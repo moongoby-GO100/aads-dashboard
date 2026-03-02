@@ -1,7 +1,7 @@
 import type { CostInfo } from "@/types";
 
 export default function CostTracker({ costs }: { costs: CostInfo }) {
-  const maxCost = Math.max(...Object.values(costs.by_agent ?? {}).map((a) => a.cost_usd), 0.001);
+  const maxCost = Math.max(...Object.values(costs.by_agent ?? {}).map((a) => a?.cost_usd ?? 0), 0.001);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -27,12 +27,12 @@ export default function CostTracker({ costs }: { costs: CostInfo }) {
             <div key={agent}>
               <div className="flex items-center justify-between text-xs mb-0.5">
                 <span className="text-gray-600 capitalize">{agent}</span>
-                <span className="text-gray-500 font-mono">${info.cost_usd.toFixed(4)}</span>
+                <span className="text-gray-500 font-mono">${(info?.cost_usd ?? 0).toFixed(4)}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-1.5">
                 <div
                   className="bg-blue-400 h-1.5 rounded-full transition-all"
-                  style={{ width: `${(info.cost_usd / maxCost) * 100}%` }}
+                  style={{ width: `${((info?.cost_usd ?? 0) / maxCost) * 100}%` }}
                 />
               </div>
             </div>

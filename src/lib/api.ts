@@ -1,36 +1,71 @@
+import type {
+  HealthResponse,
+  ProjectListResponse,
+  ProjectStatusResponse,
+  CreateProjectResponse,
+  AutoRunResponse,
+  LoginResponse,
+  MeResponse,
+} from "@/types";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
       ...options?.headers,
     },
   });
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 export const api = {
-  getHealth: () => request<{ status: string; graph_ready: boolean; version: string }>("/health"),
+  getHealth: () => request<HealthResponse>("/health"),
 
   getProjects: (limit = 20, offset = 0) =>
-    request<{ projects: import("@/types").Project[]; total: number }>(
-      `/projects?limit=${limit}&offset=${offset}`
-    ),
+    request<ProjectListResponse>(`/projects?limit=${limit}&offset=${offset}`),
 
   getProjectStatus: (id: string) =>
-    request<import("@/types").ProjectStatus>(`/projects/${id}/status`),
+    request<ProjectStatusResponse>(`/projects/${id}/status`),
+
+  createProject: (description: string) =>
+    request<CreateProjectResponse>("/projects", {
+      method: "POST",
+      body: JSON.stringify({ description }),
+    }),
+
+  autoRunProject: (id: string) =>
+    request<AutoRunResponse>(`/projects/${id}/auto_run`, { method: "POST" }),
 
   getProjectCosts: (id: string) =>
     request<{ project_id: string; costs: import("@/types").CostInfo }>(`/projects/${id}/costs`),
 
-  createProject: (description: string) =>
-    request<{ project_id: string; status: string }>("/projects", {
+  resumeProject: (id: string, approved: boolean = true, feedback: string = "승인") =>
+    request<{ project_id: string; status: string; checkpoint_stage: string }>(
+      `/projects/${id}/resume?approved=${approved}&feedback=${encodeURIComponent(feedback)}`,
+      { method: "POST" }
+    ),
+
+  login: (email: string, password: string) =>
+    request<LoginResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ description }),
+      body: JSON.stringify({ email, password }),
     }),
+
+  getMe: (token: string) =>
+    fetch(`${BASE_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((r) => (r.ok ? r.json() as Promise<MeResponse> : null)),
 };
