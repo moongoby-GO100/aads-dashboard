@@ -12,8 +12,8 @@ export default function Header({ title }: { title: string }) {
   }, []);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-      <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+    <header className="bg-white border-b border-gray-200 pr-6 pl-12 md:pl-0 py-3 flex items-center justify-between">
+      <h2 className="text-sm md:text-base font-semibold text-gray-800">{title}</h2>
       <span className="text-sm text-gray-500">{health}</span>
     </header>
   );

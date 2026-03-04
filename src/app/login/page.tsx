@@ -28,7 +28,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-sm sm:max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-blue-600">AADS</h1>
           <p className="text-sm text-gray-500 mt-1">Autonomous AI Development System</p>
