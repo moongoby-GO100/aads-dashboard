@@ -97,8 +97,8 @@ export const api = {
   getCeoDecisions: (days?: number) => request<any>(`/memory/ceo-decisions?days=${days || 30}`),
 
   // T-066: Directives + Reports + Task-History
-  getDirectives: () => request<any>("/dashboard/directives"),
-  getReports: () => request<any>("/dashboard/reports"),
+  getDirectives: (project?: string) => request<any>(`/dashboard/directives${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
+  getReports: (project?: string) => request<any>(`/dashboard/reports${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
   getReportDetail: (filename: string) => request<any>(`/dashboard/reports/${encodeURIComponent(filename)}`),
   getTaskHistory: () => request<any>("/dashboard/task-history"),
 
