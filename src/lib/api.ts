@@ -1,3 +1,7 @@
+// T-072: Flat API response types
+export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
+export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
+
 import type {
   HealthResponse,
   ProjectListResponse,
@@ -96,8 +100,8 @@ export const api = {
   getAlerts: () => request<any>("/projects/dashboard/alerts"),
   getCeoDecisions: (days?: number) => request<any>(`/memory/ceo-decisions?days=${days || 30}`),
 
-  // T-066: Directives + Reports + Task-History
-  getDirectives: (project?: string) => request<any>(`/dashboard/directives${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
+  // T-072: Directives + Reports + Task-History (flat response)
+  getDirectives: (project?: string) => request<DirectivesResponse>(`/dashboard/directives${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
   getReports: (project?: string) => request<any>(`/dashboard/reports${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
   getReportDetail: (filename: string) => request<any>(`/dashboard/reports/${encodeURIComponent(filename)}`),
   getTaskHistory: () => request<any>("/dashboard/task-history"),

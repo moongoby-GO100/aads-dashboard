@@ -10,8 +10,18 @@ interface Directive {
   status: string;
   project: string;
   created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_seconds?: number | null;
   file_path: string;
   error_type?: string;
+}
+
+// ─── Helper: Safe Render ──────────────────────────────────────────────────────
+function safeRender(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 interface DirectiveSummary {
@@ -19,6 +29,14 @@ interface DirectiveSummary {
   running: number;
   completed: number;
   error: number;
+  error_breakdown?: {
+    auth_expired: number;
+    permission_denied: number;
+    env_error: number;
+    timeout: number;
+    task_failure: number;
+  };
+  by_project?: Record<string, number>;
   directives: Directive[];
 }
 
@@ -101,8 +119,12 @@ function ProjectBadge({ project }: { project: string }) {
 }
 
 // ─── Helper: Status Badge ──────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: string }) {
-  const s = status.toLowerCase();
+function StatusBadge({ status }: { status: unknown }) {
+  // T-072: status가 객체인 경우 안전 처리 (React Error #31 방지)
+  const statusStr = typeof status === 'object' && status !== null
+    ? (status as Record<string, string>).label || (status as Record<string, string>).value || '확인중'
+    : String(status || '');
+  const s = statusStr.toLowerCase();
   let cls = "bg-gray-700 text-gray-300";
   if (s === "running") cls = "bg-green-900 text-green-300";
   else if (s === "completed" || s === "success") cls = "bg-blue-900 text-blue-300";
@@ -111,7 +133,7 @@ function StatusBadge({ status }: { status: string }) {
   else if (s === "offline") cls = "bg-red-900 text-red-300";
   else if (s === "reported") cls = "bg-blue-900 text-blue-300";
   else if (s === "active") cls = "bg-green-900 text-green-300";
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{status}</span>;
+  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{statusStr}</span>;
 }
 
 // ─── Helper: Remote Task Status Badge ─────────────────────────────────────────
@@ -174,13 +196,14 @@ function DirectivesTab() {
   };
 
   const filtered = data?.directives.filter((d) =>
-    statusFilter === "all" ? true : d.status === statusFilter
+    (statusFilter === "all" ? true : d.status === statusFilter) &&
+    (projectFilter === "all" ? true : d.project.toUpperCase() === projectFilter.toUpperCase())
   ) ?? [];
 
-  // Error type counts
+  // Error type counts — T-072: error_breakdown API 필드 우선 사용
   const errorItems = data?.directives.filter((d) => d.status === "error") ?? [];
-  const authExpiredCount = errorItems.filter((d) => d.error_type === "auth_expired").length;
-  const taskFailureCount = errorItems.filter((d) => d.error_type === "task_failure").length;
+  const authExpiredCount = data?.error_breakdown?.auth_expired ?? errorItems.filter((d) => d.error_type === "auth_expired").length;
+  const taskFailureCount = data?.error_breakdown?.task_failure ?? errorItems.filter((d) => d.error_type === "task_failure").length;
 
   return (
     <div>
@@ -259,33 +282,31 @@ function DirectivesTab() {
                 <th className="text-left p-3">제목</th>
                 <th className="text-left p-3 hidden md:table-cell">프로젝트</th>
                 <th className="text-left p-3">상태</th>
-                <th className="text-left p-3 hidden lg:table-cell">생성시각</th>
+                <th className="text-left p-3 hidden md:table-cell">에러유형</th>
+                <th className="text-left p-3 hidden lg:table-cell">시작</th>
+                <th className="text-left p-3 hidden lg:table-cell">완료</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((d, i) => (
                 <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
-                  <td className="p-3 text-white font-medium font-mono">{d.task_id}</td>
+                  <td className="p-3 text-white font-medium font-mono">{safeRender(d.task_id)}</td>
                   <td className="p-3 text-gray-200 max-w-xs">
-                    <span className="block truncate">{d.title}</span>
-                    {d.status === "error" && d.error_type && (
-                      <span
-                        className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs ${
-                          d.error_type === "auth_expired"
-                            ? "bg-gray-700 text-gray-400"
-                            : "bg-red-900 text-red-300"
-                        }`}
-                        title={d.error_type}
-                      >
-                        {d.error_type}
-                      </span>
-                    )}
+                    <span className="block truncate">{safeRender(d.title)}</span>
                   </td>
                   <td className="p-3 hidden md:table-cell">
                     <ProjectBadge project={d.project} />
                   </td>
-                  <td className="p-3"><StatusBadge status={d.status} /></td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{d.created_at || "-"}</td>
+                  <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
+                  <td className="p-3 hidden md:table-cell">
+                    {d.error_type ? (
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${safeRender(d.error_type) === "auth_expired" ? "bg-gray-700 text-gray-400" : "bg-red-900 text-red-300"}`}>
+                        {safeRender(d.error_type)}
+                      </span>
+                    ) : <span className="text-gray-600">-</span>}
+                  </td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{(d.started_at || d.created_at || "-").slice(0, 16)}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{d.completed_at ? safeRender(d.completed_at).slice(0, 16) : "-"}</td>
                 </tr>
               ))}
             </tbody>
