@@ -59,10 +59,10 @@ export default function ProjectStatusPage() {
                 <div className="mb-3">
                   <div className="flex justify-between text-xs mb-1" style={{ color: "var(--text-secondary)" }}>
                     <span>진행률</span>
-                    <span>{p.progress_percent ?? 0}%</span>
+                    <span>{p.progress ?? 0}%</span>
                   </div>
                   <div className="h-2 rounded-full" style={{ background: "var(--bg-hover)" }}>
-                    <div className="h-2 rounded-full transition-all" style={{ background: "var(--accent)", width: `${p.progress_percent ?? 0}%` }} />
+                    <div className="h-2 rounded-full transition-all" style={{ background: "var(--accent)", width: `${p.progress ?? 0}%` }} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
