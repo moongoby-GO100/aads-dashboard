@@ -83,6 +83,12 @@ export const api = {
       `/conversations?${project ? `project=${project}&` : ''}${keyword ? `keyword=${encodeURIComponent(keyword)}&` : ''}limit=${limit}&offset=${offset}`
     ),
   getConversationStats: () => request<ConversationStatsResponse>('/conversations/stats'),
+  // T-077: Channel-based conversation API
+  getConversationChannels: () => request<any>('/conversations/channels'),
+  getConversationMessages: (channel: string, limit = 50, offset = 0) =>
+    request<any>(`/conversations/messages?channel=${encodeURIComponent(channel)}&limit=${limit}&offset=${offset}`),
+  searchConversations: (q: string, channel = 'ALL', limit = 20) =>
+    request<any>(`/conversations/search?q=${encodeURIComponent(q)}&channel=${encodeURIComponent(channel)}&limit=${limit}`),
   getPublicSummary: () => request<PublicSummaryResponse>('/context/public-summary'),
   getMemorySearch: (params?: { agent_id?: string; memory_type?: string; keyword?: string }) => {
     const q = new URLSearchParams();
