@@ -10,8 +10,8 @@ interface Directive {
   status: string;
   project: string;
   created_at: string;
-  started_at?: string;
-  completed_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
   duration_seconds?: number | null;
   file_path: string;
   error_type?: string;
@@ -29,13 +29,7 @@ interface DirectiveSummary {
   running: number;
   completed: number;
   error: number;
-  error_breakdown?: {
-    auth_expired: number;
-    permission_denied: number;
-    env_error: number;
-    timeout: number;
-    task_failure: number;
-  };
+  error_breakdown?: Record<string, number>;
   by_project?: Record<string, number>;
   directives: Directive[];
 }
