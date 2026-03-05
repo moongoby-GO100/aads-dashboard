@@ -204,7 +204,7 @@ function DirectivesTab() {
     }
   }, [projectFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
 
   const handleProjectChange = (p: ProjectFilter) => {
     setProjectFilter(p);
@@ -361,7 +361,7 @@ function ReportsTab() {
     }
   }, [projectFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
 
   const handleProjectChange = (p: ProjectFilter) => {
     setProjectFilter(p);
@@ -478,7 +478,7 @@ function RemoteTab() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
 
   // REMOTE_211, REMOTE_114 우선 표시
   const priorityServers = ["REMOTE_211", "REMOTE_114"];
@@ -597,7 +597,7 @@ function AnalyticsTab() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
 
   if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>;
   if (!data) return <div className="text-center text-red-400 py-12">데이터 로드 실패</div>;
