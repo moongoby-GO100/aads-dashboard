@@ -108,4 +108,19 @@ export const api = {
 
   // T-067: Analytics
   getAnalytics: () => request<any>("/dashboard/analytics"),
+
+  // T-073: CEO Chat v2
+  sendCeoMessage: (sessionId: string, message: string) =>
+    request<any>("/ceo-chat/message", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId, message }),
+    }),
+  getCeoSessions: () => request<any>("/ceo-chat/sessions"),
+  getCeoSession: (sessionId: string) => request<any>(`/ceo-chat/sessions/${sessionId}`),
+  endCeoSession: (sessionId: string) =>
+    request<any>("/ceo-chat/end-session", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  getCeoCostSummary: () => request<any>("/ceo-chat/cost-summary"),
 };

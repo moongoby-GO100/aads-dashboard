@@ -10,6 +10,7 @@ const navItems = [
   { href: "/managers", label: "Managers", icon: "👥" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
   { href: "/tasks", label: "Tasks", icon: "📋" },
+  { href: "/ceo-chat", label: "CEO Chat", icon: "💬" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
