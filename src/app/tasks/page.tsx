@@ -24,6 +24,26 @@ function safeRender(value: unknown): string {
   return String(value);
 }
 
+// ─── Helper: KST Time Display ─────────────────────────────────────────────────
+function toKST(dtStr: string | null | undefined, len = 16): string {
+  if (!dtStr) return "-";
+  try {
+    const d = new Date(dtStr);
+    if (isNaN(d.getTime())) return dtStr.slice(0, len);
+    const kst = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
+    // "2026. 3. 5. 16:39:00" → "2026-03-05 16:39"
+    const m = kst.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{1,2}):(\d{2})/);
+    if (m) {
+      const [, y, mo, day, h, min] = m;
+      const full = `${y}-${mo.padStart(2,"0")}-${day.padStart(2,"0")} ${h.padStart(2,"0")}:${min}`;
+      return full.slice(0, len);
+    }
+    return dtStr.slice(0, len);
+  } catch {
+    return dtStr.slice(0, len);
+  }
+}
+
 interface DirectiveSummary {
   total: number;
   running: number;
@@ -299,8 +319,8 @@ function DirectivesTab() {
                       </span>
                     ) : <span className="text-gray-600">-</span>}
                   </td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{(d.started_at || d.created_at || "-").slice(0, 16)}</td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{d.completed_at ? safeRender(d.completed_at).slice(0, 16) : "-"}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.started_at || d.created_at)}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.completed_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -490,7 +510,7 @@ function RemoteTab() {
               </div>
               {s.last_ping && (
                 <div className="text-xs text-gray-400 mb-1">
-                  최근 보고: <span className="text-gray-300">{s.last_ping.slice(0, 19)}</span>
+                  최근 보고: <span className="text-gray-300">{toKST(s.last_ping, 19)}</span>
                 </div>
               )}
               {s.monitoring_projects && s.monitoring_projects.length > 0 && (
@@ -537,8 +557,8 @@ function RemoteTab() {
                   <td className="p-3 text-white font-mono font-medium">{t.task_id}</td>
                   <td className="p-3 text-gray-400 hidden md:table-cell">{t.server || "-"}</td>
                   <td className="p-3"><RemoteStatusBadge status={t.status} /></td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{t.started_at ? String(t.started_at).slice(0, 19) : "-"}</td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{t.finished_at ? String(t.finished_at).slice(0, 19) : "-"}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(t.started_at, 19)}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(t.finished_at, 19)}</td>
                   <td className="p-3 text-gray-400 hidden md:table-cell">{t.from_agent || "-"}</td>
                 </tr>
               ))}
@@ -582,10 +602,13 @@ function AnalyticsTab() {
 
   const s = data.summary;
   const successRate = s.total_tasks > 0 ? Math.round((s.completed_tasks / s.total_tasks) * 100) : 0;
-  const maxTasks = Math.max(...(data.daily_trend || []).map((d) => d.tasks), 1);
+  const dailyTrend = Array.isArray(data.daily_trend) ? data.daily_trend : [];
+  const byProject = Array.isArray(data.by_project) ? data.by_project : [];
+  const byServer = Array.isArray(data.by_server) ? data.by_server : [];
+  const maxTasks = Math.max(...dailyTrend.map((d) => d.tasks), 1);
 
   // Error distribution
-  const errorDist = data.error_distribution || [];
+  const errorDist = Array.isArray(data.error_distribution) ? data.error_distribution : [];
   const totalErrors = errorDist.reduce((sum, e) => sum + e.count, 0) || 1;
 
   return (
@@ -628,9 +651,9 @@ function AnalyticsTab() {
                 </tr>
               </thead>
               <tbody>
-                {data.by_project.length === 0 ? (
+                {byProject.length === 0 ? (
                   <tr><td colSpan={5} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
-                ) : data.by_project.map((p, i) => (
+                ) : byProject.map((p, i) => (
                   <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
                     <td className="p-3"><ProjectBadge project={p.project} /></td>
                     <td className="p-3 text-right text-gray-300">{p.conversations}</td>
@@ -658,9 +681,9 @@ function AnalyticsTab() {
                 </tr>
               </thead>
               <tbody>
-                {data.by_server.length === 0 ? (
+                {byServer.length === 0 ? (
                   <tr><td colSpan={4} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
-                ) : data.by_server.map((sv, i) => (
+                ) : byServer.map((sv, i) => (
                   <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
                     <td className="p-3 text-white font-mono font-medium">{sv.server}</td>
                     <td className="p-3 text-right text-gray-300">{sv.tasks}</td>
@@ -678,11 +701,11 @@ function AnalyticsTab() {
       <div>
         <h3 className="text-sm font-semibold text-gray-300 mb-3">일별 작업 트렌드 (최근 7일)</h3>
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-          {data.daily_trend.length === 0 ? (
+          {dailyTrend.length === 0 ? (
             <div className="text-center text-gray-500 py-8">데이터 없음</div>
           ) : (
             <div className="flex items-end gap-2 h-32">
-              {data.daily_trend.slice(-7).map((d, i) => {
+              {dailyTrend.slice(-7).map((d, i) => {
                 const pct = Math.round((d.tasks / maxTasks) * 100);
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1">
