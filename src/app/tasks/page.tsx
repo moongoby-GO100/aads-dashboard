@@ -99,7 +99,7 @@ interface AnalyticsSummary {
   avg_task_duration_min: number;
   active_servers: number;
 }
-interface ByProject { project: string; conversations: number; cost_usd: number; tokens: number; last_activity: string; }
+interface ByProject { project: string; conversations: number; cost_usd: number; tokens: number; last_activity: string; completed?: number; error?: number; total?: number; }
 interface ByServer { server: string; tasks: number; status: string; last_report: string; }
 interface DailyTrend { date: string; tasks: number; cost_usd: number; }
 interface ErrorDist { error_type: string; count: number; }
@@ -643,34 +643,39 @@ function AnalyticsTab() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 프로젝트별 테이블 */}
+        {/* 프로젝트별 완료율 바 차트 */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">프로젝트별 현황</h3>
-          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="text-left p-3">프로젝트</th>
-                  <th className="text-right p-3">대화수</th>
-                  <th className="text-right p-3">비용</th>
-                  <th className="text-right p-3 hidden md:table-cell">토큰</th>
-                  <th className="text-right p-3 hidden lg:table-cell">최근활동</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byProject.length === 0 ? (
-                  <tr><td colSpan={5} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
-                ) : byProject.map((p, i) => (
-                  <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
-                    <td className="p-3"><ProjectBadge project={p.project} /></td>
-                    <td className="p-3 text-right text-gray-300">{p.conversations}</td>
-                    <td className="p-3 text-right text-yellow-400">${p.cost_usd.toFixed(2)}</td>
-                    <td className="p-3 text-right text-gray-400 hidden md:table-cell">{p.tokens.toLocaleString()}</td>
-                    <td className="p-3 text-right text-gray-500 hidden lg:table-cell">{p.last_activity ? p.last_activity.slice(0, 10) : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">프로젝트별 완료율</h3>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+            {byProject.length === 0 ? (
+              <div className="text-center text-gray-500 py-4">데이터 없음</div>
+            ) : (
+              byProject
+                .filter((p) => Array.isArray([p]) && p.project && p.project.length <= 40)
+                .map((p, i) => {
+                  const total = typeof p.total === "number" ? p.total : 0;
+                  const completed = typeof p.completed === "number" ? p.completed : 0;
+                  const error = typeof p.error === "number" ? p.error : 0;
+                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  return (
+                    <div key={i}>
+                      <div className="flex justify-between items-center mb-1">
+                        <ProjectBadge project={p.project} />
+                        <span className="text-xs text-gray-400">{completed}/{total} ({pct}%)</span>
+                      </div>
+                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 rounded-full transition-all"
+                          style={{ width: `${Math.max(pct, completed > 0 ? 2 : 0)}%` }}
+                        />
+                      </div>
+                      {error > 0 && (
+                        <div className="text-xs text-red-400 mt-0.5">에러 {error}건</div>
+                      )}
+                    </div>
+                  );
+                })
+            )}
           </div>
         </div>
 
