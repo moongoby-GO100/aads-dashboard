@@ -601,7 +601,10 @@ function AnalyticsTab() {
   if (!data) return <div className="text-center text-red-400 py-12">데이터 로드 실패</div>;
 
   const s = data.summary;
-  const successRate = s.total_tasks > 0 ? Math.round((s.completed_tasks / s.total_tasks) * 100) : 0;
+  // T-080: success_rate = completed / (completed + error) * 100
+  const successRate = (s.completed_tasks + s.error_tasks) > 0
+    ? Math.round((s.completed_tasks / (s.completed_tasks + s.error_tasks)) * 100)
+    : 0;
   const dailyTrend = Array.isArray(data.daily_trend) ? data.daily_trend : [];
   const byProject = Array.isArray(data.by_project) ? data.by_project : [];
   const byServer = Array.isArray(data.by_server) ? data.by_server : [];
@@ -625,12 +628,16 @@ function AnalyticsTab() {
           <div className="text-xs text-gray-500">{s.completed_tasks}/{s.total_tasks}</div>
         </div>
         <div className="rounded-xl p-4 border border-yellow-700 bg-gray-900">
-          <div className="text-2xl font-bold text-yellow-300">${s.total_cost_usd.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-yellow-300">
+            {s.total_cost_usd < 0 ? "추적 미설정" : `$${s.total_cost_usd.toFixed(2)}`}
+          </div>
           <div className="text-xs mt-1 text-gray-400">총 비용</div>
           <div className="text-xs text-gray-500">{s.total_tokens.toLocaleString()} tokens</div>
         </div>
         <div className="rounded-xl p-4 border border-purple-700 bg-gray-900">
-          <div className="text-2xl font-bold text-purple-300">{s.avg_task_duration_min.toFixed(1)}분</div>
+          <div className="text-2xl font-bold text-purple-300">
+            {s.avg_task_duration_min < 0 ? "데이터 부족" : `${s.avg_task_duration_min.toFixed(1)}분`}
+          </div>
           <div className="text-xs mt-1 text-gray-400">평균 작업시간</div>
         </div>
       </div>
