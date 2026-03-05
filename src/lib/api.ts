@@ -88,4 +88,11 @@ export const api = {
     return request<MemorySearchResponse>(`/memory/search?${q.toString()}`);
   },
   getManagerInbox: (agentId: string) => request<MemoryInboxResponse>(`/memory/inbox/${agentId}`),
+
+  // T-049: CEO Dashboard extensions
+  getProjectDashboard: () => request<any>("/projects/dashboard"),
+  getProjectDetail: (id: string) => request<any>(`/projects/dashboard/${id}`),
+  getTimeline: () => request<any>("/projects/dashboard/timeline"),
+  getAlerts: () => request<any>("/projects/dashboard/alerts"),
+  getCeoDecisions: (days?: number) => request<any>(`/memory/ceo-decisions?days=${days || 30}`),
 };
