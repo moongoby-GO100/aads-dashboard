@@ -163,24 +163,42 @@ function RemoteStatusBadge({ status }: { status: string }) {
 }
 
 // ─── Helper: Project Filter Bar ────────────────────────────────────────────────
-function ProjectFilterBar({ active, onChange }: { active: ProjectFilter; onChange: (p: ProjectFilter) => void }) {
+function ProjectFilterBar({
+  active,
+  onChange,
+  counts,
+}: {
+  active: ProjectFilter;
+  onChange: (p: ProjectFilter) => void;
+  counts?: Record<string, number>;
+}) {
   return (
     <div className="flex gap-1.5 flex-wrap mb-3">
-      {PROJECT_FILTERS.map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
-            active === p
-              ? p === "all"
-                ? "bg-white text-gray-900"
-                : projectBadgeClass(p) + " ring-1 ring-white/30"
-              : "border border-gray-600 text-gray-400 hover:bg-gray-700"
-          }`}
-        >
-          {p === "all" ? "전체" : p}
-        </button>
-      ))}
+      {PROJECT_FILTERS.map((p) => {
+        const cnt = p !== "all" && counts ? (counts[p] ?? counts[p.toUpperCase()] ?? 0) : null;
+        return (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors flex items-center gap-1 ${
+              active === p
+                ? p === "all"
+                  ? "bg-white text-gray-900"
+                  : projectBadgeClass(p) + " ring-1 ring-white/30"
+                : "border border-gray-600 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            {p === "all" ? "전체" : p}
+            {cnt !== null && cnt > 0 && (
+              <span className={`inline-block text-xs font-bold rounded-full px-1.5 py-0 leading-5 ${
+                active === p ? "bg-white/20" : "bg-gray-600 text-gray-200"
+              }`}>
+                {cnt}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -260,7 +278,7 @@ function DirectivesTab() {
       )}
 
       {/* 프로젝트 필터 */}
-      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} />
+      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={data?.by_project ?? undefined} />
 
       {/* 상태 필터 + 새로고침 */}
       <div className="flex gap-2 mb-4 flex-wrap items-center">
@@ -287,7 +305,9 @@ function DirectivesTab() {
         <div className="text-center text-gray-400 py-12">로딩 중...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
-          해당하는 지시서가 없습니다.
+          {projectFilter !== "all"
+            ? `이 프로젝트의 작업 기록이 없습니다. 원격 서버에서 수집 대기중입니다.`
+            : "해당하는 지시서가 없습니다."}
         </div>
       ) : (
         <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
@@ -336,6 +356,7 @@ function DirectivesTab() {
 // ─── Tab: Reports ─────────────────────────────────────────────────────────────
 function ReportsTab() {
   const [reports, setReports] = useState<Report[]>([]);
+  const [byProject, setByProject] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<string>("");
@@ -354,8 +375,10 @@ function ReportsTab() {
         return true;
       });
       setReports(unique);
+      setByProject(res.by_project || {});
     } catch {
       setReports([]);
+      setByProject({});
     } finally {
       setLoading(false);
     }
@@ -393,7 +416,7 @@ function ReportsTab() {
   return (
     <div>
       {/* 프로젝트 필터 */}
-      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} />
+      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={byProject} />
 
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div className="flex gap-3 text-xs">
@@ -410,7 +433,9 @@ function ReportsTab() {
         <div className="text-center text-gray-400 py-12">로딩 중...</div>
       ) : reports.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
-          보고서가 없습니다.
+          {projectFilter !== "all"
+            ? "이 프로젝트의 작업 기록이 없습니다. 원격 서버에서 수집 대기중입니다."
+            : "보고서가 없습니다."}
         </div>
       ) : (
         <div className="space-y-2">
