@@ -48,8 +48,29 @@ interface RemoteServer {
   status?: string;
 }
 
-type TabType = "directives" | "reports" | "remote";
+type TabType = "directives" | "reports" | "remote" | "analytics";
 type DirectiveFilter = "all" | "running" | "completed" | "error";
+
+// ─── Analytics Types ──────────────────────────────────────────────────────────
+interface AnalyticsSummary {
+  total_tasks: number;
+  completed_tasks: number;
+  error_tasks: number;
+  total_conversations: number;
+  total_cost_usd: number;
+  total_tokens: number;
+  avg_task_duration_min: number;
+  active_servers: number;
+}
+interface ByProject { project: string; conversations: number; cost_usd: number; tokens: number; last_activity: string; }
+interface ByServer { server: string; tasks: number; status: string; last_report: string; }
+interface DailyTrend { date: string; tasks: number; cost_usd: number; }
+interface Analytics {
+  summary: AnalyticsSummary;
+  by_project: ByProject[];
+  by_server: ByServer[];
+  daily_trend: DailyTrend[];
+}
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -60,6 +81,8 @@ function StatusBadge({ status }: { status: string }) {
   else if (s === "error" || s === "failed" || s === "fail") cls = "bg-red-900 text-red-300";
   else if (s === "online") cls = "bg-emerald-900 text-emerald-300";
   else if (s === "offline") cls = "bg-red-900 text-red-300";
+  else if (s === "reported") cls = "bg-purple-900 text-purple-300";
+  else if (s === "active") cls = "bg-yellow-900 text-yellow-300";
   return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{status}</span>;
 }
 
@@ -358,6 +381,147 @@ function RemoteTab() {
   );
 }
 
+// ─── Tab: Analytics ───────────────────────────────────────────────────────────
+function AnalyticsTab() {
+  const [data, setData] = useState<Analytics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getAnalytics();
+      setData(res);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>;
+  if (!data) return <div className="text-center text-red-400 py-12">데이터 로드 실패</div>;
+
+  const s = data.summary;
+  const completionRate = s.total_tasks > 0 ? Math.round((s.completed_tasks / s.total_tasks) * 100) : 0;
+  const maxTasks = Math.max(...data.daily_trend.map((d) => d.tasks), 1);
+
+  return (
+    <div className="space-y-6">
+      {/* KPI 카드 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { label: "총 작업수", value: s.total_tasks, sub: "", color: "border-gray-600 text-white" },
+          { label: "완료율", value: `${completionRate}%`, sub: `${s.completed_tasks}/${s.total_tasks}`, color: "border-blue-700 text-blue-300" },
+          { label: "총 비용", value: `$${s.total_cost_usd.toFixed(2)}`, sub: `${s.total_tokens.toLocaleString()} tokens`, color: "border-yellow-700 text-yellow-300" },
+          { label: "평균 작업시간", value: `${s.avg_task_duration_min.toFixed(1)}분`, sub: "", color: "border-purple-700 text-purple-300" },
+          { label: "활성 서버", value: s.active_servers, sub: `대화 ${s.total_conversations}건`, color: "border-emerald-700 text-emerald-300" },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-xl p-4 border bg-gray-900 ${k.color}`}>
+            <div className="text-xl font-bold">{k.value}</div>
+            <div className="text-xs mt-1 opacity-70">{k.label}</div>
+            {k.sub && <div className="text-xs mt-0.5 opacity-50">{k.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 프로젝트별 테이블 */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">프로젝트별 현황</h3>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-700 text-gray-400">
+                  <th className="text-left p-3">프로젝트</th>
+                  <th className="text-right p-3">대화수</th>
+                  <th className="text-right p-3">비용</th>
+                  <th className="text-right p-3 hidden md:table-cell">최근활동</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.by_project.length === 0 ? (
+                  <tr><td colSpan={4} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
+                ) : data.by_project.map((p, i) => (
+                  <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
+                    <td className="p-3 text-white font-medium capitalize">{p.project}</td>
+                    <td className="p-3 text-right text-gray-300">{p.conversations}</td>
+                    <td className="p-3 text-right text-yellow-400">${p.cost_usd.toFixed(2)}</td>
+                    <td className="p-3 text-right text-gray-500 hidden md:table-cell">{p.last_activity ? p.last_activity.slice(0, 10) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 서버별 테이블 */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">서버별 현황</h3>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-700 text-gray-400">
+                  <th className="text-left p-3">서버</th>
+                  <th className="text-right p-3">작업수</th>
+                  <th className="text-left p-3">상태</th>
+                  <th className="text-right p-3 hidden md:table-cell">최근보고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.by_server.length === 0 ? (
+                  <tr><td colSpan={4} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
+                ) : data.by_server.map((sv, i) => (
+                  <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
+                    <td className="p-3 text-white font-mono font-medium">{sv.server}</td>
+                    <td className="p-3 text-right text-gray-300">{sv.tasks}</td>
+                    <td className="p-3"><StatusBadge status={sv.status} /></td>
+                    <td className="p-3 text-right text-gray-500 hidden md:table-cell">{sv.last_report ? sv.last_report.slice(0, 16) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* 일별 트렌드 바 차트 */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">일별 작업 트렌드 (최근 7일)</h3>
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+          {data.daily_trend.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">데이터 없음</div>
+          ) : (
+            <div className="flex items-end gap-2 h-32">
+              {data.daily_trend.map((d, i) => {
+                const pct = Math.round((d.tasks / maxTasks) * 100);
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-xs text-gray-400">{d.tasks}</span>
+                    <div
+                      className="w-full bg-blue-600 rounded-t transition-all"
+                      style={{ height: `${Math.max(pct, 4)}%`, minHeight: "4px" }}
+                      title={`${d.date}: ${d.tasks}건`}
+                    />
+                    <span className="text-xs text-gray-500 truncate w-full text-center">{d.date.slice(5)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={load} className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg">
+          새로고침
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const [tab, setTab] = useState<TabType>("directives");
@@ -366,6 +530,7 @@ export default function TasksPage() {
     { key: "directives", label: "📋 지시서" },
     { key: "reports", label: "📊 보고서" },
     { key: "remote", label: "🔄 원격작업" },
+    { key: "analytics", label: "📈 분석" },
   ];
 
   return (
@@ -393,6 +558,7 @@ export default function TasksPage() {
         {tab === "directives" && <DirectivesTab />}
         {tab === "reports" && <ReportsTab />}
         {tab === "remote" && <RemoteTab />}
+        {tab === "analytics" && <AnalyticsTab />}
       </div>
     </div>
   );

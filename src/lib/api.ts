@@ -101,4 +101,7 @@ export const api = {
   getReports: () => request<any>("/dashboard/reports"),
   getReportDetail: (filename: string) => request<any>(`/dashboard/reports/${encodeURIComponent(filename)}`),
   getTaskHistory: () => request<any>("/dashboard/task-history"),
+
+  // T-067: Analytics
+  getAnalytics: () => request<any>("/dashboard/analytics"),
 };
