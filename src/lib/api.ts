@@ -95,4 +95,10 @@ export const api = {
   getTimeline: () => request<any>("/projects/dashboard/timeline"),
   getAlerts: () => request<any>("/projects/dashboard/alerts"),
   getCeoDecisions: (days?: number) => request<any>(`/memory/ceo-decisions?days=${days || 30}`),
+
+  // T-066: Directives + Reports + Task-History
+  getDirectives: () => request<any>("/dashboard/directives"),
+  getReports: () => request<any>("/dashboard/reports"),
+  getReportDetail: (filename: string) => request<any>(`/dashboard/reports/${encodeURIComponent(filename)}`),
+  getTaskHistory: () => request<any>("/dashboard/task-history"),
 };
