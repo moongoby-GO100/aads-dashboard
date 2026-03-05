@@ -631,12 +631,14 @@ function AnalyticsTab() {
         </div>
         <div className="rounded-xl p-4 border border-yellow-700 bg-gray-900">
           <div className="text-2xl font-bold text-yellow-300">
-            {(s.cost_status === "not_configured" || s.total_cost_usd <= 0) ? "비용 추적 미설정" : `$${s.total_cost_usd.toFixed(2)}`}
+            {s.cost_status === "active" && s.total_cost_usd > 0
+              ? `$${s.total_cost_usd.toFixed(2)}`
+              : "데이터 수집중"}
           </div>
           <div className="text-xs mt-1 text-gray-400">총 비용</div>
           <div className="text-xs text-gray-500">{s.total_tokens.toLocaleString()} tokens</div>
-          {(s.cost_status === "not_configured" || s.total_cost_usd <= 0) && (
-            <div className="text-xs text-gray-500 mt-1">Claude Code API 비용 추적은 T-082에서 구현 예정</div>
+          {s.cost_status === "active" && s.total_cost_usd > 0 && (
+            <div className="text-xs text-green-500 mt-1">task_cost_log 집계</div>
           )}
         </div>
         <div className="rounded-xl p-4 border border-purple-700 bg-gray-900">

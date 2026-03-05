@@ -9,7 +9,8 @@ interface Channel {
   name: string;
   category: string;
   count: number;
-  last_message: string;
+  last_message: string | null;
+  status?: string;
 }
 
 interface Message {
@@ -146,13 +147,19 @@ export default function ConversationsPage() {
       ]);
       if (chData.status === "fulfilled") setChannels((chData.value as any).channels ?? []);
       if (stData.status === "fulfilled") setStats(stData.value as unknown as Stats);
-      setLastRefreshed(new Date().toLocaleTimeString("ko-KR"));
+      const now = new Date();
+      const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+      setLastRefreshed(kst.toISOString().replace("T", " ").slice(11, 19) + " KST");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchChannels(); }, [fetchChannels]);
+  useEffect(() => {
+    fetchChannels();
+    const _id = setInterval(() => fetchChannels(), 30_000);
+    return () => clearInterval(_id);
+  }, [fetchChannels]);
 
   // ── Messages ──────────────────────────────────────────────────────────────
 
@@ -264,8 +271,8 @@ export default function ConversationsPage() {
   // ── Sidebar channels ──────────────────────────────────────────────────────
 
   const sideChannels = [
-    { name: "ALL", label: "전체" },
-    ...channels.map((c) => ({ name: c.name, label: c.name })),
+    { name: "ALL", label: "전체", count: stats?.total ?? 0, inactive: false },
+    ...channels.map((c) => ({ name: c.name, label: c.name, count: c.count, inactive: c.count === 0 })),
   ];
 
   // ─── Render ─────────────────────────────────────────────────────────────
@@ -304,8 +311,9 @@ export default function ConversationsPage() {
             <p className="text-xs px-1" style={{ color: "var(--text-secondary)" }}>로딩...</p>
           ) : (
             sideChannels.map((ch) => {
-              const count = getChannelCount(ch.name);
+              const count = ch.count ?? getChannelCount(ch.name);
               const isActive = activeChannel === ch.name;
+              const isInactive = ch.inactive && ch.name !== "ALL";
               return (
                 <button
                   key={ch.name}
@@ -314,11 +322,17 @@ export default function ConversationsPage() {
                   style={
                     isActive
                       ? { background: channelColor(ch.name), color: "#fff" }
+                      : isInactive
+                      ? { color: "var(--text-secondary)", background: "var(--bg-hover)", opacity: 0.6 }
                       : { color: "var(--text-primary)", background: "transparent" }
                   }
                 >
                   <span className="font-medium">{ch.label}</span>
-                  {count > 0 && (
+                  {isInactive ? (
+                    <span className="text-xs px-1.5 rounded" style={{ background: "#374151", color: "#9CA3AF", fontSize: "10px" }}>
+                      미설정
+                    </span>
+                  ) : count > 0 ? (
                     <span
                       className="text-xs px-1.5 rounded-full"
                       style={{
@@ -328,7 +342,7 @@ export default function ConversationsPage() {
                     >
                       {count}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               );
             })
