@@ -6,6 +6,11 @@ import type {
   AutoRunResponse,
   LoginResponse,
   MeResponse,
+  ConversationsResponse,
+  ConversationStatsResponse,
+  PublicSummaryResponse,
+  MemorySearchResponse,
+  MemoryInboxResponse,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -68,4 +73,19 @@ export const api = {
     fetch(`${BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((r) => (r.ok ? r.json() as Promise<MeResponse> : null)),
+
+  getConversations: (project?: string, keyword?: string, limit = 50, offset = 0) =>
+    request<ConversationsResponse>(
+      `/conversations?${project ? `project=${project}&` : ''}${keyword ? `keyword=${encodeURIComponent(keyword)}&` : ''}limit=${limit}&offset=${offset}`
+    ),
+  getConversationStats: () => request<ConversationStatsResponse>('/conversations/stats'),
+  getPublicSummary: () => request<PublicSummaryResponse>('/context/public-summary'),
+  getMemorySearch: (params?: { agent_id?: string; memory_type?: string; keyword?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.agent_id) q.set('agent_id', params.agent_id);
+    if (params?.memory_type) q.set('memory_type', params.memory_type);
+    if (params?.keyword) q.set('keyword', params.keyword);
+    return request<MemorySearchResponse>(`/memory/search?${q.toString()}`);
+  },
+  getManagerInbox: (agentId: string) => request<MemoryInboxResponse>(`/memory/inbox/${agentId}`),
 };

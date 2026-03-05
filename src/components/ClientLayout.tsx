@@ -12,7 +12,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-950">
       <Sidebar
         isOpen={isMenuOpen}
         onOpen={() => setIsMenuOpen(true)}

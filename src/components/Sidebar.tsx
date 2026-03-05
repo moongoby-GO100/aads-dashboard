@@ -6,6 +6,9 @@ import { useEffect } from "react";
 const navItems = [
   { href: "/", label: "대시보드", icon: "🏠" },
   { href: "/projects", label: "프로젝트", icon: "📁" },
+  { href: "/conversations", label: "대화 내용", icon: "💬" },
+  { href: "/managers", label: "매니저", icon: "👥" },
+  { href: "/tasks", label: "태스크", icon: "✅" },
 ];
 
 interface SidebarProps {
@@ -81,7 +84,7 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
           ))}
         </nav>
         <div className="p-4 border-t border-gray-700 text-xs text-gray-500">
-          v0.2.0 · Phase 2
+          v0.3.0 · Phase 2
         </div>
       </aside>
     </>

@@ -143,3 +143,22 @@ export interface AutoRunResponse {
 }
 // api.ts 호환성을 위한 별칭
 export type ProjectStatusResponse = ProjectStatus;
+
+export interface Conversation {
+  id: string; project: string; source: string; snapshot: string;
+  full_text: string; logged_at: string; char_count: number; updated_at: string;
+}
+export interface ConversationsResponse {
+  status: string; total: number; limit: number; offset: number;
+  conversations: Conversation[];
+}
+export interface ConversationStatsResponse {
+  status: string; total_conversations: number;
+  projects: { project: string; count: number; last_updated: string }[];
+}
+export interface PublicSummaryResponse {
+  status: string; memory_system: string; total_categories: number;
+  category_list: string[]; data: Record<string, any[]>;
+}
+export interface MemorySearchResponse { status: string; count: number; data: any[]; }
+export interface MemoryInboxResponse { status: string; agent_id: string; count: number; data: any[]; }
