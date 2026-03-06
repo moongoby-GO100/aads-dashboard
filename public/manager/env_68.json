@@ -1,0 +1,98 @@
+{
+  "type": "full",
+  "collected_at": "2026-03-06T13:09:09.566795+09:00",
+  "server": "68",
+  "system": {
+    "disk_usage": "",
+    "memory": "",
+    "load": "",
+    "uptime": ""
+  },
+  "services": {
+    "systemd_active": "",
+    "docker": "not running",
+    "open_ports": ""
+  },
+  "processes": {
+    "php": "",
+    "node": "",
+    "python": ""
+  },
+  "recent_changes": {
+    "last_git_commits": {},
+    "last_docker_events": "none"
+  },
+  "runtimes": {
+    "php": "not installed",
+    "python3": "not installed",
+    "node": "not installed",
+    "npm": "not installed",
+    "composer": "not installed",
+    "pip": "not installed",
+    "docker": "not installed",
+    "git": "not installed"
+  },
+  "projects": {
+    "/root/aads/aads-server": {
+      "exists": true,
+      "tree": "",
+      "config_files": {
+        "composer.json": false,
+        "package.json": false,
+        "requirements.txt": false,
+        "pyproject.toml": true,
+        "docker-compose.yml": true,
+        "Dockerfile": true,
+        ".env": true,
+        "Makefile": false
+      },
+      "env_keys": "no .env",
+      "git_branch": "no git",
+      "git_last3": "no git",
+      "git_status": "clean"
+    },
+    "/root/aads/aads-dashboard": {
+      "exists": true,
+      "tree": "",
+      "config_files": {
+        "composer.json": false,
+        "package.json": true,
+        "requirements.txt": false,
+        "pyproject.toml": false,
+        "docker-compose.yml": true,
+        "Dockerfile": true,
+        ".env": false,
+        "Makefile": false
+      },
+      "env_keys": "no .env",
+      "git_branch": "no git",
+      "git_last3": "no git",
+      "git_status": "clean",
+      "node_packages": "parse error"
+    },
+    "/root/aads/aads-docs": {
+      "exists": true,
+      "tree": "",
+      "config_files": {
+        "composer.json": false,
+        "package.json": false,
+        "requirements.txt": false,
+        "pyproject.toml": false,
+        "docker-compose.yml": false,
+        "Dockerfile": false,
+        ".env": false,
+        "Makefile": false
+      },
+      "env_keys": "no .env",
+      "git_branch": "no git",
+      "git_last3": "no git",
+      "git_status": "clean"
+    }
+  },
+  "databases": {},
+  "nginx": {
+    "sites_enabled": "not found",
+    "server_names": "not found"
+  },
+  "cron": "no crontab"
+}

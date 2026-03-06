@@ -16,6 +16,7 @@ const navItems = [
   { href: "/ops", label: "운영 현황", icon: "📊" },
   { href: "/lessons", label: "교훈", icon: "💡" },
   { href: "/flow", label: "FLOW", icon: "🔄" },
+  { href: "/reports", label: "Reports", icon: "📊" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
   { href: "/server-status", label: "Server Status", icon: "🖥️" },
 ];

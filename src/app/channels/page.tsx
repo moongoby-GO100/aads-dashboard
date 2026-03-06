@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
@@ -51,12 +51,29 @@ export default function ChannelsPage() {
   const [taskSummary, setTaskSummary] = useState<TaskSummary | null>(null);
   const [contextModal, setContextModal] = useState<{ id: string; data: string } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const dragIndexRef = useRef<number>(-1);
 
   const fetchChannels = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.getChannels();
-      setChannels(res.channels || []);
+      let chs: Channel[] = res.channels || [];
+      try {
+        const saved = localStorage.getItem("channels-order");
+        if (saved) {
+          const order: string[] = JSON.parse(saved);
+          chs = [...chs].sort((a, b) => {
+            const ai = order.indexOf(a.id);
+            const bi = order.indexOf(b.id);
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+          });
+        }
+      } catch { /* ignore */ }
+      setChannels(chs);
     } catch {
       setChannels([]);
     } finally {
@@ -89,6 +106,44 @@ export default function ChannelsPage() {
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
   }, []);
+
+  function handleDragStart(e: React.DragEvent, idx: number) {
+    dragIndexRef.current = idx;
+    setDraggingId(channels[idx].id);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setOverIdx(idx);
+  }
+
+  function handleDrop(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    const from = dragIndexRef.current;
+    if (from === -1 || from === idx) {
+      setDraggingId(null);
+      setOverIdx(null);
+      return;
+    }
+    const reordered = [...channels];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(idx, 0, moved);
+    setChannels(reordered);
+    try {
+      localStorage.setItem("channels-order", JSON.stringify(reordered.map((c) => c.id)));
+    } catch { /* ignore */ }
+    setDraggingId(null);
+    setOverIdx(null);
+    dragIndexRef.current = -1;
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setOverIdx(null);
+    dragIndexRef.current = -1;
+  }
 
   function openAdd() {
     setEditTarget(null);
@@ -222,16 +277,30 @@ export default function ChannelsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {channels.map((ch) => {
+            {channels.map((ch, idx) => {
               const icon = ch.project ? (PROJECT_ICONS[ch.project] || "🤖") : "🔗";
               const projColor = ch.project ? (PROJECT_COLORS[ch.project] || "rgba(99,102,241,0.25)") : "var(--bg-hover)";
               const isActive = ch.status === "active";
 
+              const isDragging = draggingId === ch.id;
+              const isOver = overIdx === idx && draggingId !== null && draggingId !== ch.id;
+
               return (
                 <div
                   key={ch.id}
-                  className="rounded-xl p-4 flex flex-col gap-2"
-                  style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className="rounded-xl p-4 flex flex-col gap-2 transition-all duration-150"
+                  style={{
+                    background: "var(--bg-card)",
+                    border: isOver ? "2px dashed var(--accent)" : "1px solid var(--border)",
+                    opacity: isDragging ? 0.4 : 1,
+                    cursor: "grab",
+                    transform: isOver ? "scale(1.02)" : "scale(1)",
+                  }}
                 >
                   {/* 상단: ⋮ 메뉴 + 상태 */}
                   <div className="flex items-center justify-between">

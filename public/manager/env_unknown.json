@@ -1,0 +1,48 @@
+{
+  "type": "full",
+  "collected_at": "2026-03-06T22:30:23.268377+09:00",
+  "server": "unknown",
+  "system": {
+    "disk_usage": "",
+    "memory": "",
+    "load": "",
+    "uptime": ""
+  },
+  "services": {
+    "systemd_active": "",
+    "docker": "not running",
+    "open_ports": ""
+  },
+  "processes": {
+    "php": "",
+    "node": "",
+    "python": ""
+  },
+  "recent_changes": {
+    "last_git_commits": {},
+    "last_docker_events": "none"
+  },
+  "runtimes": {
+    "php": "not installed",
+    "python3": "not installed",
+    "node": "not installed",
+    "npm": "not installed",
+    "composer": "not installed",
+    "pip": "not installed",
+    "docker": "not installed",
+    "git": "not installed"
+  },
+  "projects": {
+    "": {
+      "exists": false
+    }
+  },
+  "databases": {},
+  "nginx": {
+    "sites_enabled": "not found",
+    "server_names": "not found"
+  },
+  "cron": "no crontab",
+  "trigger": "event",
+  "event_reason": "git_commit"
+}
