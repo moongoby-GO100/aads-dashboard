@@ -13,6 +13,7 @@ const navItems = [
   { href: "/tasks", label: "Tasks", icon: "📋" },
   { href: "/ceo-chat", label: "CEO Chat", icon: "💬" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
+  { href: "/ops", label: "운영 현황", icon: "📊" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
   { href: "/server-status", label: "Server Status", icon: "🖥️" },
 ];

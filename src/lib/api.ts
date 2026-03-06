@@ -115,6 +115,8 @@ export const api = {
 
   // T-067: Analytics
   getAnalytics: () => request<any>("/dashboard/analytics"),
+  getDocuments: (tag?: string) => request<any>("/documents" + (tag ? "?tag=" + encodeURIComponent(tag) : "")),
+  getDocumentContent: (docId: string) => request<any>("/documents/" + encodeURIComponent(docId)),
 
   // T-073: CEO Chat v2 / T-104: model 파라미터 추가
   sendCeoMessage: (sessionId: string, message: string, model?: string) =>
@@ -145,6 +147,13 @@ export const api = {
   deleteChannel: (id: string) =>
     request<any>(`/channels/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getContextPackage: (id: string) => request<any>(`/channels/${encodeURIComponent(id)}/context-package`),
+
+  // AADS-114: Ops Monitor
+  getOpsHealthCheck: () => request<any>("/ops/health-check"),
+  getOpsDirectiveLifecycle: (limit = 20) => request<any>(`/ops/directive-lifecycle?limit=${limit}`),
+  getOpsCostSummary: () => request<any>("/ops/cost/summary"),
+  getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
+  getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
 
   // T-038: Watchdog
   getWatchdogSummary: () => request<any>("/watchdog/summary"),
