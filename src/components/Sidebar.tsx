@@ -15,6 +15,7 @@ const navItems = [
   { href: "/ceo-chat", label: "CEO Chat", icon: "💬" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
+  { href: "/server-status", label: "Server Status", icon: "🖥️" },
 ];
 
 interface SidebarProps {
@@ -98,7 +99,7 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
           })}
         </nav>
         <div className="p-4 text-xs" style={{ borderTop: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-          v0.5.0 · T-066 · Tasks
+          v0.5.1 · Server Status
         </div>
       </aside>
     </>
