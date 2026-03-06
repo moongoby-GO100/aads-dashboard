@@ -330,6 +330,13 @@ export default function ChannelsPage() {
                     >
                       📋 컨텍스트
                     </button>
+                    <button
+                      className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
+                      style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+                      onClick={() => openEdit(ch)}
+                    >
+                      ✏️ 수정
+                    </button>
                   </div>
                 </div>
               );

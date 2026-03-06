@@ -67,6 +67,18 @@ interface Report {
   cost_usd?: number;
 }
 
+
+interface Document {
+  id: string;
+  type: string;
+  title: string;
+  filename: string;
+  created_at: string;
+  source_session: string;
+  summary: string;
+  tags: string[];
+}
+
 interface TaskHistory {
   task_id: string;
   server: string;
@@ -85,7 +97,7 @@ interface RemoteServer {
   monitoring_projects?: string[];
 }
 
-type TabType = "directives" | "reports" | "remote" | "analytics";
+type TabType = "directives" | "reports" | "remote" | "analytics" | "docs";
 type DirectiveFilter = "all" | "running" | "completed" | "error";
 type ProjectFilter = "all" | "AADS" | "KIS" | "ShortFlow" | "NewTalk" | "GO100" | "NAS";
 
@@ -216,6 +228,9 @@ function DirectivesTab() {
   const [taskDetail, setTaskDetail] = useState<string>("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async (proj: ProjectFilter = projectFilter) => {
     setLoading(true);
@@ -272,10 +287,29 @@ function DirectivesTab() {
     }
   };
 
-  const filtered = data?.directives.filter((d) =>
-    (statusFilter === "all" ? true : d.status === statusFilter) &&
-    (projectFilter === "all" ? true : d.project.toUpperCase() === projectFilter.toUpperCase())
-  ) ?? [];
+  const filtered = (data?.directives ?? [])
+    .filter((d) => {
+      const refDate = (d.started_at || d.created_at || "").slice(0, 10);
+      const fromOk = dateFrom ? refDate >= dateFrom : true;
+      const toOk = dateTo ? refDate <= dateTo : true;
+      return (
+        (statusFilter === "all" ? true : d.status === statusFilter) &&
+        (projectFilter === "all" ? true : d.project.toUpperCase() === projectFilter.toUpperCase()) &&
+        fromOk && toOk &&
+        (searchQuery.trim() === "" ? true :
+          d.task_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (d.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (d.summary || "").toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    })
+    .sort((a, b) => {
+      // running 우선, 그 다음 최근시간순
+      if (a.status === "running" && b.status !== "running") return -1;
+      if (b.status === "running" && a.status !== "running") return 1;
+      const ta = a.started_at || a.created_at || "";
+      const tb = b.started_at || b.created_at || "";
+      return tb.localeCompare(ta);
+    });
 
   // Error type counts — T-072: error_breakdown API 필드 우선 사용
   const errorItems = data?.directives.filter((d) => d.status === "error") ?? [];
@@ -323,6 +357,29 @@ function DirectivesTab() {
       {/* 프로젝트 필터 */}
       <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={data?.by_project ?? undefined} />
 
+      {/* 검색창 + 날짜 필터 */}
+      <div className="mb-3 space-y-2">
+        <input
+          type="text"
+          placeholder="Task ID, 제목, 요약 검색..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-gray-500 whitespace-nowrap">기간</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          <span className="text-xs text-gray-500">~</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg whitespace-nowrap">초기화</button>
+          )}
+        </div>
+      </div>
+
       {/* 상태 필터 + 새로고침 */}
       <div className="flex gap-2 mb-4 flex-wrap items-center">
         {(["all", "running", "completed", "error"] as DirectiveFilter[]).map((f) => (
@@ -345,9 +402,10 @@ function DirectivesTab() {
             {completeLoading ? '처리중...' : `✅ 전체 진행 완료 (${data?.running}건)`}
           </button>
         )}
+        <span className="ml-auto text-xs text-gray-500">{filtered.length}건</span>
         <button
           onClick={() => load()}
-          className="ml-auto px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+          className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
         >
           새로고침
         </button>
@@ -435,18 +493,23 @@ function ReportsTab() {
   const [detail, setDetail] = useState<string>("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async (proj: ProjectFilter = projectFilter) => {
     setLoading(true);
     try {
       const res = await api.getReports(proj === "all" ? undefined : proj);
-      // 중복 제거 (filename 기준)
+      // 중복 제거 (filename 기준) + 최근시간순 정렬
       const seen = new Set<string>();
-      const unique = (res.reports || []).filter((r: Report) => {
-        if (seen.has(r.filename)) return false;
-        seen.add(r.filename);
-        return true;
-      });
+      const unique = (res.reports || [])
+        .filter((r: Report) => {
+          if (seen.has(r.filename)) return false;
+          seen.add(r.filename);
+          return true;
+        })
+        .sort((a: Report, b: Report) => (b.completed_at || "").localeCompare(a.completed_at || ""));
       setReports(unique);
       setByProject(res.by_project || {});
     } catch {
@@ -491,6 +554,29 @@ function ReportsTab() {
       {/* 프로젝트 필터 */}
       <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={byProject} />
 
+      {/* 검색창 + 날짜 필터 */}
+      <div className="mb-3 space-y-2">
+        <input
+          type="text"
+          placeholder="Task ID, 제목, 요약 검색..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-gray-500 whitespace-nowrap">기간</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          <span className="text-xs text-gray-500">~</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg whitespace-nowrap">초기화</button>
+          )}
+        </div>
+      </div>
+
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div className="flex gap-3 text-xs">
           <span className="text-gray-400">총 <span className="text-white font-semibold">{reports.length}</span>건</span>
@@ -513,7 +599,17 @@ function ReportsTab() {
         </div>
       ) : (
         <div className="space-y-2">
-          {reports.map((r, i) => (
+          {reports.filter((r) => {
+            const refDate = (r.completed_at || "").slice(0, 10);
+            const fromOk = dateFrom ? refDate >= dateFrom : true;
+            const toOk = dateTo ? refDate <= dateTo : true;
+            return fromOk && toOk && (
+              searchQuery.trim() === "" ? true :
+                r.task_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (r.filename || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (r.summary || "").toLowerCase().includes(searchQuery.toLowerCase())
+            );
+          }).map((r, i) => (
             <div key={i} className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
               <button
                 className="w-full text-left p-3 hover:bg-gray-750 transition-colors"
@@ -567,6 +663,9 @@ function ReportsTab() {
 function RemoteTab() {
   const [data, setData] = useState<{ tasks: TaskHistory[]; remote_servers: RemoteServer[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -629,6 +728,23 @@ function RemoteTab() {
         </div>
       )}
 
+      <div className="mb-3 space-y-2">
+        <input type="text" placeholder="Task ID, 서버, 에이전트 검색..."
+          value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-gray-500 whitespace-nowrap">기간</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          <span className="text-xs text-gray-500">~</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg whitespace-nowrap">초기화</button>
+          )}
+        </div>
+      </div>
       <div className="flex justify-between items-center mb-4">
         <span className="text-sm text-gray-300">총 {data?.total ?? 0}건</span>
         <button onClick={load} className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg">
@@ -656,7 +772,19 @@ function RemoteTab() {
               </tr>
             </thead>
             <tbody>
-              {data.tasks.map((t, i) => (
+              {[...data.tasks]
+                .filter((t) => {
+                  const refDate = (t.started_at || "").slice(0, 10);
+                  const fromOk = dateFrom ? refDate >= dateFrom : true;
+                  const toOk = dateTo ? refDate <= dateTo : true;
+                  return fromOk && toOk && (
+                    searchQuery.trim() === "" ? true :
+                      (t.task_id || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (t.server || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (t.from_agent || "").toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                })
+                .sort((a, b) => (b.started_at || "").localeCompare(a.started_at || "")).map((t, i) => (
                 <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
                   <td className="p-3 text-white font-mono font-medium">{t.task_id}</td>
                   <td className="p-3 text-gray-400 hidden md:table-cell">{t.server || "-"}</td>
@@ -668,6 +796,173 @@ function RemoteTab() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Tab: Documents ───────────────────────────────────────────────────────────
+const DOC_TYPE_LABELS: Record<string, string> = {
+  plan: "기획서",
+  tech: "기술문서",
+  research: "연구보고서",
+  status: "상황보고",
+  directive: "지시서",
+};
+const DOC_TYPE_COLORS: Record<string, string> = {
+  plan:      "bg-blue-900 text-blue-200",
+  tech:      "bg-purple-900 text-purple-200",
+  research:  "bg-green-900 text-green-200",
+  status:    "bg-yellow-900 text-yellow-200",
+  directive: "bg-orange-900 text-orange-200",
+};
+
+function DocTypeBadge({ type }: { type: string }) {
+  const cls = DOC_TYPE_COLORS[type] || "bg-gray-700 text-gray-300";
+  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>{DOC_TYPE_LABELS[type] || type}</span>;
+}
+
+function DocumentsTab() {
+  const [docs, setDocs] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string>("");
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getDocuments();
+      setDocs(res.documents || []);
+    } catch {
+      setDocs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleExpand = async (doc: Document) => {
+    if (expanded === doc.id) { setExpanded(null); setDetail(""); return; }
+    setExpanded(doc.id);
+    setDetailLoading(true);
+    setDetail("");
+    try {
+      const res = await api.getDocumentContent(doc.id);
+      setDetail(res.content || "내용 없음");
+    } catch {
+      setDetail("문서를 불러올 수 없습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const DOC_TYPES = ["all", "plan", "tech", "research", "status", "directive"];
+
+  const filtered = docs
+    .filter((d) => {
+      const refDate = (d.created_at || "").slice(0, 10).replace(/\./g, "-").trim();
+      // created_at: "2026-03-06 12:14 KST" → slice(0,10) → "2026-03-06"
+      const dateStr = d.created_at ? d.created_at.slice(0, 10) : "";
+      const fromOk = dateFrom ? dateStr >= dateFrom : true;
+      const toOk = dateTo ? dateStr <= dateTo : true;
+      return (
+        (typeFilter === "all" || d.type === typeFilter) &&
+        fromOk && toOk &&
+        (searchQuery.trim() === "" ? true :
+          d.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (d.summary || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (d.tags || []).some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())))
+      );
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  return (
+    <div>
+      {/* 타입 필터 */}
+      <div className="flex gap-1.5 flex-wrap mb-3">
+        {DOC_TYPES.map((t) => (
+          <button key={t} onClick={() => setTypeFilter(t)}
+            className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
+              typeFilter === t
+                ? t === "all" ? "bg-white text-gray-900" : (DOC_TYPE_COLORS[t] || "bg-gray-600 text-white") + " ring-1 ring-white/30"
+                : "border border-gray-600 text-gray-400 hover:bg-gray-700"
+            }`}>
+            {t === "all" ? "전체" : DOC_TYPE_LABELS[t] || t}
+          </button>
+        ))}
+      </div>
+
+      {/* 검색 + 날짜 필터 */}
+      <div className="mb-3 space-y-2">
+        <input type="text" placeholder="문서 ID, 제목, 태그 검색..."
+          value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+        <div className="flex gap-2 items-center">
+          <span className="text-xs text-gray-500 whitespace-nowrap">기간</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          <span className="text-xs text-gray-500">~</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="flex-1 px-2 py-1.5 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg whitespace-nowrap">초기화</button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center mb-4">
+        <span className="text-xs text-gray-400">총 <span className="text-white font-semibold">{filtered.length}</span>건</span>
+        <button onClick={load} className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg">새로고침</button>
+      </div>
+
+      {loading ? (
+        <div className="text-center text-gray-400 py-12">로딩 중...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
+          저장된 문서가 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((doc) => (
+            <div key={doc.id} className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+              <button className="w-full text-left p-3 hover:bg-gray-750 transition-colors" onClick={() => handleExpand(doc)}>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-white font-mono text-xs font-semibold">{doc.id}</span>
+                  <DocTypeBadge type={doc.type} />
+                  <span className="text-gray-200 text-xs flex-1 min-w-0 truncate font-medium">{doc.title}</span>
+                  <span className="text-gray-500 text-xs hidden md:inline">{doc.created_at?.slice(0, 16)}</span>
+                  <span className="text-gray-500 text-xs">{expanded === doc.id ? "▲" : "▼"}</span>
+                </div>
+                <div className="flex gap-1 mt-1.5 flex-wrap">
+                  {(doc.tags || []).map((tag) => (
+                    <span key={tag} className="px-1.5 py-0.5 text-xs bg-gray-700 text-gray-400 rounded">{tag}</span>
+                  ))}
+                </div>
+                <div className="text-gray-500 text-xs mt-1 truncate">{doc.summary?.slice(0, 120)}</div>
+              </button>
+              {expanded === doc.id && (
+                <div className="border-t border-gray-700 p-3">
+                  {detailLoading ? (
+                    <div className="text-gray-400 text-xs py-4 text-center">로딩 중...</div>
+                  ) : (
+                    <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-[500px] overflow-auto font-mono leading-relaxed">
+                      {detail}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -893,6 +1188,7 @@ export default function TasksPage() {
     { key: "reports", label: "📊 보고서" },
     { key: "remote", label: "🔄 원격작업" },
     { key: "analytics", label: "📈 분석" },
+    { key: "docs", label: "📄 문서" },
   ];
 
   return (
@@ -921,6 +1217,7 @@ export default function TasksPage() {
         {tab === "reports" && <ReportsTab />}
         {tab === "remote" && <RemoteTab />}
         {tab === "analytics" && <AnalyticsTab />}
+        {tab === "docs" && <DocumentsTab />}
       </div>
     </div>
   );
