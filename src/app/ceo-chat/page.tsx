@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
+import ModelSelector, { DEFAULT_MODEL } from "@/components/chat/ModelSelector";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -37,6 +38,7 @@ export default function CeoChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTasksCount, setActiveTasksCount] = useState(0);
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function CeoChatPage() {
     setMessages(prev => [...prev, { role: "user", content: userMsg }]);
 
     try {
-      const data = await api.sendCeoMessage(sessionId, userMsg);
+      const data = await api.sendCeoMessage(sessionId, userMsg, selectedModel);
       if (sessionId === "auto" && data.session_id) {
         setSessionId(data.session_id);
       }
@@ -258,6 +260,7 @@ export default function CeoChatPage() {
 
         {/* Input */}
         <div className="p-4" style={{ borderTop: "1px solid var(--border)", background: "var(--bg-card)" }}>
+          <ModelSelector value={selectedModel} onChange={setSelectedModel} />
           <div className="flex gap-2">
             <input
               type="text"

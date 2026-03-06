@@ -109,6 +109,24 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Genspark AI 바로가기 카드 */}
+        <div className="mb-6">
+          <Link
+            href="/genspark"
+            className="flex items-center gap-4 rounded-xl p-4 transition-colors"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+          >
+            <div className="text-3xl">🌐</div>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>Genspark AI Chat</p>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>CEO 전용 웹 AI 채팅 — 클릭하여 열기</p>
+            </div>
+            <div className="ml-auto text-xs px-3 py-1 rounded-full" style={{ background: "var(--accent)", color: "#fff" }}>
+              열기 →
+            </div>
+          </Link>
+        </div>
+
         {/* 하단: 최근 대화 + 알림/CEO결정 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* 최근 대화 5건 */}

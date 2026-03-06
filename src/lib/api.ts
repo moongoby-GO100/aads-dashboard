@@ -116,11 +116,11 @@ export const api = {
   // T-067: Analytics
   getAnalytics: () => request<any>("/dashboard/analytics"),
 
-  // T-073: CEO Chat v2
-  sendCeoMessage: (sessionId: string, message: string) =>
+  // T-073: CEO Chat v2 / T-104: model 파라미터 추가
+  sendCeoMessage: (sessionId: string, message: string, model?: string) =>
     request<any>("/ceo-chat/message", {
       method: "POST",
-      body: JSON.stringify({ session_id: sessionId, message }),
+      body: JSON.stringify({ session_id: sessionId, message, ...(model ? { model } : {}) }),
     }),
   getCeoSessions: () => request<any>("/ceo-chat/sessions"),
   getCeoSession: (sessionId: string) => request<any>(`/ceo-chat/sessions/${sessionId}`),
@@ -135,12 +135,14 @@ export const api = {
     body: JSON.stringify({ project: project || "all" }),
   }),
 
-  // T-103: 대화창(Channels) CRUD
+  // T-103: 대화창(Channels) CRUD + context-package
   getChannels: () => request<any>("/channels"),
-  createChannel: (data: { id: string; name: string; description: string; url: string; status?: string; project?: string; server?: string }) =>
+  getChannel: (id: string) => request<any>(`/channels/${encodeURIComponent(id)}`),
+  createChannel: (data: { id: string; name: string; description: string; url: string; status?: string; project?: string; server?: string; context_docs?: {role: string; url: string}[]; system_prompt?: string }) =>
     request<any>("/channels", { method: "POST", body: JSON.stringify(data) }),
-  updateChannel: (id: string, data: { name?: string; description?: string; url?: string; status?: string; project?: string; server?: string }) =>
+  updateChannel: (id: string, data: { name?: string; description?: string; url?: string; status?: string; project?: string; server?: string; context_docs?: {role: string; url: string}[]; system_prompt?: string }) =>
     request<any>(`/channels/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteChannel: (id: string) =>
     request<any>(`/channels/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getContextPackage: (id: string) => request<any>(`/channels/${encodeURIComponent(id)}/context-package`),
 };
