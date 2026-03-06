@@ -155,6 +155,18 @@ export const api = {
   getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
   getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
 
+  // AADS-123: Lessons API
+  getLessons: (category?: string, project?: string) => {
+    const q = new URLSearchParams();
+    if (category) q.set("category", category);
+    if (project) q.set("project", project);
+    const qs = q.toString();
+    return request<any>(`/lessons${qs ? "?" + qs : ""}`);
+  },
+  getLesson: (id: string) => request<any>(`/lessons/${encodeURIComponent(id)}`),
+  getOpsDirectiveLifecycleByProject: (project: string, limit = 10) =>
+    request<any>(`/ops/directive-lifecycle?project=${encodeURIComponent(project)}&limit=${limit}`),
+
   // T-038: Watchdog
   getWatchdogSummary: () => request<any>("/watchdog/summary"),
   getWatchdogServices: () => request<any>("/watchdog/services"),
