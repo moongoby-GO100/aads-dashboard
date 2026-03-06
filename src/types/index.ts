@@ -107,6 +107,14 @@ export interface HealthResponse {
   status: "ok" | "error";
   graph_ready: boolean;
   version: string;
+  sandbox?: {
+    status: string;
+    docker_connected: boolean;
+    python_image: boolean;
+    node_image: boolean;
+    active_sandboxes: number;
+    max_concurrent: number;
+  };
 }
 
 export interface SSEEvent {

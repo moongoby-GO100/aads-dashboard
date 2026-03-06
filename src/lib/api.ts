@@ -145,4 +145,10 @@ export const api = {
   deleteChannel: (id: string) =>
     request<any>(`/channels/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getContextPackage: (id: string) => request<any>(`/channels/${encodeURIComponent(id)}/context-package`),
+
+  // T-038: Watchdog
+  getWatchdogSummary: () => request<any>("/watchdog/summary"),
+  getWatchdogServices: () => request<any>("/watchdog/services"),
+  getWatchdogErrors: (status?: string, limit = 20) =>
+    request<any>(`/watchdog/errors?${status ? `status=${status}&` : ""}limit=${limit}`),
 };
