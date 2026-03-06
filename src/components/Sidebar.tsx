@@ -14,6 +14,8 @@ const navItems = [
   { href: "/ceo-chat", label: "CEO Chat", icon: "💬" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
   { href: "/ops", label: "운영 현황", icon: "📊" },
+  { href: "/ops/recovery", label: "Recovery", icon: "🔄" },
+  { href: "/ops/servers", label: "Servers", icon: "🖥️" },
   { href: "/lessons", label: "교훈", icon: "💡" },
   { href: "/flow", label: "FLOW", icon: "🔄" },
   { href: "/reports", label: "Reports", icon: "📊" },
