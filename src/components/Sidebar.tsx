@@ -8,7 +8,6 @@ const navItems = [
   { href: "/project-status", label: "Project Status", icon: "📊" },
   { href: "/conversations", label: "Conversations", icon: "💬" },
   { href: "/channels", label: "대화창 관리", icon: "📌" },
-  { href: "/genspark", label: "Genspark AI", icon: "🌐" },
   { href: "/managers", label: "Managers", icon: "👥" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
   { href: "/tasks", label: "Tasks", icon: "📋" },
