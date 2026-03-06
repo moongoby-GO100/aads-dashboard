@@ -1,5 +1,4 @@
 "use client";
-import React from "react";
 import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
@@ -16,7 +15,6 @@ interface Directive {
   duration_seconds?: number | null;
   file_path: string;
   error_type?: string;
-  summary?: string;
 }
 
 // ─── Helper: Safe Render ──────────────────────────────────────────────────────
@@ -24,26 +22,6 @@ function safeRender(value: unknown): string {
   if (value === null || value === undefined) return "-";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
-}
-
-// ─── Helper: KST Time Display ─────────────────────────────────────────────────
-function toKST(dtStr: string | null | undefined, len = 16): string {
-  if (!dtStr) return "-";
-  try {
-    const d = new Date(dtStr);
-    if (isNaN(d.getTime())) return dtStr.slice(0, len);
-    const kst = d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
-    // "2026. 3. 5. 16:39:00" → "2026-03-05 16:39"
-    const m = kst.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{1,2}):(\d{2})/);
-    if (m) {
-      const [, y, mo, day, h, min] = m;
-      const full = `${y}-${mo.padStart(2,"0")}-${day.padStart(2,"0")} ${h.padStart(2,"0")}:${min}`;
-      return full.slice(0, len);
-    }
-    return dtStr.slice(0, len);
-  } catch {
-    return dtStr.slice(0, len);
-  }
 }
 
 interface DirectiveSummary {
@@ -64,7 +42,6 @@ interface Report {
   project: string;
   github_url: string;
   summary: string;
-  cost_usd?: number;
 }
 
 interface TaskHistory {
@@ -98,13 +75,11 @@ interface AnalyticsSummary {
   error_tasks: number;
   total_conversations: number;
   total_cost_usd: number;
-  cost_status?: string;
-  cost_message?: string;
   total_tokens: number;
   avg_task_duration_min: number;
   active_servers: number;
 }
-interface ByProject { project: string; conversations: number; cost_usd: number; tokens: number; last_activity: string; completed?: number; error?: number; total?: number; }
+interface ByProject { project: string; conversations: number; cost_usd: number; tokens: number; last_activity: string; }
 interface ByServer { server: string; tasks: number; status: string; last_report: string; }
 interface DailyTrend { date: string; tasks: number; cost_usd: number; }
 interface ErrorDist { error_type: string; count: number; }
@@ -166,42 +141,24 @@ function RemoteStatusBadge({ status }: { status: string }) {
 }
 
 // ─── Helper: Project Filter Bar ────────────────────────────────────────────────
-function ProjectFilterBar({
-  active,
-  onChange,
-  counts,
-}: {
-  active: ProjectFilter;
-  onChange: (p: ProjectFilter) => void;
-  counts?: Record<string, number>;
-}) {
+function ProjectFilterBar({ active, onChange }: { active: ProjectFilter; onChange: (p: ProjectFilter) => void }) {
   return (
     <div className="flex gap-1.5 flex-wrap mb-3">
-      {PROJECT_FILTERS.map((p) => {
-        const cnt = p !== "all" && counts ? (counts[p] ?? counts[p.toUpperCase()] ?? 0) : null;
-        return (
-          <button
-            key={p}
-            onClick={() => onChange(p)}
-            className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors flex items-center gap-1 ${
-              active === p
-                ? p === "all"
-                  ? "bg-white text-gray-900"
-                  : projectBadgeClass(p) + " ring-1 ring-white/30"
-                : "border border-gray-600 text-gray-400 hover:bg-gray-700"
-            }`}
-          >
-            {p === "all" ? "전체" : p}
-            {cnt !== null && cnt > 0 && (
-              <span className={`inline-block text-xs font-bold rounded-full px-1.5 py-0 leading-5 ${
-                active === p ? "bg-white/20" : "bg-gray-600 text-gray-200"
-              }`}>
-                {cnt}
-              </span>
-            )}
-          </button>
-        );
-      })}
+      {PROJECT_FILTERS.map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
+            active === p
+              ? p === "all"
+                ? "bg-white text-gray-900"
+                : projectBadgeClass(p) + " ring-1 ring-white/30"
+              : "border border-gray-600 text-gray-400 hover:bg-gray-700"
+          }`}
+        >
+          {p === "all" ? "전체" : p}
+        </button>
+      ))}
     </div>
   );
 }
@@ -212,10 +169,6 @@ function DirectivesTab() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<DirectiveFilter>("all");
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
-  const [expandedTask, setExpandedTask] = useState<string | null>(null);
-  const [taskDetail, setTaskDetail] = useState<string>("");
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [completeLoading, setCompleteLoading] = useState(false);
 
   const load = useCallback(async (proj: ProjectFilter = projectFilter) => {
     setLoading(true);
@@ -229,47 +182,11 @@ function DirectivesTab() {
     }
   }, [projectFilter]);
 
-  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const handleProjectChange = (p: ProjectFilter) => {
     setProjectFilter(p);
     load(p);
-  };
-
-  const handleCompleteAll = async () => {
-    if (!window.confirm('진행중인 모든 태스크를 완료 처리하시겠습니까?')) return;
-    setCompleteLoading(true);
-    try {
-      const res = await api.completeRunning(projectFilter === 'all' ? undefined : projectFilter);
-      alert(res.message || '완료 처리되었습니다.');
-      await load();
-    } catch {
-      alert('처리 중 오류가 발생했습니다.');
-    } finally {
-      setCompleteLoading(false);
-    }
-  };
-
-  const handleExpand = async (d: Directive) => {
-    if (expandedTask === d.task_id) {
-      setExpandedTask(null);
-      setTaskDetail("");
-      return;
-    }
-    setExpandedTask(d.task_id);
-    if (d.summary) {
-      setTaskDetail(d.summary);
-      return;
-    }
-    setDetailLoading(true);
-    try {
-      const res = await api.getDirectiveDetail(d.task_id);
-      setTaskDetail(res.content || "내용 없음");
-    } catch {
-      setTaskDetail("내용을 불러올 수 없습니다.");
-    } finally {
-      setDetailLoading(false);
-    }
   };
 
   const filtered = data?.directives.filter((d) =>
@@ -321,7 +238,7 @@ function DirectivesTab() {
       )}
 
       {/* 프로젝트 필터 */}
-      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={data?.by_project ?? undefined} />
+      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} />
 
       {/* 상태 필터 + 새로고침 */}
       <div className="flex gap-2 mb-4 flex-wrap items-center">
@@ -336,15 +253,6 @@ function DirectivesTab() {
             {f === "all" ? "전체" : f === "running" ? "진행중" : f === "completed" ? "완료" : "에러"}
           </button>
         ))}
-        {(data?.running ?? 0) > 0 && (
-          <button
-            onClick={handleCompleteAll}
-            disabled={completeLoading}
-            className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white rounded-lg font-semibold"
-          >
-            {completeLoading ? '처리중...' : `✅ 전체 진행 완료 (${data?.running}건)`}
-          </button>
-        )}
         <button
           onClick={() => load()}
           className="ml-auto px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
@@ -357,9 +265,7 @@ function DirectivesTab() {
         <div className="text-center text-gray-400 py-12">로딩 중...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
-          {projectFilter !== "all"
-            ? `이 프로젝트의 작업 기록이 없습니다. 원격 서버에서 수집 대기중입니다.`
-            : "해당하는 지시서가 없습니다."}
+          해당하는 지시서가 없습니다.
         </div>
       ) : (
         <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
@@ -377,46 +283,25 @@ function DirectivesTab() {
             </thead>
             <tbody>
               {filtered.map((d, i) => (
-                <React.Fragment key={i}>
-                  <tr
-                    className={`border-b border-gray-700 last:border-0 hover:bg-gray-750 cursor-pointer ${expandedTask === d.task_id ? "bg-gray-750" : ""}`}
-                    onClick={() => handleExpand(d)}
-                  >
-                    <td className="p-3 text-white font-medium font-mono">
-                      <span className="mr-1 text-gray-500 text-xs">{expandedTask === d.task_id ? "▲" : "▶"}</span>
-                      {safeRender(d.task_id)}
-                    </td>
-                    <td className="p-3 text-gray-200 max-w-xs">
-                      <span className="block truncate">{safeRender(d.title)}</span>
-                    </td>
-                    <td className="p-3 hidden md:table-cell">
-                      <ProjectBadge project={d.project} />
-                    </td>
-                    <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
-                    <td className="p-3 hidden md:table-cell">
-                      {d.error_type ? (
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${safeRender(d.error_type) === "auth_expired" ? "bg-gray-700 text-gray-400" : "bg-red-900 text-red-300"}`}>
-                          {safeRender(d.error_type)}
-                        </span>
-                      ) : <span className="text-gray-600">-</span>}
-                    </td>
-                    <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.started_at || d.created_at)}</td>
-                    <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.completed_at)}</td>
-                  </tr>
-                  {expandedTask === d.task_id && (
-                    <tr className="bg-gray-900 border-b border-gray-700">
-                      <td colSpan={7} className="p-4">
-                        {detailLoading ? (
-                          <div className="text-gray-400 text-xs">로딩 중...</div>
-                        ) : (
-                          <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono bg-gray-800 p-3 rounded-lg max-h-96 overflow-y-auto">
-                            {taskDetail || d.summary || "내용 없음"}
-                          </pre>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
+                  <td className="p-3 text-white font-medium font-mono">{safeRender(d.task_id)}</td>
+                  <td className="p-3 text-gray-200 max-w-xs">
+                    <span className="block truncate">{safeRender(d.title)}</span>
+                  </td>
+                  <td className="p-3 hidden md:table-cell">
+                    <ProjectBadge project={d.project} />
+                  </td>
+                  <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
+                  <td className="p-3 hidden md:table-cell">
+                    {d.error_type ? (
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${safeRender(d.error_type) === "auth_expired" ? "bg-gray-700 text-gray-400" : "bg-red-900 text-red-300"}`}>
+                        {safeRender(d.error_type)}
+                      </span>
+                    ) : <span className="text-gray-600">-</span>}
+                  </td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{(d.started_at || d.created_at || "-").slice(0, 16)}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{d.completed_at ? safeRender(d.completed_at).slice(0, 16) : "-"}</td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -429,7 +314,6 @@ function DirectivesTab() {
 // ─── Tab: Reports ─────────────────────────────────────────────────────────────
 function ReportsTab() {
   const [reports, setReports] = useState<Report[]>([]);
-  const [byProject, setByProject] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<string>("");
@@ -448,16 +332,14 @@ function ReportsTab() {
         return true;
       });
       setReports(unique);
-      setByProject(res.by_project || {});
     } catch {
       setReports([]);
-      setByProject({});
     } finally {
       setLoading(false);
     }
   }, [projectFilter]);
 
-  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const handleProjectChange = (p: ProjectFilter) => {
     setProjectFilter(p);
@@ -489,14 +371,13 @@ function ReportsTab() {
   return (
     <div>
       {/* 프로젝트 필터 */}
-      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={byProject} />
+      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} />
 
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div className="flex gap-3 text-xs">
           <span className="text-gray-400">총 <span className="text-white font-semibold">{reports.length}</span>건</span>
           <span className="text-green-400">성공 <span className="font-semibold">{successCount}</span></span>
           <span className="text-red-400">에러 <span className="font-semibold">{errorCount}</span></span>
-          {(() => { const tc = reports.reduce((sum, r) => sum + (r.cost_usd || 0), 0); return tc > 0 ? <span className="text-yellow-400">비용 <span className="font-semibold">${tc.toFixed(2)}</span></span> : null; })()}
         </div>
         <button onClick={() => load()} className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg">
           새로고침
@@ -507,9 +388,7 @@ function ReportsTab() {
         <div className="text-center text-gray-400 py-12">로딩 중...</div>
       ) : reports.length === 0 ? (
         <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
-          {projectFilter !== "all"
-            ? "이 프로젝트의 작업 기록이 없습니다. 원격 서버에서 수집 대기중입니다."
-            : "보고서가 없습니다."}
+          보고서가 없습니다.
         </div>
       ) : (
         <div className="space-y-2">
@@ -524,9 +403,6 @@ function ReportsTab() {
                   <ProjectBadge project={r.project} />
                   <span className="text-gray-300 text-xs flex-1 min-w-0 truncate">{r.filename}</span>
                   <StatusBadge status={r.status} />
-                  {(r.cost_usd ?? 0) > 0 && (
-                    <span className="text-yellow-400 text-xs font-mono">${(r.cost_usd ?? 0).toFixed(2)}</span>
-                  )}
                   <span className="text-gray-500 text-xs hidden md:inline">{r.completed_at || "-"}</span>
                   {r.github_url && (
                     <a
@@ -580,7 +456,7 @@ function RemoteTab() {
     }
   }, []);
 
-  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   // REMOTE_211, REMOTE_114 우선 표시
   const priorityServers = ["REMOTE_211", "REMOTE_114"];
@@ -614,7 +490,7 @@ function RemoteTab() {
               </div>
               {s.last_ping && (
                 <div className="text-xs text-gray-400 mb-1">
-                  최근 보고: <span className="text-gray-300">{toKST(s.last_ping, 19)}</span>
+                  최근 보고: <span className="text-gray-300">{s.last_ping.slice(0, 19)}</span>
                 </div>
               )}
               {s.monitoring_projects && s.monitoring_projects.length > 0 && (
@@ -661,8 +537,8 @@ function RemoteTab() {
                   <td className="p-3 text-white font-mono font-medium">{t.task_id}</td>
                   <td className="p-3 text-gray-400 hidden md:table-cell">{t.server || "-"}</td>
                   <td className="p-3"><RemoteStatusBadge status={t.status} /></td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(t.started_at, 19)}</td>
-                  <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(t.finished_at, 19)}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{t.started_at ? String(t.started_at).slice(0, 19) : "-"}</td>
+                  <td className="p-3 text-gray-500 hidden lg:table-cell">{t.finished_at ? String(t.finished_at).slice(0, 19) : "-"}</td>
                   <td className="p-3 text-gray-400 hidden md:table-cell">{t.from_agent || "-"}</td>
                 </tr>
               ))}
@@ -699,23 +575,17 @@ function AnalyticsTab() {
     }
   }, []);
 
-  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>;
   if (!data) return <div className="text-center text-red-400 py-12">데이터 로드 실패</div>;
 
   const s = data.summary;
-  // T-080: success_rate = completed / (completed + error) * 100
-  const successRate = (s.completed_tasks + s.error_tasks) > 0
-    ? Math.round((s.completed_tasks / (s.completed_tasks + s.error_tasks)) * 100)
-    : 0;
-  const dailyTrend = Array.isArray(data.daily_trend) ? data.daily_trend : [];
-  const byProject = Array.isArray(data.by_project) ? data.by_project : [];
-  const byServer = Array.isArray(data.by_server) ? data.by_server : [];
-  const maxTasks = Math.max(...dailyTrend.map((d) => d.tasks), 1);
+  const successRate = s.total_tasks > 0 ? Math.round((s.completed_tasks / s.total_tasks) * 100) : 0;
+  const maxTasks = Math.max(...(data.daily_trend || []).map((d) => d.tasks), 1);
 
   // Error distribution
-  const errorDist = Array.isArray(data.error_distribution) ? data.error_distribution : [];
+  const errorDist = data.error_distribution || [];
   const totalErrors = errorDist.reduce((sum, e) => sum + e.count, 0) || 1;
 
   return (
@@ -732,59 +602,45 @@ function AnalyticsTab() {
           <div className="text-xs text-gray-500">{s.completed_tasks}/{s.total_tasks}</div>
         </div>
         <div className="rounded-xl p-4 border border-yellow-700 bg-gray-900">
-          <div className="text-2xl font-bold text-yellow-300">
-            {s.cost_status === "active" && s.total_cost_usd > 0
-              ? `$${s.total_cost_usd.toFixed(2)}`
-              : "데이터 수집중"}
-          </div>
+          <div className="text-2xl font-bold text-yellow-300">${s.total_cost_usd.toFixed(2)}</div>
           <div className="text-xs mt-1 text-gray-400">총 비용</div>
           <div className="text-xs text-gray-500">{s.total_tokens.toLocaleString()} tokens</div>
-          {s.cost_status === "active" && s.total_cost_usd > 0 && (
-            <div className="text-xs text-green-500 mt-1">task_cost_log 집계</div>
-          )}
         </div>
         <div className="rounded-xl p-4 border border-purple-700 bg-gray-900">
-          <div className="text-2xl font-bold text-purple-300">
-            {s.avg_task_duration_min < 0 ? "데이터 부족" : `${s.avg_task_duration_min.toFixed(1)}분`}
-          </div>
+          <div className="text-2xl font-bold text-purple-300">{s.avg_task_duration_min.toFixed(1)}분</div>
           <div className="text-xs mt-1 text-gray-400">평균 작업시간</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 프로젝트별 완료율 바 차트 */}
+        {/* 프로젝트별 테이블 */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">프로젝트별 완료율</h3>
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
-            {byProject.length === 0 ? (
-              <div className="text-center text-gray-500 py-4">데이터 없음</div>
-            ) : (
-              byProject
-                .filter((p) => Array.isArray([p]) && p.project && p.project.length <= 40)
-                .map((p, i) => {
-                  const total = typeof p.total === "number" ? p.total : 0;
-                  const completed = typeof p.completed === "number" ? p.completed : 0;
-                  const error = typeof p.error === "number" ? p.error : 0;
-                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-                  return (
-                    <div key={i}>
-                      <div className="flex justify-between items-center mb-1">
-                        <ProjectBadge project={p.project} />
-                        <span className="text-xs text-gray-400">{completed}/{total} ({pct}%)</span>
-                      </div>
-                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all"
-                          style={{ width: `${Math.max(pct, completed > 0 ? 2 : 0)}%` }}
-                        />
-                      </div>
-                      {error > 0 && (
-                        <div className="text-xs text-red-400 mt-0.5">에러 {error}건</div>
-                      )}
-                    </div>
-                  );
-                })
-            )}
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">프로젝트별 현황</h3>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-700 text-gray-400">
+                  <th className="text-left p-3">프로젝트</th>
+                  <th className="text-right p-3">대화수</th>
+                  <th className="text-right p-3">비용</th>
+                  <th className="text-right p-3 hidden md:table-cell">토큰</th>
+                  <th className="text-right p-3 hidden lg:table-cell">최근활동</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.by_project.length === 0 ? (
+                  <tr><td colSpan={5} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
+                ) : data.by_project.map((p, i) => (
+                  <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
+                    <td className="p-3"><ProjectBadge project={p.project} /></td>
+                    <td className="p-3 text-right text-gray-300">{p.conversations}</td>
+                    <td className="p-3 text-right text-yellow-400">${p.cost_usd.toFixed(2)}</td>
+                    <td className="p-3 text-right text-gray-400 hidden md:table-cell">{p.tokens.toLocaleString()}</td>
+                    <td className="p-3 text-right text-gray-500 hidden lg:table-cell">{p.last_activity ? p.last_activity.slice(0, 10) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -802,9 +658,9 @@ function AnalyticsTab() {
                 </tr>
               </thead>
               <tbody>
-                {byServer.length === 0 ? (
+                {data.by_server.length === 0 ? (
                   <tr><td colSpan={4} className="p-4 text-center text-gray-500">데이터 없음</td></tr>
-                ) : byServer.map((sv, i) => (
+                ) : data.by_server.map((sv, i) => (
                   <tr key={i} className="border-b border-gray-700 last:border-0 hover:bg-gray-750">
                     <td className="p-3 text-white font-mono font-medium">{sv.server}</td>
                     <td className="p-3 text-right text-gray-300">{sv.tasks}</td>
@@ -822,11 +678,11 @@ function AnalyticsTab() {
       <div>
         <h3 className="text-sm font-semibold text-gray-300 mb-3">일별 작업 트렌드 (최근 7일)</h3>
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-          {dailyTrend.length === 0 ? (
+          {data.daily_trend.length === 0 ? (
             <div className="text-center text-gray-500 py-8">데이터 없음</div>
           ) : (
             <div className="flex items-end gap-2 h-32">
-              {dailyTrend.slice(-7).map((d, i) => {
+              {data.daily_trend.slice(-7).map((d, i) => {
                 const pct = Math.round((d.tasks / maxTasks) * 100);
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-1">

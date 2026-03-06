@@ -1,7 +1,3 @@
-// T-072: Flat API response types
-export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
-export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
-
 import type {
   HealthResponse,
   ProjectListResponse,
@@ -83,12 +79,6 @@ export const api = {
       `/conversations?${project ? `project=${project}&` : ''}${keyword ? `keyword=${encodeURIComponent(keyword)}&` : ''}limit=${limit}&offset=${offset}`
     ),
   getConversationStats: () => request<ConversationStatsResponse>('/conversations/stats'),
-  // T-077: Channel-based conversation API
-  getConversationChannels: () => request<any>('/conversations/channels'),
-  getConversationMessages: (channel: string, limit = 50, offset = 0) =>
-    request<any>(`/conversations/messages?channel=${encodeURIComponent(channel)}&limit=${limit}&offset=${offset}`),
-  searchConversations: (q: string, channel = 'ALL', limit = 20) =>
-    request<any>(`/conversations/search?q=${encodeURIComponent(q)}&channel=${encodeURIComponent(channel)}&limit=${limit}`),
   getPublicSummary: () => request<PublicSummaryResponse>('/context/public-summary'),
   getMemorySearch: (params?: { agent_id?: string; memory_type?: string; keyword?: string }) => {
     const q = new URLSearchParams();
@@ -106,41 +96,12 @@ export const api = {
   getAlerts: () => request<any>("/projects/dashboard/alerts"),
   getCeoDecisions: (days?: number) => request<any>(`/memory/ceo-decisions?days=${days || 30}`),
 
-  // T-072: Directives + Reports + Task-History (flat response)
+  // T-066: Directives + Reports + Task-History
   getDirectives: (project?: string) => request<any>(`/dashboard/directives${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
   getReports: (project?: string) => request<any>(`/dashboard/reports${project && project !== "all" ? `?project=${encodeURIComponent(project)}` : ""}`),
   getReportDetail: (filename: string) => request<any>(`/dashboard/reports/${encodeURIComponent(filename)}`),
   getTaskHistory: () => request<any>("/dashboard/task-history"),
-  getDirectiveDetail: (taskId: string) => request<any>(`/dashboard/directives/${encodeURIComponent(taskId)}`),
 
   // T-067: Analytics
   getAnalytics: () => request<any>("/dashboard/analytics"),
-
-  // T-073: CEO Chat v2
-  sendCeoMessage: (sessionId: string, message: string) =>
-    request<any>("/ceo-chat/message", {
-      method: "POST",
-      body: JSON.stringify({ session_id: sessionId, message }),
-    }),
-  getCeoSessions: () => request<any>("/ceo-chat/sessions"),
-  getCeoSession: (sessionId: string) => request<any>(`/ceo-chat/sessions/${sessionId}`),
-  endCeoSession: (sessionId: string) =>
-    request<any>("/ceo-chat/end-session", {
-      method: "POST",
-      body: JSON.stringify({ session_id: sessionId }),
-    }),
-  getCeoCostSummary: () => request<any>("/ceo-chat/cost-summary"),
-  completeRunning: (project?: string) => request<any>("/dashboard/complete-running", {
-    method: "POST",
-    body: JSON.stringify({ project: project || "all" }),
-  }),
-
-  // T-103: 대화창(Channels) CRUD
-  getChannels: () => request<any>("/channels"),
-  createChannel: (data: { id: string; name: string; description: string; url: string; status?: string; project?: string; server?: string }) =>
-    request<any>("/channels", { method: "POST", body: JSON.stringify(data) }),
-  updateChannel: (id: string, data: { name?: string; description?: string; url?: string; status?: string; project?: string; server?: string }) =>
-    request<any>(`/channels/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteChannel: (id: string) =>
-    request<any>(`/channels/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
