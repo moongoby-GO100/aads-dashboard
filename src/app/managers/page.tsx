@@ -23,6 +23,18 @@ interface CoreAgent {
   cost_output_per_1m?: number;
 }
 
+// AADS-143: 프로젝트별 HANDOVER 문서 GitHub 링크
+const HANDOVER_LINKS: Record<string, string> = {
+  AADS: "https://github.com/moongoby-GO100/aads-docs/blob/master/HANDOVER.md",
+  GO100: "https://github.com/moongoby-GO100/aads-docs/blob/master/GO100-HANDOVER.md",
+  KIS: "https://github.com/moongoby-GO100/aads-docs/blob/master/KIS-HANDOVER.md",
+  SF: "https://github.com/moongoby-GO100/aads-docs/blob/master/SF-HANDOVER.md",
+  ShortFlow: "https://github.com/moongoby-GO100/aads-docs/blob/master/SF-HANDOVER.md",
+  NTV2: "https://github.com/moongoby-GO100/aads-docs/blob/master/NTV2-HANDOVER.md",
+  NewTalk: "https://github.com/moongoby-GO100/aads-docs/blob/master/NTV2-HANDOVER.md",
+  NAS: "https://github.com/moongoby-GO100/aads-docs/blob/master/NAS-HANDOVER.md",
+};
+
 export default function ManagersPage() {
   const [projectManagers, setProjectManagers] = useState<ManagerAgent[]>([]);
   const [coreAgents, setCoreAgents] = useState<CoreAgent[]>([]);
@@ -32,7 +44,9 @@ export default function ManagersPage() {
   const fetchManagers = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryResult, registryResult] = await Promise.allSettled([
+      // AADS-146: /api/v1/managers 전용 엔드포인트 우선 사용 (fallback: public-summary, registry)
+      const [managersResult, summaryResult, registryResult] = await Promise.allSettled([
+        api.getManagers(),
         api.getPublicSummary(),
         api.getMemorySearch({ memory_type: "agent_registry" }),
       ]);
@@ -40,7 +54,35 @@ export default function ManagersPage() {
       const mgrs: ManagerAgent[] = [];
       const core: CoreAgent[] = [];
 
-      if (summaryResult.status === "fulfilled") {
+      // 1순위: /api/v1/managers
+      if (managersResult.status === "fulfilled") {
+        const d = managersResult.value as any;
+        for (const v of (d.project_managers || [])) {
+          mgrs.push({
+            agent_id: String(v.agent_id || v.key || ""),
+            role: String(v.role || ""),
+            projects: Array.isArray(v.projects) ? v.projects.map(String) : [],
+            server: String(v.server || ""),
+            status: String(v.status || "unknown"),
+            importance: Number(v.importance || 0),
+            required_docs: (v.required_docs as Record<string, string>) || {},
+            inbox_url: String(v.inbox_url || ""),
+          });
+        }
+        for (const v of (d.core_agents || [])) {
+          core.push({
+            key: String(v.key || ""),
+            role: String(v.role || ""),
+            model: String(v.model || ""),
+            alt_model: String(v.alt_model || ""),
+            cost_input_per_1m: Number(v.cost_input_per_1m || 0),
+            cost_output_per_1m: Number(v.cost_output_per_1m || 0),
+          });
+        }
+      }
+
+      // 2순위: public-summary fallback
+      if (mgrs.length === 0 && summaryResult.status === "fulfilled") {
         const d = summaryResult.value as any;
         const agents: { key: string; value: Record<string, unknown> | string }[] = d.data?.agents || [];
         for (const a of agents) {
@@ -69,6 +111,7 @@ export default function ManagersPage() {
         }
       }
 
+      // 3순위: agent_registry fallback
       if (registryResult.status === "fulfilled") {
         const reg = registryResult.value as any;
         const items = reg.results ?? reg.memories ?? [];
@@ -160,19 +203,28 @@ export default function ManagersPage() {
                     </div>
                     <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{mgr.importance}</span>
                   </div>
-                  {mgr.required_docs && Object.keys(mgr.required_docs).length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(mgr.required_docs).map(([docType, url]) => (
-                        url ? (
-                          <a key={docType} href={url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                            style={{ background: "var(--bg-hover)", color: "var(--accent)" }}>
-                            {docType}
-                          </a>
-                        ) : null
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {/* AADS-143: HANDOVER 문서 링크 */}
+                    {mgr.projects.map((p) => {
+                      const hwUrl = HANDOVER_LINKS[p];
+                      return hwUrl ? (
+                        <a key={`hw-${p}`} href={hwUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs px-1.5 py-0.5 rounded transition-colors font-medium"
+                          style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
+                          📄 {p} HANDOVER
+                        </a>
+                      ) : null;
+                    })}
+                    {mgr.required_docs && Object.entries(mgr.required_docs).map(([docType, url]) => (
+                      url ? (
+                        <a key={docType} href={url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                          style={{ background: "var(--bg-hover)", color: "var(--accent)" }}>
+                          {docType}
+                        </a>
+                      ) : null
+                    ))}
+                  </div>
                 </div>
               ))}
               {projectManagers.length === 0 && (

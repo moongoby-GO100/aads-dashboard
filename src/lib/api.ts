@@ -167,6 +167,14 @@ export const api = {
   getOpsDirectiveLifecycleByProject: (project: string, limit = 10) =>
     request<any>(`/ops/directive-lifecycle?project=${encodeURIComponent(project)}&limit=${limit}`),
 
+  // AADS-146: Managers API
+  getManagers: () => request<any>("/managers"),
+  getManagerDetail: (agentId: string) => request<any>(`/managers/${encodeURIComponent(agentId)}`),
+
+  // AADS-143: message_queue / context POST (트리거 메시지 전송)
+  setContext: (data: { category: string; key: string; value: unknown }) =>
+    request<any>("/context/system", { method: "POST", body: JSON.stringify(data) }),
+
   // T-038: Watchdog
   getWatchdogSummary: () => request<any>("/watchdog/summary"),
   getWatchdogServices: () => request<any>("/watchdog/services"),
