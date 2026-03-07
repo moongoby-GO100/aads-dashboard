@@ -803,6 +803,163 @@ function RemoteTab() {
 }
 
 
+// ─── MarkdownRenderer ────────────────────────────────────────────────────────
+function renderInline(text: string, key?: number): React.ReactNode {
+  // Parse **bold**, *italic*, `code`, and plain text
+  const parts: React.ReactNode[] = [];
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let idx = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
+    if (m[2]) parts.push(<strong key={`b${key}-${idx++}`} className="text-white font-semibold">{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={`i${key}-${idx++}`} className="italic text-gray-200">{m[3]}</em>);
+    else if (m[4]) parts.push(<code key={`c${key}-${idx++}`} className="px-1 py-0.5 bg-gray-700 text-yellow-300 rounded text-xs font-mono">{m[4]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last)}</span>);
+  return parts.length ? parts : text;
+}
+
+function MarkdownRenderer({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Code block
+    if (trimmed.startsWith("```")) {
+      const lang = trimmed.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      const isMermaid = lang === "mermaid";
+      elements.push(
+        <div key={`cb${i}`} className={`my-2 rounded-lg overflow-hidden border ${isMermaid ? "border-blue-700" : "border-gray-600"}`}>
+          {lang && (
+            <div className={`px-3 py-1 text-xs font-mono ${isMermaid ? "bg-blue-900 text-blue-300" : "bg-gray-700 text-gray-400"}`}>
+              {isMermaid ? "diagram (mermaid)" : lang}
+            </div>
+          )}
+          <pre className={`p-3 text-xs font-mono leading-relaxed overflow-auto max-h-[400px] whitespace-pre ${isMermaid ? "bg-blue-950 text-blue-200" : "bg-gray-900 text-gray-300"}`}>
+            {codeLines.join("\n")}
+          </pre>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Table
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      const tableRows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const row = lines[i].trim().slice(1, -1).split("|").map((c) => c.trim());
+        if (!/^[-:| ]+$/.test(lines[i].trim())) tableRows.push(row);
+        i++;
+      }
+      elements.push(
+        <div key={`tbl${i}`} className="my-2 overflow-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-700">
+                {tableRows[0]?.map((cell, ci) => (
+                  <th key={ci} className="border border-gray-600 px-2 py-1 text-left text-gray-200 font-semibold">{renderInline(cell, ci)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.slice(1).map((row, ri) => (
+                <tr key={ri} className={ri % 2 === 0 ? "bg-gray-800" : "bg-gray-750"}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="border border-gray-600 px-2 py-1 text-gray-300">{renderInline(cell, ci * 100 + ri)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // Headings
+    const hMatch = trimmed.match(/^(#{1,4})\s+(.+)/);
+    if (hMatch) {
+      const level = hMatch[1].length;
+      const text = hMatch[2];
+      const cls = level === 1 ? "text-xl font-bold text-white mt-4 mb-2 border-b border-gray-600 pb-1"
+        : level === 2 ? "text-base font-bold text-white mt-3 mb-1"
+        : level === 3 ? "text-sm font-semibold text-gray-200 mt-2 mb-1"
+        : "text-xs font-semibold text-gray-300 mt-2 mb-0.5";
+      elements.push(<div key={`h${i}`} className={cls}>{renderInline(text, i)}</div>);
+      i++; continue;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+      elements.push(<hr key={`hr${i}`} className="border-gray-600 my-3" />);
+      i++; continue;
+    }
+
+    // Unordered list
+    if (/^[-*+]\s/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^(\s*[-*+]\s)/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*+]\s/, ""));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul${i}`} className="list-disc list-inside my-1 space-y-0.5 pl-2">
+          {items.map((it, ii) => <li key={ii} className="text-xs text-gray-300">{renderInline(it, ii)}</li>)}
+        </ul>
+      );
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s/, ""));
+        i++;
+      }
+      elements.push(
+        <ol key={`ol${i}`} className="list-decimal list-inside my-1 space-y-0.5 pl-2">
+          {items.map((it, ii) => <li key={ii} className="text-xs text-gray-300">{renderInline(it, ii)}</li>)}
+        </ol>
+      );
+      continue;
+    }
+
+    // Blockquote
+    if (trimmed.startsWith(">")) {
+      const text = trimmed.slice(1).trim();
+      elements.push(<blockquote key={`bq${i}`} className="border-l-2 border-gray-500 pl-3 my-1 text-xs text-gray-400 italic">{renderInline(text, i)}</blockquote>);
+      i++; continue;
+    }
+
+    // Empty line
+    if (!trimmed) {
+      elements.push(<div key={`sp${i}`} className="h-1" />);
+      i++; continue;
+    }
+
+    // Paragraph
+    elements.push(<p key={`p${i}`} className="text-xs text-gray-300 leading-relaxed">{renderInline(trimmed, i)}</p>);
+    i++;
+  }
+
+  return <div className="space-y-0.5 text-xs">{elements}</div>;
+}
+
 // ─── Tab: Documents ───────────────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
   plan: "기획서",
@@ -955,9 +1112,9 @@ function DocumentsTab() {
                   {detailLoading ? (
                     <div className="text-gray-400 text-xs py-4 text-center">로딩 중...</div>
                   ) : (
-                    <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-[500px] overflow-auto font-mono leading-relaxed">
-                      {detail}
-                    </pre>
+                    <div className="max-h-[600px] overflow-auto pr-1">
+                      <MarkdownRenderer content={detail} />
+                    </div>
                   )}
                 </div>
               )}
