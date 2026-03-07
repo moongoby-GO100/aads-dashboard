@@ -77,8 +77,8 @@ const DEFAULT_PROJECT_DOCS: Record<string, { label: string; url: string }[]> = {
   ],
 };
 
-// AADS-143: 6프로젝트 트리거 메시지 (config 기반 관리)
-const TRIGGER_MESSAGES: Record<string, string> = {
+// AADS-143: 6프로젝트 트리거 메시지 (DB 미로드 시 기본값)
+const DEFAULT_TRIGGER_MESSAGES: Record<string, string> = {
   AADS: "[AADS] 안녕하세요. AADS Phase 2 운영 상태를 확인하고 다음 태스크를 진행해주세요. 최근: AADS-160 (CEO 검수 완료). HANDOVER.md + HANDOVER-RULES.md + CEO-DIRECTIVES.md를 참조하세요.",
   GO100: "[GO100] 안녕하세요. GO100 AI 자동매매 현황을 확인하고 다음 태스크를 진행해주세요. 최근 태스크: GO100-023. GO100-HANDOVER.md를 참조하세요.",
   KIS: "[KIS] 안녕하세요. KIS V4.1 API 연동 상태를 확인하고 다음 태스크를 진행해주세요. 최근 태스크: KIS-041. KIS-HANDOVER.md를 참조하세요.",
@@ -110,6 +110,65 @@ export default function ChannelsPage() {
   const [docsEditList, setDocsEditList] = useState<{ label: string; url: string }[]>([]);
   const [docsSaving, setDocsSaving] = useState(false);
   const [docsSyncResult, setDocsSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // 트리거 메시지 편집 state
+  const [triggerMessages, setTriggerMessages] = useState<Record<string, string>>({ ...DEFAULT_TRIGGER_MESSAGES });
+  const [triggerEditProject, setTriggerEditProject] = useState<string | null>(null);
+  const [triggerEditText, setTriggerEditText] = useState("");
+  const [triggerSavingEdit, setTriggerSavingEdit] = useState(false);
+  const [triggerEditResult, setTriggerEditResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // DB에서 트리거 메시지 로드
+  const fetchTriggerMessages = useCallback(async () => {
+    try {
+      const res = await api.getTriggerMessages();
+      if (res.ok && res.trigger_messages && Object.keys(res.trigger_messages).length > 0) {
+        setTriggerMessages({ ...DEFAULT_TRIGGER_MESSAGES, ...res.trigger_messages });
+        return;
+      }
+    } catch { /* fallthrough */ }
+    try {
+      const raw = await fetch(
+        "https://raw.githubusercontent.com/moongoby-GO100/aads-docs/main/shared/trigger-messages.json",
+        { cache: "no-store" }
+      );
+      if (raw.ok) {
+        const data = await raw.json();
+        if (data.trigger_messages && Object.keys(data.trigger_messages).length > 0) {
+          setTriggerMessages({ ...DEFAULT_TRIGGER_MESSAGES, ...data.trigger_messages });
+          return;
+        }
+      }
+    } catch { /* fallthrough */ }
+  }, []);
+
+  function openTriggerEdit(project: string) {
+    setTriggerEditProject(project);
+    setTriggerEditText(triggerMessages[project] || "");
+    setTriggerEditResult(null);
+  }
+
+  async function saveTriggerMessage() {
+    if (!triggerEditProject) return;
+    setTriggerSavingEdit(true);
+    setTriggerEditResult(null);
+    try {
+      const newMessages = { ...triggerMessages, [triggerEditProject]: triggerEditText };
+      const res = await api.syncTriggerMessages(newMessages);
+      setTriggerMessages(newMessages);
+      setTriggerEditResult({
+        ok: true,
+        msg: res.git_pushed
+          ? `저장 + push 완료 (${res.commit_sha})`
+          : "저장 완료 (변경사항 없어 push 생략)"
+      });
+      setTimeout(() => { setTriggerEditProject(null); setTriggerEditResult(null); }, 2000);
+    } catch (e: unknown) {
+      setTriggerEditResult({ ok: false, msg: e instanceof Error ? e.message : "저장 실패" });
+    } finally {
+      setTriggerSavingEdit(false);
+    }
+  }
 
   // DB에서 문서 링크 로드 → GitHub raw JSON 폴백 (작업자 수정 실시간 반영)
   const fetchProjectDocs = useCallback(async () => {
@@ -223,12 +282,13 @@ export default function ChannelsPage() {
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
   useEffect(() => { fetchTaskSummary(); }, [fetchTaskSummary]);
   useEffect(() => { fetchProjectDocs(); }, [fetchProjectDocs]);
+  useEffect(() => { fetchTriggerMessages(); }, [fetchTriggerMessages]);
 
   // 30초 주기 자동 갱신 (작업자 수정 실시간 반영)
   useEffect(() => {
-    const interval = setInterval(() => { fetchProjectDocs(); }, 30000);
+    const interval = setInterval(() => { fetchProjectDocs(); fetchTriggerMessages(); }, 30000);
     return () => clearInterval(interval);
-  }, [fetchProjectDocs]);
+  }, [fetchProjectDocs, fetchTriggerMessages]);
 
   useEffect(() => {
     const interval = setInterval(() => { fetchTaskSummary(); }, 30000);
@@ -354,7 +414,7 @@ export default function ChannelsPage() {
 
   async function sendTriggerMessage(ch: Channel) {
     const proj = ch.project || "";
-    const msg = TRIGGER_MESSAGES[proj];
+    const msg = triggerMessages[proj];
     if (!msg) {
       setTriggerResult({ id: ch.id, ok: false, msg: "트리거 메시지 없음 (프로젝트 미설정)" });
       return;
@@ -582,11 +642,21 @@ export default function ChannelsPage() {
                     </div>
                   )}
 
-                  {/* 트리거 메시지 미리보기 */}
-                  {ch.project && TRIGGER_MESSAGES[ch.project] && (
+                  {/* 트리거 메시지 미리보기 (편집 가능) */}
+                  {ch.project && triggerMessages[ch.project] && (
                     <div className="text-xs px-2 py-1 rounded" style={{ background: "rgba(59,130,246,0.08)", color: "var(--text-secondary)", border: "1px solid rgba(59,130,246,0.15)" }}>
-                      <span className="font-medium" style={{ color: "var(--accent)" }}>트리거: </span>
-                      {TRIGGER_MESSAGES[ch.project].slice(0, 60)}...
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <span className="font-medium" style={{ color: "var(--accent)" }}>트리거:</span>
+                        <button
+                          className="text-xs px-1 py-0 rounded hover:opacity-70 transition-opacity"
+                          style={{ color: "var(--accent)", background: "rgba(59,130,246,0.12)" }}
+                          onClick={(e) => { e.stopPropagation(); openTriggerEdit(ch.project!); }}
+                          title="트리거 메시지 편집"
+                        >
+                          편집
+                        </button>
+                      </div>
+                      {triggerMessages[ch.project].slice(0, 80)}...
                     </div>
                   )}
 
@@ -608,7 +678,7 @@ export default function ChannelsPage() {
                         🔗 열기
                       </button>
                     )}
-                    {ch.project && TRIGGER_MESSAGES[ch.project] && (
+                    {ch.project && triggerMessages[ch.project] && (
                       <button
                         className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity disabled:opacity-50"
                         style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
@@ -851,6 +921,70 @@ export default function ChannelsPage() {
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
                 {docsSaving ? "저장 + Push 중..." : "저장 + Push"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 트리거 메시지 편집 모달 */}
+      {triggerEditProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="w-full max-w-lg rounded-xl p-6 max-h-[85vh] overflow-y-auto" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>
+                {PROJECT_ICONS[triggerEditProject] || "📨"} {triggerEditProject} 트리거 메시지 편집
+              </h3>
+              <button
+                onClick={() => setTriggerEditProject(null)}
+                className="text-xl leading-none hover:opacity-70"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
+              저장 시 DB에 반영되고 aads-docs 레포에 자동 push됩니다. 전체 내용을 직접 수정하세요.
+            </p>
+
+            <textarea
+              value={triggerEditText}
+              onChange={(e) => setTriggerEditText(e.target.value)}
+              rows={8}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: "120px" }}
+              placeholder="트리거 메시지를 입력하세요..."
+            />
+
+            <div className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              글자 수: {triggerEditText.length}
+            </div>
+
+            {triggerEditResult && (
+              <div className="mt-3 text-xs px-2 py-1.5 rounded" style={{
+                background: triggerEditResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                color: triggerEditResult.ok ? "#22c55e" : "#ef4444"
+              }}>
+                {triggerEditResult.ok ? "✅" : "❌"} {triggerEditResult.msg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setTriggerEditProject(null)}
+                className="px-4 py-2 text-sm rounded-lg"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+              >
+                취소
+              </button>
+              <button
+                onClick={saveTriggerMessage}
+                disabled={triggerSavingEdit}
+                className="px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                {triggerSavingEdit ? "저장 + Push 중..." : "저장 + Push"}
               </button>
             </div>
           </div>

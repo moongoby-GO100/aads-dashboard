@@ -182,6 +182,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ project_docs: projectDocs }),
     }),
+  getTriggerMessages: () => request<any>("/ops/trigger-messages"),
+  syncTriggerMessages: (triggerMessages: Record<string, string>) =>
+    request<any>("/ops/sync-trigger-messages", {
+      method: "POST",
+      body: JSON.stringify({ trigger_messages: triggerMessages }),
+    }),
 
   // T-038: Watchdog
   getWatchdogSummary: () => request<any>("/watchdog/summary"),
