@@ -2,6 +2,7 @@
 import React from "react";
 import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
+import PipelineHealthTab from "@/components/PipelineHealthCard";
 import { api } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ interface RemoteServer {
   monitoring_projects?: string[];
 }
 
-type TabType = "directives" | "reports" | "remote" | "analytics" | "docs";
+type TabType = "directives" | "reports" | "pipeline" | "remote" | "analytics" | "docs";
 type DirectiveFilter = "all" | "running" | "completed" | "error";
 type ProjectFilter = "all" | "AADS" | "KIS" | "ShortFlow" | "NewTalk" | "GO100" | "NAS";
 
@@ -434,14 +435,18 @@ function DirectivesTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((d, i) => (
+              {filtered.map((d, i) => {
+                // AADS-166: 정체 태스크 강조 (running + started_at > 1h ago)
+                const isStalled = d.status === "running" && d.started_at && (Date.now() - new Date(d.started_at).getTime() > 3600_000);
+                return (
                 <React.Fragment key={i}>
                   <tr
-                    className={`border-b border-gray-700 last:border-0 hover:bg-gray-750 cursor-pointer ${expandedTask === d.task_id ? "bg-gray-750" : ""}`}
+                    className={`border-b border-gray-700 last:border-0 hover:bg-gray-750 cursor-pointer ${expandedTask === d.task_id ? "bg-gray-750" : ""} ${isStalled ? "bg-red-900/30" : ""}`}
                     onClick={() => handleExpand(d)}
                   >
                     <td className="p-3 text-white font-medium font-mono">
                       <span className="mr-1 text-gray-500 text-xs">{expandedTask === d.task_id ? "▲" : "▶"}</span>
+                      {isStalled && <span className="mr-1 text-red-400" title="stalled > 1h">⚠</span>}
                       {safeRender(d.task_id)}
                     </td>
                     <td className="p-3 text-gray-200 max-w-xs">
@@ -475,7 +480,8 @@ function DirectivesTab() {
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -1336,6 +1342,11 @@ function AnalyticsTab() {
   );
 }
 
+// ─── Pipeline Health Tab (AADS-166) ──────────────────────────────────────────
+function PipelineTab() {
+  return <PipelineHealthTab />;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const [tab, setTab] = useState<TabType>("directives");
@@ -1343,6 +1354,7 @@ export default function TasksPage() {
   const tabs: { key: TabType; label: string }[] = [
     { key: "directives", label: "📋 지시서" },
     { key: "reports", label: "📊 보고서" },
+    { key: "pipeline", label: "🏥 Pipeline" },
     { key: "remote", label: "🔄 원격작업" },
     { key: "analytics", label: "📈 분석" },
     { key: "docs", label: "📄 문서" },
@@ -1372,6 +1384,7 @@ export default function TasksPage() {
         {/* 탭 컨텐츠 */}
         {tab === "directives" && <DirectivesTab />}
         {tab === "reports" && <ReportsTab />}
+        {tab === "pipeline" && <PipelineTab />}
         {tab === "remote" && <RemoteTab />}
         {tab === "analytics" && <AnalyticsTab />}
         {tab === "docs" && <DocumentsTab />}

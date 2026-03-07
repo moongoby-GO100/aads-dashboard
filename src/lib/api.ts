@@ -198,4 +198,11 @@ export const api = {
   // AADS-163: QA Results + Design Reviews
   getOpsQaResults: (limit = 20) => request<any>(`/ops/qa-results?limit=${limit}`),
   getOpsDesignReviews: (limit = 10) => request<any>(`/ops/design-reviews?limit=${limit}`),
+
+  // AADS-166: Pipeline Health Check
+  getDirectiveFolder: (status: string) => request<any>(`/directives/${status}`),
+  getOpsPipelineStatus: () => request<any>("/ops/pipeline-status"),
+  getOpsInfraCheck: () => request<any>("/ops/infra-check"),
+  getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
+  getOpsFullHealth: () => request<any>("/ops/full-health"),
 };
