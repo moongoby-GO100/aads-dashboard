@@ -5,6 +5,14 @@ import { api } from "@/lib/api";
 import Header from "@/components/Header";
 import type { HealthResponse, ConversationStatsResponse, Conversation } from "@/types";
 
+function toDisplayText(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [dashboard, setDashboard] = useState<any>(null);
@@ -145,11 +153,11 @@ export default function DashboardPage() {
                   <div key={c.id} className="border-l-2 pl-3 py-1" style={{ borderColor: "var(--accent)" }}>
                     <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                       <span className="inline-block px-1.5 py-0.5 rounded text-[10px] text-white font-semibold bg-blue-600">
-                        {c.project?.toUpperCase()}
+                        {toDisplayText(c.project).toUpperCase()}
                       </span>
                       <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>{c.logged_at || c.updated_at}</span>
                     </div>
-                    <p className="text-xs line-clamp-2" style={{ color: "var(--text-secondary)" }}>{c.snapshot || "(내용 없음)"}</p>
+                    <p className="text-xs line-clamp-2" style={{ color: "var(--text-secondary)" }}>{toDisplayText(c.snapshot) || "(내용 없음)"}</p>
                   </div>
                 ))}
               </div>
@@ -169,13 +177,13 @@ export default function DashboardPage() {
                 {alerts.slice(0, 3).map((a: any, i: number) => (
                   <div key={i} className="flex items-start gap-2 text-xs p-2 rounded" style={{ background: "var(--bg-hover)" }}>
                     <span style={{ color: "var(--danger)" }}>⚠</span>
-                    <span style={{ color: "var(--text-primary)" }}>{a.message || a.title || JSON.stringify(a)}</span>
+                    <span style={{ color: "var(--text-primary)" }}>{toDisplayText(a.message || a.title || a)}</span>
                   </div>
                 ))}
                 {ceoDecisions.slice(0, 3).map((d: any, i: number) => (
                   <div key={`d-${i}`} className="flex items-start gap-2 text-xs p-2 rounded" style={{ background: "var(--bg-hover)" }}>
                     <span style={{ color: "var(--accent)" }}>🎯</span>
-                    <span style={{ color: "var(--text-primary)" }}>{d.content || d.decision || d.message || JSON.stringify(d)}</span>
+                    <span style={{ color: "var(--text-primary)" }}>{toDisplayText(typeof d.content === "object" && d.content !== null ? (d.content as any).body ?? (d.content as any).message ?? d.content : d.content ?? d.decision ?? d.message ?? d)}</span>
                   </div>
                 ))}
                 {alerts.length === 0 && ceoDecisions.length === 0 && (

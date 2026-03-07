@@ -578,9 +578,9 @@ export default function OpsPage() {
                   {costSummary.by_model.map((m, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "6px 8px" }}>{m.model}</td>
-                      <td style={{ padding: "6px 8px" }}>{m.calls.toLocaleString()}</td>
-                      <td style={{ padding: "6px 8px" }}>{m.tokens.toLocaleString()}</td>
-                      <td style={{ padding: "6px 8px", color: "var(--accent)", fontWeight: 600 }}>${m.cost.toFixed(4)}</td>
+                      <td style={{ padding: "6px 8px" }}>{(m.calls ?? 0).toLocaleString()}</td>
+                      <td style={{ padding: "6px 8px" }}>{(m.tokens ?? 0).toLocaleString()}</td>
+                      <td style={{ padding: "6px 8px", color: "var(--accent)", fontWeight: 600 }}>${(m.cost ?? 0).toFixed(4)}</td>
                     </tr>
                   ))}
                 </tbody>
