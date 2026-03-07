@@ -175,6 +175,14 @@ export const api = {
   setContext: (data: { category: string; key: string; value: unknown }) =>
     request<any>("/context/system", { method: "POST", body: JSON.stringify(data) }),
 
+  // AADS-148: Project Docs (중요 문서 링크 CRUD + 자동 push)
+  getProjectDocs: () => request<any>("/ops/project-docs"),
+  syncProjectDocs: (projectDocs: Record<string, { label: string; url: string }[]>) =>
+    request<any>("/ops/sync-project-docs", {
+      method: "POST",
+      body: JSON.stringify({ project_docs: projectDocs }),
+    }),
+
   // T-038: Watchdog
   getWatchdogSummary: () => request<any>("/watchdog/summary"),
   getWatchdogServices: () => request<any>("/watchdog/services"),

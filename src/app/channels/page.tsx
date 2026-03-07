@@ -40,8 +40,8 @@ const PROJECT_COLORS: Record<string, string> = {
 
 const EMPTY_FORM = { id: "", name: "", description: "", url: "", status: "active", project: "", server: "" };
 
-// AADS-148: 프로젝트별 중요 문서 링크
-const PROJECT_DOCS: Record<string, { label: string; url: string }[]> = {
+// AADS-148: 프로젝트별 중요 문서 링크 (DB 미로드 시 기본값)
+const DEFAULT_PROJECT_DOCS: Record<string, { label: string; url: string }[]> = {
   AADS: [
     { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
     { label: "RULES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER-RULES.md" },
@@ -104,6 +104,84 @@ export default function ChannelsPage() {
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const dragIndexRef = useRef<number>(-1);
 
+  // AADS-148: 문서 링크 편집 state
+  const [projectDocs, setProjectDocs] = useState<Record<string, { label: string; url: string }[]>>({ ...DEFAULT_PROJECT_DOCS });
+  const [docsEditProject, setDocsEditProject] = useState<string | null>(null);
+  const [docsEditList, setDocsEditList] = useState<{ label: string; url: string }[]>([]);
+  const [docsSaving, setDocsSaving] = useState(false);
+  const [docsSyncResult, setDocsSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // DB에서 문서 링크 로드 → GitHub raw JSON 폴백 (작업자 수정 실시간 반영)
+  const fetchProjectDocs = useCallback(async () => {
+    try {
+      // 1차: DB (대시보드에서 CEO가 직접 수정한 데이터)
+      const res = await api.getProjectDocs();
+      if (res.ok && res.project_docs && Object.keys(res.project_docs).length > 0) {
+        setProjectDocs({ ...DEFAULT_PROJECT_DOCS, ...res.project_docs });
+        return;
+      }
+    } catch { /* fallthrough */ }
+    try {
+      // 2차: GitHub raw JSON (작업자가 push한 데이터)
+      const raw = await fetch(
+        "https://raw.githubusercontent.com/moongoby-GO100/aads-docs/main/shared/project-docs.json",
+        { cache: "no-store" }
+      );
+      if (raw.ok) {
+        const data = await raw.json();
+        if (data.project_docs && Object.keys(data.project_docs).length > 0) {
+          setProjectDocs({ ...DEFAULT_PROJECT_DOCS, ...data.project_docs });
+          return;
+        }
+      }
+    } catch { /* fallthrough */ }
+    // 3차: 하드코딩 기본값 유지
+  }, []);
+
+  function openDocsEdit(project: string) {
+    const docs = projectDocs[project] || [];
+    setDocsEditProject(project);
+    setDocsEditList(docs.map(d => ({ ...d })));
+    setDocsSyncResult(null);
+  }
+
+  function addDocRow() {
+    setDocsEditList([...docsEditList, { label: "", url: "" }]);
+  }
+
+  function removeDocRow(idx: number) {
+    setDocsEditList(docsEditList.filter((_, i) => i !== idx));
+  }
+
+  function updateDocRow(idx: number, field: "label" | "url", value: string) {
+    const updated = [...docsEditList];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setDocsEditList(updated);
+  }
+
+  async function saveProjectDocs() {
+    if (!docsEditProject) return;
+    const validDocs = docsEditList.filter(d => d.label.trim() && d.url.trim());
+    setDocsSaving(true);
+    setDocsSyncResult(null);
+    try {
+      const newDocs = { ...projectDocs, [docsEditProject]: validDocs };
+      const res = await api.syncProjectDocs(newDocs);
+      setProjectDocs(newDocs);
+      setDocsSyncResult({
+        ok: true,
+        msg: res.git_pushed
+          ? `저장 + push 완료 (${res.commit_sha})`
+          : "저장 완료 (변경사항 없어 push 생략)"
+      });
+      setTimeout(() => { setDocsEditProject(null); setDocsSyncResult(null); }, 2000);
+    } catch (e: unknown) {
+      setDocsSyncResult({ ok: false, msg: e instanceof Error ? e.message : "저장 실패" });
+    } finally {
+      setDocsSaving(false);
+    }
+  }
+
   const fetchChannels = useCallback(async () => {
     setLoading(true);
     try {
@@ -144,6 +222,13 @@ export default function ChannelsPage() {
 
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
   useEffect(() => { fetchTaskSummary(); }, [fetchTaskSummary]);
+  useEffect(() => { fetchProjectDocs(); }, [fetchProjectDocs]);
+
+  // 30초 주기 자동 갱신 (작업자 수정 실시간 반영)
+  useEffect(() => {
+    const interval = setInterval(() => { fetchProjectDocs(); }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchProjectDocs]);
 
   useEffect(() => {
     const interval = setInterval(() => { fetchTaskSummary(); }, 30000);
@@ -463,21 +548,37 @@ export default function ChannelsPage() {
                     )}
                   </div>
 
-                  {/* AADS-148: 중요 문서 링크 */}
-                  {ch.project && PROJECT_DOCS[ch.project] && (
-                    <div className="flex flex-wrap gap-1">
-                      {PROJECT_DOCS[ch.project].map((doc) => (
-                        <a
-                          key={doc.label}
-                          href={doc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2 py-0.5 rounded text-xs font-medium hover:opacity-80 transition-opacity"
-                          style={{ background: "rgba(59,130,246,0.12)", color: "var(--accent)", border: "1px solid rgba(59,130,246,0.2)" }}
+                  {/* AADS-148: 중요 문서 링크 (편집 가능) */}
+                  {ch.project && (
+                    <div>
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>중요 문서</span>
+                        <button
+                          className="text-xs px-1.5 py-0 rounded hover:opacity-70 transition-opacity"
+                          style={{ color: "var(--accent)", background: "rgba(59,130,246,0.08)" }}
+                          onClick={(e) => { e.stopPropagation(); openDocsEdit(ch.project!); }}
+                          title="문서 링크 편집"
                         >
-                          {doc.label}
-                        </a>
-                      ))}
+                          편집
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(projectDocs[ch.project] || []).map((doc) => (
+                          <a
+                            key={doc.label}
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 rounded text-xs font-medium hover:opacity-80 transition-opacity"
+                            style={{ background: "rgba(59,130,246,0.12)", color: "var(--accent)", border: "1px solid rgba(59,130,246,0.2)" }}
+                          >
+                            {doc.label}
+                          </a>
+                        ))}
+                        {(!projectDocs[ch.project] || projectDocs[ch.project].length === 0) && (
+                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>문서 없음</span>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -660,6 +761,96 @@ export default function ChannelsPage() {
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
                 {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 문서 링크 편집 모달 */}
+      {docsEditProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="w-full max-w-lg rounded-xl p-6 max-h-[85vh] overflow-y-auto" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>
+                {PROJECT_ICONS[docsEditProject] || "📄"} {docsEditProject} 중요 문서 편집
+              </h3>
+              <button
+                onClick={() => setDocsEditProject(null)}
+                className="text-xl leading-none hover:opacity-70"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
+              저장 시 DB에 반영되고 aads-docs 레포에 자동 push됩니다.
+            </p>
+
+            <div className="space-y-2">
+              {docsEditList.map((doc, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={doc.label}
+                    onChange={(e) => updateDocRow(idx, "label", e.target.value)}
+                    placeholder="이름 (예: HANDOVER)"
+                    className="w-28 px-2 py-1.5 rounded text-xs outline-none"
+                    style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  />
+                  <input
+                    type="url"
+                    value={doc.url}
+                    onChange={(e) => updateDocRow(idx, "url", e.target.value)}
+                    placeholder="URL"
+                    className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                    style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  />
+                  <button
+                    onClick={() => removeDocRow(idx)}
+                    className="text-sm px-1.5 hover:opacity-70"
+                    style={{ color: "#ef4444" }}
+                    title="삭제"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={addDocRow}
+              className="mt-2 px-3 py-1 text-xs rounded-lg hover:opacity-80 transition-opacity"
+              style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+            >
+              + 문서 추가
+            </button>
+
+            {docsSyncResult && (
+              <div className="mt-3 text-xs px-2 py-1.5 rounded" style={{
+                background: docsSyncResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                color: docsSyncResult.ok ? "#22c55e" : "#ef4444"
+              }}>
+                {docsSyncResult.ok ? "✅" : "❌"} {docsSyncResult.msg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setDocsEditProject(null)}
+                className="px-4 py-2 text-sm rounded-lg"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+              >
+                취소
+              </button>
+              <button
+                onClick={saveProjectDocs}
+                disabled={docsSaving}
+                className="px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                {docsSaving ? "저장 + Push 중..." : "저장 + Push"}
               </button>
             </div>
           </div>
