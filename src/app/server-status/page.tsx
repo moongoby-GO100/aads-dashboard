@@ -46,7 +46,7 @@ export default function ServerStatusPage() {
     if (h.status === "fulfilled") setHealth(h.value);
     if (w.status === "fulfilled") setWatchdog(w.value);
     if (s.status === "fulfilled") setServices(s.value);
-    setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+    setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
     setLoading(false);
   }, []);
 
