@@ -40,6 +40,53 @@ const PROJECT_COLORS: Record<string, string> = {
 
 const EMPTY_FORM = { id: "", name: "", description: "", url: "", status: "active", project: "", server: "" };
 
+// AADS-148: 프로젝트별 중요 문서 링크
+const PROJECT_DOCS: Record<string, { label: string; url: string }[]> = {
+  AADS: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+    { label: "RULES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER-RULES.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/CEO-DIRECTIVES.md" },
+    { label: "STATUS", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/STATUS.md" },
+    { label: "RULE-MATRIX", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/shared/rules/RULE-MATRIX.md" },
+    { label: "WORKFLOW", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/shared/rules/WORKFLOW-PIPELINE.md" },
+  ],
+  GO100: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/GO100-HANDOVER.md" },
+    { label: "AADS HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/CEO-DIRECTIVES.md" },
+  ],
+  KIS: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/KIS-HANDOVER.md" },
+    { label: "AADS HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/CEO-DIRECTIVES.md" },
+  ],
+  ShortFlow: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/SF-HANDOVER.md" },
+    { label: "AADS HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/CEO-DIRECTIVES.md" },
+  ],
+  NewTalk: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/NTV2-HANDOVER.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/NTV2-CEO-DIRECTIVES.md" },
+    { label: "AADS HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+  ],
+  NAS: [
+    { label: "HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/NAS-HANDOVER.md" },
+    { label: "CEO-DIRECTIVES", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/NAS-CEO-DIRECTIVES.md" },
+    { label: "AADS HANDOVER", url: "https://github.com/moongoby-GO100/aads-docs/blob/main/HANDOVER.md" },
+  ],
+};
+
+// AADS-143: 6프로젝트 트리거 메시지 (config 기반 관리)
+const TRIGGER_MESSAGES: Record<string, string> = {
+  AADS: "[AADS] 안녕하세요. AADS Phase 2 운영 상태를 확인하고 다음 태스크를 진행해주세요. 최근: AADS-160 (CEO 검수 완료). HANDOVER.md + HANDOVER-RULES.md + CEO-DIRECTIVES.md를 참조하세요.",
+  GO100: "[GO100] 안녕하세요. GO100 AI 자동매매 현황을 확인하고 다음 태스크를 진행해주세요. 최근 태스크: GO100-023. GO100-HANDOVER.md를 참조하세요.",
+  KIS: "[KIS] 안녕하세요. KIS V4.1 API 연동 상태를 확인하고 다음 태스크를 진행해주세요. 최근 태스크: KIS-041. KIS-HANDOVER.md를 참조하세요.",
+  ShortFlow: "[SF] 안녕하세요. ShortFlow 영상 생성 현황을 확인하고 다음 태스크를 진행해주세요. 최근 태스크: SF-015. SF-HANDOVER.md를 참조하세요.",
+  NewTalk: "[NTV2] 안녕하세요. NewTalk V2 Phase 1 환경 구축 진행 상황을 확인해주세요. 최근 태스크: NT-001 (대기). NTV2-HANDOVER.md + NTV2-CEO-DIRECTIVES.md를 참조하세요.",
+  NAS: "[NAS] 안녕하세요. NAS 유지보수 현황을 확인하고 다음 태스크를 진행해주세요. 최근 태스크: NAS-010. NAS-HANDOVER.md + NAS-CEO-DIRECTIVES.md를 참조하세요.",
+};
+
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +98,8 @@ export default function ChannelsPage() {
   const [taskSummary, setTaskSummary] = useState<TaskSummary | null>(null);
   const [contextModal, setContextModal] = useState<{ id: string; data: string } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [triggerSending, setTriggerSending] = useState<string | null>(null);
+  const [triggerResult, setTriggerResult] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const dragIndexRef = useRef<number>(-1);
@@ -218,6 +267,39 @@ export default function ChannelsPage() {
     }
   }
 
+  async function sendTriggerMessage(ch: Channel) {
+    const proj = ch.project || "";
+    const msg = TRIGGER_MESSAGES[proj];
+    if (!msg) {
+      setTriggerResult({ id: ch.id, ok: false, msg: "트리거 메시지 없음 (프로젝트 미설정)" });
+      return;
+    }
+    setTriggerSending(ch.id);
+    setTriggerResult(null);
+    try {
+      // message_queue API에 트리거 메시지 등록
+      await api.setContext({
+        category: "message_queue",
+        key: `${proj}_${Date.now()}_trigger`,
+        value: {
+          target: proj,
+          type: "trigger",
+          message: msg,
+          status: "pending",
+          created_at: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) + " KST",
+          source: "dashboard_trigger",
+          channel_id: ch.id,
+        },
+      });
+      setTriggerResult({ id: ch.id, ok: true, msg: `트리거 전송 완료 (${proj})` });
+    } catch (e: unknown) {
+      setTriggerResult({ id: ch.id, ok: false, msg: e instanceof Error ? e.message : "전송 실패" });
+    } finally {
+      setTriggerSending(null);
+      setTimeout(() => setTriggerResult(null), 4000);
+    }
+  }
+
   async function openContext(ch: Channel) {
     try {
       const data = await api.getContextPackage(ch.id);
@@ -381,15 +463,58 @@ export default function ChannelsPage() {
                     )}
                   </div>
 
+                  {/* AADS-148: 중요 문서 링크 */}
+                  {ch.project && PROJECT_DOCS[ch.project] && (
+                    <div className="flex flex-wrap gap-1">
+                      {PROJECT_DOCS[ch.project].map((doc) => (
+                        <a
+                          key={doc.label}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 rounded text-xs font-medium hover:opacity-80 transition-opacity"
+                          style={{ background: "rgba(59,130,246,0.12)", color: "var(--accent)", border: "1px solid rgba(59,130,246,0.2)" }}
+                        >
+                          {doc.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 트리거 메시지 미리보기 */}
+                  {ch.project && TRIGGER_MESSAGES[ch.project] && (
+                    <div className="text-xs px-2 py-1 rounded" style={{ background: "rgba(59,130,246,0.08)", color: "var(--text-secondary)", border: "1px solid rgba(59,130,246,0.15)" }}>
+                      <span className="font-medium" style={{ color: "var(--accent)" }}>트리거: </span>
+                      {TRIGGER_MESSAGES[ch.project].slice(0, 60)}...
+                    </div>
+                  )}
+
+                  {/* 트리거 전송 결과 표시 */}
+                  {triggerResult && triggerResult.id === ch.id && (
+                    <div className="text-xs px-2 py-1 rounded" style={{ background: triggerResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: triggerResult.ok ? "var(--success, #22c55e)" : "#ef4444" }}>
+                      {triggerResult.ok ? "✅" : "❌"} {triggerResult.msg}
+                    </div>
+                  )}
+
                   {/* 구분선 + 액션 버튼 */}
-                  <div className="border-t mt-auto pt-2 flex gap-2" style={{ borderColor: "var(--border)" }}>
+                  <div className="border-t mt-auto pt-2 flex gap-1 flex-wrap" style={{ borderColor: "var(--border)" }}>
                     {ch.url && (
                       <button
                         className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                         style={{ background: "var(--accent)", color: "#fff" }}
                         onClick={() => window.open(ch.url, "_blank")}
                       >
-                        🔗 에이전트 열기
+                        🔗 열기
+                      </button>
+                    )}
+                    {ch.project && TRIGGER_MESSAGES[ch.project] && (
+                      <button
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity disabled:opacity-50"
+                        style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
+                        onClick={() => sendTriggerMessage(ch)}
+                        disabled={triggerSending === ch.id}
+                      >
+                        {triggerSending === ch.id ? "전송 중..." : "📨 트리거 전송"}
                       </button>
                     )}
                     <button
