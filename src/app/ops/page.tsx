@@ -60,6 +60,24 @@ interface BridgeLogItem {
   blocked_reason?: string;
 }
 
+interface QaResultItem {
+  task_id: string;
+  project: string;
+  verdict: string;
+  retry_count: number;
+  detail?: string;
+  created_at: string;
+}
+
+interface DesignReviewItem {
+  task_id: string;
+  project: string;
+  verdict: string;
+  screenshot_url?: string;
+  detail?: string;
+  created_at: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toKST(dtStr: string | null | undefined): string {
@@ -272,6 +290,8 @@ export default function OpsPage() {
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
   const [envHistory, setEnvHistory] = useState<EnvHistoryData | null>(null);
   const [bridgeLog, setBridgeLog] = useState<BridgeLogItem[]>([]);
+  const [qaResults, setQaResults] = useState<QaResultItem[]>([]);
+  const [designReviews, setDesignReviews] = useState<DesignReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("-");
@@ -287,17 +307,25 @@ export default function OpsPage() {
   // Bridge log collapsed
   const [bridgeExpanded, setBridgeExpanded] = useState(false);
 
+  // QA Results / Design Reviews toggle
+  const [qaExpanded, setQaExpanded] = useState(true);
+  const [designExpanded, setDesignExpanded] = useState(true);
+  // Design review detail toggle
+  const [designDetailOpen, setDesignDetailOpen] = useState<string | null>(null);
+
   // Server tab for env
   const [activeServer, setActiveServer] = useState<number | string>(68);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [healthData, lifecycleData, costData, envData, bridgeData] = await Promise.allSettled([
+      const [healthData, lifecycleData, costData, envData, bridgeData, qaData, designData] = await Promise.allSettled([
         api.getOpsHealthCheck(),
         api.getOpsDirectiveLifecycle(20),
         api.getOpsCostSummary(),
         api.getOpsEnvHistory(activeServer),
         api.getOpsBridgeLog(30),
+        api.getOpsQaResults(20),
+        api.getOpsDesignReviews(10),
       ]);
 
       if (healthData.status === "fulfilled") setHealth(healthData.value);
@@ -310,6 +338,14 @@ export default function OpsPage() {
       if (bridgeData.status === "fulfilled") {
         const items = bridgeData.value?.items || bridgeData.value || [];
         setBridgeLog(Array.isArray(items) ? items : []);
+      }
+      if (qaData.status === "fulfilled") {
+        const items = qaData.value?.items || qaData.value || [];
+        setQaResults(Array.isArray(items) ? items : []);
+      }
+      if (designData.status === "fulfilled") {
+        const items = designData.value?.items || designData.value || [];
+        setDesignReviews(Array.isArray(items) ? items : []);
       }
 
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
@@ -641,7 +677,119 @@ export default function OpsPage() {
           </div>
         </section>
 
-        {/* ─── 섹션 6: 브릿지 활동 로그 ─── */}
+        {/* ─── 섹션 6: QA Results ─── */}
+        <section style={{ ...cardStyle, marginBottom: 24 }}>
+          <button
+            onClick={() => setQaExpanded(!qaExpanded)}
+            style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", color: "var(--text-primary)", padding: 0 }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🧪 QA Results (최근 20건)</h3>
+            <span style={{ fontSize: 18, color: "var(--text-secondary)" }}>{qaExpanded ? "▲" : "▼"}</span>
+          </button>
+          {qaExpanded && (
+            <div style={{ marginTop: 14, overflowX: "auto" }}>
+              {qaResults.length === 0 ? (
+                <div style={{ color: "var(--text-secondary)", fontSize: 12, padding: 12 }}>데이터 없음</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      {["Task ID", "프로젝트", "판정", "재시도", "상세", "시각"].map((h) => (
+                        <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {qaResults.map((item, i) => {
+                      const isPass = item.verdict === "PASS";
+                      return (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--border)", background: isPass ? "transparent" : "rgba(239,68,68,0.06)" }}>
+                          <td style={{ padding: "6px 8px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{item.task_id}</td>
+                          <td style={{ padding: "6px 8px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{item.project || "-"}</td>
+                          <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                            <span style={{
+                              display: "inline-block", padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 700,
+                              background: isPass ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                              color: isPass ? "var(--success)" : "var(--danger)",
+                            }}>
+                              {isPass ? "✅ PASS" : "❌ FAIL"}
+                            </span>
+                          </td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>{item.retry_count ?? 0}회</td>
+                          <td style={{ padding: "6px 8px", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                            {item.detail || "-"}
+                          </td>
+                          <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>{toKST(item.created_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ─── 섹션 7: Design Reviews ─── */}
+        <section style={{ ...cardStyle, marginBottom: 24 }}>
+          <button
+            onClick={() => setDesignExpanded(!designExpanded)}
+            style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", cursor: "pointer", color: "var(--text-primary)", padding: 0 }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🎨 Design Reviews (최근 10건)</h3>
+            <span style={{ fontSize: 18, color: "var(--text-secondary)" }}>{designExpanded ? "▲" : "▼"}</span>
+          </button>
+          {designExpanded && (
+            <div style={{ marginTop: 14 }}>
+              {designReviews.length === 0 ? (
+                <div style={{ color: "var(--text-secondary)", fontSize: 12, padding: 12 }}>데이터 없음</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {designReviews.map((item, i) => {
+                    const isPass = item.verdict === "PASS" || item.verdict === "PASS_TIMEOUT";
+                    const isOpen = designDetailOpen === item.task_id;
+                    return (
+                      <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
+                        <button
+                          onClick={() => setDesignDetailOpen(isOpen ? null : item.task_id)}
+                          style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, background: "var(--bg-hover)", border: "none", cursor: "pointer", padding: "10px 14px", textAlign: "left" }}
+                        >
+                          {item.screenshot_url && (
+                            <img
+                              src={item.screenshot_url}
+                              alt="screenshot"
+                              style={{ width: 56, height: 40, objectFit: "cover", borderRadius: 4, flexShrink: 0, border: "1px solid var(--border)" }}
+                            />
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{item.task_id}</span>
+                            <span style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 8 }}>{item.project}</span>
+                          </div>
+                          <span style={{
+                            display: "inline-block", padding: "2px 10px", borderRadius: 10, fontSize: 11, fontWeight: 700,
+                            background: isPass ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                            color: isPass ? "var(--success)" : "var(--danger)",
+                          }}>
+                            {isPass ? (item.verdict === "PASS_TIMEOUT" ? "⏱ PASS(타임아웃)" : "✅ PASS") : "🔍 검토필요"}
+                          </span>
+                          <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap", marginLeft: 8 }}>{toKST(item.created_at)}</span>
+                          <span style={{ fontSize: 14, color: "var(--text-secondary)", marginLeft: 8 }}>{isOpen ? "▲" : "▼"}</span>
+                        </button>
+                        {isOpen && (
+                          <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-secondary)", borderTop: "1px solid var(--border)" }}>
+                            {item.detail || "상세 정보 없음"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ─── 섹션 8: 브릿지 활동 로그 ─── */}
         <section style={{ ...cardStyle, marginBottom: 24 }}>
           <button
             onClick={() => setBridgeExpanded(!bridgeExpanded)}

@@ -194,4 +194,8 @@ export const api = {
   getWatchdogServices: () => request<any>("/watchdog/services"),
   getWatchdogErrors: (status?: string, limit = 20) =>
     request<any>(`/watchdog/errors?${status ? `status=${status}&` : ""}limit=${limit}`),
+
+  // AADS-163: QA Results + Design Reviews
+  getOpsQaResults: (limit = 20) => request<any>(`/ops/qa-results?limit=${limit}`),
+  getOpsDesignReviews: (limit = 10) => request<any>(`/ops/design-reviews?limit=${limit}`),
 };
