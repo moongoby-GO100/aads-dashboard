@@ -135,7 +135,7 @@ function BarChart({ data }: { data: { label: string; value: number }[] }) {
               </text>
               {d.value > 0 && (
                 <text x={x + 16} y={y - 3} textAnchor="middle" fontSize={7} fill="var(--text-primary)">
-                  ${d.value.toFixed(2)}
+                  ${(d.value ?? 0).toFixed(2)}
                 </text>
               )}
             </g>
@@ -174,7 +174,7 @@ function PieChart({ data }: { data: { label: string; value: number }[] }) {
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: s.color }} />
             <span style={{ color: "var(--text-secondary)" }}>{s.label}</span>
-            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${s.value.toFixed(2)}</span>
+            <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>${(s.value ?? 0).toFixed(2)}</span>
           </div>
         ))}
       </div>
