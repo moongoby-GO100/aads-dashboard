@@ -9,11 +9,13 @@ export interface ModelOption {
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { id: "claude-opus-4-6",   name: "Claude Opus 4.6",   icon: "🟣", cost: "$5/$25",     desc: "복잡한 전략·설계" },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", icon: "🔵", cost: "$3/$15",     desc: "일반 개발·분석" },
-  { id: "gemini-2.0-flash",  name: "Gemini 2.0 Flash",  icon: "🟡", cost: "$0.05/$0.40",desc: "가벼운 조회·요약" },
-  { id: "gpt-5-mini",        name: "GPT-5 mini",        icon: "🟢", cost: "$0.25/$2",   desc: "DevOps·스크립트" },
-  { id: "mixture",           name: "혼합 에이전트",       icon: "🔴", cost: "자동",        desc: "여러 모델 자동 라우팅" },
+  { id: "claude-opus-4-6",           name: "Claude Opus 4.6",   icon: "🟣", cost: "$5/$25",      desc: "복잡한 전략·설계" },
+  { id: "claude-sonnet-4-6",         name: "Claude Sonnet 4.6", icon: "🔵", cost: "$3/$15",      desc: "일반 개발·분석" },
+  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5",  icon: "💙", cost: "$0.80/$4",    desc: "빠른 조회·정리" },
+  { id: "gpt-5",                     name: "GPT-5",             icon: "🟢", cost: "$10/$30",     desc: "OpenAI 고성능" },
+  { id: "gpt-5-mini",                name: "GPT-5 mini",        icon: "🟩", cost: "$0.25/$2",    desc: "OpenAI DevOps·스크립트" },
+  { id: "gemini-2.5-flash",          name: "Gemini 2.5 Flash",  icon: "🟡", cost: "$0.30/$2.50", desc: "Google 가벼운 조회·요약" },
+  { id: "mixture",                   name: "혼합 에이전트",       icon: "🔴", cost: "자동",         desc: "여러 모델 자동 라우팅" },
 ];
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
