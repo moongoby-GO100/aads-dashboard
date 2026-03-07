@@ -25,7 +25,7 @@ export default function ProjectCard({ project }: { project: Project }) {
           </span>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          {new Date(project.created_at).toLocaleString("ko-KR")}
+          {new Date(project.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
         </p>
         <p className="text-xs text-gray-400 font-mono truncate mt-1">#{project.id.slice(0, 8)}</p>
       </div>

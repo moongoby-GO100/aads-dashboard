@@ -135,7 +135,7 @@ export default function ManagersPage() {
       mgrs.sort((a, b) => b.importance - a.importance);
       setProjectManagers(mgrs);
       setCoreAgents(core);
-      setLastRefreshed(new Date().toLocaleTimeString("ko-KR"));
+      setLastRefreshed(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }));
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);

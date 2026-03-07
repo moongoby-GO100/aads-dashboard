@@ -127,7 +127,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right text-xs text-gray-400">
                           <div>${r.cost_usd?.toFixed(4)}</div>
-                          <div>{new Date(r.created_at).toLocaleString("ko-KR")}</div>
+                          <div>{new Date(r.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</div>
                         </div>
                       </div>
                     </div>
@@ -154,7 +154,7 @@ export default function ReportsPage() {
                           <span className="px-2 py-0.5 rounded-full text-white" style={{background: p.status === "approved" ? "#16a34a" : "var(--accent)"}}>
                             {p.status}
                           </span>
-                          <div className="text-gray-400 mt-1">{new Date(p.created_at).toLocaleString("ko-KR")}</div>
+                          <div className="text-gray-400 mt-1">{new Date(p.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</div>
                         </div>
                       </div>
                     </div>
@@ -174,7 +174,7 @@ export default function ReportsPage() {
                       <Link href={`/projects/${a.project_id}`} className="text-xs text-gray-400 hover:text-blue-500 block mt-1">
                         프로젝트 #{a.project_id.slice(0,8)}
                       </Link>
-                      <p className="text-xs text-gray-400 mt-1">{new Date(a.created_at).toLocaleString("ko-KR")}</p>
+                      <p className="text-xs text-gray-400 mt-1">{new Date(a.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>
                     </div>
                   ))
                 }

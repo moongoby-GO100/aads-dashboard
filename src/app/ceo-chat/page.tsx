@@ -208,7 +208,7 @@ export default function CeoChatPage() {
             <option value="auto">-- 새 세션 시작 --</option>
             {sessions.map(s => (
               <option key={s.session_id} value={s.session_id}>
-                {s.session_id.slice(0, 8)}... | {new Date(s.started_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} | ${Number(s.total_cost_usd).toFixed(4)} | {s.total_turns}턴 [{s.status}]
+                {s.session_id.slice(0, 8)}... | {new Date(s.started_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} | ${Number(s.total_cost_usd).toFixed(4)} | {s.total_turns}턴 [{s.status}]
               </option>
             ))}
           </select>

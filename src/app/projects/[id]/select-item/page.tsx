@@ -108,7 +108,7 @@ export default function SelectItemPage() {
               <div key={report.id} className="mb-6">
                 <div className="mb-4 p-4 rounded-lg border" style={{borderColor:"var(--border)",background:"var(--bg-card)"}}>
                   <h2 className="font-semibold text-lg mb-1">방향: {report.direction}</h2>
-                  <p className="text-xs text-gray-400">{new Date(report.created_at).toLocaleString("ko-KR")}</p>
+                  <p className="text-xs text-gray-400">{new Date(report.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>
                   {report.recommendation && <p className="mt-2 text-sm text-blue-600">추천: {report.recommendation}</p>}
                 </div>
 

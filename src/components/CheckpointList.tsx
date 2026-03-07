@@ -37,7 +37,7 @@ export default function CheckpointList({ checkpoints }: { checkpoints: Checkpoin
                 </p>
                 {cp?.timestamp && (
                   <p className="text-xs text-gray-400">
-                    {new Date(cp.timestamp).toLocaleString("ko-KR")}
+                    {new Date(cp.timestamp).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
                     {cp.feedback && ` — ${cp.feedback}`}
                   </p>
                 )}

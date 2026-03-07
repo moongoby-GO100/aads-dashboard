@@ -19,7 +19,7 @@ export default function SSEMonitor({ projectId }: { projectId: string }) {
     const disconnect = connectSSE(
       projectId,
       (event: SSEEvent) => {
-        const ts = new Date().toLocaleTimeString("ko-KR");
+        const ts = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" });
         let message = "";
         switch (event.type) {
           case "agent_start":

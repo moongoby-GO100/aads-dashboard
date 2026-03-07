@@ -40,13 +40,9 @@ interface SearchResult {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-const KST_OFFSET = 9 * 60 * 60 * 1000;
-
 function toKST(dateStr: string): string {
   try {
-    const d = new Date(dateStr);
-    const kst = new Date(d.getTime() + KST_OFFSET);
-    return kst.toISOString().replace("T", " ").slice(0, 16) + " KST";
+    return new Date(dateStr).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) + " KST";
   } catch {
     return dateStr;
   }
