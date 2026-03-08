@@ -69,7 +69,13 @@ export interface SourceItem {
 }
 
 export interface SSEChunk {
-  type: "delta" | "done" | "error" | "thought_summary" | "sources";
+  type:
+    | "delta" | "done" | "error"
+    | "thought_summary" | "sources"
+    // AADS-185 신규
+    | "thinking"
+    | "tool_use" | "tool_result"
+    | "research.start" | "research.progress" | "research.complete";
   content?: string;
   summary?: string;
   sources?: SourceItem[];
@@ -79,10 +85,20 @@ export interface SSEChunk {
   input_tokens?: number;
   output_tokens?: number;
   cost_usd?: string;
-  // backend sends these names (AADS-182 fix)
+  // backend sends these names
   model?: string;
   cost?: string;
   intent?: string;
+  // thinking
+  thinking?: string;
+  thinking_summary?: string;
+  // tool use
+  tool_name?: string;
+  tool_use_id?: string;
+  // research
+  interaction_id?: string;
+  progress?: number;
+  report?: string;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
