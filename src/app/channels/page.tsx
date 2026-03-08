@@ -688,6 +688,15 @@ export default function ChannelsPage() {
                         {triggerSending === ch.id ? "전송 중..." : "📨 트리거 전송"}
                       </button>
                     )}
+                    {ch.project && (
+                      <button
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
+                        style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}
+                        onClick={() => window.open(`/conversations?manager=${encodeURIComponent(ch.name || ch.project || "")}`, "_blank")}
+                      >
+                        💬 대화 기록
+                      </button>
+                    )}
                     <button
                       className="flex-1 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                       style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}

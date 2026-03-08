@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
@@ -25,7 +26,6 @@ interface ChannelMessage {
 interface ChatTurn {
   role: "user" | "assistant" | "tool";
   content: string;
-  timestamp?: string;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -59,6 +59,16 @@ function toDateLabel(dateStr: string): string {
   }
 }
 
+function toTimeStr(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    return kst.toISOString().slice(11, 16);
+  } catch {
+    return "";
+  }
+}
+
 // ─── Snapshot Parser ───────────────────────────────────────────────────────
 
 const UI_HEADER_LINES = new Set([
@@ -70,6 +80,14 @@ const MODEL_PATTERNS = [
   "Claude Opus", "Claude Sonnet", "Claude Haiku",
   "GPT-5", "GPT-4", "Gemini", "o1", "o3",
 ];
+
+function getSnippet(snapshot: string): string {
+  if (!snapshot) return "(내용 없음)";
+  const lines = snapshot.split("\n")
+    .map(l => l.trim())
+    .filter(l => l && !UI_HEADER_LINES.has(l));
+  return lines.slice(0, 2).join(" ").slice(0, 100) || "(내용 없음)";
+}
 
 function parseSnapshot(snapshot: string): ChatTurn[] {
   if (!snapshot) return [];
@@ -174,18 +192,27 @@ function parseSnapshot(snapshot: string): ChatTurn[] {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 
-export default function ConversationsPage() {
+export default function ConversationsPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen" style={{ color: "var(--text-secondary)" }}>로딩 중...</div>}>
+      <ConversationsPage />
+    </Suspense>
+  );
+}
+
+function ConversationsPage() {
+  const searchParams = useSearchParams();
+  const managerParam = searchParams.get("manager");
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [msgLoading, setMsgLoading] = useState(false);
-  const [hasOlder, setHasOlder] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const LIMIT = 30;
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const LIMIT = 50;
 
   // ── Load channels ─────────────────────────────────────────────────────
 
@@ -195,33 +222,32 @@ export default function ConversationsPage() {
         const data = await api.getConversationChannels();
         const chs = (data as any).channels ?? [];
         setChannels(chs);
-        if (chs.length > 0) setActiveChannel(chs[0].name);
+        // URL ?manager= 파라미터가 있으면 해당 채널 자동 선택
+        if (managerParam) {
+          const match = chs.find((c: Channel) => c.name.toUpperCase() === managerParam.toUpperCase());
+          setActiveChannel(match ? match.name : chs[0]?.name ?? null);
+        } else if (chs.length > 0) {
+          setActiveChannel(chs[0].name);
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [managerParam]);
 
-  // ── Load messages (chronological: oldest first, newest at bottom) ─────
+  // ── Load messages ─────────────────────────────────────────────────────
 
-  const fetchMessages = useCallback(async (channel: string, off = 0, prepend = false) => {
+  const fetchMessages = useCallback(async (channel: string, off = 0) => {
     setMsgLoading(true);
     try {
       const data = await api.getConversationMessages(channel, LIMIT, off) as any;
       const msgs: ChannelMessage[] = data.messages ?? [];
-      // API returns newest first — reverse for chronological (oldest at top)
-      const chronological = [...msgs].reverse();
-      const t = data.total ?? 0;
-      setTotal(t);
-
-      if (prepend) {
-        setMessages(prev => [...chronological, ...prev]);
+      if (off === 0) {
+        setMessages(msgs);
       } else {
-        setMessages(chronological);
-        setHasOlder(t > LIMIT);
-        // Scroll to bottom after initial load
-        setTimeout(() => bottomRef.current?.scrollIntoView(), 100);
+        setMessages(prev => [...prev, ...msgs]);
       }
+      setTotal(data.total ?? 0);
     } finally {
       setMsgLoading(false);
     }
@@ -230,48 +256,29 @@ export default function ConversationsPage() {
   useEffect(() => {
     if (!activeChannel) return;
     setMessages([]);
+    setOffset(0);
+    setExpandedKey(null);
     fetchMessages(activeChannel, 0);
   }, [activeChannel, fetchMessages]);
 
-  const loadOlder = () => {
+  const loadMore = () => {
     if (!activeChannel || msgLoading) return;
-    const container = chatContainerRef.current;
-    const prevHeight = container?.scrollHeight ?? 0;
-    const newOffset = messages.length;
-    setMsgLoading(true);
-    (async () => {
-      try {
-        const data = await api.getConversationMessages(activeChannel, LIMIT, newOffset) as any;
-        const msgs: ChannelMessage[] = data.messages ?? [];
-        const chronological = [...msgs].reverse();
-        setMessages(prev => [...chronological, ...prev]);
-        setHasOlder(newOffset + msgs.length < (data.total ?? 0));
-        // Maintain scroll position
-        setTimeout(() => {
-          if (container) container.scrollTop = container.scrollHeight - prevHeight;
-        }, 50);
-      } finally {
-        setMsgLoading(false);
-      }
-    })();
+    const newOffset = offset + LIMIT;
+    setOffset(newOffset);
+    fetchMessages(activeChannel, newOffset);
   };
 
-  // ── Build timeline with date separators ───────────────────────────────
+  // ── Group messages by date (newest date first, within date newest first) ──
 
-  type TimelineItem =
-    | { type: "date"; label: string }
-    | { type: "conversation"; msg: ChannelMessage; turns: ChatTurn[] };
-
-  const timeline: TimelineItem[] = [];
-  let lastDate = "";
+  const dateGroups: { date: string; items: ChannelMessage[] }[] = [];
+  const dateMap = new Map<string, ChannelMessage[]>();
   for (const msg of messages) {
-    const dateLabel = toDateLabel(msg.created_at);
-    if (dateLabel !== lastDate) {
-      timeline.push({ type: "date", label: dateLabel });
-      lastDate = dateLabel;
-    }
-    const turns = parseSnapshot(msg.snapshot);
-    timeline.push({ type: "conversation", msg, turns });
+    const d = toDateLabel(msg.created_at);
+    if (!dateMap.has(d)) dateMap.set(d, []);
+    dateMap.get(d)!.push(msg);
+  }
+  for (const [date, items] of dateMap) {
+    dateGroups.push({ date, items });
   }
 
   // ─── Render ───────────────────────────────────────────────────────────
@@ -325,7 +332,7 @@ export default function ConversationsPage() {
           </div>
         )}
 
-        {/* ── Main Chat Area ── */}
+        {/* ── Main Area ── */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3"
@@ -351,22 +358,8 @@ export default function ConversationsPage() {
             </div>
           </div>
 
-          {/* Chat stream — chronological, newest at bottom */}
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Load older button */}
-            {hasOlder && (
-              <div className="text-center py-2">
-                <button
-                  onClick={loadOlder}
-                  disabled={msgLoading}
-                  className="px-4 py-1.5 text-xs rounded-full"
-                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-                >
-                  {msgLoading ? "로딩 중..." : "이전 대화 불러오기 ▲"}
-                </button>
-              </div>
-            )}
-
+          {/* Date-grouped conversation list */}
+          <div className="flex-1 overflow-y-auto p-4">
             {msgLoading && messages.length === 0 ? (
               <div className="text-center py-20" style={{ color: "var(--text-secondary)" }}>
                 <p className="text-sm">로딩 중...</p>
@@ -376,82 +369,127 @@ export default function ConversationsPage() {
                 <p className="text-sm">저장된 대화가 없습니다.</p>
               </div>
             ) : (
-              timeline.map((item, tIdx) => {
-                // Date separator
-                if (item.type === "date") {
-                  return (
-                    <div key={`date-${tIdx}`} className="flex items-center gap-3 py-2">
+              <>
+                {dateGroups.map(({ date, items }) => (
+                  <div key={date} className="mb-6">
+                    {/* Date header */}
+                    <div className="flex items-center gap-3 mb-3">
                       <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
-                      <span className="text-xs font-medium px-3 py-1 rounded-full"
+                      <span className="text-xs font-semibold px-3 py-1 rounded-full"
                         style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
-                        {item.label}
+                        {date}
                       </span>
                       <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
                     </div>
-                  );
-                }
 
-                // Conversation block — show all turns as chat bubbles
-                const { msg, turns } = item;
-                return (
-                  <div key={`conv-${msg.key || msg.id}`} className="space-y-3">
-                    {/* Conversation timestamp marker */}
-                    <div className="flex items-center gap-2 pl-1">
-                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        {toKST(msg.created_at).slice(11)}
-                      </span>
-                      <div className="flex-1 h-px" style={{ background: "var(--border)", opacity: 0.4 }} />
-                    </div>
+                    {/* Conversation list for this date */}
+                    <div className="space-y-2">
+                      {items.map(msg => {
+                        const msgKey = msg.key || String(msg.id);
+                        const isExpanded = expandedKey === msgKey;
+                        const turns = isExpanded ? parseSnapshot(msg.snapshot) : [];
 
-                    {turns.map((turn, idx) => {
-                      if (turn.role === "tool") {
-                        const toolLines = turn.content.split("\n").map(l => l.trim()).filter(Boolean);
-                        let action = "";
-                        let target = "";
-                        for (const l of toolLines) {
-                          if (l === "Using Tool" || l === "|" || l === "View") continue;
-                          if (["Read", "Search", "Navigate", "Fetch", "Query", "Screenshot", "Click", "Fill"].some(a => l.startsWith(a))) action = l;
-                          else if (l.startsWith("http") || l.startsWith("/")) target = l;
-                        }
                         return (
-                          <div key={idx} className="flex justify-start">
-                            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs"
-                              style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                              <span style={{ color: "#818cf8" }}>
-                                {action.startsWith("Read") ? "📖" : action.startsWith("Search") ? "🔍" :
-                                 action.startsWith("Navigate") ? "🌐" : action.startsWith("Screenshot") ? "📸" :
-                                 action.startsWith("Fetch") ? "📡" : action.startsWith("Query") ? "🗄️" : "🔧"}
-                              </span>
-                              <span style={{ color: "#a5b4fc" }}>{action || "Tool"}</span>
-                              {target && <span className="truncate max-w-[300px]" style={{ color: "var(--text-secondary)" }}>{target}</span>}
-                            </div>
+                          <div key={msgKey}>
+                            {/* List item — clickable */}
+                            <button
+                              onClick={() => setExpandedKey(isExpanded ? null : msgKey)}
+                              className="w-full text-left px-4 py-3 rounded-lg transition-colors"
+                              style={{
+                                background: isExpanded ? "var(--bg-card)" : "transparent",
+                                border: isExpanded ? "1px solid var(--accent)" : "1px solid var(--border)",
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs font-mono flex-shrink-0" style={{ color: "var(--accent)" }}>
+                                  {toTimeStr(msg.created_at)}
+                                </span>
+                                <span className="text-sm truncate flex-1" style={{ color: "var(--text-primary)" }}>
+                                  {getSnippet(msg.snapshot)}
+                                </span>
+                                <span className="text-xs flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+                                  {isExpanded ? "▲" : "▼"}
+                                </span>
+                              </div>
+                            </button>
+
+                            {/* Expanded chat view */}
+                            {isExpanded && (
+                              <div className="mt-1 rounded-b-lg p-4 space-y-4"
+                                style={{ background: "var(--bg-main)", border: "1px solid var(--border)", borderTop: "none" }}>
+                                {turns.length === 0 ? (
+                                  <p className="text-sm text-center py-4" style={{ color: "var(--text-secondary)" }}>
+                                    파싱 가능한 내용 없음
+                                  </p>
+                                ) : (
+                                  turns.map((turn, idx) => {
+                                    if (turn.role === "tool") {
+                                      const toolLines = turn.content.split("\n").map(l => l.trim()).filter(Boolean);
+                                      let action = "";
+                                      let target = "";
+                                      for (const l of toolLines) {
+                                        if (l === "Using Tool" || l === "|" || l === "View") continue;
+                                        if (["Read", "Search", "Navigate", "Fetch", "Query", "Screenshot", "Click", "Fill"].some(a => l.startsWith(a))) action = l;
+                                        else if (l.startsWith("http") || l.startsWith("/")) target = l;
+                                      }
+                                      return (
+                                        <div key={idx} className="flex justify-start">
+                                          <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs"
+                                            style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                                            <span style={{ color: "#818cf8" }}>
+                                              {action.startsWith("Read") ? "📖" : action.startsWith("Search") ? "🔍" :
+                                               action.startsWith("Navigate") ? "🌐" : action.startsWith("Screenshot") ? "📸" :
+                                               action.startsWith("Fetch") ? "📡" : action.startsWith("Query") ? "🗄️" : "🔧"}
+                                            </span>
+                                            <span style={{ color: "#a5b4fc" }}>{action || "Tool"}</span>
+                                            {target && <span className="truncate max-w-[300px]" style={{ color: "var(--text-secondary)" }}>{target}</span>}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    const isUser = turn.role === "user";
+                                    return (
+                                      <div key={idx} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                                        <div className="max-w-[75%]">
+                                          <div
+                                            className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap"
+                                            style={isUser
+                                              ? { background: "var(--accent)", color: "#fff", borderBottomRightRadius: "4px" }
+                                              : { background: "var(--bg-card)", color: "var(--text-primary)", border: "1px solid var(--border)", borderBottomLeftRadius: "4px" }
+                                            }
+                                          >
+                                            {turn.content}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
-                      }
-
-                      const isUser = turn.role === "user";
-                      return (
-                        <div key={idx} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                          <div className="max-w-[75%]">
-                            <div
-                              className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap"
-                              style={isUser
-                                ? { background: "var(--accent)", color: "#fff", borderBottomRightRadius: "4px" }
-                                : { background: "var(--bg-card)", color: "var(--text-primary)", border: "1px solid var(--border)", borderBottomLeftRadius: "4px" }
-                              }
-                            >
-                              {turn.content}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                      })}
+                    </div>
                   </div>
-                );
-              })
-            )}
+                ))}
 
-            <div ref={bottomRef} />
+                {/* Load more */}
+                {messages.length < total && (
+                  <div className="text-center py-4">
+                    <button
+                      onClick={loadMore}
+                      disabled={msgLoading}
+                      className="px-4 py-2 text-sm rounded-lg"
+                      style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+                    >
+                      {msgLoading ? "로딩 중..." : `더 보기 (${total - messages.length}건 남음)`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
