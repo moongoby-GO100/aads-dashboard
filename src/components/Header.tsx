@@ -66,6 +66,8 @@ export default function Header({ title }: { title: string }) {
       <div className="flex items-center gap-4">
         <a
           href="/chat"
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-sm font-semibold px-3 py-1.5 rounded-lg"
           style={{ background: "#6C63FF", color: "#fff", textDecoration: "none" }}
         >
