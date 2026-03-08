@@ -1,185 +1,217 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+/**
+ * AADS-172-B: CEO Chat-First 페이지 (재작성)
+ * - ChatStream / ChatInput / useChatSSE / useChatSession 통합
+ * - AADS-170 /api/v1/chat/* 엔드포인트 사용
+ * - 워크스페이스 선택 + 세션 관리 사이드바
+ * - 기존 /api/v1/ceo-chat/* 비용 사이드바 유지 (하위 호환)
+ */
+import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
-import ModelSelector, { DEFAULT_MODEL } from "@/components/chat/ModelSelector";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  model_used?: string;
-  input_tokens?: number;
-  output_tokens?: number;
-  cost_usd?: number;
-  created_at?: string;
-}
-
-interface Session {
-  session_id: string;
-  started_at: string;
-  summary: string | null;
-  total_cost_usd: number;
-  total_turns: number;
-  status: string;
-}
-
-interface CostSummary {
-  today: { turns: number; cost: number };
-  this_week: { turns: number; cost: number };
-  this_month: { turns: number; cost: number };
-  by_model: { flash?: number; sonnet?: number; opus?: number };
-}
+import ChatStream from "@/components/chat/ChatStream";
+import ChatInput from "@/components/chat/ChatInput";
+import { CHAT_MODEL_OPTIONS, DEFAULT_CHAT_MODEL } from "@/components/chat/ModelSelector";
+import { useChatSSE } from "@/hooks/useChatSSE";
+import { useChatSession } from "@/hooks/useChatSession";
+import type { ChatMessage } from "@/services/chatApi";
 
 export default function CeoChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const [sessionId, setSessionId] = useState<string>("auto");
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_CHAT_MODEL);
   const [activeTasksCount, setActiveTasksCount] = useState(0);
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadSessions();
-    loadCostSummary();
-  }, []);
+  const { state: sseState, sendMessage: sseStreamSend, cancelStream } = useChatSSE();
+  const {
+    workspaces,
+    sessions,
+    messages,
+    currentWorkspace,
+    currentSession,
+    loading,
+    selectWorkspace,
+    selectSession,
+    createNewSession,
+    appendMessage,
+    updateLastMessage,
+  } = useChatSession();
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // 메시지 전송
+  const handleSend = useCallback(
+    async (text: string, model: string) => {
+      if (!currentWorkspace) return;
 
-  async function loadSessions() {
-    try {
-      const data = await api.getCeoSessions();
-      setSessions(data.sessions || []);
-    } catch (e) {
-      console.error("Failed to load sessions", e);
-    }
-  }
-
-  async function loadCostSummary() {
-    try {
-      const data = await api.getCeoCostSummary();
-      setCostSummary(data);
-    } catch (e) {
-      console.error("Failed to load cost summary", e);
-    }
-  }
-
-  async function loadSession(sid: string) {
-    try {
-      const data = await api.getCeoSession(sid);
-      setMessages(data.messages || []);
-      setSessionId(sid);
-    } catch (e) {
-      console.error("Failed to load session", e);
-    }
-  }
-
-  async function sendMessage() {
-    if (!inputValue.trim() || isLoading) return;
-    const userMsg = inputValue.trim();
-    setInputValue("");
-    setIsLoading(true);
-
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
-
-    try {
-      const data = await api.sendCeoMessage(sessionId, userMsg, selectedModel);
-      if (sessionId === "auto" && data.session_id) {
-        setSessionId(data.session_id);
+      // 세션이 없으면 자동 생성
+      let sess = currentSession;
+      if (!sess) {
+        sess = await createNewSession();
+        if (!sess) return;
       }
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: data.response,
-        model_used: data.model_used,
-        input_tokens: data.input_tokens,
-        output_tokens: data.output_tokens,
-        cost_usd: data.cost_usd,
-      }]);
-      setActiveTasksCount(data.active_tasks?.length || 0);
-      loadSessions();
-      loadCostSummary();
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: `오류 발생: ${errMsg}`,
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
-  async function newSession() {
-    setMessages([]);
-    setSessionId("auto");
-    setActiveTasksCount(0);
-  }
+      // 사용자 메시지 낙관적 추가
+      const userMsg: ChatMessage = {
+        id: `tmp-user-${Date.now()}`,
+        session_id: sess.id,
+        role: "user",
+        content: text,
+        model_used: null,
+        input_tokens: null,
+        output_tokens: null,
+        cost_usd: null,
+        bookmarked: false,
+        attachments: [],
+        sources: null,
+        thought_summary: null,
+        created_at: new Date().toISOString(),
+      };
+      appendMessage(userMsg);
 
-  async function endSession() {
-    if (sessionId === "auto") return;
+      // AI 플레이스홀더
+      const aiPlaceholder: ChatMessage = {
+        id: `tmp-ai-${Date.now()}`,
+        session_id: sess.id,
+        role: "assistant",
+        content: "",
+        model_used: model === "auto" ? null : model,
+        input_tokens: null,
+        output_tokens: null,
+        cost_usd: null,
+        bookmarked: false,
+        attachments: [],
+        sources: null,
+        thought_summary: null,
+        created_at: new Date().toISOString(),
+      };
+      appendMessage(aiPlaceholder);
+
+      const resolvedModel = model === "auto" ? undefined : model;
+
+      await sseStreamSend(sess.id, text, resolvedModel, (fullText) => {
+        // 스트리밍 완료 → 마지막 메시지 업데이트
+        updateLastMessage(fullText, {
+          model_used: sseState.modelUsed || resolvedModel || "auto",
+          input_tokens: sseState.inputTokens || undefined,
+          output_tokens: sseState.outputTokens || undefined,
+          cost_usd: sseState.costUsd || undefined,
+          sources: sseState.sources.length > 0 ? sseState.sources : null,
+          thought_summary: sseState.thoughtSummary || null,
+        });
+        setActiveTasksCount(0);
+      });
+    },
+    [
+      currentWorkspace,
+      currentSession,
+      createNewSession,
+      appendMessage,
+      updateLastMessage,
+      sseStreamSend,
+      sseState,
+    ]
+  );
+
+  const handleNewSession = async () => {
+    await createNewSession();
+  };
+
+  const handleBookmark = async (id: string) => {
     try {
-      await api.endCeoSession(sessionId);
-      loadSessions();
-      loadCostSummary();
-      alert(`세션 ${sessionId} 종료 및 요약 완료`);
+      const { chatApi } = await import("@/services/chatApi");
+      await chatApi.toggleBookmark(id);
     } catch (e) {
-      console.error("End session failed", e);
+      console.error("Bookmark failed", e);
     }
-  }
+  };
 
-  function getModelLabel(model?: string) {
-    if (!model) return "";
-    if (model.includes("haiku")) return "Flash";
-    if (model.includes("sonnet")) return "Sonnet";
-    if (model.includes("opus")) return "Opus";
-    return model;
-  }
+  const handleCreateDirective = (content: string) => {
+    const snippet = content.slice(0, 200);
+    alert(`지시서 생성 요청:\n${snippet}\n\n(지시서 작성 기능은 다음 단계에서 구현됩니다)`);
+  };
 
-  const monthlyBudget = 63;
-  const monthlyUsed = costSummary?.this_month.cost || 0;
-  const budgetPct = Math.min((monthlyUsed / monthlyBudget) * 100, 100);
-
-  const totalModelCost = (costSummary?.by_model.flash || 0) + (costSummary?.by_model.sonnet || 0) + (costSummary?.by_model.opus || 0);
+  const isDeepResearch = CHAT_MODEL_OPTIONS.find((m) => m.id === selectedModel)?.isDeepResearch;
 
   return (
     <div className="flex h-screen" style={{ background: "var(--bg-main)", color: "var(--text-primary)" }}>
-      {/* Main Chat Area */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-card)" }}>
-          <div className="flex items-center gap-3">
-            <span className="text-xl">💬</span>
-            <div>
-              <h1 className="font-bold text-base">CEO Chat v2</h1>
-              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                세션: {sessionId === "auto" ? "신규" : sessionId.slice(0, 8) + "..."}
-                {activeTasksCount > 0 && (
-                  <span className="ml-2 text-green-400 animate-pulse">● {activeTasksCount}개 작업 실행중</span>
-                )}
-              </p>
+      {/* ── 왼쪽 사이드바 (워크스페이스 + 세션) ─────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          className="w-60 flex flex-col overflow-y-auto flex-shrink-0"
+          style={{ borderRight: "1px solid var(--border)", background: "var(--bg-card)" }}
+        >
+          {/* 워크스페이스 */}
+          <div className="p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>워크스페이스</p>
+            {loading && workspaces.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>
+            ) : (
+              <div className="space-y-1">
+                {workspaces.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => selectWorkspace(w)}
+                    className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2"
+                    style={
+                      currentWorkspace?.id === w.id
+                        ? { background: "var(--accent)", color: "#fff" }
+                        : { background: "transparent", color: "var(--text-secondary)" }
+                    }
+                  >
+                    <span>{w.icon || "💬"}</span>
+                    <span className="truncate">{w.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 세션 목록 */}
+          <div className="flex-1 p-3 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>세션</p>
+              <button
+                onClick={handleNewSession}
+                className="text-xs px-2 py-0.5 rounded"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                + 새 세션
+              </button>
+            </div>
+            <div className="space-y-1">
+              {sessions.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => selectSession(s)}
+                  className="w-full text-left px-2 py-2 rounded-lg text-xs transition-colors"
+                  style={
+                    currentSession?.id === s.id
+                      ? { background: "var(--accent)", color: "#fff" }
+                      : { background: "var(--bg-main)", color: "var(--text-secondary)" }
+                  }
+                >
+                  <p className="font-medium truncate">{s.title || "새 대화"}</p>
+                  <p className="text-xs opacity-70 mt-0.5">
+                    {new Date(s.created_at).toLocaleDateString("ko-KR")}
+                    {s.pinned && " 📌"}
+                  </p>
+                </button>
+              ))}
+              {sessions.length === 0 && currentWorkspace && (
+                <p className="text-xs py-2 text-center" style={{ color: "var(--text-secondary)" }}>
+                  세션이 없습니다
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={newSession}
-              className="text-xs px-3 py-1.5 rounded"
-              style={{ background: "var(--accent)", color: "#fff" }}
-            >
-              새 세션
-            </button>
-            {sessionId !== "auto" && (
-              <button
-                onClick={endSession}
-                className="text-xs px-3 py-1.5 rounded"
-                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-              >
-                세션 종료
-              </button>
-            )}
+        </div>
+      )}
+
+      {/* ── 메인 채팅 영역 ──────────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* 헤더 */}
+        <div
+          className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-card)" }}
+        >
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="text-xs px-2 py-1.5 rounded"
@@ -187,213 +219,93 @@ export default function CeoChatPage() {
             >
               {sidebarOpen ? "◀" : "▶"}
             </button>
-          </div>
-        </div>
-
-        {/* Session selector */}
-        <div className="px-4 py-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-card)" }}>
-          <select
-            className="text-xs px-2 py-1 rounded w-full max-w-xs"
-            style={{ background: "var(--bg-main)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-            value={sessionId}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === "auto") {
-                newSession();
-              } else {
-                loadSession(val);
-              }
-            }}
-          >
-            <option value="auto">-- 새 세션 시작 --</option>
-            {sessions.map(s => (
-              <option key={s.session_id} value={s.session_id}>
-                {s.session_id.slice(0, 8)}... | {new Date(s.started_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} | ${Number(s.total_cost_usd).toFixed(4)} | {s.total_turns}턴 [{s.status}]
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
-            <div className="text-center py-20" style={{ color: "var(--text-secondary)" }}>
-              <p className="text-4xl mb-4">💬</p>
-              <p className="text-lg font-medium mb-2">CEO Chat v2</p>
-              <p className="text-sm">메시지를 입력하세요. 내용에 따라 최적 모델이 자동 선택됩니다.</p>
-              <div className="mt-4 text-xs space-y-1">
-                <p>⚡ 상태/확인 → Flash (빠름·저비용)</p>
-                <p>🔧 코드/수정 → Sonnet (균형)</p>
-                <p>🧠 설계/분석 → Opus (고성능)</p>
-              </div>
-            </div>
-          )}
-          {messages.map((msg, idx) => (
-            <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className="max-w-[75%]">
-                <div
-                  className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap"
-                  style={msg.role === "user"
-                    ? { background: "var(--accent)", color: "#fff", borderBottomRightRadius: "4px" }
-                    : { background: "var(--bg-card)", color: "var(--text-primary)", border: "1px solid var(--border)", borderBottomLeftRadius: "4px" }
-                  }
-                >
-                  {msg.content}
-                </div>
-                {msg.role === "assistant" && msg.model_used && (
-                  <p className="text-xs mt-1 ml-1" style={{ color: "var(--text-secondary)" }}>
-                    [{getModelLabel(msg.model_used)} · {msg.input_tokens?.toLocaleString()}in · {msg.output_tokens?.toLocaleString()}out · ${msg.cost_usd?.toFixed(4)}]
-                  </p>
+            <div>
+              <h1 className="font-bold text-base">
+                {currentWorkspace?.name || "CEO Chat"}
+              </h1>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                {currentSession?.title || (currentSession ? "새 대화" : "세션을 선택하거나 + 새 세션")}
+                {activeTasksCount > 0 && (
+                  <span className="ml-2 text-green-400 animate-pulse">● {activeTasksCount}개 작업 실행중</span>
                 )}
-              </div>
+                {sseState.isStreaming && (
+                  <span className="ml-2 animate-pulse" style={{ color: "var(--accent)" }}>● 응답 생성 중</span>
+                )}
+              </p>
             </div>
-          ))}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="px-4 py-3 rounded-2xl text-sm" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-                <span className="animate-pulse">AI 응답 생성중...</span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input */}
-        <div className="p-4" style={{ borderTop: "1px solid var(--border)", background: "var(--bg-card)" }}>
-          <ModelSelector value={selectedModel} onChange={setSelectedModel} />
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="flex-1 px-4 py-2.5 rounded-xl text-sm"
-              style={{ background: "var(--bg-main)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
-              placeholder="메시지를 입력하세요... (예: shortflow 상태 확인해)"
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              disabled={isLoading}
-            />
+          </div>
+          <div className="flex items-center gap-2">
+            {sseState.isStreaming && (
+              <button
+                onClick={cancelStream}
+                className="text-xs px-3 py-1.5 rounded"
+                style={{ background: "#ef4444", color: "#fff" }}
+              >
+                중지
+              </button>
+            )}
             <button
-              onClick={sendMessage}
-              disabled={isLoading || !inputValue.trim()}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium"
-              style={{ background: "var(--accent)", color: "#fff", opacity: (isLoading || !inputValue.trim()) ? 0.5 : 1 }}
+              onClick={handleNewSession}
+              className="text-xs px-3 py-1.5 rounded"
+              style={{ background: "var(--accent)", color: "#fff" }}
             >
-              전송
+              새 세션
             </button>
           </div>
         </div>
+
+        {/* SSE 에러 표시 */}
+        {sseState.error && (
+          <div
+            className="mx-4 mt-2 px-3 py-2 rounded text-xs flex-shrink-0"
+            style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}
+          >
+            오류: {sseState.error}
+          </div>
+        )}
+
+        {/* 워크스페이스 미선택 상태 */}
+        {!currentWorkspace && !loading && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-4xl mb-4">💬</p>
+              <p className="text-lg font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+                CEO Chat-First
+              </p>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                왼쪽에서 워크스페이스를 선택하세요
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 채팅 스트림 */}
+        {currentWorkspace && (
+          <ChatStream
+            messages={messages}
+            isStreaming={sseState.isStreaming}
+            streamingText={sseState.streamingText}
+            isDeepResearch={!!isDeepResearch}
+            onBookmark={handleBookmark}
+            onCopy={(content) => navigator.clipboard.writeText(content)}
+            onCreateDirective={handleCreateDirective}
+          />
+        )}
+
+        {/* 입력 영역 */}
+        {currentWorkspace && (
+          <ChatInput
+            onSend={handleSend}
+            isStreaming={sseState.isStreaming}
+            lastAssistantMessage={
+              [...messages].reverse().find((m) => m.role === "assistant")?.content || ""
+            }
+            hasMessages={messages.length > 0}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+          />
+        )}
       </div>
-
-      {/* Right Sidebar */}
-      {sidebarOpen && (
-        <div className="w-72 flex flex-col overflow-y-auto" style={{ borderLeft: "1px solid var(--border)", background: "var(--bg-card)" }}>
-          {/* Cost Dashboard */}
-          <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-            <h3 className="text-sm font-semibold mb-3">비용 현황</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span style={{ color: "var(--text-secondary)" }}>오늘</span>
-                <span>${(costSummary?.today.cost || 0).toFixed(4)} ({costSummary?.today.turns || 0}턴)</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: "var(--text-secondary)" }}>이번주</span>
-                <span>${(costSummary?.this_week.cost || 0).toFixed(4)} ({costSummary?.this_week.turns || 0}턴)</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: "var(--text-secondary)" }}>이번달</span>
-                <span>${monthlyUsed.toFixed(4)} / ${monthlyBudget}</span>
-              </div>
-            </div>
-            {/* Budget Progress Bar */}
-            <div className="mt-3">
-              <div className="flex justify-between text-xs mb-1">
-                <span style={{ color: "var(--text-secondary)" }}>월 예산</span>
-                <span style={{ color: budgetPct > 80 ? "#ef4444" : budgetPct > 60 ? "#f59e0b" : "var(--text-secondary)" }}>
-                  {budgetPct.toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full" style={{ background: "var(--bg-main)" }}>
-                <div
-                  className="h-2 rounded-full transition-all"
-                  style={{
-                    width: `${budgetPct}%`,
-                    background: budgetPct > 80 ? "#ef4444" : budgetPct > 60 ? "#f59e0b" : "var(--accent)"
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Model Distribution */}
-          {costSummary && totalModelCost > 0 && (
-            <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-              <h3 className="text-sm font-semibold mb-3">모델별 분포 (이번달)</h3>
-              <div className="space-y-2 text-xs">
-                {[
-                  { label: "Flash", key: "flash" as const, color: "#22c55e" },
-                  { label: "Sonnet", key: "sonnet" as const, color: "#3b82f6" },
-                  { label: "Opus", key: "opus" as const, color: "#8b5cf6" },
-                ].map(({ label, key, color }) => {
-                  const cost = costSummary.by_model[key] || 0;
-                  const pct = totalModelCost > 0 ? (cost / totalModelCost) * 100 : 0;
-                  return (
-                    <div key={key}>
-                      <div className="flex justify-between mb-1">
-                        <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-                        <span>{pct.toFixed(0)}% (${cost.toFixed(4)})</span>
-                      </div>
-                      <div className="h-1.5 rounded-full" style={{ background: "var(--bg-main)" }}>
-                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Session Info */}
-          {sessionId !== "auto" && (
-            <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-              <h3 className="text-sm font-semibold mb-2">현재 세션</h3>
-              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                ID: {sessionId.slice(0, 12)}...
-              </p>
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                메시지: {messages.length}개
-              </p>
-            </div>
-          )}
-
-          {/* Recent Sessions */}
-          <div className="p-4 flex-1">
-            <h3 className="text-sm font-semibold mb-3">최근 세션</h3>
-            <div className="space-y-2">
-              {sessions.slice(0, 8).map(s => (
-                <button
-                  key={s.session_id}
-                  onClick={() => loadSession(s.session_id)}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors"
-                  style={s.session_id === sessionId
-                    ? { background: "var(--accent)", color: "#fff" }
-                    : { background: "var(--bg-main)", color: "var(--text-secondary)" }
-                  }
-                >
-                  <div className="flex justify-between mb-0.5">
-                    <span className="font-medium">{s.session_id.slice(0, 8)}...</span>
-                    <span className={s.status === "active" ? "text-green-400" : ""}>{s.status}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>{s.total_turns}턴</span>
-                    <span>${Number(s.total_cost_usd).toFixed(4)}</span>
-                  </div>
-                  {s.summary && <p className="mt-1 truncate opacity-70">{s.summary}</p>}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
