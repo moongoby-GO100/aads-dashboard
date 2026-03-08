@@ -80,7 +80,7 @@ export function useChatSession(): UseChatSessionReturn {
     setMessages([]);
     try {
       const msgs = await chatApi.getMessages(s.id, 50, 0);
-      setMessages(msgs.reverse()); // API returns newest first
+      setMessages(msgs); // API returns ORDER BY created_at ASC (oldest first = correct display order)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

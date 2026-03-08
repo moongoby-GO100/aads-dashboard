@@ -74,10 +74,15 @@ export interface SSEChunk {
   summary?: string;
   sources?: SourceItem[];
   message_id?: string;
+  // frontend-style names
   model_used?: string;
   input_tokens?: number;
   output_tokens?: number;
   cost_usd?: string;
+  // backend sends these names (AADS-182 fix)
+  model?: string;
+  cost?: string;
+  intent?: string;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
@@ -119,10 +124,11 @@ export const chatApi = {
     sessionId: string,
     content: string,
     modelOverride?: string,
-    attachments?: unknown[]
+    signal?: AbortSignal,
   ): Promise<ReadableStreamDefaultReader<Uint8Array>> => {
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         ...getAuthHeaders(),
@@ -131,7 +137,7 @@ export const chatApi = {
         session_id: sessionId,
         content,
         model_override: modelOverride || null,
-        attachments: attachments || [],
+        attachments: [],
       }),
     });
     if (!res.ok || !res.body) throw new Error(`Stream error ${res.status}`);

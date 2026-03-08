@@ -8,7 +8,7 @@ import { useState, useCallback } from "react";
 import ChatStream from "@/components/chat/ChatStream";
 import ChatInput from "@/components/chat/ChatInput";
 import { CHAT_MODEL_OPTIONS, DEFAULT_CHAT_MODEL } from "@/components/chat/ModelSelector";
-import { useChatSSE } from "@/hooks/useChatSSE";
+import { useChatSSE, type StreamMeta } from "@/hooks/useChatSSE";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useArtifactPanel, detectArtifactType, extractCodeFromContent } from "@/hooks/useArtifactPanel";
 import ArtifactPanel from "@/components/chat/ArtifactPanel";
@@ -126,17 +126,17 @@ export default function CeoChatPage() {
 
       const resolvedModel = model === "auto" ? undefined : model;
 
-      await sseStreamSend(sess.id, text, resolvedModel, (fullText) => {
+      await sseStreamSend(sess.id, text, resolvedModel, (fullText, meta: StreamMeta) => {
+        // meta는 done 이벤트에서 직접 추출 (stale closure 방지)
         updateLastMessage(fullText, {
-          model_used: sseState.modelUsed || resolvedModel || "auto",
-          input_tokens: sseState.inputTokens || undefined,
-          output_tokens: sseState.outputTokens || undefined,
-          cost_usd: sseState.costUsd || undefined,
-          sources: sseState.sources.length > 0 ? sseState.sources : null,
-          thought_summary: sseState.thoughtSummary || null,
+          model_used: meta.modelUsed || resolvedModel || "auto",
+          input_tokens: meta.inputTokens ?? undefined,
+          output_tokens: meta.outputTokens ?? undefined,
+          cost_usd: meta.costUsd ?? undefined,
+          sources: meta.sources.length > 0 ? meta.sources : null,
+          thought_summary: meta.thoughtSummary || null,
         });
         setActiveTasksCount(0);
-        // 아티팩트 자동 감지 + 패널 표시
         detectAndShowArtifact(fullText);
       });
     },
@@ -147,7 +147,6 @@ export default function CeoChatPage() {
       appendMessage,
       updateLastMessage,
       sseStreamSend,
-      sseState,
       detectAndShowArtifact,
     ]
   );
