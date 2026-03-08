@@ -205,4 +205,17 @@ export const api = {
   getOpsInfraCheck: () => request<any>("/ops/infra-check"),
   getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
   getOpsFullHealth: () => request<any>("/ops/full-health"),
+
+  // AADS-169: Claude Bot Status + Process Control
+  getClaudeProcesses: (limit = 5) => request<any>(`/ops/claude-processes?limit=${limit}`),
+  postClaudeCleanup: (server?: string | null, dry_run = false, reason = "manual_ceo_trigger") =>
+    request<any>("/ops/claude-cleanup", {
+      method: "POST",
+      body: JSON.stringify({ server: server || null, dry_run, reason }),
+    }),
+  postBridgeRestart: (reason = "manual_ceo_trigger") =>
+    request<any>("/ops/bridge-restart", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };

@@ -28,10 +28,29 @@ export interface SSEPipeline {
   checked_at: string;
 }
 
+export interface SSEClaudeWatchdog {
+  generated_at: string;
+  summary?: {
+    total_issues?: number;
+    critical_issues?: number;
+    high_issues?: number;
+    cleanup_actions?: number;
+  };
+  servers?: Record<string, {
+    scan_ok?: boolean;
+    process_counts?: Record<string, number>;
+    bridge_alive?: boolean;
+    auto_trigger_alive?: boolean;
+  }>;
+  issues?: Array<{ severity: string; server: string; type: string; detail: string }>;
+  cleanup_log?: Array<{ ts: string; server: string; type: string; pid: number; result: string }>;
+}
+
 export function useSSE() {
   const [health, setHealth] = useState<SSEHealth | null>(null);
   const [directives, setDirectives] = useState<SSEDirectiveChange[]>([]);
   const [pipeline, setPipeline] = useState<SSEPipeline | null>(null);
+  const [claudeWatchdog, setClaudeWatchdog] = useState<SSEClaudeWatchdog | null>(null);
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const fallbackRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,6 +109,12 @@ export function useSSE() {
         } catch {}
       });
 
+      es.addEventListener("claude_watchdog", (e) => {
+        try {
+          setClaudeWatchdog(JSON.parse(e.data));
+        } catch {}
+      });
+
       es.onerror = () => {
         setConnected(false);
         es.close();
@@ -107,5 +132,5 @@ export function useSSE() {
     };
   }, [startFallback, stopFallback]);
 
-  return { health, directives, pipeline, connected };
+  return { health, directives, pipeline, claudeWatchdog, connected };
 }
