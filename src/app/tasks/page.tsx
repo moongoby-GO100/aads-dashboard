@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
 import PipelineHealthTab from "@/components/PipelineHealthCard";
 import { api } from "@/lib/api";
+import { useTaskPolling } from "@/hooks/useTaskPolling";
+import { TaskTable } from "@/components/tasks/TaskTable";
+import type { CrossDirective } from "@/services/taskApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Directive {
@@ -220,63 +223,98 @@ function ProjectFilterBar({
 }
 
 // ─── Tab: Directives ──────────────────────────────────────────────────────────
+// AADS-181: 전체 프로젝트 통합 (3서버) + 기존 AADS DB 데이터 하위 호환
+type CrossStatusFilter = "all" | "running" | "done" | "pending" | "archived";
+
 function DirectivesTab() {
+  // ── 기존 AADS DB 데이터 (하위 호환) ──────────────────────────────────────
   const [data, setData] = useState<DirectiveSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<DirectiveFilter>("all");
+  const [aadsLoading, setAadsLoading] = useState(true);
+  const [completeLoading, setCompleteLoading] = useState(false);
+
+  // ── 크로스서버 데이터 (AADS-181) ────────────────────────────────────────
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
+  const [crossStatusFilter, setCrossStatusFilter] = useState<CrossStatusFilter>("all");
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [taskDetail, setTaskDetail] = useState<string>("");
   const [detailLoading, setDetailLoading] = useState(false);
-  const [completeLoading, setCompleteLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const load = useCallback(async (proj: ProjectFilter = projectFilter) => {
-    setLoading(true);
+  // useTaskPolling: 전체 프로젝트 크로스서버 데이터
+  const {
+    data: crossData,
+    loading: crossLoading,
+    refresh: crossRefresh,
+    lastUpdated,
+  } = useTaskPolling({ status: "all", project: "all", enabled: true });
+
+  // 기존 AADS DB 데이터 로드 (AADS 탭 전용 + 하위 호환)
+  const loadAads = useCallback(async () => {
+    setAadsLoading(true);
     try {
-      const res = await api.getDirectives(proj === "all" ? undefined : proj);
+      const res = await api.getDirectives(undefined);
       setData(res);
     } catch {
       setData(null);
     } finally {
-      setLoading(false);
+      setAadsLoading(false);
     }
-  }, [projectFilter]);
+  }, []);
 
-  useEffect(() => { load(); const _id = setInterval(() => load(), 30_000); return () => clearInterval(_id); }, [load]);
+  useEffect(() => {
+    loadAads();
+    const _id = setInterval(() => loadAads(), 30_000);
+    return () => clearInterval(_id);
+  }, [loadAads]);
 
   const handleProjectChange = (p: ProjectFilter) => {
     setProjectFilter(p);
-    load(p);
+    setExpandedTask(null);
+    setTaskDetail("");
   };
 
   const handleCompleteAll = async () => {
-    if (!window.confirm('진행중인 모든 태스크를 완료 처리하시겠습니까?')) return;
+    if (!window.confirm("진행중인 모든 태스크를 완료 처리하시겠습니까?")) return;
     setCompleteLoading(true);
     try {
-      const res = await api.completeRunning(projectFilter === 'all' ? undefined : projectFilter);
-      alert(res.message || '완료 처리되었습니다.');
-      await load();
+      const res = await api.completeRunning(projectFilter === "all" ? undefined : projectFilter);
+      alert(res.message || "완료 처리되었습니다.");
+      loadAads();
     } catch {
-      alert('처리 중 오류가 발생했습니다.');
+      alert("처리 중 오류가 발생했습니다.");
     } finally {
       setCompleteLoading(false);
     }
   };
 
-  const handleExpand = async (d: Directive) => {
+  const handleExpandCross = async (d: CrossDirective) => {
     if (expandedTask === d.task_id) {
       setExpandedTask(null);
       setTaskDetail("");
       return;
     }
     setExpandedTask(d.task_id);
-    if (d.summary) {
-      setTaskDetail(d.summary);
+    setDetailLoading(true);
+    try {
+      const res = await api.getDirectiveDetail(d.task_id);
+      setTaskDetail(res.content || "내용 없음");
+    } catch {
+      setTaskDetail("원격 서버 파일: 직접 조회 불가");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleExpandAads = async (d: Directive) => {
+    if (expandedTask === d.task_id) {
+      setExpandedTask(null);
+      setTaskDetail("");
       return;
     }
+    setExpandedTask(d.task_id);
+    if (d.summary) { setTaskDetail(d.summary); return; }
     setDetailLoading(true);
     try {
       const res = await api.getDirectiveDetail(d.task_id);
@@ -288,81 +326,122 @@ function DirectivesTab() {
     }
   };
 
-  const filtered = (data?.directives ?? [])
+  // ── 크로스서버 데이터 필터링 ───────────────────────────────────────────
+  const allCrossDirectives = crossData?.directives ?? [];
+
+  const crossFiltered = allCrossDirectives
     .filter((d) => {
-      const refDate = (d.started_at || d.created_at || "").slice(0, 10);
+      const projOk =
+        projectFilter === "all" ||
+        d.project.toUpperCase() === projectFilter.toUpperCase() ||
+        // ShortFlow/NewTalk 별칭 처리
+        (projectFilter === "ShortFlow" && d.project.toUpperCase() === "SF") ||
+        (projectFilter === "NewTalk" && (d.project.toUpperCase() === "NTV2" || d.project.toUpperCase() === "NT"));
+      const statusOk = crossStatusFilter === "all" || d.status === crossStatusFilter;
+      const refDate = (d.started_at || "").slice(0, 10);
       const fromOk = dateFrom ? refDate >= dateFrom : true;
       const toOk = dateTo ? refDate <= dateTo : true;
-      return (
-        (statusFilter === "all" ? true : d.status === statusFilter) &&
-        (projectFilter === "all" ? true : d.project.toUpperCase() === projectFilter.toUpperCase()) &&
-        fromOk && toOk &&
-        (searchQuery.trim() === "" ? true :
-          d.task_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (d.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (d.summary || "").toLowerCase().includes(searchQuery.toLowerCase()))
-      );
+      const searchOk =
+        searchQuery.trim() === "" ||
+        d.task_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (d.title || "").toLowerCase().includes(searchQuery.toLowerCase());
+      return projOk && statusOk && fromOk && toOk && searchOk;
     })
     .sort((a, b) => {
-      // running 우선, 그 다음 최근시간순
       if (a.status === "running" && b.status !== "running") return -1;
       if (b.status === "running" && a.status !== "running") return 1;
-      const ta = a.started_at || a.created_at || "";
-      const tb = b.started_at || b.created_at || "";
-      return tb.localeCompare(ta);
+      return (b.started_at || "").localeCompare(a.started_at || "");
     });
 
-  // Error type counts — T-072: error_breakdown API 필드 우선 사용
-  const errorItems = data?.directives.filter((d) => d.status === "error") ?? [];
-  const authExpiredCount = data?.error_breakdown?.auth_expired ?? errorItems.filter((d) => d.error_type === "auth_expired").length;
-  const taskFailureCount = data?.error_breakdown?.task_failure ?? errorItems.filter((d) => d.error_type === "task_failure").length;
+  // ── 요약 카드 수치 ────────────────────────────────────────────────────
+  // 전체 탭: 크로스서버 합산. 개별 탭: 해당 프로젝트 크로스서버 필터
+  const counts = crossData?.counts ?? {};
+  const crossByServer = crossData?.by_server ?? {};
+  const totalCount = projectFilter === "all"
+    ? (counts.pending ?? 0) + (counts.running ?? 0) + (counts.done ?? 0)
+    : crossFiltered.length;
+  const runningCount = projectFilter === "all"
+    ? (counts.running ?? 0)
+    : crossFiltered.filter((d) => d.status === "running").length;
+  const doneCount = projectFilter === "all"
+    ? (counts.done ?? 0)
+    : crossFiltered.filter((d) => d.status === "done").length;
+  const pendingCount = projectFilter === "all"
+    ? (counts.pending ?? 0)
+    : crossFiltered.filter((d) => d.status === "pending").length;
+
+  // AADS DB 에러 카운트 (AADS 탭 전용)
+  const aadsError = data?.error ?? 0;
+
+  // ── 표시 모드: "all" 탭이거나 비AADS 프로젝트 → 크로스서버, "AADS" 탭 → DB 기반
+  const useCrossServerView = projectFilter !== "AADS";
+
+  // project counts for tab badges
+  const projectCounts: Record<string, number> = {};
+  allCrossDirectives.forEach((d) => {
+    const p = d.project.toUpperCase();
+    projectCounts[p] = (projectCounts[p] ?? 0) + 1;
+  });
+
+  const isStalled = (d: CrossDirective) =>
+    d.status === "running" && !!d.started_at && Date.now() - new Date(d.started_at).getTime() > 3_600_000;
 
   return (
     <div>
-      {/* KPI 카드 */}
-      {data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div className="rounded-xl p-4 border border-gray-600 bg-gray-900">
-            <div className="text-2xl font-bold text-white">{data.total}</div>
-            <div className="text-xs mt-1 text-gray-400">전체</div>
+      {/* ── KPI 카드 (AADS-181: 전체 프로젝트 합산) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="rounded-xl p-4 border border-gray-600 bg-gray-900">
+          <div className="text-2xl font-bold text-white">{totalCount}</div>
+          <div className="text-xs mt-1 text-gray-400">
+            전체{projectFilter === "all" ? " (3서버)" : ""}
           </div>
-          <div className="rounded-xl p-4 border border-green-700 bg-gray-900">
-            <div className="text-2xl font-bold text-green-300">{data.running}</div>
-            <div className="text-xs mt-1 text-gray-400">진행중</div>
-          </div>
-          <div className="rounded-xl p-4 border border-blue-700 bg-gray-900">
-            <div className="text-2xl font-bold text-blue-300">{data.completed}</div>
-            <div className="text-xs mt-1 text-gray-400">완료</div>
-          </div>
-          <div className="rounded-xl p-4 border border-red-700 bg-gray-900">
-            <div className="text-2xl font-bold text-red-300">{data.error}</div>
-            <div className="text-xs mt-1 text-gray-400">에러</div>
-            {data.error > 0 && (
-              <div className="flex gap-2 mt-1 flex-wrap">
-                {authExpiredCount > 0 && (
-                  <span className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">
-                    auth_expired: {authExpiredCount}
-                  </span>
-                )}
-                {taskFailureCount > 0 && (
-                  <span className="text-xs bg-red-900 text-red-300 px-1.5 py-0.5 rounded">
-                    task_failure: {taskFailureCount}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          {projectFilter === "all" && (
+            <div className="flex gap-1 mt-2 flex-wrap">
+              {Object.entries(crossByServer).map(([sid, sdata]) => (
+                <span
+                  key={sid}
+                  className={`text-xs px-1.5 py-0.5 rounded font-mono ${
+                    sid === "68" ? "bg-blue-900 text-blue-300" :
+                    sid === "211" ? "bg-purple-900 text-purple-300" :
+                    "bg-orange-900 text-orange-300"
+                  } ${!(sdata as { reachable?: boolean }).reachable ? "opacity-50 line-through" : ""}`}
+                  title={`서버 ${sid}: ${(sdata as { total?: number }).total ?? 0}건`}
+                >
+                  {sid}:{(sdata as { total?: number }).total ?? 0}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+        <div className="rounded-xl p-4 border border-yellow-700 bg-gray-900">
+          <div className="text-2xl font-bold text-yellow-300">{pendingCount}</div>
+          <div className="text-xs mt-1 text-gray-400">대기중</div>
+        </div>
+        <div className="rounded-xl p-4 border border-green-700 bg-gray-900">
+          <div className="text-2xl font-bold text-green-300">{runningCount}</div>
+          <div className="text-xs mt-1 text-gray-400">진행중</div>
+        </div>
+        <div className="rounded-xl p-4 border border-blue-700 bg-gray-900">
+          <div className="text-2xl font-bold text-blue-300">{doneCount}</div>
+          <div className="text-xs mt-1 text-gray-400">완료</div>
+          {projectFilter === "AADS" && aadsError > 0 && (
+            <div className="text-xs mt-1 text-red-400">에러 {aadsError}건</div>
+          )}
+        </div>
+      </div>
 
-      {/* 프로젝트 필터 */}
-      <ProjectFilterBar active={projectFilter} onChange={handleProjectChange} counts={data?.by_project ?? undefined} />
+      {/* ── 프로젝트 탭 필터 ── */}
+      <ProjectFilterBar
+        active={projectFilter}
+        onChange={handleProjectChange}
+        counts={projectFilter === "all" ? projectCounts : data?.by_project ?? undefined}
+      />
 
-      {/* 검색창 + 날짜 필터 */}
+      {/* ── 검색창 + 날짜 필터 ── */}
       <div className="mb-3 space-y-2">
         <input
           type="text"
-          placeholder="Task ID, 제목, 요약 검색..."
+          placeholder="Task ID, 제목 검색..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -381,110 +460,145 @@ function DirectivesTab() {
         </div>
       </div>
 
-      {/* 상태 필터 + 새로고침 */}
+      {/* ── 상태 필터 + 새로고침 ── */}
       <div className="flex gap-2 mb-4 flex-wrap items-center">
-        {(["all", "running", "completed", "error"] as DirectiveFilter[]).map((f) => (
+        {(["all", "running", "pending", "done", "archived"] as CrossStatusFilter[]).map((f) => (
           <button
             key={f}
-            onClick={() => setStatusFilter(f)}
+            onClick={() => setCrossStatusFilter(f)}
             className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              statusFilter === f ? "bg-blue-600 text-white" : "border border-gray-600 text-gray-300 hover:bg-gray-700"
+              crossStatusFilter === f ? "bg-blue-600 text-white" : "border border-gray-600 text-gray-300 hover:bg-gray-700"
             }`}
           >
-            {f === "all" ? "전체" : f === "running" ? "진행중" : f === "completed" ? "완료" : "에러"}
+            {f === "all" ? "전체" : f === "running" ? "진행중" : f === "pending" ? "대기중" : f === "done" ? "완료" : "보관"}
           </button>
         ))}
-        {(data?.running ?? 0) > 0 && (
+        {runningCount > 0 && projectFilter === "AADS" && (
           <button
             onClick={handleCompleteAll}
             disabled={completeLoading}
             className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white rounded-lg font-semibold"
           >
-            {completeLoading ? '처리중...' : `✅ 전체 진행 완료 (${data?.running}건)`}
+            {completeLoading ? "처리중..." : `✅ 완료 처리 (${runningCount}건)`}
           </button>
         )}
-        <span className="ml-auto text-xs text-gray-500">{filtered.length}건</span>
+        <span className="ml-auto text-xs text-gray-500">
+          {useCrossServerView ? crossFiltered.length : (data?.directives ?? []).length}건
+          {lastUpdated && (
+            <span className="ml-2 text-gray-600">
+              갱신: {lastUpdated.toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false })}
+            </span>
+          )}
+        </span>
         <button
-          onClick={() => load()}
+          onClick={() => { crossRefresh(); if (projectFilter === "AADS") loadAads(); }}
           className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
         >
           새로고침
         </button>
       </div>
 
-      {loading ? (
-        <div className="text-center text-gray-400 py-12">로딩 중...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-lg">
-          {projectFilter !== "all"
-            ? `이 프로젝트의 작업 기록이 없습니다. 원격 서버에서 수집 대기중입니다.`
-            : "해당하는 지시서가 없습니다."}
-        </div>
+      {/* ── 테이블: 크로스서버 뷰 (전체/비AADS) ── */}
+      {useCrossServerView ? (
+        crossLoading ? (
+          <div className="text-center text-gray-400 py-12">3서버 스캔 중...</div>
+        ) : (
+          <TaskTable
+            directives={crossFiltered}
+            expandedTask={expandedTask}
+            onExpand={handleExpandCross}
+            taskDetail={taskDetail}
+            detailLoading={detailLoading}
+            isStalled={isStalled}
+          />
+        )
       ) : (
-        <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-700 text-gray-400">
-                <th className="text-left p-3">Task ID</th>
-                <th className="text-left p-3">제목</th>
-                <th className="text-left p-3 hidden md:table-cell">프로젝트</th>
-                <th className="text-left p-3">상태</th>
-                <th className="text-left p-3 hidden md:table-cell">에러유형</th>
-                <th className="text-left p-3 hidden lg:table-cell">시작</th>
-                <th className="text-left p-3 hidden lg:table-cell">완료</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((d, i) => {
-                // AADS-166: 정체 태스크 강조 (running + started_at > 1h ago)
-                const isStalled = d.status === "running" && d.started_at && (Date.now() - new Date(d.started_at).getTime() > 3600_000);
-                return (
-                <React.Fragment key={i}>
-                  <tr
-                    className={`border-b border-gray-700 last:border-0 hover:bg-gray-750 cursor-pointer ${expandedTask === d.task_id ? "bg-gray-750" : ""} ${isStalled ? "bg-red-900/30" : ""}`}
-                    onClick={() => handleExpand(d)}
-                  >
-                    <td className="p-3 text-white font-medium font-mono">
-                      <span className="mr-1 text-gray-500 text-xs">{expandedTask === d.task_id ? "▲" : "▶"}</span>
-                      {isStalled && <span className="mr-1 text-red-400" title="stalled > 1h">⚠</span>}
-                      {safeRender(d.task_id)}
-                    </td>
-                    <td className="p-3 text-gray-200 max-w-xs">
-                      <span className="block truncate">{safeRender(d.title)}</span>
-                    </td>
-                    <td className="p-3 hidden md:table-cell">
-                      <ProjectBadge project={d.project} />
-                    </td>
-                    <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
-                    <td className="p-3 hidden md:table-cell">
-                      {d.error_type ? (
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${safeRender(d.error_type) === "auth_expired" ? "bg-gray-700 text-gray-400" : "bg-red-900 text-red-300"}`}>
-                          {safeRender(d.error_type)}
-                        </span>
-                      ) : <span className="text-gray-600">-</span>}
-                    </td>
-                    <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.started_at || d.created_at)}</td>
-                    <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.completed_at)}</td>
-                  </tr>
-                  {expandedTask === d.task_id && (
-                    <tr className="bg-gray-900 border-b border-gray-700">
-                      <td colSpan={7} className="p-4">
-                        {detailLoading ? (
-                          <div className="text-gray-400 text-xs">로딩 중...</div>
-                        ) : (
-                          <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono bg-gray-800 p-3 rounded-lg max-h-96 overflow-y-auto">
-                            {taskDetail || d.summary || "내용 없음"}
-                          </pre>
+        /* ── AADS 전용: 기존 DB 기반 테이블 (하위 호환) ── */
+        aadsLoading ? (
+          <div className="text-center text-gray-400 py-12">로딩 중...</div>
+        ) : (
+          <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-700 text-gray-400">
+                  <th className="text-left p-3">Task ID</th>
+                  <th className="text-left p-3">제목</th>
+                  <th className="text-left p-3 hidden md:table-cell">서버</th>
+                  <th className="text-left p-3">상태</th>
+                  <th className="text-left p-3 hidden md:table-cell">에러유형</th>
+                  <th className="text-left p-3 hidden lg:table-cell">시작</th>
+                  <th className="text-left p-3 hidden lg:table-cell">완료</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.directives ?? [])
+                  .filter((d) => {
+                    const statusOk =
+                      crossStatusFilter === "all" ||
+                      (crossStatusFilter === "running" && d.status === "running") ||
+                      (crossStatusFilter === "done" && (d.status === "completed" || d.status === "done")) ||
+                      (crossStatusFilter === "pending" && d.status === "pending");
+                    const searchOk =
+                      searchQuery.trim() === "" ||
+                      d.task_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (d.title || "").toLowerCase().includes(searchQuery.toLowerCase());
+                    return statusOk && searchOk;
+                  })
+                  .sort((a, b) => {
+                    if (a.status === "running" && b.status !== "running") return -1;
+                    if (b.status === "running" && a.status !== "running") return 1;
+                    return (b.started_at || b.created_at || "").localeCompare(a.started_at || a.created_at || "");
+                  })
+                  .map((d, i) => {
+                    const isStld = d.status === "running" && d.started_at && Date.now() - new Date(d.started_at).getTime() > 3_600_000;
+                    return (
+                      <React.Fragment key={i}>
+                        <tr
+                          className={`border-b border-gray-700 last:border-0 hover:bg-gray-750 cursor-pointer ${expandedTask === d.task_id ? "bg-gray-750" : ""} ${isStld ? "bg-red-900/30" : ""}`}
+                          onClick={() => handleExpandAads(d)}
+                        >
+                          <td className="p-3 text-white font-medium font-mono">
+                            <span className="mr-1 text-gray-500 text-xs">{expandedTask === d.task_id ? "▲" : "▶"}</span>
+                            {isStld && <span className="mr-1 text-red-400" title="stalled">⚠</span>}
+                            {safeRender(d.task_id)}
+                          </td>
+                          <td className="p-3 text-gray-200 max-w-xs"><span className="block truncate">{safeRender(d.title)}</span></td>
+                          <td className="p-3 hidden md:table-cell">
+                            <span className="px-1.5 py-0.5 rounded text-xs font-mono font-semibold bg-blue-900 text-blue-200 border border-blue-700">
+                              68 (AADS)
+                            </span>
+                          </td>
+                          <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
+                          <td className="p-3 hidden md:table-cell">
+                            {d.error_type ? (
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${safeRender(d.error_type) === "auth_expired" ? "bg-gray-700 text-gray-400" : "bg-red-900 text-red-300"}`}>
+                                {safeRender(d.error_type)}
+                              </span>
+                            ) : <span className="text-gray-600">-</span>}
+                          </td>
+                          <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.started_at || d.created_at)}</td>
+                          <td className="p-3 text-gray-500 hidden lg:table-cell">{toKST(d.completed_at)}</td>
+                        </tr>
+                        {expandedTask === d.task_id && (
+                          <tr className="bg-gray-900 border-b border-gray-700">
+                            <td colSpan={7} className="p-4">
+                              {detailLoading ? (
+                                <div className="text-gray-400 text-xs">로딩 중...</div>
+                              ) : (
+                                <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono bg-gray-800 p-3 rounded-lg max-h-96 overflow-y-auto">
+                                  {taskDetail || d.summary || "내용 없음"}
+                                </pre>
+                              )}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </React.Fragment>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
   );
