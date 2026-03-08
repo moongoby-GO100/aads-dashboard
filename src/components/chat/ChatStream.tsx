@@ -20,6 +20,7 @@ interface ChatStreamProps {
   onBookmark?: (id: string) => void;
   onCopy?: (content: string) => void;
   onCreateDirective?: (content: string) => void;
+  onViewInPanel?: (content: string) => void;
   emptyState?: React.ReactNode;
 }
 
@@ -31,6 +32,7 @@ export default function ChatStream({
   onBookmark,
   onCopy,
   onCreateDirective,
+  onViewInPanel,
   emptyState,
 }: ChatStreamProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -96,6 +98,7 @@ export default function ChatStream({
               onBookmark={onBookmark}
               onCopy={onCopy}
               onCreateDirective={onCreateDirective}
+              onViewInPanel={msg.role === "assistant" ? onViewInPanel : undefined}
             />
           );
         })}

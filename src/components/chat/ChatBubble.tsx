@@ -204,6 +204,7 @@ interface ChatBubbleProps {
   onBookmark?: (id: string) => void;
   onCopy?: (content: string) => void;
   onCreateDirective?: (content: string) => void;
+  onViewInPanel?: (content: string) => void;
 }
 
 export default function ChatBubble({
@@ -213,6 +214,7 @@ export default function ChatBubble({
   onBookmark,
   onCopy,
   onCreateDirective,
+  onViewInPanel,
 }: ChatBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
@@ -309,6 +311,16 @@ export default function ChatBubble({
                   title="지시서 생성"
                 >
                   📋
+                </button>
+              )}
+              {onViewInPanel && (
+                <button
+                  onClick={() => onViewInPanel(displayContent)}
+                  className="text-xs px-1.5 py-1 rounded transition-colors"
+                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  title="패널에서 보기"
+                >
+                  🗂
                 </button>
               )}
             </div>

@@ -1,18 +1,18 @@
 "use client";
 /**
- * AADS-172-B: CEO Chat-First 페이지 (재작성)
- * - ChatStream / ChatInput / useChatSSE / useChatSession 통합
- * - AADS-170 /api/v1/chat/* 엔드포인트 사용
- * - 워크스페이스 선택 + 세션 관리 사이드바
- * - 기존 /api/v1/ceo-chat/* 비용 사이드바 유지 (하위 호환)
+ * AADS-172-C: CEO Chat-First 페이지 (아티팩트 패널 통합)
+ * - AADS-172-B: ChatStream / ChatInput / useChatSSE / useChatSession
+ * - AADS-172-C: ArtifactPanel (3단계) + useArtifactPanel + AI 응답 아티팩트 자동 감지
  */
 import { useState, useCallback } from "react";
-import { api } from "@/lib/api";
 import ChatStream from "@/components/chat/ChatStream";
 import ChatInput from "@/components/chat/ChatInput";
 import { CHAT_MODEL_OPTIONS, DEFAULT_CHAT_MODEL } from "@/components/chat/ModelSelector";
 import { useChatSSE } from "@/hooks/useChatSSE";
 import { useChatSession } from "@/hooks/useChatSession";
+import { useArtifactPanel, detectArtifactType, extractCodeFromContent } from "@/hooks/useArtifactPanel";
+import ArtifactPanel from "@/components/chat/ArtifactPanel";
+import { chatApi } from "@/services/chatApi";
 import type { ChatMessage } from "@/services/chatApi";
 
 export default function CeoChatPage() {
@@ -35,12 +35,53 @@ export default function CeoChatPage() {
     updateLastMessage,
   } = useChatSession();
 
+  const {
+    panelState,
+    activeTab,
+    artifact,
+    setActiveTab,
+    toggleCollapse,
+    cyclePanel,
+    openTab,
+    showArtifact,
+  } = useArtifactPanel();
+
+  // AI 응답 완료 후 아티팩트 감지
+  const detectAndShowArtifact = useCallback(
+    (fullText: string) => {
+      const artType = detectArtifactType(fullText);
+      if (!artType) return;
+      if (artType === "code") {
+        const { code, language } = extractCodeFromContent(fullText);
+        showArtifact({ type: "code", content: code, language });
+      } else if (artType === "report") {
+        showArtifact({ type: "report", content: fullText });
+      } else if (artType === "chart") {
+        showArtifact({ type: "chart", content: fullText });
+      }
+    },
+    [showArtifact]
+  );
+
+  // "패널에서 보기" 클릭 핸들러
+  const handleViewInPanel = useCallback(
+    (content: string) => {
+      const artType = detectArtifactType(content) || "report";
+      if (artType === "code") {
+        const { code, language } = extractCodeFromContent(content);
+        showArtifact({ type: "code", content: code, language });
+      } else {
+        showArtifact({ type: artType, content });
+      }
+    },
+    [showArtifact]
+  );
+
   // 메시지 전송
   const handleSend = useCallback(
     async (text: string, model: string) => {
       if (!currentWorkspace) return;
 
-      // 세션이 없으면 자동 생성
       let sess = currentSession;
       if (!sess) {
         sess = await createNewSession();
@@ -86,7 +127,6 @@ export default function CeoChatPage() {
       const resolvedModel = model === "auto" ? undefined : model;
 
       await sseStreamSend(sess.id, text, resolvedModel, (fullText) => {
-        // 스트리밍 완료 → 마지막 메시지 업데이트
         updateLastMessage(fullText, {
           model_used: sseState.modelUsed || resolvedModel || "auto",
           input_tokens: sseState.inputTokens || undefined,
@@ -96,6 +136,8 @@ export default function CeoChatPage() {
           thought_summary: sseState.thoughtSummary || null,
         });
         setActiveTasksCount(0);
+        // 아티팩트 자동 감지 + 패널 표시
+        detectAndShowArtifact(fullText);
       });
     },
     [
@@ -106,6 +148,7 @@ export default function CeoChatPage() {
       updateLastMessage,
       sseStreamSend,
       sseState,
+      detectAndShowArtifact,
     ]
   );
 
@@ -115,7 +158,6 @@ export default function CeoChatPage() {
 
   const handleBookmark = async (id: string) => {
     try {
-      const { chatApi } = await import("@/services/chatApi");
       await chatApi.toggleBookmark(id);
     } catch (e) {
       console.error("Bookmark failed", e);
@@ -251,6 +293,18 @@ export default function CeoChatPage() {
             >
               새 세션
             </button>
+            {/* 아티팩트 패널 토글 버튼 */}
+            <button
+              onClick={cyclePanel}
+              title="아티팩트 패널 (Ctrl+])"
+              className="text-xs px-2 py-1.5 rounded"
+              style={{
+                background: panelState !== "hidden" ? "var(--accent)" : "var(--bg-hover)",
+                color: panelState !== "hidden" ? "#fff" : "var(--text-secondary)",
+              }}
+            >
+              🗂
+            </button>
           </div>
         </div>
 
@@ -289,6 +343,7 @@ export default function CeoChatPage() {
             onBookmark={handleBookmark}
             onCopy={(content) => navigator.clipboard.writeText(content)}
             onCreateDirective={handleCreateDirective}
+            onViewInPanel={handleViewInPanel}
           />
         )}
 
@@ -306,6 +361,17 @@ export default function CeoChatPage() {
           />
         )}
       </div>
+
+      {/* ── 오른쪽 아티팩트 패널 ────────────────────────────────────────── */}
+      <ArtifactPanel
+        panelState={panelState}
+        activeTab={activeTab}
+        artifact={artifact}
+        workspaceId={currentWorkspace?.id}
+        onTabSelect={openTab}
+        onToggleCollapse={toggleCollapse}
+        onCyclePanel={cyclePanel}
+      />
     </div>
   );
 }
