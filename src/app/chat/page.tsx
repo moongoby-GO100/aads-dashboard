@@ -422,6 +422,12 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
 
     abortCtrl.current = new AbortController();
+    // 30초 타임아웃 → 폴링 fallback 트리거
+    const sseTimeout = setTimeout(() => {
+      abortCtrl.current?.abort();
+    }, 30000);
+
+    let full = "";
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
         method: "POST",
@@ -437,7 +443,6 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let buf = "";
-      let full = "";
       let gotFinal = false;
 
       while (true) {
@@ -453,20 +458,33 @@ export default function ChatPage() {
           if (raw === "[DONE]") continue;
           try {
             const ev = JSON.parse(raw);
-            if (ev.type === "token" && typeof ev.text === "string") {
+            if (ev.type === "delta" && typeof ev.content === "string") {
+              full += ev.content;
+              setStreamBuf(full);
+            } else if (ev.type === "token" && typeof ev.text === "string") {
+              // legacy fallback
               full += ev.text;
               setStreamBuf(full);
+            } else if (ev.type === "done") {
+              gotFinal = true;
+              setStreamBuf("");
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `ai-${Date.now()}`,
+                  session_id: sessionId!,
+                  role: "assistant" as const,
+                  content: full,
+                  model_used: ev.model || undefined,
+                },
+              ]);
             } else if (ev.type === "message_done" && ev.message) {
+              // legacy fallback
               gotFinal = true;
               setStreamBuf("");
               setMessages((prev) => [...prev, ev.message as ChatMessage]);
-              if (ev.session_title) {
-                setSessions((prev) =>
-                  prev.map((s) => (s.id === sessionId ? { ...s, title: ev.session_title } : s))
-                );
-              }
             } else if (ev.type === "error") {
-              throw new Error(ev.error || "Unknown streaming error");
+              throw new Error(ev.error || ev.content || "Unknown streaming error");
             }
           } catch {
             // ignore malformed SSE lines
@@ -483,7 +501,49 @@ export default function ChatPage() {
       }
     } catch (e: unknown) {
       const err = e as Error;
-      if (err.name !== "AbortError") {
+      if (err.name === "AbortError") {
+        // 타임아웃 또는 사용자 중단: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback
+        if (full) {
+          setStreamBuf("");
+          setMessages((prev) => [
+            ...prev,
+            { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full },
+          ]);
+        } else {
+          // 폴링 fallback: 3초 후 DB에서 응답 조회
+          setStreamBuf("");
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            const msgs = await chatApi<ChatMessage[]>(
+              `/chat/messages?session_id=${sessionId}&limit=5&offset=0`
+            );
+            const aiMsg = msgs.find((m) => m.role === "assistant");
+            if (aiMsg) {
+              setMessages((prev) => [...prev, aiMsg]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `err-${Date.now()}`,
+                  session_id: sessionId!,
+                  role: "assistant",
+                  content: "⚠️ 응답을 가져오지 못했습니다. 잠시 후 재시도해주세요.",
+                },
+              ]);
+            }
+          } catch {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `err-${Date.now()}`,
+                session_id: sessionId!,
+                role: "assistant",
+                content: "⚠️ 연결이 끊겼습니다. 페이지를 새로고침하거나 재시도해주세요.",
+              },
+            ]);
+          }
+        }
+      } else {
         setMessages((prev) => [
           ...prev,
           {
@@ -495,6 +555,7 @@ export default function ChatPage() {
         ]);
       }
     } finally {
+      clearTimeout(sseTimeout);
       setStreaming(false);
       setStreamBuf("");
     }
