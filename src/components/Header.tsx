@@ -64,6 +64,13 @@ export default function Header({ title }: { title: string }) {
     <header className="bg-white border-b border-gray-200 pr-6 pl-12 md:pl-0 py-3 flex items-center justify-between">
       <h2 className="text-sm md:text-base font-semibold text-gray-800">{title}</h2>
       <div className="flex items-center gap-4">
+        <a
+          href="/chat"
+          className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+          style={{ background: "#6C63FF", color: "#fff", textDecoration: "none" }}
+        >
+          💬 AI Chat
+        </a>
         <div className="flex items-center gap-1.5" title={`Pipeline: ${pipelineStatus}`}>
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
           <span className="text-xs text-gray-500">{pipelineStatus}</span>

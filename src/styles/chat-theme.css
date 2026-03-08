@@ -1,0 +1,55 @@
+/* AADS Chat-First Theme — dark/light CSS variables */
+
+[data-theme="dark"] {
+  --ct-bg: #0F0F0F;
+  --ct-card: #1A1A1A;
+  --ct-border: #2A2A2A;
+  --ct-text: #E5E5E5;
+  --ct-text-muted: #888888;
+  --ct-accent: #6C5CE7;
+  --ct-accent-hover: #5A4BD0;
+  --ct-success: #00B894;
+  --ct-warning: #FDCB6E;
+  --ct-error: #FF6B6B;
+  --ct-sidebar-bg: #141414;
+  --ct-hover: #252525;
+  --ct-input-bg: #1E1E1E;
+  --ct-scrollbar: #333333;
+}
+
+[data-theme="light"] {
+  --ct-bg: #FAFAFA;
+  --ct-card: #FFFFFF;
+  --ct-border: #E5E5E5;
+  --ct-text: #1A1A1A;
+  --ct-text-muted: #666666;
+  --ct-accent: #6C5CE7;
+  --ct-accent-hover: #5A4BD0;
+  --ct-success: #00B894;
+  --ct-warning: #FDCB6E;
+  --ct-error: #FF6B6B;
+  --ct-sidebar-bg: #F0F0F0;
+  --ct-hover: #EBEBEB;
+  --ct-input-bg: #F5F5F5;
+  --ct-scrollbar: #CCCCCC;
+}
+
+.chat-theme-root {
+  background: var(--ct-bg);
+  color: var(--ct-text);
+}
+
+/* Scrollbar styling */
+.chat-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--ct-scrollbar);
+  border-radius: 3px;
+}
+.chat-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--ct-text-muted);
+}

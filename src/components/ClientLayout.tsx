@@ -7,7 +7,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname.startsWith("/chat")) {
     return <>{children}</>;
   }
 

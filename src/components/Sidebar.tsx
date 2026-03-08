@@ -5,13 +5,14 @@ import { useEffect } from "react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏠" },
+  { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
   { href: "/project-status", label: "Project Status", icon: "📊" },
-  { href: "/conversations", label: "Conversations", icon: "💬" },
+  { href: "/conversations", label: "Conversations", icon: "🗨️" },
   { href: "/channels", label: "대화창 관리", icon: "📌" },
   { href: "/managers", label: "Managers", icon: "👥" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
   { href: "/tasks", label: "Tasks", icon: "📋" },
-  { href: "/ceo-chat", label: "CEO Chat", icon: "💬" },
+  { href: "/ceo-chat", label: "CEO Chat v2", icon: "💬" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
   { href: "/ops", label: "운영 현황", icon: "📊" },
   { href: "/ops/recovery", label: "Recovery", icon: "🔄" },
@@ -92,7 +93,9 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"
                 style={isActive
                   ? { background: "var(--accent)", color: "#fff" }
-                  : { color: "var(--text-secondary)" }
+                  : "highlight" in item && item.highlight
+                    ? { color: "#a78bfa", fontWeight: 600 }
+                    : { color: "var(--text-secondary)" }
                 }
                 onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"; }}
                 onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = ""; }}
@@ -103,8 +106,22 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
             );
           })}
         </nav>
-        <div className="p-4 text-xs" style={{ borderTop: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-          v0.5.1 · Server Status
+        <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
+          <a
+            href="/chat"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors w-full"
+            style={{ background: "var(--accent)", color: "#fff" }}
+            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "var(--accent-hover)")}
+            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "var(--accent)")}
+          >
+            <span>💬</span>
+            <span>AI Chat</span>
+          </a>
+          <div className="mt-2 text-xs text-center" style={{ color: "var(--text-secondary)" }}>
+            v0.5.1 · Server Status
+          </div>
         </div>
       </aside>
     </>

@@ -45,6 +45,72 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
 
+// ─── Chat-First 5 모델 (AADS-172-B) ─────────────────────────────────────────
+
+export interface ChatModelOption {
+  id: string;
+  label: string;
+  cost: string;
+  description: string;
+  isDeepResearch?: boolean;
+}
+
+export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
+  { id: "auto",              label: "Auto",           cost: "자동",  description: "인텐트 기반 자동 라우팅" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6",     cost: "$0.03", description: "균형잡힌 성능" },
+  { id: "claude-opus-4-6",   label: "Opus 4.6",       cost: "$0.15", description: "최고 성능" },
+  { id: "gemini-2.5-flash",  label: "Flash-Lite",     cost: "$0.001",description: "빠름 · 저비용" },
+  { id: "deep-research",     label: "Deep Research",  cost: "~$3",   description: "심층 연구 모드", isDeepResearch: true },
+];
+
+export const DEFAULT_CHAT_MODEL = "auto";
+
+interface ChatModelSelectorProps {
+  value: string;
+  onChange: (modelId: string) => void;
+  compact?: boolean;
+}
+
+export function ChatModelSelector({ value, onChange, compact }: ChatModelSelectorProps) {
+  const selected = CHAT_MODEL_OPTIONS.find((m) => m.id === value) ?? CHAT_MODEL_OPTIONS[0];
+
+  return (
+    <div className={`relative flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="text-xs rounded-lg cursor-pointer"
+        style={{
+          background: "var(--bg-main)",
+          color: "var(--text-primary)",
+          border: "1px solid var(--border)",
+          outline: "none",
+          padding: compact ? "4px 6px" : "6px 10px",
+          minWidth: compact ? "120px" : "160px",
+        }}
+        title={selected.description}
+      >
+        {CHAT_MODEL_OPTIONS.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label} ({m.cost})
+          </option>
+        ))}
+      </select>
+      {!compact && (
+        <span
+          className="text-xs px-1.5 py-0.5 rounded"
+          style={{
+            background: selected.isDeepResearch ? "rgba(139,92,246,0.15)" : "var(--bg-hover)",
+            color: selected.isDeepResearch ? "#a78bfa" : "var(--text-secondary)",
+          }}
+        >
+          {selected.cost}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   auto: "자동",
   anthropic: "Anthropic",
