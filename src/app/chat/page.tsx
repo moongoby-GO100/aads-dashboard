@@ -464,8 +464,17 @@ export default function ChatPage() {
   // ── Load sessions on workspace change ──
   useEffect(() => {
     if (!activeWs) return;
+    // 워크스페이스 전환 시 이전 세션 해제 — 프로젝트 컨텍스트 분리
+    setActiveSession(null);
+    setMessages([]);
     chatApi<ChatSession[]>(`/chat/sessions?workspace_id=${activeWs}`)
-      .then(setSessions)
+      .then((loaded) => {
+        setSessions(loaded);
+        // 해당 워크스페이스의 첫 세션 자동 선택
+        if (loaded.length > 0) {
+          setActiveSession(loaded[0]);
+        }
+      })
       .catch(console.error);
   }, [activeWs]);
 
@@ -789,6 +798,8 @@ export default function ChatPage() {
 
   // ── Derived ──
   const vars = theme === "dark" ? DARK : LIGHT;
+  const activeWsObj = workspaces.find((w) => w.id === activeWs);
+  const activeWsName = activeWsObj?.name || "워크스페이스";
   const filteredSessions = sessions.filter(
     (s) => !search || s.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -1026,7 +1037,7 @@ export default function ChatPage() {
                 onMouseEnter={(e) => (e.currentTarget.style.background = "var(--ct-accent-h)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "var(--ct-accent)")}
               >
-                ✏️ 새 대화
+                ✏️ 새 대화 ({activeWsObj?.icon || "📁"} {activeWsName.replace(/^\[.*?\]\s*/, "")})
               </button>
               <input
                 type="text"
