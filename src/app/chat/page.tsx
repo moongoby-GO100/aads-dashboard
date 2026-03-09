@@ -411,6 +411,8 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const msgQueueRef = useRef<string[]>([]);
+  const [queueCount, setQueueCount] = useState(0);
 
   // ── UI state ──
   const [search, setSearch] = useState("");
@@ -548,9 +550,18 @@ export default function ChatPage() {
   }
 
   // ── Send message (SSE streaming) ──
-  async function sendMessage() {
-    if (!input.trim() || streaming) return;
-    const content = input.trim();
+  async function sendMessage(queuedContent?: string) {
+    const content = queuedContent || input.trim();
+    if (!content) return;
+
+    // streaming 중이면 큐에 추가
+    if (streaming && !queuedContent) {
+      msgQueueRef.current.push(content);
+      setQueueCount(msgQueueRef.current.length);
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      return;
+    }
 
     // Auto-create session if none active
     let sessionId = activeSession?.id;
@@ -746,6 +757,15 @@ export default function ChatPage() {
       setStreaming(false);
       setStreamBuf("");
       setToolStatus(null);
+
+      // 큐에 대기 중인 메시지가 있으면 자동 전송
+      if (msgQueueRef.current.length > 0) {
+        const next = msgQueueRef.current.shift()!;
+        setQueueCount(msgQueueRef.current.length);
+        setTimeout(() => sendMessage(next), 300);
+      } else {
+        setQueueCount(0);
+      }
     }
   }
 
@@ -788,6 +808,14 @@ export default function ChatPage() {
   // ── Keyboard ──
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+    // Ctrl+Z: 마지막 큐 메시지 취소
+    if (e.ctrlKey && e.key === "z" && queueCount > 0) {
+      e.preventDefault();
+      const removed = msgQueueRef.current.pop();
+      setQueueCount(msgQueueRef.current.length);
+      if (removed) setInput(removed);
+      return;
+    }
     if (e.ctrlKey && e.key === "]") {
       e.preventDefault();
       setArtifactMode((m) => (m === "full" ? "mini" : m === "mini" ? "hidden" : "full"));
@@ -1705,33 +1733,37 @@ export default function ChatPage() {
               onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
               onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
             />
-            <button
-              onClick={streaming ? stopStreaming : sendMessage}
-              disabled={!streaming && !input.trim()}
-              style={{
-                padding: "10px 20px",
-                fontSize: "14px",
-                fontWeight: 600,
-                background: streaming ? "#ef4444" : "var(--ct-accent)",
-                color: "#fff",
-                border: "none",
-                borderRadius: "12px",
-                cursor: streaming || input.trim() ? "pointer" : "not-allowed",
-                opacity: !streaming && !input.trim() ? 0.5 : 1,
-                transition: "background 0.2s",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                if (streaming || input.trim())
-                  e.currentTarget.style.background = streaming ? "#dc2626" : "var(--ct-accent-h)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = streaming ? "#ef4444" : "var(--ct-accent)";
-              }}
-            >
-              {streaming ? "⏹ 중단" : "전송"}
-            </button>
+            <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+              {/* 큐 취소 버튼 (큐에 메시지가 있을 때만) */}
+              {queueCount > 0 && (
+                <button
+                  onClick={() => { msgQueueRef.current = []; setQueueCount(0); }}
+                  style={{
+                    padding: "10px 12px", fontSize: "12px", fontWeight: 600,
+                    background: "#f59e0b", color: "#fff", border: "none", borderRadius: "12px",
+                    cursor: "pointer", whiteSpace: "nowrap",
+                  }}
+                  title="대기 메시지 전체 취소"
+                >
+                  {queueCount}건 취소
+                </button>
+              )}
+              {/* 전송/대기추가/중단 버튼 */}
+              <button
+                onClick={streaming && !input.trim() ? stopStreaming : () => sendMessage()}
+                disabled={!streaming && !input.trim()}
+                style={{
+                  padding: "10px 20px", fontSize: "14px", fontWeight: 600,
+                  background: streaming ? (input.trim() ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
+                  color: "#fff", border: "none", borderRadius: "12px",
+                  cursor: streaming || input.trim() ? "pointer" : "not-allowed",
+                  opacity: !streaming && !input.trim() ? 0.5 : 1,
+                  transition: "background 0.2s", whiteSpace: "nowrap",
+                }}
+              >
+                {streaming ? (input.trim() ? "대기 전송" : "⏹ 중단") : "전송"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
