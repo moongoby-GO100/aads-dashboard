@@ -13,6 +13,7 @@ interface Workspace {
 
 interface Session {
   session_id: string;
+  id?: string;
   title: string;
   created_at: string;
   message_count: number;
@@ -102,7 +103,7 @@ export default function ChatSidebar({
       if (diff < 60000) return "방금 전";
       if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
       if (diff < 86400000) return `${Math.floor(diff / 3600000)}시간 전`;
-      return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
+      return d.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric" });
     } catch {
       return "";
     }
@@ -199,16 +200,16 @@ export default function ChatSidebar({
             ) : (
               sessions.map((s) => (
                 <button
-                  key={s.session_id}
-                  onClick={() => onSelectSession(s.session_id, s.workspace_id)}
+                  key={s.session_id ?? s.id ?? ""}
+                  onClick={() => onSelectSession(s.session_id ?? s.id ?? "", s.workspace_id)}
                   className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                   style={{
                     background:
-                      activeSessionId === s.session_id
+                      activeSessionId === (s.session_id ?? s.id)
                         ? "var(--ct-hover)"
                         : "transparent",
                     borderLeft:
-                      activeSessionId === s.session_id
+                      activeSessionId === (s.session_id ?? s.id)
                         ? "2px solid var(--ct-accent)"
                         : "2px solid transparent",
                   }}

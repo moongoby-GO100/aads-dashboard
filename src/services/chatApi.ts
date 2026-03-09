@@ -55,6 +55,10 @@ export interface ChatMessage {
   input_tokens: number | null;
   output_tokens: number | null;
   cost_usd: string | null;
+  // API 응답 호환 (서버는 tokens_in/tokens_out/cost 반환)
+  tokens_in?: number | null;
+  tokens_out?: number | null;
+  cost?: string | null;
   bookmarked: boolean;
   attachments: unknown[];
   sources: SourceItem[] | null;
@@ -70,12 +74,14 @@ export interface SourceItem {
 
 export interface SSEChunk {
   type:
-    | "delta" | "done" | "error"
+    | "delta" | "done" | "error" | "heartbeat"
     | "thought_summary" | "sources"
     // AADS-185 신규
     | "thinking"
     | "tool_use" | "tool_result"
-    | "research.start" | "research.progress" | "research.complete";
+    | "research.start" | "research.progress" | "research.complete"
+    // Agent SDK
+    | "sdk_session" | "sdk_complete";
   content?: string;
   summary?: string;
   sources?: SourceItem[];

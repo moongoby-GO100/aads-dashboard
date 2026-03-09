@@ -410,6 +410,7 @@ export default function ChatPage() {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
 
   // ── UI state ──
   const [search, setSearch] = useState("");
@@ -481,7 +482,7 @@ export default function ChatPage() {
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
     if (!activeSession) { setMessages([]); setArtifacts([]); return; }
-    chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}`)
+    chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then(setMessages)
       .catch(console.error);
     chatApi<Artifact[]>(`/chat/artifacts?session_id=${activeSession.id}`)
@@ -575,15 +576,16 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
 
     abortCtrl.current = new AbortController();
-    // 30초 타임아웃 → heartbeat(10초)가 리셋하므로 정상 연결 시 만료 안 됨
+    // 90초 타임아웃 → heartbeat(10초)가 리셋하므로 정상 연결 시 만료 안 됨
+    // Extended Thinking/Deep Research 등 초기 응답 지연 고려
     let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 30000);
+    }, 90000);
     const resetSseTimeout = () => {
       clearTimeout(sseTimeout);
       sseTimeout = setTimeout(() => {
         abortCtrl.current?.abort();
-      }, 30000);
+      }, 90000);
     };
 
     let full = "";
@@ -645,6 +647,16 @@ export default function ChatPage() {
                   created_at: new Date().toISOString(),
                 },
               ]);
+            } else if (ev.type === "tool_use" && ev.tool_name) {
+              setToolStatus(`🔧 ${ev.tool_name} 실행 중...`);
+            } else if (ev.type === "tool_result" && ev.tool_name) {
+              setToolStatus(null);
+            } else if (ev.type === "thinking" && ev.content) {
+              setToolStatus("💭 사고 중...");
+            } else if (ev.type === "sdk_session") {
+              setToolStatus("🤖 Agent SDK 연결됨");
+            } else if (ev.type === "sdk_complete") {
+              setToolStatus(null);
             } else if (ev.type === "diff_preview") {
               diffApproval.onDiffPreview({
                 type: "diff_preview",
@@ -692,7 +704,7 @@ export default function ChatPage() {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${sessionId}&limit=5&offset=0`
             );
-            const aiMsg = msgs.find((m) => m.role === "assistant");
+            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
             if (aiMsg) {
               setMessages((prev) => [...prev, aiMsg]);
             } else {
@@ -733,6 +745,7 @@ export default function ChatPage() {
       clearTimeout(sseTimeout);
       setStreaming(false);
       setStreamBuf("");
+      setToolStatus(null);
     }
   }
 
@@ -740,6 +753,7 @@ export default function ChatPage() {
     abortCtrl.current?.abort();
     setStreaming(false);
     setStreamBuf("");
+    setToolStatus(null);
   }
 
   // ── File upload ──
@@ -1544,6 +1558,7 @@ export default function ChatPage() {
                     {msg.created_at && (
                       <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
                         {new Date(msg.created_at).toLocaleString("ko-KR", {
+                          timeZone: "Asia/Seoul",
                           month: "numeric", day: "numeric",
                           hour: "2-digit", minute: "2-digit", second: "2-digit",
                         })}
@@ -1571,9 +1586,14 @@ export default function ChatPage() {
                   border: "1px solid var(--ct-border)",
                 }}
               >
+                {toolStatus && !streamBuf && (
+                  <div style={{ fontSize: "13px", color: "var(--ct-accent)", marginBottom: "6px", opacity: 0.85 }}>
+                    {toolStatus}
+                  </div>
+                )}
                 {streamBuf ? (
                   <MarkdownBlock text={streamBuf} />
-                ) : (
+                ) : !toolStatus ? (
                   <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
                     {[0, 1, 2].map((i) => (
                       <span
@@ -1590,7 +1610,7 @@ export default function ChatPage() {
                       />
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           )}
