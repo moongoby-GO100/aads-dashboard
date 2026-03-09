@@ -34,13 +34,19 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "o1",                        name: "o1",                        provider: "openai",   cost: "$15/$60" },
   { id: "o1-mini",                   name: "o1-mini",                   provider: "openai",   cost: "$3/$12" },
   { id: "o3-mini",                   name: "o3-mini",                   provider: "openai",   cost: "$1.10/$4.40" },
-  // -- Google Gemini --
-  { id: "gemini-2.5-pro",            name: "Gemini 2.5 Pro",            provider: "google",   cost: "$7/$21" },
+  // -- Google Gemini 3.1 --
   { id: "gemini-3.1-pro-preview",    name: "Gemini 3.1 Pro Preview",    provider: "google",   cost: "$2/$12" },
-  { id: "gemini-2.5-flash",          name: "Gemini 2.5 Flash",          provider: "google",   cost: "$0.30/$2.50" },
-  { id: "gemini-2.0-flash",          name: "Gemini 2.0 Flash",          provider: "google",   cost: "$0.075/$0.30" },
-  { id: "gemini-1.5-pro",            name: "Gemini 1.5 Pro",            provider: "google",   cost: "$3.50/$10.50" },
-  { id: "gemini-1.5-flash",          name: "Gemini 1.5 Flash",          provider: "google",   cost: "$0.075/$0.30" },
+  { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash-Lite Preview", provider: "google", cost: "$0.02/$0.10" },
+  // -- Google Gemini 3.0 --
+  { id: "gemini-3-pro-preview",      name: "Gemini 3.0 Pro Preview",    provider: "google",   cost: "$2/$12" },
+  { id: "gemini-3-flash-preview",    name: "Gemini 3.0 Flash Preview",  provider: "google",   cost: "$0.15/$0.60" },
+  // -- Google Gemini 2.5 --
+  { id: "gemini-2.5-pro",            name: "Gemini 2.5 Pro",            provider: "google",   cost: "$7/$21" },
+  { id: "gemini-2.5-flash",          name: "Gemini 2.5 Flash",          provider: "google",   cost: "$0.15/$0.60" },
+  { id: "gemini-2.5-flash-lite",     name: "Gemini 2.5 Flash-Lite",     provider: "google",   cost: "$0.02/$0.10" },
+  { id: "gemini-2.5-flash-image",    name: "Gemini 2.5 Flash Image",    provider: "google",   cost: "$0.15/$0.60" },
+  // -- Google Gemma 3 (오픈소스) --
+  { id: "gemma-3-27b-it",            name: "Gemma 3 27B",               provider: "google",   cost: "무료" },
 ];
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -56,11 +62,12 @@ export interface ChatModelOption {
 }
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
-  { id: "auto",              label: "Auto",           cost: "자동",  description: "인텐트 기반 자동 라우팅" },
-  { id: "claude-sonnet-4-6", label: "Sonnet 4.6",     cost: "$0.03", description: "균형잡힌 성능" },
-  { id: "claude-opus-4-6",   label: "Opus 4.6",       cost: "$0.15", description: "최고 성능" },
-  { id: "gemini-2.5-flash",  label: "Flash-Lite",     cost: "$0.001",description: "빠름 · 저비용" },
-  { id: "deep-research",     label: "Deep Research",  cost: "~$3",   description: "심층 연구 모드", isDeepResearch: true },
+  { id: "auto",                    label: "Auto",              cost: "자동",   description: "인텐트 기반 자동 라우팅" },
+  { id: "claude-sonnet-4-6",       label: "Sonnet 4.6",        cost: "$0.03",  description: "균형잡힌 성능" },
+  { id: "claude-opus-4-6",         label: "Opus 4.6",          cost: "$0.15",  description: "최고 성능" },
+  { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$0.02",  description: "최신 Gemini" },
+  { id: "gemini-2.5-flash",        label: "Flash 2.5",         cost: "$0.001", description: "빠름 · 저비용" },
+  { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
 ];
 
 export const DEFAULT_CHAT_MODEL = "auto";

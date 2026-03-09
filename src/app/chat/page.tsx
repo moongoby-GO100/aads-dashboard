@@ -133,69 +133,207 @@ function processInline(text: string): React.ReactNode {
         </code>
       );
     }
-    // Bold
-    const boldParts = part.split(/(\*\*[^*\n]+\*\*)/g);
-    return boldParts.map((bp, j) =>
-      bp.startsWith("**") && bp.endsWith("**") ? (
-        <strong key={`${i}-${j}`}>{bp.slice(2, -2)}</strong>
-      ) : (
-        <span key={`${i}-${j}`}>{bp}</span>
-      )
-    );
+    // Split by links [text](url) — but not images ![alt](url)
+    const linkParts = part.split(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g);
+    // linkParts: [before, text, url, after, text, url, ...]
+    const withLinks: React.ReactNode[] = [];
+    for (let li = 0; li < linkParts.length; li += 3) {
+      const seg = linkParts[li] || "";
+      if (seg) withLinks.push(<span key={`${i}-l${li}`}>{seg}</span>);
+      if (li + 2 < linkParts.length) {
+        withLinks.push(
+          <a
+            key={`${i}-a${li}`}
+            href={linkParts[li + 2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--ct-accent)", textDecoration: "underline" }}
+          >
+            {linkParts[li + 1]}
+          </a>
+        );
+      }
+    }
+    // Now process bold within each text span
+    return withLinks.map((node, wi) => {
+      if (typeof node === "object" && node !== null && (node as any).type === "a") return node;
+      const raw = typeof node === "string" ? node : ((node as any)?.props?.children ?? "");
+      if (typeof raw !== "string" || !raw) return node;
+      const boldParts = raw.split(/(\*\*[^*\n]+\*\*)/g);
+      return boldParts.map((bp: string, j: number) =>
+        bp.startsWith("**") && bp.endsWith("**") ? (
+          <strong key={`${i}-${wi}-${j}`}>{bp.slice(2, -2)}</strong>
+        ) : (
+          <span key={`${i}-${wi}-${j}`}>{bp}</span>
+        )
+      );
+    });
   });
 }
 
 function InlineMd({ text }: { text: string }) {
   const lines = text.split("\n");
+
+  // Group consecutive lines starting with | into table blocks
+  const blocks: { type: "lines" | "table"; rows: string[] }[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trimStart().startsWith("|")) {
+      const tableRows: string[] = [];
+      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
+        tableRows.push(lines[i]);
+        i++;
+      }
+      blocks.push({ type: "table", rows: tableRows });
+    } else {
+      if (blocks.length === 0 || blocks[blocks.length - 1].type !== "lines") {
+        blocks.push({ type: "lines", rows: [] });
+      }
+      blocks[blocks.length - 1].rows.push(lines[i]);
+      i++;
+    }
+  }
+
+  const parseTableCells = (row: string) =>
+    row.split("|").slice(1, -1).map((c) => c.trim());
+
+  const isSeparatorRow = (row: string) =>
+    /^\|[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)*\|?\s*$/.test(row.trim());
+
+  const renderLine = (line: string, li: number, total: number) => {
+    // Images: ![alt](url)
+    if (line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/)) {
+      const m = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      if (m) {
+        return (
+          <img
+            key={li}
+            src={m[2]}
+            alt={m[1]}
+            style={{
+              maxWidth: "100%",
+              borderRadius: "8px",
+              marginTop: "8px",
+              marginBottom: "8px",
+              display: "block",
+            }}
+          />
+        );
+      }
+    }
+    if (line.startsWith("### "))
+      return (
+        <div
+          key={li}
+          style={{ fontWeight: 700, fontSize: "14px", marginTop: "10px", marginBottom: "4px" }}
+        >
+          {processInline(line.slice(4))}
+        </div>
+      );
+    if (line.startsWith("## "))
+      return (
+        <div
+          key={li}
+          style={{ fontWeight: 700, fontSize: "15px", marginTop: "12px", marginBottom: "6px" }}
+        >
+          {processInline(line.slice(3))}
+        </div>
+      );
+    if (line.startsWith("# "))
+      return (
+        <div
+          key={li}
+          style={{ fontWeight: 700, fontSize: "17px", marginTop: "14px", marginBottom: "8px" }}
+        >
+          {processInline(line.slice(2))}
+        </div>
+      );
+    if (line.match(/^[-*] /))
+      return (
+        <div key={li} style={{ paddingLeft: "16px", display: "flex", gap: "6px" }}>
+          <span>•</span>
+          <span>{processInline(line.slice(2))}</span>
+        </div>
+      );
+    if (line.match(/^\d+\. /))
+      return (
+        <div key={li} style={{ paddingLeft: "16px" }}>
+          {processInline(line)}
+        </div>
+      );
+    return (
+      <span key={li}>
+        {processInline(line)}
+        {li < total - 1 && <br />}
+      </span>
+    );
+  };
+
+  let lineIdx = 0;
   return (
     <>
-      {lines.map((line, li) => {
-        if (line.startsWith("### "))
+      {blocks.map((block, bi) => {
+        if (block.type === "table") {
+          const rows = block.rows;
+          // Determine header: first row is header if second row is separator
+          const hasHeader = rows.length >= 2 && isSeparatorRow(rows[1]);
+          const headerCells = hasHeader ? parseTableCells(rows[0]) : null;
+          const dataRows = hasHeader ? rows.slice(2) : rows.filter((r) => !isSeparatorRow(r));
+          lineIdx += rows.length;
+          const cellStyle: React.CSSProperties = {
+            padding: "6px 12px",
+            border: "1px solid var(--ct-border)",
+            textAlign: "left" as const,
+          };
           return (
-            <div
-              key={li}
-              style={{ fontWeight: 700, fontSize: "14px", marginTop: "10px", marginBottom: "4px" }}
-            >
-              {processInline(line.slice(4))}
+            <div key={`tbl-${bi}`} style={{ overflowX: "auto", margin: "8px 0" }}>
+              <table
+                style={{
+                  borderCollapse: "collapse",
+                  width: "100%",
+                  fontSize: "13px",
+                }}
+              >
+                {headerCells && (
+                  <thead>
+                    <tr>
+                      {headerCells.map((cell, ci) => (
+                        <th
+                          key={ci}
+                          style={{
+                            ...cellStyle,
+                            fontWeight: 700,
+                            background: "var(--ct-code)",
+                          }}
+                        >
+                          {processInline(cell)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {dataRows.map((row, ri) => (
+                    <tr key={ri}>
+                      {parseTableCells(row).map((cell, ci) => (
+                        <td key={ci} style={cellStyle}>
+                          {processInline(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           );
-        if (line.startsWith("## "))
-          return (
-            <div
-              key={li}
-              style={{ fontWeight: 700, fontSize: "15px", marginTop: "12px", marginBottom: "6px" }}
-            >
-              {processInline(line.slice(3))}
-            </div>
-          );
-        if (line.startsWith("# "))
-          return (
-            <div
-              key={li}
-              style={{ fontWeight: 700, fontSize: "17px", marginTop: "14px", marginBottom: "8px" }}
-            >
-              {processInline(line.slice(2))}
-            </div>
-          );
-        if (line.match(/^[-*] /))
-          return (
-            <div key={li} style={{ paddingLeft: "16px", display: "flex", gap: "6px" }}>
-              <span>•</span>
-              <span>{processInline(line.slice(2))}</span>
-            </div>
-          );
-        if (line.match(/^\d+\. /))
-          return (
-            <div key={li} style={{ paddingLeft: "16px" }}>
-              {processInline(line)}
-            </div>
-          );
-        return (
-          <span key={li}>
-            {processInline(line)}
-            {li < lines.length - 1 && <br />}
-          </span>
-        );
+        }
+        // Regular lines
+        const rendered = block.rows.map((line) => {
+          const result = renderLine(line, lineIdx, lines.length);
+          lineIdx++;
+          return result;
+        });
+        return <span key={`blk-${bi}`}>{rendered}</span>;
       })}
     </>
   );
@@ -428,10 +566,16 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
 
     abortCtrl.current = new AbortController();
-    // 30초 타임아웃 → 폴링 fallback 트리거
-    const sseTimeout = setTimeout(() => {
+    // 60초 타임아웃 → 폴링 fallback 트리거 (heartbeat가 10초마다 리셋)
+    let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 30000);
+    }, 60000);
+    const resetSseTimeout = () => {
+      clearTimeout(sseTimeout);
+      sseTimeout = setTimeout(() => {
+        abortCtrl.current?.abort();
+      }, 60000);
+    };
 
     let full = "";
     try {
@@ -464,7 +608,11 @@ export default function ChatPage() {
           if (raw === "[DONE]") continue;
           try {
             const ev = JSON.parse(raw);
-            if (ev.type === "delta" && typeof ev.content === "string") {
+            // Any SSE event (including heartbeat) resets the inactivity timeout
+            resetSseTimeout();
+            if (ev.type === "heartbeat") {
+              continue; // keep-alive, no UI action needed
+            } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
               setStreamBuf(full);
             } else if (ev.type === "token" && typeof ev.text === "string") {
