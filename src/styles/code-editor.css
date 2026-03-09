@@ -1,0 +1,202 @@
+/* AADS-188D: Monaco DiffEditor + Code 패널 */
+.code-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ct-card, #16213e);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.code-diff-viewer[data-theme="light"] {
+  background: var(--ct-card, #fff);
+}
+.code-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ct-border, #2d2d4a);
+  flex-shrink: 0;
+}
+.code-diff-filename {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ct-text, #e2e8f0);
+}
+.code-diff-toolbar button {
+  margin-left: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid var(--ct-border);
+  border-radius: 6px;
+  background: var(--ct-input);
+  color: var(--ct-text2);
+  cursor: pointer;
+}
+.code-diff-toolbar button.active {
+  background: var(--ct-accent);
+  color: #fff;
+  border-color: var(--ct-accent);
+}
+.code-diff-body {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+}
+.code-diff-fallback {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow: auto;
+}
+.code-diff-original,
+.code-diff-modified {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ct-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.code-diff-label {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--ct-hover);
+  color: var(--ct-text2);
+}
+.code-diff-fallback pre {
+  margin: 0;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  flex: 1;
+}
+.code-diff-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--ct-border);
+  flex-shrink: 0;
+}
+.code-diff-accept,
+.code-diff-reject,
+.code-diff-edit {
+  padding: 8px 14px;
+  font-size: 13px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.code-diff-accept {
+  background: #22c55e;
+  color: #fff;
+}
+.code-diff-reject {
+  background: #ef4444;
+  color: #fff;
+}
+.code-diff-edit {
+  background: var(--ct-accent);
+  color: #fff;
+}
+.code-diff-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+.code-diff-modal-inner {
+  background: var(--ct-card);
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+}
+.code-diff-modal-inner textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px;
+  border: 1px solid var(--ct-border);
+  border-radius: 6px;
+  background: var(--ct-input);
+  color: var(--ct-text);
+}
+.code-diff-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.code-panel {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  min-width: 440px;
+  max-width: 440px;
+  height: 100%;
+  background: var(--ct-sb);
+  border-left: 1px solid var(--ct-border);
+  box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+/* 모바일: 전체화면 오버레이 */
+@media (max-width: 767px) {
+  .code-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    min-width: unset;
+    max-width: unset;
+    z-index: 2000;
+    box-shadow: none;
+    border-left: none;
+  }
+}
+.code-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ct-border);
+  flex-shrink: 0;
+}
+.code-panel-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.code-panel-project {
+  font-size: 11px;
+  color: var(--ct-text2);
+}
+.code-panel-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--ct-text2);
+  padding: 0 4px;
+  line-height: 1;
+}
+.code-panel-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.code-panel-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--ct-text2);
+  font-size: 13px;
+}

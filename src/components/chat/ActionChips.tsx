@@ -15,10 +15,10 @@ export interface ActionChip {
 }
 
 export const WELCOME_CHIPS: ActionChip[] = [
-  { id: "briefing",    label: "오늘의 브리핑",  message: "오늘 AADS 전체 상태 브리핑해줘",         icon: "📋" },
-  { id: "competitor",  label: "경쟁사 분석",    message: "현재 AI 개발 자동화 경쟁사 분석해줘",     icon: "🔍" },
-  { id: "project",     label: "프로젝트 현황",  message: "6개 프로젝트 전체 현황 요약해줘",         icon: "📊" },
-  { id: "code-review", label: "코드 리뷰",      message: "최근 커밋된 코드 리뷰해줘",               icon: "💻" },
+  { id: "briefing",    label: "오늘의 브리핑",    message: "오늘 AADS 전체 상태 브리핑해줘",           icon: "📋" },
+  { id: "work-status", label: "작업현황",        message: "작업현황 알려줘. pending이랑 최근 완료 목록", icon: "📊" },
+  { id: "server-search", label: "서버 파일 검색", message: "KIS 서버에서 설정 파일 목록 찾아줘",       icon: "🔍" },
+  { id: "project",     label: "프로젝트 현황",  message: "6개 프로젝트 전체 현황 요약해줘",         icon: "📂" },
   { id: "directive",   label: "지시서 작성",    message: "새 지시서 작성 도와줘",                   icon: "✍️" },
 ];
 
@@ -30,6 +30,13 @@ export function getDynamicChips(lastAssistantMessage: string): ActionChip[] {
   if (msg.includes("검색") || msg.includes("소스") || msg.includes("결과")) {
     chips.push({ id: "deep-analysis", label: "심층 분석", message: "방금 내용 더 심층적으로 분석해줘", icon: "🧠" });
     chips.push({ id: "report",        label: "보고서 생성", message: "방금 내용으로 보고서 작성해줘", icon: "📄" });
+  }
+  if (msg.includes("서버") || msg.includes("원격") || msg.includes("ssh") || msg.includes("kis") || msg.includes("sf 서버")) {
+    chips.push({ id: "server-list",   label: "서버 파일 검색", message: "SF 서버에서 파일 목록 찾아줘", icon: "🔍" });
+    chips.push({ id: "server-read",   label: "원격 파일 읽기", message: "해당 서버에서 config 파일 내용 보여줘", icon: "📄" });
+  }
+  if (msg.includes("대시보드") || msg.includes("작업") || msg.includes("pending") || msg.includes("완료")) {
+    chips.push({ id: "task-more",     label: "작업 이력 더", message: "최근 완료된 작업 20개 보여줘", icon: "📋" });
   }
   if (msg.includes("오류") || msg.includes("에러") || msg.includes("버그")) {
     chips.push({ id: "fix",    label: "수정 제안",  message: "해결 방안 제시해줘",           icon: "🔧" });
