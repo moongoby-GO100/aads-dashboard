@@ -344,12 +344,21 @@ export default function ChatBubble({
         {sources.length > 0 && <SourceCard sources={sources} />}
 
         {/* 메타 정보 */}
-        {!isStreaming && message.model_used && (
+        {!isStreaming && (
           <p className="text-xs mt-1 ml-1" style={{ color: "var(--text-secondary)" }}>
-            [{message.model_used.includes("opus") ? "Opus" : message.model_used.includes("sonnet") ? "Sonnet" : message.model_used}
+            {message.model_used && <span>[{message.model_used}</span>}
             {message.input_tokens ? ` · ${message.input_tokens.toLocaleString()}in` : ""}
             {message.output_tokens ? ` · ${message.output_tokens.toLocaleString()}out` : ""}
-            {message.cost_usd ? ` · $${Number(message.cost_usd).toFixed(4)}` : ""}]
+            {message.cost_usd ? ` · $${Number(message.cost_usd).toFixed(4)}` : ""}
+            {message.model_used && <span>]</span>}
+            {message.created_at && (
+              <span style={{ marginLeft: message.model_used ? "6px" : "0" }}>
+                {new Date(message.created_at).toLocaleString("ko-KR", {
+                  month: "numeric", day: "numeric",
+                  hour: "2-digit", minute: "2-digit", second: "2-digit",
+                })}
+              </span>
+            )}
           </p>
         )}
       </div>

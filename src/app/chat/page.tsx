@@ -630,6 +630,10 @@ export default function ChatPage() {
                   role: "assistant" as const,
                   content: full,
                   model_used: ev.model || undefined,
+                  input_tokens: ev.input_tokens || undefined,
+                  output_tokens: ev.output_tokens || undefined,
+                  cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                  created_at: new Date().toISOString(),
                 },
               ]);
             } else if (ev.type === "diff_preview") {
@@ -1512,7 +1516,7 @@ export default function ChatPage() {
                     <MarkdownBlock text={msg.content} />
                   )}
                 </div>
-                {msg.role === "assistant" && (msg.model_used || msg.cost_usd) && (
+                {msg.role === "assistant" && (
                   <div
                     style={{
                       fontSize: "11px",
@@ -1521,10 +1525,19 @@ export default function ChatPage() {
                       marginLeft: "4px",
                     }}
                   >
-                    [{msg.model_used?.split("-").slice(0, 3).join("-") ?? ""}
+                    {msg.model_used && <span>[{msg.model_used}</span>}
                     {msg.input_tokens ? ` · ${msg.input_tokens.toLocaleString()}in` : ""}
                     {msg.output_tokens ? ` · ${msg.output_tokens.toLocaleString()}out` : ""}
-                    {msg.cost_usd ? ` · $${msg.cost_usd.toFixed(4)}` : ""}]
+                    {msg.cost_usd ? ` · $${Number(msg.cost_usd).toFixed(4)}` : ""}
+                    {msg.model_used && <span>]</span>}
+                    {msg.created_at && (
+                      <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
+                        {new Date(msg.created_at).toLocaleString("ko-KR", {
+                          month: "numeric", day: "numeric",
+                          hour: "2-digit", minute: "2-digit", second: "2-digit",
+                        })}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
