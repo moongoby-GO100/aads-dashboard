@@ -17,17 +17,30 @@ import SourceCard from "./SourceCard";
 
 function renderInline(text: string, key?: number): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  // 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
+  const re = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
   let last = 0, m: RegExpExecArray | null, idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last)
       parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
-    if (m[2]) parts.push(<strong key={`b${key}-${idx++}`} className="font-semibold">{m[2]}</strong>);
-    else if (m[3]) parts.push(<em key={`i${key}-${idx++}`} className="italic">{m[3]}</em>);
-    else if (m[4])
+    if (m[3]) {
+      // 이미지: ![alt](url)
+      parts.push(
+        <img key={`img${key}-${idx++}`} src={m[3]} alt={m[2] || ""} loading="lazy"
+          style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
+      );
+    } else if (m[5]) {
+      // 링크: [text](url)
+      parts.push(
+        <a key={`a${key}-${idx++}`} href={m[5]} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[4]}</a>
+      );
+    } else if (m[6]) parts.push(<strong key={`b${key}-${idx++}`} className="font-semibold">{m[6]}</strong>);
+    else if (m[7]) parts.push(<em key={`i${key}-${idx++}`} className="italic">{m[7]}</em>);
+    else if (m[8])
       parts.push(
         <code key={`c${key}-${idx++}`} className="px-1 py-0.5 rounded text-xs font-mono"
-          style={{ background: "rgba(255,255,255,0.1)", color: "#f9c74f" }}>{m[4]}</code>
+          style={{ background: "rgba(255,255,255,0.1)", color: "#f9c74f" }}>{m[8]}</code>
       );
     last = m.index + m[0].length;
   }

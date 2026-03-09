@@ -566,15 +566,15 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
 
     abortCtrl.current = new AbortController();
-    // 60초 타임아웃 → 폴링 fallback 트리거 (heartbeat가 10초마다 리셋)
+    // 30초 타임아웃 → heartbeat(10초)가 리셋하므로 정상 연결 시 만료 안 됨
     let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 60000);
+    }, 30000);
     const resetSseTimeout = () => {
       clearTimeout(sseTimeout);
       sseTimeout = setTimeout(() => {
         abortCtrl.current?.abort();
-      }, 60000);
+      }, 30000);
     };
 
     let full = "";

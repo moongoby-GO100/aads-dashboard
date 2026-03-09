@@ -5,39 +5,37 @@
  */
 import React, { useState, useMemo } from "react";
 import { driveApi } from "@/services/driveApi";
+import { chatApi } from "@/services/chatApi";
 
 // ─── 인라인 마크다운 렌더러 ────────────────────────────────────────────────
 
 function renderInline(text: string, keyPrefix = ""): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  const re = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last)
       parts.push(<span key={`${keyPrefix}t${idx++}`}>{text.slice(last, m.index)}</span>);
-    if (m[2])
+    if (m[3]) {
       parts.push(
-        <strong key={`${keyPrefix}b${idx++}`} className="font-semibold">
-          {m[2]}
-        </strong>
+        <img key={`${keyPrefix}img${idx++}`} src={m[3]} alt={m[2] || ""} loading="lazy"
+          style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
       );
-    else if (m[3])
+    } else if (m[5]) {
       parts.push(
-        <em key={`${keyPrefix}i${idx++}`} className="italic">
-          {m[3]}
-        </em>
+        <a key={`${keyPrefix}a${idx++}`} href={m[5]} target="_blank" rel="noopener noreferrer"
+          style={{ color: "var(--ct-accent)", textDecoration: "underline" }}>{m[4]}</a>
       );
-    else if (m[4])
+    } else if (m[6])
+      parts.push(<strong key={`${keyPrefix}b${idx++}`} className="font-semibold">{m[6]}</strong>);
+    else if (m[7])
+      parts.push(<em key={`${keyPrefix}i${idx++}`} className="italic">{m[7]}</em>);
+    else if (m[8])
       parts.push(
-        <code
-          key={`${keyPrefix}c${idx++}`}
-          className="px-1 py-0.5 rounded text-xs font-mono"
-          style={{ background: "rgba(108,92,231,0.15)", color: "var(--ct-accent)" }}
-        >
-          {m[4]}
-        </code>
+        <code key={`${keyPrefix}c${idx++}`} className="px-1 py-0.5 rounded text-xs font-mono"
+          style={{ background: "rgba(108,92,231,0.15)", color: "var(--ct-accent)" }}>{m[8]}</code>
       );
     last = m.index + m[0].length;
   }
@@ -216,9 +214,11 @@ interface Props {
   content: string;
   title?: string;
   workspaceId?: string;
+  artifactId?: string;
+  onContentUpdate?: (newContent: string) => void;
 }
 
-export default function ArtifactReport({ content, title, workspaceId }: Props) {
+export default function ArtifactReport({ content, title, workspaceId, artifactId, onContentUpdate }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState(content);
   const [copied, setCopied] = useState(false);
@@ -239,21 +239,61 @@ export default function ArtifactReport({ content, title, workspaceId }: Props) {
   const handlePdf = () => {
     const win = window.open("", "_blank");
     if (!win) return;
+    // 마크다운 → HTML 변환
+    const md = displayContent;
+    let html = md
+      // 코드 블록
+      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em"><code>$2</code></pre>')
+      // 테이블 (간단 변환)
+      .replace(/^\|(.+)\|$/gm, (row: string) => {
+        if (/^[\s|:-]+$/.test(row)) return '';
+        const cells = row.slice(1, -1).split('|').map((c: string) => c.trim());
+        return '<tr>' + cells.map((c: string) => `<td style="border:1px solid #ddd;padding:8px 12px">${c}</td>`).join('') + '</tr>';
+      })
+      // 헤더
+      .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // 이미지
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%">')
+      // 링크
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      // 볼드/이탤릭
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // 인라인 코드
+      .replace(/`([^`]+)`/g, '<code style="background:#f4f4f4;padding:2px 6px;border-radius:4px;font-size:0.85em">$1</code>')
+      // 인용
+      .replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #6c5ce7;padding-left:1rem;color:#666;margin:0.5rem 0">$1</blockquote>')
+      // 목록
+      .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+      // 구분선
+      .replace(/^---$/gm, '<hr>')
+      // 줄바꿈
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+    // tr 태그가 있으면 table로 감싸기
+    if (html.includes('<tr>')) {
+      html = html.replace(/(<tr>[\s\S]*?<\/tr>)+/g, '<table style="border-collapse:collapse;width:100%;margin:1rem 0">$&</table>');
+    }
+    // li 태그가 있으면 ul로 감싸기
+    if (html.includes('<li>')) {
+      html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, '<ul style="padding-left:1.5rem">$&</ul>');
+    }
     win.document.write(`
       <html><head><title>${title || "보고서"}</title>
       <style>
-        body { font-family: -apple-system, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; line-height: 1.6; }
-        h1,h2,h3 { margin-top: 1.5rem; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
-        pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
-        blockquote { border-left: 3px solid #6c5ce7; padding-left: 1rem; color: #666; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px 12px; }
-        th { background: #f9f9f9; }
+        body { font-family: 'Malgun Gothic', -apple-system, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; line-height: 1.8; color: #333; }
+        h1 { font-size: 1.5rem; border-bottom: 2px solid #6c5ce7; padding-bottom: 0.5rem; }
+        h2 { font-size: 1.25rem; margin-top: 1.5rem; }
+        h3 { font-size: 1.1rem; margin-top: 1.2rem; }
+        p { margin: 0.5rem 0; }
+        img { max-width: 100%; }
         @media print { body { padding: 0; } }
       </style></head>
-      <body><pre style="white-space:pre-wrap;font-family:inherit">${displayContent.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
-      <script>window.print();window.close();</script>
+      <body><p>${html}</p>
+      <script>setTimeout(function(){window.print()},500);</script>
       </body></html>
     `);
     win.document.close();
@@ -266,6 +306,29 @@ export default function ArtifactReport({ content, title, workspaceId }: Props) {
       const name = `${title || "report"}_${new Date().toISOString().slice(0, 10)}.md`;
       await driveApi.saveText(name, displayContent, workspaceId, "Reports");
       setSaveMsg("Drive에 저장됨");
+      setTimeout(() => setSaveMsg(""), 3000);
+    } catch {
+      setSaveMsg("저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!artifactId) {
+      // artifactId 없으면 콜백만
+      onContentUpdate?.(editContent);
+      setEditMode(false);
+      setSaveMsg("저장됨 (로컬)");
+      setTimeout(() => setSaveMsg(""), 2000);
+      return;
+    }
+    setSaving(true);
+    try {
+      await chatApi.updateArtifact(artifactId, { content: editContent });
+      onContentUpdate?.(editContent);
+      setEditMode(false);
+      setSaveMsg("DB에 저장됨");
       setTimeout(() => setSaveMsg(""), 3000);
     } catch {
       setSaveMsg("저장 실패");
@@ -305,6 +368,16 @@ export default function ArtifactReport({ content, title, workspaceId }: Props) {
         >
           {editMode ? "미리보기" : "편집"}
         </button>
+        {editMode && (
+          <button
+            onClick={handleSaveEdit}
+            disabled={saving}
+            className="text-xs px-2 py-1 rounded font-semibold"
+            style={{ background: "var(--ct-accent)", color: "#fff" }}
+          >
+            {saving ? "저장 중..." : "저장"}
+          </button>
+        )}
         <button
           onClick={handleCopy}
           className="text-xs px-2 py-1 rounded"

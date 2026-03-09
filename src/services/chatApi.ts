@@ -169,6 +169,8 @@ export const chatApi = {
   // Artifacts
   getArtifacts: (sessionId: string) =>
     req<unknown[]>(`/chat/artifacts?session_id=${sessionId}`),
+  updateArtifact: (artifactId: string, data: { content?: string; title?: string }) =>
+    req<unknown>(`/chat/artifacts/${artifactId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   // Research
   getResearchHistory: (limit = 20) =>
