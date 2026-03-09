@@ -73,6 +73,31 @@ const MODEL_PATTERNS = [
 
 function parseSnapshot(snapshot: string): ChatTurn[] {
   if (!snapshot) return [];
+
+  // ── 구조화 포맷 감지: [USER]/[ASSISTANT] 마커 + ---MSG_SEP--- 구분자 ──
+  if (snapshot.includes("---MSG_SEP---")) {
+    const segments = snapshot.split("---MSG_SEP---");
+    const turns: ChatTurn[] = [];
+    for (const seg of segments) {
+      const trimmed = seg.trim();
+      let role: "user" | "assistant" | "tool" = "assistant";
+      let content = trimmed;
+      if (trimmed.startsWith("[USER]")) {
+        role = "user";
+        content = trimmed.slice(6).trim();
+      } else if (trimmed.startsWith("[ASSISTANT]")) {
+        role = "assistant";
+        content = trimmed.slice(11).trim();
+      } else if (trimmed.startsWith("[UNKNOWN]")) {
+        role = "assistant";
+        content = trimmed.slice(9).trim();
+      }
+      if (content) turns.push({ role, content });
+    }
+    if (turns.length > 0) return turns;
+  }
+
+  // ── 기존 heuristic 파싱 (flat text fallback) ──
   const rawLines = snapshot.split("\n");
 
   let startIdx = 0;

@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { MODEL_OPTIONS, DEFAULT_MODEL } from "@/components/chat/ModelSelector";
+import { CodePanel } from "@/components/CodePanel";
+import { useDiffApproval } from "@/hooks/useDiffApproval";
+import "@/styles/code-editor.css";
 
 // ══════════════════════════════════════════════════════════════════
 // Types
@@ -276,6 +279,9 @@ export default function ChatPage() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
 
+  // ── AADS-188D: diff_preview 승인 패널 ──
+  const diffApproval = useDiffApproval();
+
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -478,6 +484,14 @@ export default function ChatPage() {
                   model_used: ev.model || undefined,
                 },
               ]);
+            } else if (ev.type === "diff_preview") {
+              diffApproval.onDiffPreview({
+                type: "diff_preview",
+                file_path: ev.file_path || "",
+                tool_use_id: ev.tool_use_id || "",
+                original_content: ev.original_content,
+                modified_content: ev.modified_content,
+              });
             } else if (ev.type === "message_done" && ev.message) {
               // legacy fallback
               gotFinal = true;
@@ -1529,6 +1543,26 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* AADS-188D: Code 패널 (diff_preview 시에만 표시) */}
+      {diffApproval.payload && (
+        <CodePanel
+          visible
+          payload={diffApproval.payload}
+          sessionId={activeSession?.id ?? null}
+          theme={theme}
+          countdown={diffApproval.countdown}
+          onClose={diffApproval.close}
+          onResult={(action, msg) => {
+            if (msg) setMessages((prev) => [...prev, {
+              id: `sys-${Date.now()}`,
+              session_id: activeSession?.id ?? "",
+              role: "assistant",
+              content: `[코드 수정 ${action === "approve" ? "승인" : "거부"}] ${msg}`,
+            }]);
+          }}
+        />
+      )}
 
       {/* ════════════════════════════════════════════════════════════
           RIGHT ARTIFACT PANEL

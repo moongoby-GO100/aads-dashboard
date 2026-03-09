@@ -251,7 +251,8 @@ const _TOOL_DISPLAY_NAMES: Record<string, string> = {
   directive_create: "지시서 생성",
   read_github_file: "GitHub 파일 읽기",
   query_database: "DB 조회",
-  read_remote_file: "원격 파일",
+  read_remote_file: "원격 서버 파일 읽기",
+  list_remote_dir: "서버 파일 검색 (SSH)",
   web_search_brave: "웹 검색",
   cost_report: "비용 보고서",
 };
