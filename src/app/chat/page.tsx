@@ -411,6 +411,11 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  // AADS-190: 세션 비용/턴 + Yellow 경고 + 도구턴 한도
+  const [sessionCost, setSessionCost] = useState<string | null>(null);
+  const [sessionTurns, setSessionTurns] = useState<number | null>(null);
+  const [yellowWarning, setYellowWarning] = useState<string | null>(null);
+  const [toolTurnInfo, setToolTurnInfo] = useState<string | null>(null);
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
 
@@ -644,6 +649,11 @@ export default function ChatPage() {
             } else if (ev.type === "done") {
               gotFinal = true;
               setStreamBuf("");
+              setYellowWarning(null);
+              setToolTurnInfo(null);
+              // AADS-190: 세션 비용/턴 업데이트
+              if (ev.session_cost) setSessionCost(ev.session_cost);
+              if (ev.session_turns) setSessionTurns(ev.session_turns);
               setMessages((prev) => [
                 ...prev,
                 {
@@ -681,6 +691,12 @@ export default function ChatPage() {
               gotFinal = true;
               setStreamBuf("");
               setMessages((prev) => [...prev, ev.message as ChatMessage]);
+            } else if (ev.type === "yellow_limit") {
+              // Yellow 도구 연속 실행 경고
+              setYellowWarning(ev.content || `쓰기 도구 연속 ${ev.consecutive_count || 5}회 호출`);
+            } else if (ev.type === "tool_turn_limit") {
+              // 도구 턴 한도 자동 연장 알림
+              setToolTurnInfo(ev.content || `도구 턴 ${ev.current_turn}회 → ${ev.extended_to}회 연장`);
             } else if (ev.type === "error") {
               throw new Error(ev.error || ev.content || "Unknown streaming error");
             }
@@ -1655,6 +1671,47 @@ export default function ChatPage() {
             flexShrink: 0,
           }}
         >
+          {/* AADS-190: Yellow 경고 바 */}
+          {yellowWarning && streaming && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 12px", marginBottom: "8px", borderRadius: "8px",
+              background: "#f59e0b20", border: "1px solid #f59e0b60",
+              fontSize: "13px", color: "#f59e0b",
+            }}>
+              <span>⚠️ {yellowWarning}</span>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  onClick={() => setYellowWarning(null)}
+                  style={{
+                    padding: "4px 12px", fontSize: "12px", fontWeight: 600,
+                    background: "#f59e0b", color: "#fff", border: "none", borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >계속</button>
+                <button
+                  onClick={() => { setYellowWarning(null); abortCtrl.current?.abort(); }}
+                  style={{
+                    padding: "4px 12px", fontSize: "12px", fontWeight: 600,
+                    background: "#ef4444", color: "#fff", border: "none", borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >중단</button>
+              </div>
+            </div>
+          )}
+
+          {/* AADS-190: 도구 턴 연장 알림 */}
+          {toolTurnInfo && streaming && (
+            <div style={{
+              padding: "6px 12px", marginBottom: "8px", borderRadius: "8px",
+              background: "#6366f120", border: "1px solid #6366f160",
+              fontSize: "12px", color: "#6366f1",
+            }}>
+              🔄 {toolTurnInfo}
+            </div>
+          )}
+
           {/* Action chips */}
           <div
             style={{
@@ -1734,6 +1791,15 @@ export default function ChatPage() {
               onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
             />
             <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+              {/* AADS-190: 세션 비용/턴 표시 */}
+              {sessionCost && (
+                <span style={{
+                  fontSize: "11px", color: "var(--ct-text2)", whiteSpace: "nowrap",
+                  padding: "2px 8px", background: "var(--ct-hover)", borderRadius: "8px",
+                }}>
+                  {sessionCost}{sessionTurns ? ` | ${sessionTurns}턴` : ""}
+                </span>
+              )}
               {/* 큐 취소 버튼 (큐에 메시지가 있을 때만) */}
               {queueCount > 0 && (
                 <button
