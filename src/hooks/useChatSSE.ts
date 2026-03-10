@@ -47,6 +47,10 @@ export interface StreamState {
   inputTokens: number | null;
   outputTokens: number | null;
   costUsd: string | null;
+  // AADS-190: 세션 누적 비용/턴
+  sessionCost: string | null;
+  sessionTurns: number | null;
+  yellowLimitWarning: string | null;
 }
 
 const INITIAL_STREAM: StreamState = {
@@ -64,6 +68,9 @@ const INITIAL_STREAM: StreamState = {
   inputTokens: null,
   outputTokens: null,
   costUsd: null,
+  sessionCost: null,
+  sessionTurns: null,
+  yellowLimitWarning: null,
 };
 
 const SSE_INACTIVITY_MS = 90_000; // heartbeat(10s) 기준 — 90초간 무응답 시에만 타임아웃
@@ -236,6 +243,13 @@ export function useChatSSE() {
                     researchProgress: "완료",
                   }));
 
+                } else if (chunk.type === "yellow_limit") {
+                  // Yellow 도구 연속 실행 경고
+                  setState((s) => ({
+                    ...s,
+                    yellowLimitWarning: chunk.content || `쓰기 도구 연속 ${chunk.consecutive_count || 5}회`,
+                  }));
+
                 } else if (chunk.type === "done") {
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
                   const meta: StreamMeta = {
@@ -261,6 +275,9 @@ export function useChatSSE() {
                     toolEvents: [...toolEvents],
                     thoughtSummary: meta.thoughtSummary,
                     thinkingText: meta.thinkingText,
+                    sessionCost: chunk.session_cost || null,
+                    sessionTurns: chunk.session_turns || null,
+                    yellowLimitWarning: null,
                   }));
                   completeStream(sessionId, fullText);
                   onDone?.(fullText, meta);

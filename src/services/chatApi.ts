@@ -81,7 +81,9 @@ export interface SSEChunk {
     | "tool_use" | "tool_result"
     | "research.start" | "research.progress" | "research.complete"
     // Agent SDK
-    | "sdk_session" | "sdk_complete";
+    | "sdk_session" | "sdk_complete"
+    // AADS-190: Yellow 도구 연속 제한
+    | "yellow_limit";
   content?: string;
   summary?: string;
   sources?: SourceItem[];
@@ -105,6 +107,10 @@ export interface SSEChunk {
   interaction_id?: string;
   progress?: number;
   report?: string;
+  // AADS-190: 세션 누적 비용/턴
+  session_cost?: string;
+  session_turns?: number;
+  consecutive_count?: number;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
