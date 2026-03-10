@@ -434,6 +434,7 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortCtrl = useRef<AbortController | null>(null);
+  const sessionSwitchRef = useRef(false);
 
   // ── Init theme ──
   useEffect(() => {
@@ -489,8 +490,9 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
-    // 세션 전환 시 진행 중인 스트리밍 중단
+    // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
+      sessionSwitchRef.current = true;
       abortCtrl.current?.abort();
       setStreaming(false);
       setStreamBuf("");
@@ -579,6 +581,7 @@ export default function ChatPage() {
   async function sendMessage(queuedContent?: string) {
     const content = queuedContent || input.trim();
     if (!content) return;
+    sessionSwitchRef.current = false;
 
     // streaming 중이면 큐에 추가
     if (streaming && !queuedContent) {
@@ -738,6 +741,11 @@ export default function ChatPage() {
       const err = e as Error;
       const isAbort = err.name === "AbortError";
       const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed");
+      // 세션 전환으로 인한 abort → 이전 응답을 새 세션에 추가하지 않음
+      if (sessionSwitchRef.current) {
+        sessionSwitchRef.current = false;
+        return;
+      }
       if (isAbort || isNetwork) {
         // 연결 끊김: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback (최대 3회)
         if (full) {
