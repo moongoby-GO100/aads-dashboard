@@ -435,6 +435,7 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
+  const activeSessionRef = useRef<string | null>(null);
 
   // ── Init theme ──
   useEffect(() => {
@@ -490,6 +491,7 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
+    activeSessionRef.current = activeSession?.id || null;
     // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
       sessionSwitchRef.current = true;
@@ -606,6 +608,10 @@ export default function ChatPage() {
     setStreamBuf("");
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
+    // 이 요청의 세션 ID 캡처 — 세션 전환 감지용
+    const requestSessionId = sessionId;
+    const isStale = () => activeSessionRef.current !== requestSessionId;
+
     const userMsg: ChatMessage = {
       id: `tmp-${Date.now()}`,
       session_id: sessionId,
@@ -649,11 +655,14 @@ export default function ChatPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        // 세션이 전환되었으면 남은 스트림 무시
+        if (isStale()) { reader.cancel(); break; }
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
 
         for (const line of lines) {
+          if (isStale()) break;
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
@@ -682,7 +691,7 @@ export default function ChatPage() {
                 ...prev,
                 {
                   id: `ai-${Date.now()}`,
-                  session_id: sessionId!,
+                  session_id: requestSessionId!,
                   role: "assistant" as const,
                   content: full,
                   model_used: ev.model || undefined,
@@ -730,11 +739,12 @@ export default function ChatPage() {
         }
       }
 
-      if (!gotFinal && full) {
+      if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
+      else if (!gotFinal && full) {
         setStreamBuf("");
         setMessages((prev) => [
           ...prev,
-          { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full },
+          { id: `ai-${Date.now()}`, session_id: requestSessionId!, role: "assistant", content: full },
         ]);
       }
     } catch (e: unknown) {
@@ -804,17 +814,19 @@ export default function ChatPage() {
       }
     } finally {
       clearTimeout(sseTimeout);
-      setStreaming(false);
-      setStreamBuf("");
-      setToolStatus(null);
-
-      // 큐에 대기 중인 메시지가 있으면 자동 전송
-      if (msgQueueRef.current.length > 0) {
-        const next = msgQueueRef.current.shift()!;
-        setQueueCount(msgQueueRef.current.length);
-        setTimeout(() => sendMessage(next), 300);
-      } else {
-        setQueueCount(0);
+      // 세션 전환된 경우 상태는 이미 useEffect에서 초기화됨 — 중복 설정 방지
+      if (!isStale()) {
+        setStreaming(false);
+        setStreamBuf("");
+        setToolStatus(null);
+        // 큐에 대기 중인 메시지가 있으면 자동 전송 (같은 세션일 때만)
+        if (msgQueueRef.current.length > 0) {
+          const next = msgQueueRef.current.shift()!;
+          setQueueCount(msgQueueRef.current.length);
+          setTimeout(() => sendMessage(next), 300);
+        } else {
+          setQueueCount(0);
+        }
       }
     }
   }
