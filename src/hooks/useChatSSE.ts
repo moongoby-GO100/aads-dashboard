@@ -11,6 +11,8 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { chatApi, type SourceItem, type SSEChunk } from "@/services/chatApi";
+import { reportError } from "@/services/errorReporter";
+import { registerStream, updateStreamText, completeStream } from "@/services/streamManager";
 
 export interface ToolUseEvent {
   toolName: string;
@@ -64,13 +66,14 @@ const INITIAL_STREAM: StreamState = {
   costUsd: null,
 };
 
-const SSE_TIMEOUT_MS = 60_000; // Deep Research에 더 긴 타임아웃
+const SSE_INACTIVITY_MS = 90_000; // heartbeat(10s) 기준 — 90초간 무응답 시에만 타임아웃
 const MAX_RETRY = 3;
 
 export function useChatSSE() {
   const [state, setState] = useState<StreamState>(INITIAL_STREAM);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetStream = useCallback(() => {
     setState(INITIAL_STREAM);
@@ -98,6 +101,8 @@ export function useChatSSE() {
       abortRef.current = abort;
 
       setState({ ...INITIAL_STREAM, isStreaming: true });
+      // AADS-190: StreamManager에 스트림 시작 등록
+      registerStream(sessionId);
 
       const pollFallback = async (): Promise<boolean> => {
         try {
@@ -130,7 +135,12 @@ export function useChatSSE() {
       let attempt = 0;
 
       const doStream = async (): Promise<void> => {
-        const timeoutId = setTimeout(() => abort.abort(), SSE_TIMEOUT_MS);
+        // 이벤트(heartbeat 포함) 수신 시마다 리셋되는 inactivity 타임아웃
+        const resetInactivityTimeout = () => {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          timeoutRef.current = setTimeout(() => abort.abort(), SSE_INACTIVITY_MS);
+        };
+        resetInactivityTimeout();
 
         try {
           const reader = await chatApi.sendMessageStream(
@@ -151,6 +161,9 @@ export function useChatSSE() {
             const { done, value } = await reader.read();
             if (done) break;
 
+            // 데이터 수신 → inactivity 타이머 리셋
+            resetInactivityTimeout();
+
             buffer += decoder.decode(value, { stream: true });
             const events = buffer.split("\n\n");
             buffer = events.pop() ?? "";
@@ -165,9 +178,13 @@ export function useChatSSE() {
                   chunk = JSON.parse(trimmed.slice(6)) as SSEChunk;
                 } catch { continue; }
 
+                // heartbeat → 타이머 리셋만, UI 변경 없음
+                if (chunk.type === "heartbeat") continue;
+
                 if (chunk.type === "delta" && chunk.content) {
                   fullText += chunk.content;
                   setState((s) => ({ ...s, streamingText: fullText }));
+                  updateStreamText(sessionId, fullText);
 
                 } else if (chunk.type === "thinking" && chunk.content) {
                   thinkingText += chunk.content;
@@ -220,7 +237,7 @@ export function useChatSSE() {
                   }));
 
                 } else if (chunk.type === "done") {
-                  clearTimeout(timeoutId);
+                  if (timeoutRef.current) clearTimeout(timeoutRef.current);
                   const meta: StreamMeta = {
                     modelUsed: chunk.model_used || chunk.model || null,
                     inputTokens: chunk.input_tokens || null,
@@ -245,6 +262,7 @@ export function useChatSSE() {
                     thoughtSummary: meta.thoughtSummary,
                     thinkingText: meta.thinkingText,
                   }));
+                  completeStream(sessionId, fullText);
                   onDone?.(fullText, meta);
                   return;
 
@@ -255,7 +273,7 @@ export function useChatSSE() {
             }
           }
 
-          clearTimeout(timeoutId);
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
           setState((s) => ({ ...s, isStreaming: false, isResearching: false }));
           onDone?.(fullText, {
             modelUsed: null, inputTokens: null, outputTokens: null, costUsd: null,
@@ -264,7 +282,7 @@ export function useChatSSE() {
             toolsUsed: [...toolEvents],
           });
         } catch (err) {
-          clearTimeout(timeoutId);
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
           const isAborted = abort.signal.aborted;
           attempt++;
 
@@ -277,6 +295,15 @@ export function useChatSSE() {
           const recovered = await pollFallback();
           if (!recovered) {
             const msg = err instanceof Error ? err.message : String(err);
+            const errorType = isAborted ? "STREAM_TIMEOUT" : "SSE_DISCONNECT";
+            // AADS-190: StreamManager에 에러 기록 + 백엔드 보고
+            completeStream(sessionId, "", msg);
+            reportError({
+              error_type: errorType,
+              message: msg,
+              session_id: sessionId,
+              context: { attempt, maxRetry: MAX_RETRY },
+            });
             setState((s) => ({
               ...s,
               isStreaming: false,

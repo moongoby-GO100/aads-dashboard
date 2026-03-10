@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chatApi, type ChatMessage, type ChatSession, type ChatWorkspace } from "@/services/chatApi";
+import { getStreamSnapshot, getActiveStreamIds } from "@/services/streamManager";
 
 export interface UseChatSessionReturn {
   workspaces: ChatWorkspace[];
@@ -21,6 +22,9 @@ export interface UseChatSessionReturn {
   appendMessage: (msg: ChatMessage) => void;
   updateLastMessage: (content: string, meta?: Partial<ChatMessage>) => void;
   loadWorkspaces: () => Promise<void>;
+  // AADS-190: StreamManager 연동
+  getBackgroundStream: () => import("@/services/streamManager").StreamSnapshot | null;
+  activeStreamSessionIds: () => string[];
 }
 
 export function useChatSession(): UseChatSessionReturn {
@@ -123,6 +127,15 @@ export function useChatSession(): UseChatSessionReturn {
     []
   );
 
+  // AADS-190: 현재 세션의 백그라운드 스트림 상태 조회
+  const getBackgroundStream = useCallback(() => {
+    if (!currentSession) return null;
+    return getStreamSnapshot(currentSession.id);
+  }, [currentSession]);
+
+  // AADS-190: 활성 스트리밍 세션 ID 목록
+  const activeStreamSessionIds = useCallback(() => getActiveStreamIds(), []);
+
   return {
     workspaces,
     sessions,
@@ -137,5 +150,7 @@ export function useChatSession(): UseChatSessionReturn {
     appendMessage,
     updateLastMessage,
     loadWorkspaces,
+    getBackgroundStream,
+    activeStreamSessionIds,
   };
 }
