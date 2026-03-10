@@ -489,6 +489,17 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
+    // 세션 전환 시 진행 중인 스트리밍 중단
+    if (streaming) {
+      abortCtrl.current?.abort();
+      setStreaming(false);
+      setStreamBuf("");
+      setToolStatus(null);
+      setYellowWarning(null);
+      setToolTurnInfo(null);
+      msgQueueRef.current = [];
+      setQueueCount(0);
+    }
     if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); return; }
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then(setMessages)
