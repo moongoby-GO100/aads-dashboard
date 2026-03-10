@@ -426,6 +426,10 @@ export default function ChatPage() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
 
+  // ── Proactive Briefing ──
+  const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean } | null>(null);
+  const briefingShownRef = useRef<Set<string>>(new Set());
+
   // ── AADS-188D: diff_preview 승인 패널 ──
   const diffApproval = useDiffApproval();
 
@@ -504,7 +508,7 @@ export default function ChatPage() {
       msgQueueRef.current = [];
       setQueueCount(0);
     }
-    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); return; }
+    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); return; }
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then(setMessages)
       .catch(console.error);
@@ -521,6 +525,24 @@ export default function ChatPage() {
     } else {
       setSessionCost(null);
       setSessionTurns(null);
+    }
+    // 프로액티브 브리핑: 세션 진입 시 1회만 표시
+    const sid = activeSession.id;
+    const shownKey = `briefing_${sid}`;
+    if (!briefingShownRef.current.has(sid) && !sessionStorage.getItem(shownKey)) {
+      chatApi<{ has_briefing: boolean; briefing_message: string }>(`/briefing?session_id=${sid}`)
+        .then((res) => {
+          if (res.has_briefing && res.briefing_message) {
+            setBriefing({ message: res.briefing_message, collapsed: false });
+            briefingShownRef.current.add(sid);
+            sessionStorage.setItem(shownKey, "1");
+          } else {
+            setBriefing(null);
+          }
+        })
+        .catch(() => setBriefing(null));
+    } else {
+      setBriefing(null);
     }
   }, [activeSession?.id]);
 
@@ -1590,6 +1612,84 @@ export default function ChatPage() {
                 <span>⚡ 상태 확인 → Haiku (빠름·저비용)</span>
                 <span>🔧 코드·수정 → Sonnet (균형)</span>
                 <span>🧠 설계·분석 → Opus (고성능)</span>
+              </div>
+            </div>
+          )}
+
+          {/* 프로액티브 브리핑 카드 */}
+          {briefing && (
+            <div
+              className="ct-msg-enter"
+              style={{
+                display: "flex",
+                justifyContent: "flex-start",
+                marginBottom: "8px",
+              }}
+            >
+              <div style={{ maxWidth: "85%", width: "100%" }}>
+                <div
+                  style={{
+                    padding: briefing.collapsed ? "10px 16px" : "14px 18px",
+                    borderRadius: "18px",
+                    borderBottomLeftRadius: "4px",
+                    fontSize: "13px",
+                    lineHeight: "1.7",
+                    background: theme === "dark"
+                      ? "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.08))"
+                      : "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.05))",
+                    color: "var(--ct-text)",
+                    border: `1px solid ${theme === "dark" ? "rgba(99,102,241,0.3)" : "rgba(59,130,246,0.2)"}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      cursor: "pointer",
+                    }}
+                    onClick={() =>
+                      setBriefing((prev) =>
+                        prev ? { ...prev, collapsed: !prev.collapsed } : null
+                      )
+                    }
+                  >
+                    <span style={{ fontWeight: 600, fontSize: "13px" }}>
+                      📋 프로액티브 브리핑
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--ct-text2)",
+                        marginLeft: "8px",
+                        userSelect: "none",
+                      }}
+                    >
+                      {briefing.collapsed ? "▶ 펼치기" : "▼ 접기"}
+                    </span>
+                  </div>
+                  {!briefing.collapsed && (
+                    <div style={{ marginTop: "8px" }}>
+                      <MarkdownBlock text={briefing.message} />
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--ct-text2)",
+                    marginTop: "4px",
+                    marginLeft: "4px",
+                  }}
+                >
+                  시스템 자동 브리핑 · {new Date().toLocaleString("ko-KR", {
+                    timeZone: "Asia/Seoul",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
               </div>
             </div>
           )}
