@@ -24,6 +24,7 @@ interface ChatSession {
   last_active_at: string;
   pinned: boolean;
   message_count: number;
+  cost_total?: string | number;
 }
 interface ChatMessage {
   id: string;
@@ -488,7 +489,7 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
-    if (!activeSession) { setMessages([]); setArtifacts([]); return; }
+    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); return; }
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then(setMessages)
       .catch(console.error);
@@ -497,6 +498,15 @@ export default function ChatPage() {
       .catch(() => setArtifacts([]));
     // Sync model from session
     if (activeSession.current_model) setModel(activeSession.current_model);
+    // AADS-190: 세션 전환 시 누적비용 즉시 표시
+    const ct = activeSession.cost_total;
+    if (ct && Number(ct) > 0) {
+      setSessionCost(`$${Number(ct).toFixed(2)}`);
+      setSessionTurns(activeSession.message_count || null);
+    } else {
+      setSessionCost(null);
+      setSessionTurns(null);
+    }
   }, [activeSession?.id]);
 
   // ── Auto-scroll ──
@@ -715,8 +725,10 @@ export default function ChatPage() {
       }
     } catch (e: unknown) {
       const err = e as Error;
-      if (err.name === "AbortError") {
-        // 타임아웃 또는 사용자 중단: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback
+      const isAbort = err.name === "AbortError";
+      const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed");
+      if (isAbort || isNetwork) {
+        // 연결 끊김: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback (최대 3회)
         if (full) {
           setStreamBuf("");
           setMessages((prev) => [
@@ -724,37 +736,40 @@ export default function ChatPage() {
             { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full },
           ]);
         } else {
-          // 폴링 fallback: 3초 후 DB에서 응답 조회
           setStreamBuf("");
-          await new Promise((r) => setTimeout(r, 3000));
-          try {
-            const msgs = await chatApi<ChatMessage[]>(
-              `/chat/messages?session_id=${sessionId}&limit=5&offset=0`
-            );
-            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
-            if (aiMsg) {
-              setMessages((prev) => [...prev, aiMsg]);
-            } else {
+          let recovered = false;
+          for (let retry = 0; retry < 3; retry++) {
+            await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
+            try {
+              const msgs = await chatApi<ChatMessage[]>(
+                `/chat/messages?session_id=${sessionId}&limit=5&offset=0`
+              );
+              const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
+              if (aiMsg) {
+                setMessages((prev) => [...prev, aiMsg]);
+                recovered = true;
+                break;
+              }
+            } catch { /* retry */ }
+          }
+          if (!recovered) {
+            // 최종 실패 시 전체 메시지 리로드
+            try {
+              const allMsgs = await chatApi<ChatMessage[]>(
+                `/chat/messages?session_id=${sessionId}&limit=500`
+              );
+              setMessages(allMsgs);
+            } catch {
               setMessages((prev) => [
                 ...prev,
                 {
                   id: `err-${Date.now()}`,
                   session_id: sessionId!,
                   role: "assistant",
-                  content: "⚠️ 응답을 가져오지 못했습니다. 잠시 후 재시도해주세요.",
+                  content: "⚠️ 연결이 끊겼습니다. 페이지를 새로고침해주세요.",
                 },
               ]);
             }
-          } catch {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `err-${Date.now()}`,
-                session_id: sessionId!,
-                role: "assistant",
-                content: "⚠️ 연결이 끊겼습니다. 페이지를 새로고침하거나 재시도해주세요.",
-              },
-            ]);
           }
         }
       } else {
