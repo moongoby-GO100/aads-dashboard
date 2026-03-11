@@ -4,6 +4,7 @@ import { MODEL_OPTIONS, DEFAULT_MODEL } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
+import MemoryContextBar from "@/components/chat/MemoryContextBar";
 
 // ══════════════════════════════════════════════════════════════════
 // Types
@@ -546,6 +547,9 @@ export default function ChatPage() {
       msgQueueRef.current = [];
       setQueueCount(0);
     }
+    // 세션 전환 시 edit state 초기화
+    setEditingMsgId(null);
+    setEditText("");
     if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); return; }
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then(setMessages)
@@ -1727,6 +1731,22 @@ export default function ChatPage() {
                 🏠
               </a>
               <a
+                href="/memory"
+                style={{
+                  padding: "7px 10px",
+                  background: "var(--ct-hover)",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  color: "var(--ct-text2)",
+                  fontSize: "13px",
+                  textDecoration: "none",
+                }}
+                title="AI Memory"
+              >
+                🧠
+              </a>
+              <a
                 href="/settings"
                 style={{
                   padding: "7px 10px",
@@ -2297,6 +2317,9 @@ export default function ChatPage() {
             flexShrink: 0,
           }}
         >
+          {/* 메모리 & 맥락 뷰어 */}
+          <MemoryContextBar sessionId={activeSession?.id ?? null} />
+
           {/* AADS-190: Yellow 경고 바 */}
           {yellowWarning && streaming && (
             <div style={{
