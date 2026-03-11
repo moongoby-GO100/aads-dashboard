@@ -118,20 +118,7 @@ export const api = {
   getDocuments: (tag?: string) => request<any>("/documents" + (tag ? "?tag=" + encodeURIComponent(tag) : "")),
   getDocumentContent: (docId: string) => request<any>("/documents/" + encodeURIComponent(docId)),
 
-  // T-073: CEO Chat v2 / T-104: model 파라미터 추가
-  sendCeoMessage: (sessionId: string, message: string, model?: string) =>
-    request<any>("/ceo-chat/message", {
-      method: "POST",
-      body: JSON.stringify({ session_id: sessionId, message, ...(model ? { model } : {}) }),
-    }),
-  getCeoSessions: () => request<any>("/ceo-chat/sessions"),
-  getCeoSession: (sessionId: string) => request<any>(`/ceo-chat/sessions/${sessionId}`),
-  endCeoSession: (sessionId: string) =>
-    request<any>("/ceo-chat/end-session", {
-      method: "POST",
-      body: JSON.stringify({ session_id: sessionId }),
-    }),
-  getCeoCostSummary: () => request<any>("/ceo-chat/cost-summary"),
+  // T-073: CEO Chat v2 — Legacy, /chat으로 통합됨 (2026-03-11 비활성화)
   completeRunning: (project?: string) => request<any>("/dashboard/complete-running", {
     method: "POST",
     body: JSON.stringify({ project: project || "all" }),
