@@ -739,6 +739,7 @@ export default function ChatPage() {
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
               setStreamBuf(full);
+              if (toolStatus) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
               full += ev.text;
@@ -768,7 +769,7 @@ export default function ChatPage() {
             } else if (ev.type === "tool_use" && ev.tool_name) {
               setToolStatus(`🔧 ${ev.tool_name} 실행 중...`);
             } else if (ev.type === "tool_result" && ev.tool_name) {
-              setToolStatus(null);
+              setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
             } else if (ev.type === "thinking" && ev.content) {
               setToolStatus("💭 사고 중...");
             } else if (ev.type === "sdk_session") {
@@ -1982,8 +1983,19 @@ export default function ChatPage() {
                   border: "1px solid var(--ct-border)",
                 }}
               >
-                {toolStatus && !streamBuf && (
-                  <div style={{ fontSize: "13px", color: "var(--ct-accent)", marginBottom: "6px", opacity: 0.85 }}>
+                {toolStatus && (
+                  <div style={{
+                    fontSize: "12px", color: "var(--ct-accent)",
+                    marginBottom: streamBuf ? "8px" : "0",
+                    padding: "4px 8px", borderRadius: "6px",
+                    background: "var(--ct-accent)" + "12",
+                    display: "flex", alignItems: "center", gap: "6px",
+                  }}>
+                    <span style={{
+                      width: "6px", height: "6px", borderRadius: "50%",
+                      background: "var(--ct-accent)",
+                      animation: "ct-bounce 1.2s infinite",
+                    }} />
                     {toolStatus}
                   </div>
                 )}
