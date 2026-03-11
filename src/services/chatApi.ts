@@ -52,6 +52,7 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   model_used: string | null;
+  intent?: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
   cost_usd: string | null;

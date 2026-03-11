@@ -572,6 +572,30 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamBuf]);
 
+  // ── 백그라운드 메시지 폴링 (Pipeline C / Agent 완료 메시지 실시간 수신) ──
+  useEffect(() => {
+    if (!activeSession?.id) return;
+    const sid = activeSession.id;
+    const iv = setInterval(async () => {
+      // 스트리밍 중이면 폴링 생략
+      if (streaming) return;
+      try {
+        const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0`);
+        if (!latest || latest.length === 0) return;
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = latest.filter((m) => !existingIds.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          // 기존 목록에 새 메시지 추가 (시간순)
+          return [...prev, ...newMsgs].sort(
+            (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+          );
+        });
+      } catch { /* 폴링 실패 무시 */ }
+    }, 8000); // 8초마다 체크
+    return () => clearInterval(iv);
+  }, [activeSession?.id, streaming]);
+
   // ── Toggle theme ──
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -789,6 +813,7 @@ export default function ChatPage() {
                   role: "assistant" as const,
                   content: full,
                   model_used: ev.model || undefined,
+                  intent: ev.intent || undefined,
                   input_tokens: ev.input_tokens || undefined,
                   output_tokens: ev.output_tokens || undefined,
                   cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,

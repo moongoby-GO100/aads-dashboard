@@ -397,10 +397,40 @@ export default function ChatBubble({
     );
   }
 
+  // ─── Intent 기반 출처 배지 ─────────────────────────────────────
+  const intent = (message as ChatMessage & { intent?: string | null }).intent;
+  const intentBadge = (() => {
+    if (!intent || intent === "casual" || intent === "status_check") return null;
+    const map: Record<string, { icon: string; label: string; color: string; bg: string }> = {
+      pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+      agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
+      system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
+      auto_reaction: { icon: "🔄", label: "Auto", color: "#06b6d4", bg: "rgba(6,182,212,0.15)" },
+    };
+    return map[intent] || null;
+  })();
+
+  // ─── 비용 표시 (REST API: tokens_in/tokens_out/cost, SSE: input_tokens/output_tokens/cost_usd) ───
+  const displayTokensIn = message.input_tokens || message.tokens_in || null;
+  const displayTokensOut = message.output_tokens || message.tokens_out || null;
+  const displayCost = message.cost_usd || message.cost || null;
+
   // AI 메시지
   return (
     <div className="flex justify-start mb-3 group">
       <div className="max-w-[80%] min-w-0">
+        {/* 출처 배지 */}
+        {intentBadge && (
+          <div className="flex items-center gap-1.5 mb-1 ml-1">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+              style={{ background: intentBadge.bg, color: intentBadge.color, border: `1px solid ${intentBadge.color}33` }}
+            >
+              {intentBadge.icon} {intentBadge.label}
+            </span>
+          </div>
+        )}
+
         {/* 사고 과정 */}
         {message.thought_summary && <ThoughtSummary summary={message.thought_summary} />}
 
@@ -408,8 +438,8 @@ export default function ChatBubble({
         <div
           className="px-4 py-3 rounded-2xl text-sm relative"
           style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
+            background: intentBadge ? `linear-gradient(135deg, var(--bg-card), ${intentBadge.bg})` : "var(--bg-card)",
+            border: intentBadge ? `1px solid ${intentBadge.color}44` : "1px solid var(--border)",
             borderBottomLeftRadius: "6px",
             color: "var(--text-primary)",
           }}
@@ -480,9 +510,9 @@ export default function ChatBubble({
         {!isStreaming && (
           <p className="text-xs mt-1 ml-1" style={{ color: "var(--text-secondary)" }}>
             {message.model_used && <span>[{message.model_used}</span>}
-            {message.input_tokens ? ` · ${message.input_tokens.toLocaleString()}in` : ""}
-            {message.output_tokens ? ` · ${message.output_tokens.toLocaleString()}out` : ""}
-            {message.cost_usd ? ` · $${Number(message.cost_usd).toFixed(4)}` : ""}
+            {displayTokensIn ? ` · ${displayTokensIn.toLocaleString()}in` : ""}
+            {displayTokensOut ? ` · ${displayTokensOut.toLocaleString()}out` : ""}
+            {displayCost && Number(displayCost) > 0 ? ` · $${Number(displayCost).toFixed(4)}` : ""}
             {message.model_used && <span>]</span>}
             {message.created_at && (
               <span style={{ marginLeft: message.model_used ? "6px" : "0" }}>
