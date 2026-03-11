@@ -208,6 +208,15 @@ function ThoughtSummary({ summary }: { summary: string }) {
   );
 }
 
+// ─── Sanitize raw XML tool blocks ─────────────────────────────────────────────
+
+function stripToolXml(text: string): string {
+  return text
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, "")
+    .replace(/<function_response>[\s\S]*?<\/function_response>/g, "")
+    .trim();
+}
+
 // ─── Main ChatBubble ──────────────────────────────────────────────────────────
 
 interface ChatBubbleProps {
@@ -233,7 +242,8 @@ export default function ChatBubble({
   const [copiedMsg, setCopiedMsg] = useState(false);
 
   const isUser = message.role === "user";
-  const displayContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
+  const rawContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
+  const displayContent = isUser ? rawContent : stripToolXml(rawContent);
   const sources = message.sources || [];
 
   const handleCopy = () => {
