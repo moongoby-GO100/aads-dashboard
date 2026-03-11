@@ -208,6 +208,42 @@ function ThoughtSummary({ summary }: { summary: string }) {
   );
 }
 
+// ─── Attachment File Cards ────────────────────────────────────────────────────
+
+function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
+  if (!attachments || attachments.length === 0) return null;
+
+  const fileIcon = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if (["py", "js", "ts", "tsx", "jsx", "sh", "sql", "go", "rs"].includes(ext)) return "💻";
+    if (["pdf"].includes(ext)) return "📕";
+    if (["xlsx", "xls", "csv"].includes(ext)) return "📊";
+    if (["md", "txt", "log"].includes(ext)) return "📄";
+    if (["json", "yaml", "yml", "toml", "xml"].includes(ext)) return "📋";
+    if (["png", "jpg", "jpeg", "gif", "svg"].includes(ext)) return "🖼️";
+    return "📎";
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1">
+      {attachments.map((att, i) => {
+        const a = att as Record<string, string>;
+        const name = a?.name || a?.filename || `file_${i}`;
+        return (
+          <div
+            key={i}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
+            style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.85)" }}
+          >
+            <span>{fileIcon(name)}</span>
+            <span className="truncate" style={{ maxWidth: "120px" }}>{name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Sanitize raw XML tool blocks ─────────────────────────────────────────────
 
 function stripToolXml(text: string): string {
@@ -254,15 +290,24 @@ export default function ChatBubble({
     onCopy?.(displayContent);
   };
 
+  // 사용자 메시지에서 [첨부파일: ...] 참조 텍스트 분리 (깔끔한 표시)
+  const userDisplayContent = isUser
+    ? displayContent.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim()
+    : displayContent;
+  const userAttachments = (message.attachments || []) as unknown[];
+
   if (isUser) {
     return (
       <div className="flex justify-end mb-3">
         <div className="max-w-[75%]">
+          {userAttachments.length > 0 && (
+            <FileAttachmentCards attachments={userAttachments} />
+          )}
           <div
             className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
             style={{ background: "var(--accent)", color: "#fff", borderBottomRightRadius: "6px" }}
           >
-            {displayContent}
+            {userDisplayContent}
           </div>
           {message.created_at && (
             <p className="text-right text-xs mt-1 mr-1" style={{ color: "var(--text-secondary)" }}>
