@@ -835,6 +835,24 @@ export default function ChatPage() {
           ...prev,
           { id: `ai-${Date.now()}`, session_id: requestSessionId!, role: "assistant", content: full },
         ]);
+      } else if (!gotFinal && !full) {
+        // 도구만 실행되고 텍스트 없이 스트림 종료 — DB에서 응답 복구 시도
+        setStreamBuf("");
+        setToolStatus("⏳ 응답 확인 중...");
+        for (let retry = 0; retry < 3; retry++) {
+          await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
+          try {
+            const msgs = await chatApi<ChatMessage[]>(
+              `/chat/messages?session_id=${requestSessionId}&limit=5&offset=0`
+            );
+            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
+            if (aiMsg) {
+              setMessages((prev) => [...prev, aiMsg]);
+              break;
+            }
+          } catch { /* retry */ }
+        }
+        setToolStatus(null);
       }
     } catch (e: unknown) {
       const err = e as Error;
