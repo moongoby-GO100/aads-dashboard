@@ -345,6 +345,48 @@ function InlineMd({ text }: { text: string }) {
   );
 }
 
+function CopyableCodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code.trimEnd()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <div style={{ position: "relative", margin: "8px 0" }}>
+      <button
+        onClick={handleCopy}
+        style={{
+          position: "absolute", top: 6, right: 6, padding: "2px 8px",
+          fontSize: "11px", borderRadius: "4px", cursor: "pointer",
+          border: "1px solid var(--ct-border)", fontFamily: "sans-serif",
+          background: copied ? "#22c55e" : "var(--ct-card)",
+          color: copied ? "#fff" : "var(--ct-text2)",
+          transition: "all 0.2s",
+        }}
+      >
+        {copied ? "복사됨" : "복사"}
+      </button>
+      <pre
+        style={{
+          background: "var(--ct-code)", padding: "12px", borderRadius: "8px",
+          overflowX: "auto", fontSize: "12px", fontFamily: "monospace",
+          whiteSpace: "pre-wrap", wordBreak: "break-word",
+          border: "1px solid var(--ct-border)",
+        }}
+      >
+        {lang && (
+          <div style={{ color: "var(--ct-text2)", fontSize: "10px", marginBottom: "6px", fontFamily: "sans-serif" }}>
+            {lang}
+          </div>
+        )}
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 function MarkdownBlock({ text }: { text: string }) {
   const parts = text.split(/(```[\s\S]*?```)/g);
   return (
@@ -354,37 +396,7 @@ function MarkdownBlock({ text }: { text: string }) {
           const firstNl = part.indexOf("\n");
           const lang = firstNl > 3 ? part.slice(3, firstNl).trim() : "";
           const code = firstNl >= 0 ? part.slice(firstNl + 1).replace(/```$/, "") : part.slice(3).replace(/```$/, "");
-          return (
-            <pre
-              key={i}
-              style={{
-                background: "var(--ct-code)",
-                padding: "12px",
-                borderRadius: "8px",
-                overflowX: "auto",
-                fontSize: "12px",
-                margin: "8px 0",
-                fontFamily: "monospace",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                border: "1px solid var(--ct-border)",
-              }}
-            >
-              {lang && (
-                <div
-                  style={{
-                    color: "var(--ct-text2)",
-                    fontSize: "10px",
-                    marginBottom: "6px",
-                    fontFamily: "sans-serif",
-                  }}
-                >
-                  {lang}
-                </div>
-              )}
-              <code>{code}</code>
-            </pre>
-          );
+          return <CopyableCodeBlock key={i} lang={lang} code={code} />;
         }
         return <InlineMd key={i} text={part} />;
       })}
@@ -588,16 +600,35 @@ export default function ChatPage() {
         const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0`);
         if (!latest || latest.length === 0) return;
         setMessages((prev) => {
+          // ID 기반 dedup
           const existingIds = new Set(prev.map((m) => m.id));
-          const newMsgs = latest.filter((m) => !existingIds.has(m.id));
-          if (newMsgs.length === 0) return prev;
-          // 기존 목록에 새 메시지 추가 (시간순)
+          // content hash 기반 dedup (ai-* 임시 ID vs DB UUID 충돌 방지)
+          const existingHashes = new Set(
+            prev.map((m) => `${m.role}:${(m.content || "").slice(0, 200)}`)
+          );
+          const newMsgs = latest.filter(
+            (m) => !existingIds.has(m.id) && !existingHashes.has(`${m.role}:${(m.content || "").slice(0, 200)}`)
+          );
+          if (newMsgs.length === 0) {
+            // 임시 ID → DB ID 교체 (ai-*, tmp-* 등)
+            let replaced = false;
+            const updated = prev.map((m) => {
+              if (m.id.startsWith("ai-") || m.id.startsWith("tmp-")) {
+                const match = latest.find(
+                  (l) => l.role === m.role && (l.content || "").slice(0, 200) === (m.content || "").slice(0, 200)
+                );
+                if (match) { replaced = true; return match; }
+              }
+              return m;
+            });
+            return replaced ? updated : prev;
+          }
           return [...prev, ...newMsgs].sort(
             (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
           );
         });
       } catch { /* 폴링 실패 무시 */ }
-    }, 8000); // 8초마다 체크
+    }, 8000);
     return () => clearInterval(iv);
   }, [activeSession?.id, streaming]);
 
@@ -794,6 +825,12 @@ export default function ChatPage() {
             resetSseTimeout();
             if (ev.type === "heartbeat") {
               continue; // keep-alive, no UI action needed
+            } else if (ev.type === "stream_reset") {
+              // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
+              full = "";
+              setStreamBuf("");
+              setToolStatus("🔄 응답 재검증 중...");
+              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
               setStreamBuf(full);
