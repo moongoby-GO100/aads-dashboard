@@ -32,9 +32,14 @@ interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   model_used?: string;
+  intent?: string;
   input_tokens?: number;
   output_tokens?: number;
   cost_usd?: number;
+  // REST API 필드명 호환 (서버는 tokens_in/tokens_out/cost 반환)
+  tokens_in?: number;
+  tokens_out?: number;
+  cost?: string | number;
   created_at?: string;
 }
 interface Artifact {
@@ -2057,6 +2062,24 @@ export default function ChatPage() {
               )}
 
               <div style={{ maxWidth: "80%" }}>
+                {/* 출처 배지: Pipeline C / Agent / System */}
+                {msg.role === "assistant" && (() => {
+                  const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
+                    pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+                    agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
+                    system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
+                  };
+                  const badge = msg.intent ? badgeMap[msg.intent] : null;
+                  return badge ? (
+                    <div style={{ marginBottom: "4px", marginLeft: "4px" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: "4px",
+                        padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
+                        background: badge.bg, color: badge.color, border: `1px solid ${badge.color}33`,
+                      }}>{badge.icon} {badge.label}</span>
+                    </div>
+                  ) : null;
+                })()}
                 {/* 인라인 편집 모드 (방식A) */}
                 {msg.role === "user" && editingMsgId === msg.id ? (
                   <div style={{
@@ -2115,9 +2138,13 @@ export default function ChatPage() {
                           whiteSpace: "pre-wrap",
                         }
                       : {
-                          background: "var(--ct-ai)",
+                          background: msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                            ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
+                            : "var(--ct-ai)",
                           color: "var(--ct-text)",
-                          border: "1px solid var(--ct-border)",
+                          border: msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                            ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
+                            : "1px solid var(--ct-border)",
                           borderBottomLeftRadius: "4px",
                         }),
                   }}
@@ -2146,9 +2173,9 @@ export default function ChatPage() {
                     }}
                   >
                     {msg.model_used && <span>[{msg.model_used}</span>}
-                    {msg.input_tokens ? ` · ${msg.input_tokens.toLocaleString()}in` : ""}
-                    {msg.output_tokens ? ` · ${msg.output_tokens.toLocaleString()}out` : ""}
-                    {msg.cost_usd ? ` · $${Number(msg.cost_usd).toFixed(4)}` : ""}
+                    {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
+                    {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
+                    {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
                     {msg.model_used && <span>]</span>}
                     {msg.created_at && (
                       <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
