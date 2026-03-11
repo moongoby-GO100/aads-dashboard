@@ -427,6 +427,12 @@ export default function ChatPage() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
 
+  // ── 프로젝트 추가 모달 ──
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [newProjectCode, setNewProjectCode] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectIcon, setNewProjectIcon] = useState("📁");
+
   // ── Proactive Briefing ──
   const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean } | null>(null);
   const briefingShownRef = useRef<Set<string>>(new Set());
@@ -578,6 +584,28 @@ export default function ChatPage() {
       console.error(e);
       return null;
     }
+  }
+
+  async function addProject() {
+    const code = newProjectCode.trim().toUpperCase();
+    const name = newProjectName.trim();
+    if (!code || !name) return;
+    try {
+      const ws = await chatApi<Workspace>("/chat/workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `[${code}] ${name}`,
+          icon: newProjectIcon || "📁",
+          color: "#6366F1",
+        }),
+      });
+      setWorkspaces((prev) => [...prev, ws]);
+      setActiveWs(ws.id);
+      setShowAddProject(false);
+      setNewProjectCode("");
+      setNewProjectName("");
+      setNewProjectIcon("📁");
+    } catch (e) { console.error("Failed to add project:", e); }
   }
 
   async function deleteSession(id: string) {
@@ -1053,6 +1081,129 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* ── 프로젝트 추가 모달 ── */}
+      {showAddProject && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 3000,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setShowAddProject(false)}
+        >
+          <div
+            style={{
+              background: "var(--ct-card)", borderRadius: "16px",
+              padding: "24px", width: "360px", maxWidth: "90vw",
+              border: "1px solid var(--ct-border)",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", color: "var(--ct-text)" }}>
+              새 프로젝트 추가
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  프로젝트 코드 (영문)
+                </label>
+                <input
+                  autoFocus
+                  value={newProjectCode}
+                  onChange={(e) => setNewProjectCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                  placeholder="예: MYAPP"
+                  maxLength={10}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "14px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box", fontWeight: 700,
+                    letterSpacing: "1px",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  프로젝트 이름
+                </label>
+                <input
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="예: 내 프로젝트"
+                  maxLength={50}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "14px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
+                  onKeyDown={(e) => { if (e.key === "Enter") addProject(); }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  아이콘 (이모지)
+                </label>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {["📁", "💻", "🚀", "📊", "🎯", "🔧", "📱", "🌐", "🤖", "💰"].map((icon) => (
+                    <button
+                      key={icon}
+                      onClick={() => setNewProjectIcon(icon)}
+                      style={{
+                        padding: "6px 10px", fontSize: "16px",
+                        background: newProjectIcon === icon ? "var(--ct-accent)" : "var(--ct-hover)",
+                        border: newProjectIcon === icon ? "2px solid var(--ct-accent)" : "1px solid var(--ct-border)",
+                        borderRadius: "8px", cursor: "pointer",
+                      }}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {newProjectCode && (
+                <div style={{ fontSize: "12px", color: "var(--ct-text2)", padding: "4px 0" }}>
+                  미리보기: <strong style={{ color: "var(--ct-text)" }}>[{newProjectCode}] {newProjectName || "..."}</strong>
+                  <br />
+                  세션명 예시: <strong style={{ color: "var(--ct-accent)" }}>{newProjectCode}-001</strong>, {newProjectCode}-002, ...
+                </div>
+              )}
+              <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                <button
+                  onClick={() => setShowAddProject(false)}
+                  style={{
+                    flex: 1, padding: "8px", fontSize: "13px",
+                    background: "var(--ct-hover)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={addProject}
+                  disabled={!newProjectCode || !newProjectName.trim()}
+                  style={{
+                    flex: 1, padding: "8px", fontSize: "13px", fontWeight: 600,
+                    background: newProjectCode && newProjectName.trim() ? "var(--ct-accent)" : "var(--ct-hover)",
+                    color: "#fff", border: "none", borderRadius: "8px",
+                    cursor: newProjectCode && newProjectName.trim() ? "pointer" : "not-allowed",
+                    opacity: newProjectCode && newProjectName.trim() ? 1 : 0.5,
+                  }}
+                >
+                  추가
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Hidden file input ── */}
       <input
         ref={fileInputRef}
@@ -1335,6 +1486,31 @@ export default function ChatPage() {
                   워크스페이스 로딩 중...
                 </div>
               )}
+            </div>
+
+            {/* 프로젝트 추가 버튼 */}
+            <div style={{ padding: "4px 12px" }}>
+              <button
+                onClick={() => setShowAddProject(true)}
+                style={{
+                  width: "100%",
+                  padding: "6px",
+                  background: "none",
+                  border: "1px dashed var(--ct-border)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  color: "var(--ct-text2)",
+                  fontSize: "11px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--ct-accent)"; e.currentTarget.style.color = "var(--ct-accent)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--ct-border)"; e.currentTarget.style.color = "var(--ct-text2)"; }}
+              >
+                + 프로젝트 추가
+              </button>
             </div>
 
             {/* Sidebar Footer */}
