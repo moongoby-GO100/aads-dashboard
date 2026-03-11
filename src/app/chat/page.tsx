@@ -641,7 +641,7 @@ export default function ChatPage() {
   }
 
   // ── Send message (SSE streaming) ──
-  async function sendMessage(queuedContent?: string) {
+  async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
     const content = queuedContent || input.trim();
     if (!content) return;
     sessionSwitchRef.current = false;
@@ -709,13 +709,28 @@ export default function ChatPage() {
 
       if (!res.ok) {
         const statusCode = res.status;
+        // 502/503: 서버 재시작 — 자동 재시도 (최대 2회, 5초 간격)
+        if ((statusCode === 502 || statusCode === 503) && !retryCount) {
+          // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
+          setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+          setStreaming(false);
+          setStreamBuf("");
+          setToolStatus("🔄 서버 재시작 감지 — 5초 후 자동 재전송...");
+          await new Promise((r) => setTimeout(r, 5000));
+          setToolStatus(null);
+          return sendMessage(content, undefined, (retryCount || 0) + 1);
+        }
         const _errMap: Record<number, string> = {
-          502: "서버가 재시작 중입니다. 잠시 후 다시 시도해주세요.",
-          503: "서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.",
-          504: "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.",
-          429: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+          502: "서버가 재시작 중입니다.",
+          503: "서버가 일시적으로 과부하 상태입니다.",
+          504: "응답 시간이 초과되었습니다.",
+          429: "요청이 너무 많습니다.",
         };
-        throw new Error(_errMap[statusCode] || `서버 오류 (${statusCode})`);
+        // 실패 시 사용자 메시지를 입력창에 복원
+        setInput(content);
+        // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
       }
 
       const reader = res.body?.getReader();
