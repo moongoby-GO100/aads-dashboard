@@ -154,6 +154,7 @@ export const chatApi = {
     content: string,
     modelOverride?: string,
     signal?: AbortSignal,
+    attachments?: Array<{ name: string; path: string }>,
   ): Promise<ReadableStreamDefaultReader<Uint8Array>> => {
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
@@ -166,7 +167,7 @@ export const chatApi = {
         session_id: sessionId,
         content,
         model_override: modelOverride || null,
-        attachments: [],
+        attachments: attachments || [],
       }),
     });
     if (!res.ok || !res.body) throw new Error(`Stream error ${res.status}`);

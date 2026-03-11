@@ -16,7 +16,7 @@ import { ChatModelSelector, DEFAULT_CHAT_MODEL, CHAT_MODEL_OPTIONS } from "./Mod
 import ActionChips, { WELCOME_CHIPS, getDynamicChips } from "./ActionChips";
 
 interface ChatInputProps {
-  onSend: (message: string, modelId: string) => void;
+  onSend: (message: string, modelId: string, files?: File[]) => void;
   isStreaming: boolean;
   lastAssistantMessage?: string;
   hasMessages?: boolean;
@@ -62,7 +62,7 @@ export default function ChatInput({
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
-    onSend(trimmed, model);
+    onSend(trimmed, model, attachedFiles.length > 0 ? attachedFiles : undefined);
     setText("");
     setAttachedFiles([]);
     if (textareaRef.current) {

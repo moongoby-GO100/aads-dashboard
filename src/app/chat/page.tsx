@@ -437,6 +437,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingAttachments = useRef<Array<{ name: string; path: string }>>([]);
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
@@ -658,10 +659,13 @@ export default function ChatPage() {
 
     let full = "";
     try {
+      const attachments = pendingAttachments.current.length > 0
+        ? [...pendingAttachments.current] : [];
+      pendingAttachments.current = [];
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHdrs() },
-        body: JSON.stringify({ session_id: sessionId, content, model_override: model }),
+        body: JSON.stringify({ session_id: sessionId, content, model_override: model, attachments }),
         signal: abortCtrl.current.signal,
       });
 
@@ -863,19 +867,28 @@ export default function ChatPage() {
   // ── File upload ──
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || !activeWs) return;
-    const file = files[0];
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const token = getToken();
-      await fetch(`${BASE_URL}/chat/drive/upload?workspace_id=${activeWs}`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      setInput((prev) => `${prev}\n[파일첨부: ${file.name}]`.trim());
-      textareaRef.current?.focus();
-    } catch (e) { console.error("Upload failed", e); }
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const token = getToken();
+        const res = await fetch(`${BASE_URL}/chat/drive/upload?workspace_id=${activeWs}`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          pendingAttachments.current.push({
+            name: data.filename || file.name,
+            path: data.file_path || "",
+          });
+          setInput((prev) => `${prev}\n[첨부: ${file.name}]`.trim());
+        }
+      } catch (e) { console.error("Upload failed", e); }
+    }
+    textareaRef.current?.focus();
   }
 
   function onDrop(e: React.DragEvent) {
