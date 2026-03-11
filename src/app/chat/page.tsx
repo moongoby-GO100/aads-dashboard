@@ -474,29 +474,34 @@ export default function ChatPage() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // ── Load workspaces ──
+  // ── Load workspaces (restore last active from localStorage) ──
   useEffect(() => {
     chatApi<Workspace[]>("/chat/workspaces")
       .then((ws) => {
         setWorkspaces(ws);
-        if (ws.length > 0) setActiveWs(ws[0].id);
+        if (ws.length === 0) return;
+        const savedWs = localStorage.getItem("aads-chat-activeWs");
+        const match = savedWs && ws.find((w) => w.id === savedWs);
+        setActiveWs(match ? match.id : ws[0].id);
       })
       .catch(console.error);
   }, []);
 
-  // ── Load sessions on workspace change ──
+  // ── Load sessions on workspace change (restore last session from localStorage) ──
   useEffect(() => {
     if (!activeWs) return;
+    localStorage.setItem("aads-chat-activeWs", activeWs);
     // 워크스페이스 전환 시 이전 세션 해제 — 프로젝트 컨텍스트 분리
     setActiveSession(null);
     setMessages([]);
     chatApi<ChatSession[]>(`/chat/sessions?workspace_id=${activeWs}`)
       .then((loaded) => {
         setSessions(loaded);
-        // 해당 워크스페이스의 첫 세션 자동 선택
-        if (loaded.length > 0) {
-          setActiveSession(loaded[0]);
-        }
+        if (loaded.length === 0) return;
+        // localStorage에 저장된 세션 복원 시도
+        const savedSid = localStorage.getItem(`aads-chat-activeSession-${activeWs}`);
+        const match = savedSid && loaded.find((s) => s.id === savedSid);
+        setActiveSession(match || loaded[0]);
       })
       .catch(console.error);
   }, [activeWs]);
@@ -504,6 +509,10 @@ export default function ChatPage() {
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
     activeSessionRef.current = activeSession?.id || null;
+    // 세션 ID를 localStorage에 저장 (페이지 새로고침 시 복원용)
+    if (activeSession?.id && activeWs) {
+      localStorage.setItem(`aads-chat-activeSession-${activeWs}`, activeSession.id);
+    }
     // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
       sessionSwitchRef.current = true;
