@@ -707,7 +707,16 @@ export default function ChatPage() {
         signal: abortCtrl.current.signal,
       });
 
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      if (!res.ok) {
+        const statusCode = res.status;
+        const _errMap: Record<number, string> = {
+          502: "서버가 재시작 중입니다. 잠시 후 다시 시도해주세요.",
+          503: "서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.",
+          504: "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.",
+          429: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+        };
+        throw new Error(_errMap[statusCode] || `서버 오류 (${statusCode})`);
+      }
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
