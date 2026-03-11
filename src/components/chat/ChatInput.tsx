@@ -22,6 +22,8 @@ interface ChatInputProps {
   hasMessages?: boolean;
   selectedModel?: string;
   onModelChange?: (modelId: string) => void;
+  editMode?: string | null;
+  onCancelEdit?: () => void;
 }
 
 export default function ChatInput({
@@ -31,6 +33,8 @@ export default function ChatInput({
   hasMessages = false,
   selectedModel,
   onModelChange,
+  editMode,
+  onCancelEdit,
 }: ChatInputProps) {
   const [text, setText] = useState("");
   const [model, setModel] = useState(selectedModel || DEFAULT_CHAT_MODEL);
@@ -163,6 +167,18 @@ export default function ChatInput({
           style={{ background: "rgba(109,40,217,0.15)", border: "2px dashed var(--accent)", color: "var(--accent)" }}
         >
           📎 파일을 여기에 놓으세요
+        </div>
+      )}
+
+      {/* 재지시 모드 배너 */}
+      {editMode && (
+        <div className="flex items-center justify-between mb-2 px-3 py-2 rounded-lg text-xs"
+          style={{ background: "rgba(109,40,217,0.15)", border: "1px solid rgba(109,40,217,0.3)", color: "#a78bfa" }}>
+          <span>🔄 이전 메시지를 수정하여 재전송합니다</span>
+          <button onClick={onCancelEdit} className="ml-2 px-2 py-0.5 rounded"
+            style={{ background: "rgba(255,255,255,0.1)" }}>
+            취소
+          </button>
         </div>
       )}
 

@@ -263,6 +263,8 @@ interface ChatBubbleProps {
   onCopy?: (content: string) => void;
   onCreateDirective?: (content: string) => void;
   onViewInPanel?: (content: string) => void;
+  onEditResend?: (message: ChatMessage, newContent: string) => void;
+  onCopyToInput?: (content: string) => void;
 }
 
 export default function ChatBubble({
@@ -273,9 +275,13 @@ export default function ChatBubble({
   onCopy,
   onCreateDirective,
   onViewInPanel,
+  onEditResend,
+  onCopyToInput,
 }: ChatBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState("");
 
   const isUser = message.role === "user";
   const rawContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
@@ -297,20 +303,92 @@ export default function ChatBubble({
   const userAttachments = (message.attachments || []) as unknown[];
 
   if (isUser) {
+    const startEdit = () => {
+      setEditText(message.content.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim());
+      setIsEditing(true);
+    };
+    const cancelEdit = () => { setIsEditing(false); setEditText(""); };
+    const submitEdit = () => {
+      const trimmed = editText.trim();
+      if (trimmed && trimmed !== userDisplayContent) {
+        onEditResend?.(message, trimmed);
+      }
+      setIsEditing(false);
+      setEditText("");
+    };
+    const handleEditKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(); }
+      if (e.key === "Escape") cancelEdit();
+    };
+
     return (
-      <div className="flex justify-end mb-3">
+      <div className="flex justify-end mb-3 group">
         <div className="max-w-[75%]">
           {userAttachments.length > 0 && (
             <FileAttachmentCards attachments={userAttachments} />
           )}
-          <div
-            className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
-            style={{ background: "var(--accent)", color: "#fff", borderBottomRightRadius: "6px" }}
-          >
-            {userDisplayContent}
-          </div>
+
+          {isEditing ? (
+            /* 인라인 편집 모드 */
+            <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid var(--accent)", borderBottomRightRadius: "6px" }}>
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleEditKey}
+                className="w-full p-3 text-sm resize-none outline-none"
+                style={{ background: "rgba(109,40,217,0.15)", color: "#fff", minHeight: "60px", maxHeight: "200px", border: "none" }}
+                rows={Math.min(editText.split("\n").length + 1, 8)}
+              />
+              <div className="flex justify-end gap-2 px-3 py-2" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <button onClick={cancelEdit} className="text-xs px-3 py-1 rounded-lg"
+                  style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}>
+                  취소
+                </button>
+                <button onClick={submitEdit} className="text-xs px-3 py-1 rounded-lg font-medium"
+                  style={{ background: "var(--accent)", color: "#fff" }}>
+                  수정 후 재전송
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* 일반 표시 모드 */
+            <div
+              className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed relative"
+              style={{ background: "var(--accent)", color: "#fff", borderBottomRightRadius: "6px" }}
+              onMouseEnter={() => setShowActions(true)}
+              onMouseLeave={() => setShowActions(false)}
+            >
+              {userDisplayContent}
+
+              {/* 호버 액션 버튼 */}
+              {showActions && !isStreaming && (
+                <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex gap-1"
+                  style={{ opacity: 1, transition: "opacity 0.15s" }}>
+                  {onEditResend && (
+                    <button onClick={startEdit}
+                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      title="수정 후 재전송">
+                      ✏️
+                    </button>
+                  )}
+                  {onCopyToInput && (
+                    <button onClick={() => onCopyToInput(userDisplayContent)}
+                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      title="입력창에 복사 (재지시)">
+                      🔄
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {message.created_at && (
             <p className="text-right text-xs mt-1 mr-1" style={{ color: "var(--text-secondary)" }}>
+              {message.edited_at && <span style={{ color: "#a78bfa" }}>(수정됨) </span>}
               {new Date(message.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
             </p>
           )}

@@ -420,6 +420,10 @@ export default function ChatPage() {
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [uploading, setUploading] = useState(false);
+  // 메시지 수정/재지시
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editMode, setEditMode] = useState<string | null>(null);  // 재지시 배너용
 
   // ── UI state ──
   const [search, setSearch] = useState("");
@@ -665,6 +669,7 @@ export default function ChatPage() {
     }
 
     setInput("");
+    setEditMode(null);
     setStreaming(true);
     setStreamBuf("");
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
@@ -943,6 +948,49 @@ export default function ChatPage() {
     setStreaming(false);
     setStreamBuf("");
     setToolStatus(null);
+  }
+
+  // ── 방식A: 수정 후 재전송 ──
+  async function handleEditResend(msgId: string, newContent: string) {
+    if (!activeSession) return;
+    try {
+      // 1) 기존 메시지 + AI 응답 삭제
+      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
+        method: "DELETE",
+        headers: { ...authHdrs() },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const deletedCount = data.deleted_count || 0;
+        // 프론트에서도 해당 메시지 + 바로 다음 AI 메시지 제거
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === msgId);
+          if (idx < 0) return prev;
+          // 해당 메시지 + 바로 다음 assistant 메시지 제거
+          const next = prev[idx + 1];
+          const idsToRemove = new Set([msgId]);
+          if (next && next.role === "assistant") idsToRemove.add(next.id);
+          return prev.filter((m) => !idsToRemove.has(m.id));
+        });
+      }
+      // 2) 수정된 내용으로 재전송
+      await sendMessage(newContent);
+    } catch (e) {
+      console.error("Edit resend failed:", e);
+    }
+    setEditingMsgId(null);
+    setEditText("");
+  }
+
+  // ── 방식B: 입력창에 복사 (재지시) ──
+  function handleCopyToInput(content: string) {
+    setInput(content);
+    setEditMode("resend");
+    // 포커스
+    setTimeout(() => {
+      const ta = document.querySelector("textarea");
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 100);
   }
 
   // ── File upload ──
@@ -1946,13 +1994,88 @@ export default function ChatPage() {
           {messages.map((msg, idx) => (
             <div
               key={msg.id || idx}
-              className="ct-msg-enter"
+              className="ct-msg-enter group"
               style={{
                 display: "flex",
                 justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
               }}
             >
+              {/* 방식A/B 버튼: 사용자 메시지 왼쪽에 호버 시 표시 */}
+              {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && (
+                <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => {
+                      setEditingMsgId(msg.id);
+                      setEditText(msg.content);
+                    }}
+                    title="수정 후 재전송"
+                    style={{
+                      width: "28px", height: "28px", borderRadius: "50%",
+                      background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
+                      color: "var(--ct-text2)", fontSize: "13px",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >✏️</button>
+                  <button
+                    onClick={() => handleCopyToInput(msg.content)}
+                    title="입력창에 복사 (재지시)"
+                    style={{
+                      width: "28px", height: "28px", borderRadius: "50%",
+                      background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
+                      color: "var(--ct-text2)", fontSize: "13px",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >🔄</button>
+                </div>
+              )}
+
               <div style={{ maxWidth: "80%" }}>
+                {/* 인라인 편집 모드 (방식A) */}
+                {msg.role === "user" && editingMsgId === msg.id ? (
+                  <div style={{
+                    borderRadius: "18px", overflow: "hidden",
+                    border: "2px solid var(--ct-accent)", borderBottomRightRadius: "4px",
+                  }}>
+                    <textarea
+                      autoFocus
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditResend(msg.id, editText.trim()); }
+                        if (e.key === "Escape") { setEditingMsgId(null); setEditText(""); }
+                      }}
+                      style={{
+                        width: "100%", padding: "12px 16px", fontSize: "14px",
+                        background: "rgba(109,40,217,0.15)", color: "#fff",
+                        border: "none", outline: "none", resize: "none",
+                        minHeight: "60px", maxHeight: "200px", lineHeight: "1.6",
+                      }}
+                      rows={Math.min(editText.split("\n").length + 1, 8)}
+                    />
+                    <div style={{
+                      display: "flex", justifyContent: "flex-end", gap: "8px",
+                      padding: "8px 12px", background: "rgba(0,0,0,0.3)",
+                    }}>
+                      <button
+                        onClick={() => { setEditingMsgId(null); setEditText(""); }}
+                        style={{
+                          fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
+                          background: "var(--ct-ai)", color: "var(--ct-text2)", border: "none", cursor: "pointer",
+                        }}
+                      >취소</button>
+                      <button
+                        onClick={() => handleEditResend(msg.id, editText.trim())}
+                        style={{
+                          fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
+                          background: "var(--ct-accent)", color: "#fff", border: "none", cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                      >수정 후 재전송</button>
+                    </div>
+                  </div>
+                ) : (
                 <div
                   style={{
                     padding: "12px 16px",
@@ -1980,6 +2103,14 @@ export default function ChatPage() {
                     <MarkdownBlock text={msg.content} />
                   )}
                 </div>
+                )}
+                {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
+                {msg.role === "user" && msg.created_at && (
+                  <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
+                    {(msg as any).edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
+                    {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                )}
                 {msg.role === "assistant" && (
                   <div
                     style={{
@@ -2192,6 +2323,23 @@ export default function ChatPage() {
             ))}
           </div>
 
+          {/* 재지시 모드 배너 (방식B) */}
+          {editMode && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: "8px", padding: "6px 12px", borderRadius: "8px",
+              background: "rgba(109,40,217,0.15)", border: "1px solid rgba(109,40,217,0.3)",
+              fontSize: "12px", color: "var(--ct-accent)",
+            }}>
+              <span>🔄 이전 메시지를 수정하여 재전송합니다</span>
+              <button onClick={() => { setEditMode(null); setInput(""); }}
+                style={{ marginLeft: "8px", padding: "2px 8px", borderRadius: "6px",
+                  background: "rgba(255,255,255,0.1)", border: "none", color: "var(--ct-text2)",
+                  cursor: "pointer", fontSize: "11px" }}>
+                취소
+              </button>
+            </div>
+          )}
           {/* Textarea + send button */}
           <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
             <textarea

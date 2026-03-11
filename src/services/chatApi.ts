@@ -63,6 +63,7 @@ export interface ChatMessage {
   attachments: unknown[];
   sources: SourceItem[] | null;
   thought_summary: string | null;
+  edited_at: string | null;
   created_at: string;
 }
 
@@ -140,6 +141,13 @@ export const chatApi = {
     req<ChatMessage[]>(`/chat/messages?session_id=${sessionId}&limit=${limit}&offset=${offset}`),
   toggleBookmark: (messageId: string) =>
     req<ChatMessage>(`/chat/messages/${messageId}/bookmark`, { method: "PUT" }),
+  updateMessage: (messageId: string, content: string) =>
+    req<ChatMessage>(`/chat/messages/${messageId}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+  deleteMessageAndResponse: (messageId: string) =>
+    req<{ status: string; deleted_count: number }>(`/chat/messages/${messageId}`, { method: "DELETE" }),
   searchMessages: (q: string, workspaceId?: string, limit = 20) =>
     req<{ messages: ChatMessage[]; total: number }>(
       `/chat/messages/search?q=${encodeURIComponent(q)}${workspaceId ? `&workspace_id=${workspaceId}` : ""}&limit=${limit}`
