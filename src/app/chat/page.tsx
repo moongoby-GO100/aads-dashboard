@@ -419,6 +419,7 @@ export default function ChatPage() {
   const [toolTurnInfo, setToolTurnInfo] = useState<string | null>(null);
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
+  const [uploading, setUploading] = useState(false);
 
   // ── UI state ──
   const [search, setSearch] = useState("");
@@ -867,26 +868,33 @@ export default function ChatPage() {
   // ── File upload ──
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || !activeWs) return;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const formData = new FormData();
-      formData.append("file", file);
-      try {
-        const token = getToken();
-        const res = await fetch(`${BASE_URL}/chat/drive/upload?workspace_id=${activeWs}`, {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          pendingAttachments.current.push({
-            name: data.filename || file.name,
-            path: data.file_path || "",
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+          const token = getToken();
+          const res = await fetch(`${BASE_URL}/chat/drive/upload?workspace_id=${activeWs}`, {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
           });
-          setInput((prev) => `${prev}\n[첨부: ${file.name}]`.trim());
-        }
-      } catch (e) { console.error("Upload failed", e); }
+          if (res.ok) {
+            const data = await res.json();
+            pendingAttachments.current.push({
+              name: data.filename || file.name,
+              path: data.file_path || "",
+            });
+            setInput((prev) => `${prev}\n[첨부: ${file.name}]`.trim());
+          } else {
+            console.error("Upload failed:", res.status, await res.text());
+          }
+        } catch (e) { console.error("Upload failed", e); }
+      }
+    } finally {
+      setUploading(false);
     }
     textareaRef.current?.focus();
   }
@@ -904,7 +912,7 @@ export default function ChatPage() {
 
   // ── Keyboard ──
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!uploading) sendMessage(); return; }
     // Ctrl+Z: 마지막 큐 메시지 취소
     if (e.ctrlKey && e.key === "z" && queueCount > 0) {
       e.preventDefault();
@@ -1871,6 +1879,35 @@ export default function ChatPage() {
             </div>
           )}
 
+          {/* 업로드 진행 표시 */}
+          {uploading && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              marginBottom: "6px", padding: "4px 10px",
+              fontSize: "12px", color: "var(--ct-accent)",
+              background: "var(--ct-hover)", borderRadius: "8px",
+            }}>
+              ⏳ 파일 업로드 중...
+            </div>
+          )}
+
+          {/* 첨부된 파일 목록 */}
+          {pendingAttachments.current.length > 0 && !uploading && (
+            <div style={{
+              display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px",
+            }}>
+              {pendingAttachments.current.map((att, i) => (
+                <span key={i} style={{
+                  fontSize: "11px", padding: "2px 8px",
+                  background: "var(--ct-hover)", borderRadius: "8px",
+                  color: "var(--ct-text2)", border: "1px solid var(--ct-border)",
+                }}>
+                  📎 {att.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Action chips */}
           <div
             style={{
@@ -1975,18 +2012,18 @@ export default function ChatPage() {
               )}
               {/* 전송/대기추가/중단 버튼 */}
               <button
-                onClick={streaming && !input.trim() ? stopStreaming : () => sendMessage()}
-                disabled={!streaming && !input.trim()}
+                onClick={streaming && !input.trim() ? stopStreaming : () => { if (!uploading) sendMessage(); }}
+                disabled={uploading || (!streaming && !input.trim())}
                 style={{
                   padding: "10px 20px", fontSize: "14px", fontWeight: 600,
-                  background: streaming ? (input.trim() ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
+                  background: uploading ? "#9ca3af" : streaming ? (input.trim() ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                   color: "#fff", border: "none", borderRadius: "12px",
-                  cursor: streaming || input.trim() ? "pointer" : "not-allowed",
-                  opacity: !streaming && !input.trim() ? 0.5 : 1,
+                  cursor: uploading ? "wait" : (streaming || input.trim() ? "pointer" : "not-allowed"),
+                  opacity: uploading || (!streaming && !input.trim()) ? 0.5 : 1,
                   transition: "background 0.2s", whiteSpace: "nowrap",
                 }}
               >
-                {streaming ? (input.trim() ? "대기 전송" : "⏹ 중단") : "전송"}
+                {uploading ? "업로드중..." : streaming ? (input.trim() ? "대기 전송" : "⏹ 중단") : "전송"}
               </button>
             </div>
           </div>
