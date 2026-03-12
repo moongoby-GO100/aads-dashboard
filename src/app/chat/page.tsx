@@ -561,11 +561,20 @@ export default function ChatPage() {
     // 백그라운드 생성 중이던 세션이면 빠른 폴링 시작
     const isPending = pendingResponseSessions.current.has(activeSession.id);
     setWaitingBgResponse(isPending);
+    // 세션 진입 시 서버에서 스트리밍 상태 확인 (세션 이동 후 돌아왔을 때 '생성 중' 감지)
+    chatApi<{ is_streaming: boolean; tool_count?: number; last_tool?: string }>(
+      `/chat/sessions/${activeSession.id}/streaming-status`
+    ).then((status) => {
+      if (status.is_streaming) {
+        setWaitingBgResponse(true);
+        pendingResponseSessions.current.add(activeSession.id);
+      }
+    }).catch(() => {});
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
       .then((msgs) => {
         setMessages(msgs);
         // 마지막 메시지가 AI 응답이면 이미 완료된 것 → pending 해제
-        if (isPending && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+        if (isPending && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant" && msgs[msgs.length - 1].intent !== "streaming_placeholder") {
           pendingResponseSessions.current.delete(activeSession.id);
           setWaitingBgResponse(false);
         }
@@ -2240,13 +2249,18 @@ export default function ChatPage() {
                             whiteSpace: "pre-wrap",
                           }
                       : {
-                          background: msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                          background: msg.intent === "streaming_placeholder"
+                            ? "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.15))"
+                            : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
                             ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
                             : "var(--ct-ai)",
                           color: "var(--ct-text)",
-                          border: msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                          border: msg.intent === "streaming_placeholder"
+                            ? "1px solid #3b82f666"
+                            : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
                             ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                             : "1px solid var(--ct-border)",
+                          ...(msg.intent === "streaming_placeholder" ? { animation: "pulse 2s ease-in-out infinite" } : {}),
                           borderBottomLeftRadius: "4px",
                         }),
                   }}
