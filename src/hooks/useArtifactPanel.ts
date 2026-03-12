@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 export type PanelState = "full" | "mini" | "hidden";
-export type TabId = "report" | "code" | "chart" | "dashboard" | "drive";
+export type TabId = "report" | "code" | "chart" | "dashboard" | "drive" | "tasks";
 
 export interface ArtifactContent {
   type: "report" | "code" | "chart";

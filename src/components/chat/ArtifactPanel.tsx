@@ -14,6 +14,7 @@ import ArtifactCode, {} from "./ArtifactCode";
 import ArtifactChart from "./ArtifactChart";
 import ArtifactDashboard from "./ArtifactDashboard";
 import AIDrive from "./AIDrive";
+import ArtifactTaskMonitor from "./ArtifactTaskMonitor";
 
 const PANEL_WIDTH: Record<PanelState, string> = {
   full:   "420px",
@@ -26,6 +27,7 @@ interface Props {
   activeTab: TabId;
   artifact: ArtifactContent | null;
   workspaceId?: string;
+  sessionId?: string;
   onTabSelect: (tab: TabId) => void;
   onToggleCollapse: () => void;
   onCyclePanel: () => void;
@@ -36,6 +38,7 @@ export default function ArtifactPanel({
   activeTab,
   artifact,
   workspaceId,
+  sessionId,
   onTabSelect,
   onToggleCollapse,
 }: Props) {
@@ -157,6 +160,7 @@ export default function ArtifactPanel({
             {activeTab === "chart" && <ArtifactChart />}
             {activeTab === "dashboard" && <ArtifactDashboard />}
             {activeTab === "drive" && <AIDrive workspaceId={workspaceId} />}
+            {activeTab === "tasks" && <ArtifactTaskMonitor sessionId={sessionId} />}
           </div>
         </div>
       )}

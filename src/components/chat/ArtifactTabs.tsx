@@ -11,6 +11,7 @@ export const TABS: Array<{ id: TabId; icon: string; label: string }> = [
   { id: "chart",     icon: "📊", label: "차트" },
   { id: "dashboard", icon: "🖥️", label: "대시보드" },
   { id: "drive",     icon: "📁", label: "AI Drive" },
+  { id: "tasks",     icon: "⚡", label: "작업" },
 ];
 
 interface Props {

@@ -5,6 +5,7 @@ import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
+import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 
 // ══════════════════════════════════════════════════════════════════
 // Types
@@ -53,7 +54,7 @@ interface Artifact {
 }
 type Theme = "dark" | "light";
 type ArtifactMode = "full" | "mini" | "hidden";
-type ArtifactTab = "report" | "code" | "chart" | "dashboard";
+type ArtifactTab = "report" | "code" | "chart" | "dashboard" | "tasks";
 type ScreenSize = "desktop" | "tablet" | "mobile";
 
 // ══════════════════════════════════════════════════════════════════
@@ -2658,6 +2659,7 @@ export default function ChatPage() {
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                     { key: "dashboard" as ArtifactTab, icon: "🖥️", label: "대시보드" },
+                    { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
                 ).map((tab) => (
                   <button
@@ -2684,8 +2686,10 @@ export default function ChatPage() {
               </div>
 
               {/* Artifact content */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
-                {activeArtifact ? (
+              <div style={{ flex: 1, overflowY: "auto", padding: artifactTab === "tasks" ? "0" : "16px" }}>
+                {artifactTab === "tasks" ? (
+                  <ArtifactTaskMonitor sessionId={activeSession?.id} />
+                ) : activeArtifact ? (
                   <div>
                     <div
                       style={{
@@ -2802,6 +2806,7 @@ export default function ChatPage() {
                   { key: "code" as ArtifactTab, icon: "💻" },
                   { key: "chart" as ArtifactTab, icon: "📊" },
                   { key: "dashboard" as ArtifactTab, icon: "🖥️" },
+                  { key: "tasks" as ArtifactTab, icon: "⚡" },
                 ]
               ).map((tab) => (
                 <button
