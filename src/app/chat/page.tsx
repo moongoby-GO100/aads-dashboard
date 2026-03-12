@@ -471,6 +471,9 @@ export default function ChatPage() {
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
+  // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
+  const pendingResponseSessions = useRef<Set<string>>(new Set());
+  const [waitingBgResponse, setWaitingBgResponse] = useState(false);
 
   // ── Init theme ──
   useEffect(() => {
@@ -538,6 +541,9 @@ export default function ChatPage() {
     }
     // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
+      // 생성 중이던 세션 기록 — 돌아올 때 빠른 폴링으로 응답 감지
+      const prevSid = activeSessionRef.current;
+      if (prevSid) pendingResponseSessions.current.add(prevSid);
       sessionSwitchRef.current = true;
       abortCtrl.current?.abort();
       setStreaming(false);
@@ -551,9 +557,19 @@ export default function ChatPage() {
     // 세션 전환 시 edit state 초기화
     setEditingMsgId(null);
     setEditText("");
-    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); return; }
+    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); setWaitingBgResponse(false); return; }
+    // 백그라운드 생성 중이던 세션이면 빠른 폴링 시작
+    const isPending = pendingResponseSessions.current.has(activeSession.id);
+    setWaitingBgResponse(isPending);
     chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
-      .then(setMessages)
+      .then((msgs) => {
+        setMessages(msgs);
+        // 마지막 메시지가 AI 응답이면 이미 완료된 것 → pending 해제
+        if (isPending && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+          pendingResponseSessions.current.delete(activeSession.id);
+          setWaitingBgResponse(false);
+        }
+      })
       .catch(console.error);
     chatApi<Artifact[]>(`/chat/artifacts?session_id=${activeSession.id}`)
       .then(setArtifacts)
@@ -595,15 +611,25 @@ export default function ChatPage() {
   }, [messages, streamBuf]);
 
   // ── 백그라운드 메시지 폴링 (Pipeline C / Agent 완료 메시지 실시간 수신) ──
+  // waitingBgResponse=true 이면 2초 빠른 폴링, 아니면 8초 일반 폴링
   useEffect(() => {
     if (!activeSession?.id) return;
     const sid = activeSession.id;
+    const pollInterval = waitingBgResponse ? 2000 : 8000;
     const iv = setInterval(async () => {
-      // 스트리밍 중이면 폴링 생략
-      if (streaming) return;
+      // 스트리밍 중이면 폴링 생략 (단, 백그라운드 응답 대기 중이면 폴링 유지)
+      if (streaming && !waitingBgResponse) return;
       try {
         const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
         if (!latest || latest.length === 0) return;
+        // 백그라운드 응답 대기 중 → AI 응답 도착 감지
+        if (waitingBgResponse) {
+          const hasNewAi = latest.some((m) => m.role === "assistant");
+          if (hasNewAi) {
+            pendingResponseSessions.current.delete(sid);
+            setWaitingBgResponse(false);
+          }
+        }
         setMessages((prev) => {
           // ID 기반 dedup
           const existingIds = new Set(prev.map((m) => m.id));
@@ -633,9 +659,9 @@ export default function ChatPage() {
           );
         });
       } catch { /* 폴링 실패 무시 */ }
-    }, 8000);
+    }, pollInterval);
     return () => clearInterval(iv);
-  }, [activeSession?.id, streaming]);
+  }, [activeSession?.id, streaming, waitingBgResponse]);
 
   // ── Toggle theme ──
   function toggleTheme() {
@@ -2267,6 +2293,40 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
+
+          {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) */}
+          {waitingBgResponse && !streaming && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "18px",
+                  borderBottomLeftRadius: "4px",
+                  fontSize: "14px",
+                  maxWidth: "80%",
+                  background: "var(--ct-ai)",
+                  color: "var(--ct-text)",
+                  border: "1px solid var(--ct-border)",
+                  display: "flex", alignItems: "center", gap: "8px",
+                }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: "7px", height: "7px", borderRadius: "50%",
+                      background: "var(--ct-accent)", display: "inline-block",
+                      animation: "ct-bounce 1.2s infinite",
+                      animationDelay: `${i * 0.2}s`,
+                    }}
+                  />
+                ))}
+                <span style={{ fontSize: "13px", color: "var(--ct-muted)" }}>
+                  백그라운드에서 응답 생성 중...
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Streaming indicator */}
           {streaming && (
