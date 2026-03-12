@@ -601,7 +601,7 @@ export default function ChatPage() {
       // 스트리밍 중이면 폴링 생략
       if (streaming) return;
       try {
-        const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0`);
+        const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
         if (!latest || latest.length === 0) return;
         setMessages((prev) => {
           // ID 기반 dedup
