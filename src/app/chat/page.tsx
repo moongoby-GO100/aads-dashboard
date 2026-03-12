@@ -2088,7 +2088,16 @@ export default function ChatPage() {
               }}
             >
               {/* 방식A/B 버튼: 사용자 메시지 왼쪽에 호버 시 표시 */}
-              {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && (
+              {msg.role === "user" && msg.intent === "system_trigger" && (
+                <div style={{ marginBottom: "4px", marginRight: "4px", textAlign: "right" }}>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: "4px",
+                    padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
+                    background: "rgba(59,130,246,0.15)", color: "#3b82f6", border: "1px solid #3b82f633",
+                  }}>⚙️ 시스템 트리거</span>
+                </div>
+              )}
+              {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
                 <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => {
@@ -2188,12 +2197,21 @@ export default function ChatPage() {
                     fontSize: "14px",
                     lineHeight: "1.6",
                     ...(msg.role === "user"
-                      ? {
-                          background: "var(--ct-user)",
-                          color: "#fff",
-                          borderBottomRightRadius: "4px",
-                          whiteSpace: "pre-wrap",
-                        }
+                      ? msg.intent === "system_trigger"
+                        ? {
+                            background: "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.1))",
+                            color: "var(--ct-text)",
+                            border: "1px solid #3b82f644",
+                            borderBottomRightRadius: "4px",
+                            whiteSpace: "pre-wrap" as const,
+                            fontStyle: "italic" as const,
+                          }
+                        : {
+                            background: "var(--ct-user)",
+                            color: "#fff",
+                            borderBottomRightRadius: "4px",
+                            whiteSpace: "pre-wrap",
+                          }
                       : {
                           background: msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
                             ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
@@ -2207,7 +2225,7 @@ export default function ChatPage() {
                   }}
                 >
                   {msg.role === "user" ? (
-                    msg.content
+                    msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : msg.content
                   ) : (
                     <MarkdownBlock text={msg.content} />
                   )}
