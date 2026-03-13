@@ -95,24 +95,17 @@ export default function ChatInput({
     setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i));
   };
 
-  // Ctrl+V 클립보드 이미지 붙여넣기
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      const imageFiles: File[] = [];
-      for (const item of items) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
-      if (imageFiles.length > 0) handleFileChange(imageFiles);
-    };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Ctrl+V 클립보드 파일 붙여넣기 (이미지 포함 모든 파일)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const files = items
+      .filter(item => item.kind === "file")
+      .map(item => item.getAsFile())
+      .filter(Boolean) as File[];
+    if (files.length > 0) {
+      setAttachedFiles(prev => [...prev, ...files]);
+    }
+  };
 
   // 드래그&드롭
   const handleDragOver = (e: React.DragEvent) => {
@@ -218,6 +211,14 @@ export default function ChatInput({
                     className="w-16 h-16 object-cover rounded-lg"
                     style={{ border: "1px solid var(--border)" }}
                   />
+                ) : f.type.startsWith("video/") ? (
+                  <div
+                    className="flex flex-col items-center justify-center gap-1 text-xs rounded-lg"
+                    style={{ width: "64px", height: "64px", background: "var(--bg-hover)", border: "1px solid var(--border)" }}
+                  >
+                    <span style={{ fontSize: "24px" }}>🎬</span>
+                    <span className="truncate w-full text-center px-1" style={{ fontSize: "9px" }}>{f.name}</span>
+                  </div>
                 ) : (
                   <div
                     className="flex items-center gap-1 text-xs px-2 py-1 rounded-full"
@@ -290,6 +291,7 @@ export default function ChatInput({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={isStreaming}
           rows={1}
           placeholder={isStreaming ? "AI 응답 생성 중..." : "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"}

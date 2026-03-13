@@ -488,20 +488,20 @@ export default function ChatPage() {
     }
   }, []);
 
-  // ── Ctrl+V 클립보드 이미지 붙여넣기 ──
+  // ── Ctrl+V 클립보드 파일 붙여넣기 (이미지 포함 모든 파일) ──
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-      const imageFiles: File[] = [];
+      const pastedFiles: File[] = [];
       for (const item of items) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
+        if (item.kind === "file") {
           const file = item.getAsFile();
-          if (file) imageFiles.push(file);
+          if (file) pastedFiles.push(file);
         }
       }
-      if (imageFiles.length > 0) {
-        handleFiles(imageFiles);
+      if (pastedFiles.length > 0) {
+        handleFiles(pastedFiles);
       }
     };
     window.addEventListener("paste", handlePaste);
@@ -1146,11 +1146,14 @@ export default function ChatPage() {
       "xml", "ini", "conf", "cfg", "rs", "go", "java", "c", "cpp",
       "h", "rb", "php", "swift", "kt",
     ]);
+    const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv", "flv", "m4v"]);
+    const VIDEO_MAX_BYTES = 20 * 1024 * 1024; // 20MB
 
     for (const file of fileArray) {
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const isImage = IMAGE_EXTS.has(ext) || file.type.startsWith("image/");
       const isText = TEXT_EXTS.has(ext) || file.type.startsWith("text/");
+      const isVideo = VIDEO_EXTS.has(ext) || file.type.startsWith("video/");
 
       if (isImage) {
         // 이미지: base64 인코딩 → Claude Vision API로 전달
@@ -1186,6 +1189,23 @@ export default function ChatPage() {
           reader.readAsDataURL(file);
         });
         pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+      } else if (isVideo) {
+        // 동영상: 20MB 이하 → base64 인코딩 → Gemini API 분석
+        if (file.size > VIDEO_MAX_BYTES) {
+          pendingAttachments.current.push({ type: "file", name: file.name, error: `동영상 파일이 너무 큽니다 (최대 20MB). 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB` });
+        } else {
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result.split(",")[1] ?? "");
+            };
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(file);
+          });
+          const mediaType = file.type || `video/${ext}`;
+          pendingAttachments.current.push({ type: "video", base64, name: file.name, media_type: mediaType });
+        }
       } else {
         // 기타 파일: 이름만 기록
         pendingAttachments.current.push({ type: "file", name: file.name });
@@ -1194,24 +1214,7 @@ export default function ChatPage() {
     textareaRef.current?.focus();
   }
 
-  // Ctrl+V 클립보드 이미지 붙여넣기
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      const imageFiles: File[] = [];
-      for (const item of items) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) imageFiles.push(file);
-        }
-      }
-      if (imageFiles.length > 0) handleFiles(imageFiles);
-    };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Ctrl+V 클립보드 붙여넣기 — 위(activeWs 의존) 핸들러가 모든 파일 타입 처리
 
   // 개별 첨부 파일 제거
   function removePendingFile(idx: number) {
