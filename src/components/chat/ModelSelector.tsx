@@ -49,7 +49,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "gemma-3-27b-it",            name: "Gemma 3 27B",               provider: "google",   cost: "무료" },
 ];
 
-export const DEFAULT_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_MODEL = "claude-opus-4-6";
 
 // ─── Chat-First 5 모델 (AADS-172-B) ─────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
 ];
 
-export const DEFAULT_CHAT_MODEL = "auto";
+export const DEFAULT_CHAT_MODEL = "claude-opus-4-6";
 
 interface ChatModelSelectorProps {
   value: string;
