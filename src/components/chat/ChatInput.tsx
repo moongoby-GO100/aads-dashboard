@@ -86,7 +86,7 @@ export default function ChatInput({
   };
 
   // 파일 첨부
-  const handleFileChange = (files: FileList | null) => {
+  const handleFileChange = (files: FileList | File[] | null) => {
     if (!files) return;
     setAttachedFiles((prev) => [...prev, ...Array.from(files)]);
   };
@@ -94,6 +94,25 @@ export default function ChatInput({
   const removeFile = (i: number) => {
     setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i));
   };
+
+  // Ctrl+V 클립보드 이미지 붙여넣기
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) handleFileChange(imageFiles);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 드래그&드롭
   const handleDragOver = (e: React.DragEvent) => {
@@ -188,23 +207,36 @@ export default function ChatInput({
       {/* 첨부 파일 미리보기 */}
       {attachedFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
-          {attachedFiles.map((f, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded-full"
-              style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}
-            >
-              <span>📄</span>
-              <span className="max-w-[120px] truncate">{f.name}</span>
-              <button
-                onClick={() => removeFile(i)}
-                className="ml-1 hover:text-red-400 transition-colors"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+          {attachedFiles.map((f, i) => {
+            const isImg = f.type.startsWith("image/");
+            return (
+              <div key={i} className="relative inline-flex items-center">
+                {isImg ? (
+                  <img
+                    src={URL.createObjectURL(f)}
+                    alt={f.name}
+                    className="w-16 h-16 object-cover rounded-lg"
+                    style={{ border: "1px solid var(--border)" }}
+                  />
+                ) : (
+                  <div
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-full"
+                    style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", maxWidth: "140px" }}
+                  >
+                    <span>📄</span>
+                    <span className="truncate">{f.name}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => removeFile(i)}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white"
+                  style={{ background: "#ef4444", fontSize: "10px", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -247,6 +279,7 @@ export default function ChatInput({
           ref={fileInputRef}
           type="file"
           multiple
+          accept="*/*"
           className="hidden"
           onChange={(e) => handleFileChange(e.target.files)}
         />

@@ -43,6 +43,8 @@ interface ChatMessage {
   tokens_out?: number;
   cost?: string | number;
   created_at?: string;
+  // 로컬 첨부 이미지 미리보기 URL (DB 저장 안 됨, 렌더링 전용)
+  attachmentPreviews?: string[];
 }
 interface Artifact {
   id: string;
@@ -467,7 +469,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingAttachments = useRef<Array<{ name: string; path: string }>>([]);
+  const pendingAttachments = useRef<Array<Record<string, any>>>([]);
+  const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
@@ -484,6 +487,27 @@ export default function ChatPage() {
       setTheme("light");
     }
   }, []);
+
+  // ── Ctrl+V 클립보드 이미지 붙여넣기 ──
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        handleFiles(imageFiles);
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWs]);
 
   // ── Responsive ──
   useEffect(() => {
@@ -747,12 +771,13 @@ export default function ChatPage() {
   // ── Send message (SSE streaming) ──
   async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
     const content = queuedContent || input.trim();
-    if (!content) return;
+    const hasFiles = pendingAttachments.current.length > 0;
+    if (!content && !hasFiles) return;
     sessionSwitchRef.current = false;
 
     // streaming 중이면 큐에 추가
     if (streaming && !queuedContent) {
-      msgQueueRef.current.push(content);
+      msgQueueRef.current.push(content || "(파일 첨부)");
       setQueueCount(msgQueueRef.current.length);
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -774,6 +799,12 @@ export default function ChatPage() {
     setStreamBuf("");
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
+    // 첨부 이미지 미리보기 URL 캡처 (메시지 버블 표시용) 후 state 초기화
+    const _previewUrls = pendingPreviewFiles
+      .filter((f) => f.type.startsWith("image/"))
+      .map((f) => URL.createObjectURL(f));
+    setPendingPreviewFiles([]);
+
     // 이 요청의 세션 ID 캡처 — 세션 전환 감지용
     const requestSessionId = sessionId;
     const isStale = () => activeSessionRef.current !== requestSessionId;
@@ -784,6 +815,7 @@ export default function ChatPage() {
       role: "user",
       content,
       created_at: new Date().toISOString(),
+      attachmentPreviews: _previewUrls.length > 0 ? _previewUrls : undefined,
     };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -1100,38 +1132,91 @@ export default function ChatPage() {
     }, 100);
   }
 
-  // ── File upload ──
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0 || !activeWs) return;
-    setUploading(true);
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const formData = new FormData();
-        formData.append("file", file);
-        try {
-          const token = getToken();
-          const res = await fetch(`${BASE_URL}/chat/drive/upload?workspace_id=${activeWs}`, {
-            method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            pendingAttachments.current.push({
-              name: data.filename || file.name,
-              path: data.file_path || "",
-            });
-            setInput((prev) => `${prev}\n[첨부: ${file.name}]`.trim());
-          } else {
-            console.error("Upload failed:", res.status, await res.text());
-          }
-        } catch (e) { console.error("Upload failed", e); }
+  // ── File attachment (클라이언트 측 inline 변환 — 서버 업로드 불필요) ──
+  async function handleFiles(files: FileList | File[] | null) {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    // 로컬 미리보기용 File 객체 즉시 저장
+    setPendingPreviewFiles((prev) => [...prev, ...fileArray]);
+
+    const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+    const TEXT_EXTS = new Set([
+      "txt", "md", "csv", "json", "py", "js", "ts", "tsx", "jsx",
+      "html", "css", "yaml", "yml", "toml", "sh", "sql", "log",
+      "xml", "ini", "conf", "cfg", "rs", "go", "java", "c", "cpp",
+      "h", "rb", "php", "swift", "kt",
+    ]);
+
+    for (const file of fileArray) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const isImage = IMAGE_EXTS.has(ext) || file.type.startsWith("image/");
+      const isText = TEXT_EXTS.has(ext) || file.type.startsWith("text/");
+
+      if (isImage) {
+        // 이미지: base64 인코딩 → Claude Vision API로 전달
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1] ?? ""); // "data:image/...;base64,XXX" → "XXX"
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const mediaType = file.type || `image/${ext === "jpg" ? "jpeg" : ext}`;
+        pendingAttachments.current.push({ type: "image", base64, media_type: mediaType, name: file.name });
+      } else if (isText) {
+        // 텍스트 파일: 최대 500KB 내용 읽기 → ephemeral document layer로 전달
+        const content = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve("");
+          reader.readAsText(file.slice(0, 500_000));
+        });
+        pendingAttachments.current.push({ type: "text", name: file.name, content });
+      } else if (ext === "pdf" || file.type === "application/pdf") {
+        // PDF: base64 인코딩 → 서버에서 텍스트 추출
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1] ?? "");
+          };
+          reader.onerror = () => resolve("");
+          reader.readAsDataURL(file);
+        });
+        pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+      } else {
+        // 기타 파일: 이름만 기록
+        pendingAttachments.current.push({ type: "file", name: file.name });
       }
-    } finally {
-      setUploading(false);
     }
     textareaRef.current?.focus();
+  }
+
+  // Ctrl+V 클립보드 이미지 붙여넣기
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) handleFiles(imageFiles);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 개별 첨부 파일 제거
+  function removePendingFile(idx: number) {
+    setPendingPreviewFiles((prev) => prev.filter((_, i) => i !== idx));
+    pendingAttachments.current = pendingAttachments.current.filter((_, i) => i !== idx);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -1415,8 +1500,10 @@ export default function ChatPage() {
       <input
         ref={fileInputRef}
         type="file"
+        multiple
+        accept="*/*"
         style={{ display: "none" }}
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
       />
 
       {/* ── Mobile/Tablet overlay backdrop ── */}
@@ -2265,6 +2352,21 @@ export default function ChatPage() {
                         }),
                   }}
                 >
+                  {msg.role === "user" && msg.attachmentPreviews && msg.attachmentPreviews.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                      {msg.attachmentPreviews.map((url, pi) => (
+                        <img
+                          key={pi}
+                          src={url}
+                          alt="첨부 이미지"
+                          style={{
+                            maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                            borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {msg.role === "user" ? (
                     msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : msg.content
                   ) : (
@@ -2466,20 +2568,48 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* 첨부된 파일 목록 */}
-          {pendingAttachments.current.length > 0 && !uploading && (
+          {/* 첨부된 파일 목록 (이미지 썸네일 + 텍스트 파일 배지) */}
+          {pendingPreviewFiles.length > 0 && (
             <div style={{
-              display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px",
+              display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "6px",
             }}>
-              {pendingAttachments.current.map((att, i) => (
-                <span key={i} style={{
-                  fontSize: "11px", padding: "2px 8px",
-                  background: "var(--ct-hover)", borderRadius: "8px",
-                  color: "var(--ct-text2)", border: "1px solid var(--ct-border)",
-                }}>
-                  📎 {att.name}
-                </span>
-              ))}
+              {pendingPreviewFiles.map((file, i) => {
+                const isImg = file.type.startsWith("image/");
+                return (
+                  <div key={i} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                    {isImg ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        style={{
+                          width: "64px", height: "64px", objectFit: "cover",
+                          borderRadius: "8px", border: "1px solid var(--ct-border)",
+                        }}
+                      />
+                    ) : (
+                      <span style={{
+                        fontSize: "11px", padding: "4px 10px",
+                        background: "var(--ct-hover)", borderRadius: "8px",
+                        color: "var(--ct-text2)", border: "1px solid var(--ct-border)",
+                        maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        📄 {file.name}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => removePendingFile(i)}
+                      style={{
+                        position: "absolute", top: "-4px", right: "-4px",
+                        width: "16px", height: "16px", borderRadius: "50%",
+                        background: "#ef4444", color: "#fff", border: "none",
+                        cursor: "pointer", fontSize: "10px", lineHeight: "16px",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        padding: 0,
+                      }}
+                    >✕</button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -2604,14 +2734,14 @@ export default function ChatPage() {
               )}
               {/* 전송/대기추가/중단 버튼 */}
               <button
-                onClick={streaming && !input.trim() ? stopStreaming : () => { if (!uploading) sendMessage(); }}
-                disabled={uploading || (!streaming && !input.trim())}
+                onClick={streaming && !input.trim() && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
+                disabled={uploading || (!streaming && !input.trim() && pendingPreviewFiles.length === 0)}
                 style={{
                   padding: "10px 20px", fontSize: "14px", fontWeight: 600,
-                  background: uploading ? "#9ca3af" : streaming ? (input.trim() ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
+                  background: uploading ? "#9ca3af" : streaming ? (input.trim() || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                   color: "#fff", border: "none", borderRadius: "12px",
-                  cursor: uploading ? "wait" : (streaming || input.trim() ? "pointer" : "not-allowed"),
-                  opacity: uploading || (!streaming && !input.trim()) ? 0.5 : 1,
+                  cursor: uploading ? "wait" : (streaming || input.trim() || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
+                  opacity: uploading || (!streaming && !input.trim() && pendingPreviewFiles.length === 0) ? 0.5 : 1,
                   transition: "background 0.2s", whiteSpace: "nowrap",
                 }}
               >
