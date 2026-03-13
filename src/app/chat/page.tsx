@@ -677,7 +677,7 @@ export default function ChatPage() {
             // 임시 ID → DB ID 교체 (ai-*, tmp-* 등)
             let replaced = false;
             const updated = prev.map((m) => {
-              if (m.id.startsWith("ai-") || m.id.startsWith("tmp-")) {
+              if (m.id.startsWith("ai-") || m.id.startsWith("tmp-") || m.id.startsWith("stopped-")) {
                 const match = latest.find(
                   (l) => l.role === m.role && (l.content || "").slice(0, 200) === (m.content || "").slice(0, 200)
                 );
@@ -1103,9 +1103,20 @@ export default function ChatPage() {
 
   function stopStreaming() {
     abortCtrl.current?.abort();
+    // 스트리밍 중 버퍼에 내용이 있으면 메시지 목록에 확정 (새 버블 방지)
+    const buf = streamBuf;
     setStreaming(false);
     setStreamBuf("");
     setToolStatus(null);
+    if (buf && activeSession) {
+      const stoppedMsg: ChatMessage = {
+        id: `stopped-${Date.now()}`,
+        session_id: activeSession.id,
+        role: "assistant",
+        content: buf + "\n\n_(응답 중지됨)_",
+      };
+      setMessages((prev) => [...prev, stoppedMsg]);
+    }
     // 백엔드 프로세스도 강제 중단
     if (activeSession) {
       fetch(`${BASE_URL}/chat/sessions/${activeSession}/stop`, {
