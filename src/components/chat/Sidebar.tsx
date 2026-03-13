@@ -225,10 +225,14 @@ export default function ChatSidebar({
                   }}
                 >
                   <div
-                    className="text-xs font-medium truncate"
+                    className="flex items-center gap-1 text-xs font-medium truncate"
                     style={{ color: "var(--ct-text)" }}
                   >
-                    {s.title || "새 대화"}
+                    <span className="truncate">{s.title || "새 대화"}</span>
+                    {/* 세션 상태 뱃지: 🟢 정상 / 🟡 30턴+ / 🔴 50턴+ */}
+                    <span className="flex-shrink-0" style={{ fontSize: "8px" }}>
+                      {s.message_count >= 50 ? "🔴" : s.message_count >= 30 ? "🟡" : "🟢"}
+                    </span>
                   </div>
                   <div
                     className="flex items-center gap-2 mt-0.5"

@@ -834,13 +834,32 @@ export default function ChatPage() {
 
     let full = "";
     try {
+      const rawFiles = [...pendingPreviewFiles];
       const attachments = pendingAttachments.current.length > 0
         ? [...pendingAttachments.current] : [];
       pendingAttachments.current = [];
+
+      let fetchBody: BodyInit;
+      let fetchHeaders: Record<string, string> = { ...authHdrs() };
+
+      if (rawFiles.length > 0) {
+        // FormData: raw File 객체로 전송 (서버에서 base64 변환)
+        const formData = new FormData();
+        formData.append("session_id", sessionId!);
+        formData.append("content", content);
+        if (model) formData.append("model_override", model);
+        rawFiles.forEach((f) => formData.append("files", f));
+        fetchBody = formData;
+        // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
+      } else {
+        fetchHeaders["Content-Type"] = "application/json";
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: model, attachments });
+      }
+
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHdrs() },
-        body: JSON.stringify({ session_id: sessionId, content, model_override: model, attachments }),
+        headers: fetchHeaders,
+        body: fetchBody,
         signal: abortCtrl.current.signal,
       });
 

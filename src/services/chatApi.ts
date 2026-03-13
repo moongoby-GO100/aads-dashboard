@@ -198,4 +198,46 @@ export const chatApi = {
   // Research
   getResearchHistory: (limit = 20) =>
     req<unknown[]>(`/chat/research/history?limit=${limit}`),
+
+  // Memory Context Viewer
+  getMemoryContext: (sessionId: string) =>
+    req<MemoryContextResponse>(`/chat/sessions/${sessionId}/memory-context`),
 };
+
+// ─── Memory Context Types ────────────────────────────────────────────────────
+
+export interface MemoryItem {
+  key: string;
+  category: string;
+  summary: string;
+}
+
+export interface MemoryContextResponse {
+  session_id: string;
+  workspace_name: string;
+  injected_memory: {
+    system_prompt_tokens: number;
+    long_term_memory: { count: number; tokens: number; items: MemoryItem[] };
+    observations: { count: number; tokens: number; items: MemoryItem[] };
+    session_summaries: { count: number; tokens: number; items: Array<{ date: string; summary: string }> };
+    total_memory_count: number;
+    total_injected_tokens: number;
+  };
+  context_status: {
+    session_title: string;
+    message_count: number;
+    total_cost: number;
+    tokens_in: number;
+    tokens_out: number;
+    compaction_needed: boolean;
+    compaction_threshold: number;
+    has_summary: boolean;
+    health: "normal" | "warning" | "danger";
+  };
+  session_history: Array<{
+    date: string;
+    title: string;
+    summary: string;
+    message_count: number;
+  }>;
+}
