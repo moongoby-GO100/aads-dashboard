@@ -2475,7 +2475,7 @@ export default function ChatPage() {
 
           {/* Streaming indicator */}
           {streaming && (
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 style={{
                   padding: "12px 16px",
@@ -2526,29 +2526,21 @@ export default function ChatPage() {
                   </div>
                 ) : null}
               </div>
-              {/* ⏹ 스트리밍 중지 버튼 — 응답 버블 바로 아래 */}
+              {/* ⏹ 중지 버튼 */}
               <button
                 onClick={stopStreaming}
                 style={{
-                  marginTop: "8px",
-                  padding: "6px 16px",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  background: "#ef4444",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "20px",
+                  marginTop: "4px", marginLeft: "4px",
+                  padding: "2px 8px",
+                  fontSize: "11px", fontWeight: 500,
+                  background: "transparent", color: "var(--ct-muted)",
+                  border: "1px solid var(--ct-border)", borderRadius: "10px",
                   cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "opacity 0.2s",
+                  transition: "all 0.15s",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-              >
-                <span style={{ fontSize: "14px" }}>■</span> 응답 중지
-              </button>
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
+              >■ 중지</button>
             </div>
           )}
 
