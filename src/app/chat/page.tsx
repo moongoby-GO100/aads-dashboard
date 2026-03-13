@@ -2526,6 +2526,29 @@ export default function ChatPage() {
                   </div>
                 ) : null}
               </div>
+              {/* ⏹ 스트리밍 중지 버튼 — 응답 버블 바로 아래 */}
+              <button
+                onClick={stopStreaming}
+                style={{
+                  marginTop: "8px",
+                  padding: "6px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  background: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "20px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "opacity 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                <span style={{ fontSize: "14px" }}>■</span> 응답 중지
+              </button>
             </div>
           )}
 
