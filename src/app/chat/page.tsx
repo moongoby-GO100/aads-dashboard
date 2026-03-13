@@ -1106,6 +1106,13 @@ export default function ChatPage() {
     setStreaming(false);
     setStreamBuf("");
     setToolStatus(null);
+    // 백엔드 프로세스도 강제 중단
+    if (activeSession) {
+      fetch(`${BASE_URL}/chat/sessions/${activeSession}/stop`, {
+        method: "POST",
+        headers: { ...authHdrs() },
+      }).catch(() => {});
+    }
   }
 
   // ── 방식A: 수정 후 재전송 ──
