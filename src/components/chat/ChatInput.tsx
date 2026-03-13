@@ -65,14 +65,14 @@ export default function ChatInput({
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || isStreaming) return;
+    if ((!trimmed && attachedFiles.length === 0) || isStreaming) return;
     onSend(trimmed, model, attachedFiles.length > 0 ? attachedFiles : undefined);
     setText("");
     setAttachedFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [text, model, isStreaming, onSend]);
+  }, [text, model, isStreaming, attachedFiles, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -166,7 +166,7 @@ export default function ChatInput({
     : WELCOME_CHIPS;
 
   const isDeepResearch = CHAT_MODEL_OPTIONS.find((m) => m.id === model)?.isDeepResearch;
-  const canSend = text.trim().length > 0 && !isStreaming;
+  const canSend = (text.trim().length > 0 || attachedFiles.length > 0) && !isStreaming;
 
   return (
     <div
