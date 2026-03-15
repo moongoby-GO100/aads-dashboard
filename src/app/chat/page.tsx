@@ -3093,19 +3093,27 @@ export default function ChatPage() {
                   {sessionCost}{sessionTurns ? ` | ${sessionTurns}턴` : ""}
                 </span>
               )}
-              {/* 큐 취소 버튼 (큐에 메시지가 있을 때만) */}
+              {/* 큐 상태 표시 + 취소 버튼 (큐에 메시지가 있을 때) */}
               {queueCount > 0 && (
-                <button
-                  onClick={() => { msgQueueRef.current = []; setQueueCount(0); }}
-                  style={{
-                    padding: "10px 12px", fontSize: "12px", fontWeight: 600,
-                    background: "#f59e0b", color: "#fff", border: "none", borderRadius: "12px",
-                    cursor: "pointer", whiteSpace: "nowrap",
-                  }}
-                  title="대기 메시지 전체 취소"
-                >
-                  {queueCount}건 취소
-                </button>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  padding: "4px 10px", fontSize: "12px",
+                  background: "#f59e0b20", border: "1px solid #f59e0b60",
+                  borderRadius: "10px", color: "#f59e0b", whiteSpace: "nowrap",
+                }}>
+                  <span title={msgQueueRef.current.join(" | ")}>
+                    📋 대기 {queueCount}건: {(msgQueueRef.current[0] || "").slice(0, 20)}{(msgQueueRef.current[0] || "").length > 20 ? "..." : ""}
+                  </span>
+                  <button
+                    onClick={() => { msgQueueRef.current = []; setQueueCount(0); setYellowWarning(null); }}
+                    style={{
+                      padding: "2px 8px", fontSize: "11px", fontWeight: 600,
+                      background: "#f59e0b", color: "#fff", border: "none", borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                    title="대기 메시지 전체 취소 (Ctrl+Z)"
+                  >✕ 취소</button>
+                </div>
               )}
               {/* 전송/대기추가/중단 버튼 */}
               <button
