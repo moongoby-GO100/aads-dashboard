@@ -938,6 +938,14 @@ export default function ChatPage() {
       setQueueCount(msgQueueRef.current.length);
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
+      // 대화창에 추가 지시를 user 메시지로 즉시 표시
+      setMessages(prev => [...prev, {
+        id: `interrupt-${Date.now()}`,
+        session_id: activeSession?.id || "",
+        role: "user" as const,
+        content: `💬 **[추가 지시]** ${interruptContent}`,
+        created_at: new Date().toISOString(),
+      }]);
       // 백엔드 인터럽트 큐에 push
       if (activeSession?.id) {
         chatApi(`/chat/sessions/${activeSession.id}/interrupt`, {
@@ -947,7 +955,7 @@ export default function ChatPage() {
       }
       // 추가 지시 접수 안내
       setYellowWarning(`추가 지시 접수됨 (대기 ${msgQueueRef.current.length}건)`);
-      setTimeout(() => setYellowWarning(null), 3000);
+      setTimeout(() => setYellowWarning(null), 5000);
       return;
     }
 
