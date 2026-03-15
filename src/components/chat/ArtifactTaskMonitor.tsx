@@ -33,6 +33,8 @@ const STATUS_COLORS: Record<string, string> = {
   error: "#ef4444",
   failed: "#ef4444",
   queued: "#9ca3af",
+  stall_detected: "#f97316",
+  cancelled: "#6b7280",
 };
 
 const LOG_TYPE_COLORS: Record<string, string> = {
@@ -95,7 +97,7 @@ export default function ArtifactTaskMonitor({ sessionId }: { sessionId?: string 
   // 초기 로드 + 폴링
   useEffect(() => {
     fetchTasks();
-    const interval = setInterval(fetchTasks, 10000);
+    const interval = setInterval(fetchTasks, 3000);
     return () => clearInterval(interval);
   }, [fetchTasks]);
 
@@ -181,7 +183,7 @@ export default function ArtifactTaskMonitor({ sessionId }: { sessionId?: string 
     autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
   };
 
-  const activeTasks = tasks.filter((t) => ["running", "in_progress", "queued", "awaiting_approval"].includes(t.status));
+  const activeTasks = tasks.filter((t) => ["running", "in_progress", "queued", "awaiting_approval", "stall_detected", "error"].includes(t.status));
 
   return (
     <div className="flex flex-col h-full" style={{ color: "var(--ct-text)" }}>
