@@ -655,14 +655,13 @@ export default function ChatPage() {
         // streaming_placeholder: 생성 중이면 보여주고, 완료 후에는 필터
         const processed = msgs.map((m) => {
           if (m.intent === "streaming_placeholder") {
-            // placeholder를 "생성 중" 메시지로 변환하여 표시
-            return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다...", _isPlaceholder: true };
+            return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
           }
           return m;
         });
         setMessages(processed);
         // 마지막 메시지가 AI 응답(비 placeholder)이면 이미 완료된 것 → pending 해제
-        const nonPlaceholder = processed.filter((m: any) => !m._isPlaceholder);
+        const nonPlaceholder = processed.filter((m) => m.intent !== "streaming_placeholder");
         if (isPending && nonPlaceholder.length > 0 && nonPlaceholder[nonPlaceholder.length - 1].role === "assistant") {
           pendingResponseSessions.current.delete(activeSession.id);
           setWaitingBgResponse(false);
@@ -739,13 +738,13 @@ export default function ChatPage() {
             const phMsg = rawLatest.find((m) => m.intent === "streaming_placeholder");
             if (phMsg) {
               setMessages(prev => {
-                const idx = prev.findIndex((m: any) => m._isPlaceholder || m.intent === "streaming_placeholder");
+                const idx = prev.findIndex((m) => m.intent === "streaming_placeholder");
                 if (idx >= 0) {
                   const updated = [...prev];
-                  updated[idx] = { ...phMsg, content: phMsg.content || "⏳ 생성 중...", _isPlaceholder: true };
+                  updated[idx] = { ...phMsg, content: phMsg.content || "⏳ 생성 중..." };
                   return updated;
                 }
-                return [...prev, { ...phMsg, content: phMsg.content || "⏳ 생성 중...", _isPlaceholder: true }];
+                return [...prev, { ...phMsg, content: phMsg.content || "⏳ 생성 중..." }];
               });
               return; // placeholder 업데이트만 하고 아래 dedup 로직 스킵
             }
