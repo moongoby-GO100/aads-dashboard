@@ -1157,15 +1157,22 @@ export default function ChatPage() {
               // 도구 턴 한도 자동 연장 알림
               setToolTurnInfo(ev.content || `도구 턴 ${ev.current_turn}회 → ${ev.extended_to}회 연장`);
             } else if (ev.type === "interrupt_applied") {
-              // CEO 인터럽트 반영 알림 — 채팅창에 시스템 메시지로 표시 (영구)
+              // CEO 인터럽트가 LLM에 반영됨 → 큐에서 해당 지시 제거 (완료 후 중복 전송 방지)
+              if (msgQueueRef.current.length > 0) {
+                msgQueueRef.current.shift();
+                setQueueCount(msgQueueRef.current.length);
+              }
+              // 대화에 반영 내용 표시
               const interruptMsg = ev.content || "추가 지시 반영 중..."
               setMessages(prev => [...prev, {
                 id: `interrupt-notice-${Date.now()}`,
                 session_id: activeSession?.id || "",
                 role: "assistant" as const,
-                content: `⚡ **추가 지시 접수됨**: ${interruptMsg}`,
+                content: `⚡ **추가 지시 반영됨**: ${interruptMsg}`,
                 created_at: new Date().toISOString(),
-              }])
+              }]);
+              setYellowWarning(`✅ 추가 지시 반영됨 (대기 ${msgQueueRef.current.length}건)`);
+              setTimeout(() => setYellowWarning(null), 3000);
             } else if (ev.type === "error") {
               // error를 inner catch 밖으로 전파 (inner catch가 삼키지 않도록)
               sseError = new Error(ev.error || ev.content || "Unknown streaming error");
