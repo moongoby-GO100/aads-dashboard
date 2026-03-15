@@ -357,6 +357,36 @@ function CopyableCodeBlock({ lang, code }: { lang: string; code: string }) {
       setTimeout(() => setCopied(false), 1500);
     });
   };
+
+  // HTML 코드블록 → iframe 미리보기 렌더링
+  if (lang === "html") {
+    return (
+      <div style={{ marginTop: "12px", borderRadius: "12px", overflow: "hidden", border: "1px solid #2d3148" }}>
+        <div style={{ background: "#1e2130", padding: "6px 14px", fontSize: "0.75rem", color: "#a855f7", fontWeight: 600, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>🎨 미리보기</span>
+          <button
+            onClick={handleCopy}
+            style={{
+              padding: "2px 8px", fontSize: "11px", borderRadius: "4px", cursor: "pointer",
+              border: "1px solid #2d3148", fontFamily: "sans-serif",
+              background: copied ? "#22c55e" : "#1e2130",
+              color: copied ? "#fff" : "#a855f7",
+              transition: "all 0.2s",
+            }}
+          >
+            {copied ? "복사됨" : "복사"}
+          </button>
+        </div>
+        <iframe
+          srcDoc={code}
+          style={{ width: "100%", height: "540px", border: "none", background: "#fff" }}
+          sandbox="allow-scripts allow-same-origin"
+          title="HTML Preview"
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: "relative", margin: "8px 0" }}>
       <button
@@ -433,6 +463,7 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
   // AADS-190: 세션 비용/턴 + Yellow 경고 + 도구턴 한도
   const [sessionCost, setSessionCost] = useState<string | null>(null);
   const [sessionTurns, setSessionTurns] = useState<number | null>(null);
@@ -558,6 +589,8 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
+    // 먼저 이전 세션ID 저장 (ref 업데이트 전에 읽어야 함)
+    const prevSid = activeSessionRef.current;
     activeSessionRef.current = activeSession?.id || null;
     // 세션 ID를 localStorage에 저장 (페이지 새로고침 시 복원용)
     if (activeSession?.id && activeWs) {
@@ -566,7 +599,6 @@ export default function ChatPage() {
     // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
       // 생성 중이던 세션 기록 — 돌아올 때 빠른 폴링으로 응답 감지
-      const prevSid = activeSessionRef.current;
       if (prevSid) pendingResponseSessions.current.add(prevSid);
       sessionSwitchRef.current = true;
       abortCtrl.current?.abort();
@@ -581,24 +613,54 @@ export default function ChatPage() {
     // 세션 전환 시 edit state 초기화
     setEditingMsgId(null);
     setEditText("");
-    if (!activeSession) { setMessages([]); setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); setWaitingBgResponse(false); return; }
+    // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
+    setMessages([]);
+    setWaitingBgResponse(false);
+    setStreamBuf("");
+    if (!activeSession) { setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); return; }
     // 백그라운드 생성 중이던 세션이면 빠른 폴링 시작
     const isPending = pendingResponseSessions.current.has(activeSession.id);
-    setWaitingBgResponse(isPending);
+    // FIX: streaming-status API 확인 전까지 false 유지 (엉뚱한 세션에 버블 표시 방지)
+    // isPending이어도 API로 재확인 후 설정
     // 세션 진입 시 서버에서 스트리밍 상태 확인 (세션 이동 후 돌아왔을 때 '생성 중' 감지)
-    chatApi<{ is_streaming: boolean; tool_count?: number; last_tool?: string }>(
+    chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string }>(
       `/chat/sessions/${activeSession.id}/streaming-status`
     ).then((status) => {
       if (status.is_streaming) {
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(activeSession.id);
+        setTimeout(() => {
+          setWaitingBgResponse(false);
+          pendingResponseSessions.current.delete(activeSession.id);
+        }, 30000);
+      } else if (status.just_completed) {
+        // 세션 복귀 시 방금 완료된 응답 감지 → 즉시 메시지 재로드
+        pendingResponseSessions.current.delete(activeSession.id);
+        setWaitingBgResponse(false);
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
+          .then((msgs) => {
+            if (activeSessionRef.current !== activeSession.id) return;
+            setMessages(msgs.filter((m) => m.intent !== "streaming_placeholder"));
+          }).catch(() => {});
       }
     }).catch(() => {});
-    chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
+    const fetchSid = activeSession.id;
+    chatApi<ChatMessage[]>(`/chat/messages?session_id=${fetchSid}&limit=500`)
       .then((msgs) => {
-        setMessages(msgs);
-        // 마지막 메시지가 AI 응답이면 이미 완료된 것 → pending 해제
-        if (isPending && msgs.length > 0 && msgs[msgs.length - 1].role === "assistant" && msgs[msgs.length - 1].intent !== "streaming_placeholder") {
+        // FIX: 응답 도착 시 현재 세션과 다르면 무시 (세션 전환 race condition 방지)
+        if (activeSessionRef.current !== fetchSid) return;
+        // streaming_placeholder: 생성 중이면 보여주고, 완료 후에는 필터
+        const processed = msgs.map((m) => {
+          if (m.intent === "streaming_placeholder") {
+            // placeholder를 "생성 중" 메시지로 변환하여 표시
+            return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다...", _isPlaceholder: true };
+          }
+          return m;
+        });
+        setMessages(processed);
+        // 마지막 메시지가 AI 응답(비 placeholder)이면 이미 완료된 것 → pending 해제
+        const nonPlaceholder = processed.filter((m: any) => !m._isPlaceholder);
+        if (isPending && nonPlaceholder.length > 0 && nonPlaceholder[nonPlaceholder.length - 1].role === "assistant") {
           pendingResponseSessions.current.delete(activeSession.id);
           setWaitingBgResponse(false);
         }
@@ -653,8 +715,13 @@ export default function ChatPage() {
       // 스트리밍 중이면 폴링 생략 (단, 백그라운드 응답 대기 중이면 폴링 유지)
       if (streaming && !waitingBgResponse) return;
       try {
-        const latest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
-        if (!latest || latest.length === 0) return;
+        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
+        if (!rawLatest || rawLatest.length === 0) return;
+        // streaming_placeholder: 대기 중이면 보여주고, 완료되면 필터
+        const latest = waitingBgResponse
+          ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m)
+          : rawLatest.filter((m) => m.intent !== "streaming_placeholder");
+        if (latest.length === 0) return;
         // 백그라운드 응답 대기 중 → AI 응답 도착 감지
         if (waitingBgResponse) {
           const hasNewAi = latest.some((m) => m.role === "assistant");
@@ -775,12 +842,23 @@ export default function ChatPage() {
     if (!content && !hasFiles) return;
     sessionSwitchRef.current = false;
 
-    // streaming 중이면 큐에 추가
+    // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
     if (streaming && !queuedContent) {
-      msgQueueRef.current.push(content || "(파일 첨부)");
+      const interruptContent = content || "(파일 첨부)";
+      msgQueueRef.current.push(interruptContent);
       setQueueCount(msgQueueRef.current.length);
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
+      // 백엔드 인터럽트 큐에 push
+      if (activeSession?.id) {
+        chatApi(`/chat/sessions/${activeSession.id}/interrupt`, {
+          method: "POST",
+          body: JSON.stringify({ content: interruptContent }),
+        }).catch((e: unknown) => console.warn("interrupt push failed:", e));
+      }
+      // 추가 지시 접수 안내
+      setYellowWarning(`추가 지시 접수됨 (대기 ${msgQueueRef.current.length}건)`);
+      setTimeout(() => setYellowWarning(null), 3000);
       return;
     }
 
@@ -797,6 +875,7 @@ export default function ChatPage() {
     setEditMode(null);
     setStreaming(true);
     setStreamBuf("");
+    setToolLogs([]);
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
     // 첨부 이미지 미리보기 URL 캡처 (메시지 버블 표시용) 후 state 초기화
@@ -831,6 +910,11 @@ export default function ChatPage() {
         abortCtrl.current?.abort();
       }, 90000);
     };
+
+    // 절대 타임아웃 5분 — heartbeat와 무관하게 streaming 강제 종료
+    const maxStreamTimeout = setTimeout(() => {
+      abortCtrl.current?.abort();
+    }, 300000);
 
     let full = "";
     try {
@@ -910,13 +994,16 @@ export default function ChatPage() {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
+          let sseError: Error | null = null;
           try {
             const ev = JSON.parse(raw);
-            // Any SSE event (including heartbeat) resets the inactivity timeout
-            resetSseTimeout();
+            // heartbeat skips timeout reset to prevent infinite extension
             if (ev.type === "heartbeat") {
-              continue; // keep-alive, no UI action needed
-            } else if (ev.type === "stream_reset") {
+              continue; // keep-alive only -- do NOT reset inactivity timeout
+            }
+            // Only real data events reset the inactivity timeout
+            resetSseTimeout();
+            if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
               full = "";
               setStreamBuf("");
@@ -933,29 +1020,65 @@ export default function ChatPage() {
             } else if (ev.type === "done") {
               gotFinal = true;
               setStreamBuf("");
+              setStreaming(false);
+              setToolStatus(null);
+              setToolLogs([]);
               setYellowWarning(null);
               setToolTurnInfo(null);
               // AADS-190: 세션 비용/턴 업데이트
               if (ev.session_cost) setSessionCost(ev.session_cost);
               if (ev.session_turns) setSessionTurns(ev.session_turns);
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: `ai-${Date.now()}`,
-                  session_id: requestSessionId!,
-                  role: "assistant" as const,
-                  content: full,
-                  model_used: ev.model || undefined,
-                  intent: ev.intent || undefined,
-                  input_tokens: ev.input_tokens || undefined,
-                  output_tokens: ev.output_tokens || undefined,
-                  cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
-                  created_at: new Date().toISOString(),
-                },
-              ]);
+              // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
+              if (full.trim()) {
+                setMessages((prev) => [
+                  // 기존 streaming_placeholder 제거 후 최종 응답 추가
+                  ...prev.filter((m) => m.intent !== "streaming_placeholder"),
+                  {
+                    id: `ai-${Date.now()}`,
+                    session_id: requestSessionId!,
+                    role: "assistant" as const,
+                    content: full,
+                    model_used: ev.model || undefined,
+                    intent: ev.intent || undefined,
+                    input_tokens: ev.input_tokens || undefined,
+                    output_tokens: ev.output_tokens || undefined,
+                    cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                    created_at: new Date().toISOString(),
+                  },
+                ]);
+              }
+              break; // done 이벤트 수신 → for 루프 탈출
             } else if (ev.type === "tool_use" && ev.tool_name) {
-              setToolStatus(`🔧 ${ev.tool_name} 실행 중...`);
+              const toolIcons: Record<string, string> = {
+                read_remote_file: "📄", read_github_file: "📄", list_remote_dir: "📁",
+                write_remote_file: "✏️", patch_remote_file: "✏️",
+                run_remote_command: "⚡", query_database: "🗄️", query_project_database: "🗄️",
+                web_search: "🔍", web_search_brave: "🔍", jina_read: "🌐",
+                crawl4ai_fetch: "🌐", deep_crawl: "🌐", deep_research: "🔬",
+                health_check: "💊", get_all_service_status: "📊",
+                pipeline_c_start: "🚀", delegate_to_agent: "🤖",
+                save_note: "📝", recall_notes: "🧠",
+              };
+              const icon = toolIcons[ev.tool_name] || "🔧";
+              const inp = ev.tool_input || {};
+              const paramText = inp.path || inp.query || inp.url || inp.command
+                || inp.file_path || inp.task || inp.project
+                || (Object.values(inp).filter((v: unknown) => typeof v === "string")[0] as string)
+                || "";
+              const sub = paramText ? String(paramText).slice(0, 80) : undefined;
+              setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }]);
+              setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
             } else if (ev.type === "tool_result" && ev.tool_name) {
+              const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
+              setToolLogs(prev => {
+                const updated = [...prev];
+                const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(ev.tool_name));
+                if (lastIdx >= 0) {
+                  const realIdx = updated.length - 1 - lastIdx;
+                  updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
+                }
+                return updated;
+              });
               setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
             } else if (ev.type === "thinking" && ev.content) {
               setToolStatus("💭 사고 중...");
@@ -975,20 +1098,37 @@ export default function ChatPage() {
               // legacy fallback
               gotFinal = true;
               setStreamBuf("");
-              setMessages((prev) => [...prev, ev.message as ChatMessage]);
+              setStreaming(false);
+              setToolStatus(null);
+              setMessages((prev) => [...prev.filter((m) => m.intent !== "streaming_placeholder"), ev.message as ChatMessage]);
+              break; // done → for 루프 탈출
             } else if (ev.type === "yellow_limit") {
               // Yellow 도구 연속 실행 경고
               setYellowWarning(ev.content || `쓰기 도구 연속 ${ev.consecutive_count || 5}회 호출`);
             } else if (ev.type === "tool_turn_limit") {
               // 도구 턴 한도 자동 연장 알림
               setToolTurnInfo(ev.content || `도구 턴 ${ev.current_turn}회 → ${ev.extended_to}회 연장`);
+            } else if (ev.type === "interrupt_applied") {
+              // CEO 인터럽트 반영 알림 — 채팅창에 시스템 메시지로 표시 (영구)
+              const interruptMsg = ev.content || "추가 지시 반영 중..."
+              setMessages(prev => [...prev, {
+                id: `interrupt-notice-${Date.now()}`,
+                session_id: activeSession?.id || "",
+                role: "assistant" as const,
+                content: `⚡ **추가 지시 접수됨**: ${interruptMsg}`,
+                created_at: new Date().toISOString(),
+              }])
             } else if (ev.type === "error") {
-              throw new Error(ev.error || ev.content || "Unknown streaming error");
+              // error를 inner catch 밖으로 전파 (inner catch가 삼키지 않도록)
+              sseError = new Error(ev.error || ev.content || "Unknown streaming error");
             }
           } catch {
-            // ignore malformed SSE lines
+            // ignore malformed SSE lines (JSON parse 실패 등)
           }
+          // SSE error 이벤트는 outer catch로 전파
+          if (sseError) throw sseError;
         }
+        if (gotFinal) break; // done 이벤트 수신 → while 루프 탈출
       }
 
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
@@ -1084,11 +1224,14 @@ export default function ChatPage() {
       }
     } finally {
       clearTimeout(sseTimeout);
-      // 세션 전환된 경우 상태는 이미 useEffect에서 초기화됨 — 중복 설정 방지
+      clearTimeout(maxStreamTimeout);
+      // 스트리밍 상태는 항상 해제 — 세션 전환 여부와 무관하게 무한 버블 방지
+      setStreaming(false);
+      setStreamBuf("");
+      setToolStatus(null);
       if (!isStale()) {
-        setStreaming(false);
-        setStreamBuf("");
-        setToolStatus(null);
+        // streaming_placeholder 잔여물 정리
+        setMessages((prev) => prev.filter((m) => m.intent !== "streaming_placeholder"));
         // 큐에 대기 중인 메시지가 있으면 자동 전송 (같은 세션일 때만)
         if (msgQueueRef.current.length > 0) {
           const next = msgQueueRef.current.shift()!;
@@ -1119,7 +1262,7 @@ export default function ChatPage() {
     }
     // 백엔드 프로세스도 강제 중단
     if (activeSession) {
-      fetch(`${BASE_URL}/chat/sessions/${activeSession}/stop`, {
+      fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
         method: "POST",
         headers: { ...authHdrs() },
       }).catch(() => {});
@@ -2500,25 +2643,39 @@ export default function ChatPage() {
                   border: "1px solid var(--ct-border)",
                 }}
               >
-                {toolStatus && (
+                {(toolLogs.length > 0 || toolStatus) && (
                   <div style={{
-                    fontSize: "12px", color: "var(--ct-accent)",
+                    fontSize: "12px", borderRadius: "8px",
+                    background: "rgba(108,99,255,0.06)",
+                    border: "1px solid rgba(108,99,255,0.2)",
+                    padding: "8px 10px",
                     marginBottom: streamBuf ? "8px" : "0",
-                    padding: "4px 8px", borderRadius: "6px",
-                    background: "var(--ct-accent)" + "12",
-                    display: "flex", alignItems: "center", gap: "6px",
+                    maxHeight: "180px", overflowY: "auto",
                   }}>
-                    <span style={{
-                      width: "6px", height: "6px", borderRadius: "50%",
-                      background: "var(--ct-accent)",
-                      animation: "ct-bounce 1.2s infinite",
-                    }} />
-                    {toolStatus}
+                    {toolLogs.map((log, i) => (
+                      <div key={i} style={{ marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px", color: log.icon === "✅" ? "#4ade80" : "var(--ct-accent)" }}>
+                          <span>{log.icon}</span>
+                          <span style={{ fontWeight: 500 }}>{log.text}</span>
+                        </div>
+                        {log.sub && (
+                          <div style={{ color: "#888", fontSize: "11px", marginLeft: "18px", fontFamily: "monospace", wordBreak: "break-all" }}>
+                            {log.sub}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {toolStatus && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--ct-accent)", marginTop: toolLogs.length > 0 ? "4px" : "0" }}>
+                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--ct-accent)", animation: "ct-bounce 1.2s infinite", display: "inline-block" }} />
+                        <span>{toolStatus}</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {streamBuf ? (
                   <MarkdownBlock text={streamBuf} />
-                ) : !toolStatus ? (
+                ) : !toolStatus && toolLogs.length === 0 ? (
                   <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
                     {[0, 1, 2].map((i) => (
                       <span
@@ -2561,7 +2718,7 @@ export default function ChatPage() {
         {/* Input Area */}
         <div
           style={{
-            padding: "12px 14px",
+            padding: screenSize === "mobile" ? "10px 10px" : "12px 14px",
             borderTop: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             flexShrink: 0,
@@ -2694,8 +2851,8 @@ export default function ChatPage() {
                   if ("prefix" in chip) applyChip(chip.prefix);
                 }}
                 style={{
-                  padding: "4px 10px",
-                  fontSize: "12px",
+                  padding: screenSize === "mobile" ? "6px 12px" : "4px 10px",
+                  fontSize: screenSize === "mobile" ? "14px" : "12px",
                   background: "var(--ct-hover)",
                   border: "1px solid var(--ct-border)",
                   borderRadius: "16px",
@@ -2738,7 +2895,8 @@ export default function ChatPage() {
               onChange={(e) => {
                 setInput(e.target.value);
                 e.target.style.height = "auto";
-                e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                const maxH = window.innerWidth < 768 ? 200 : 160;
+                e.target.style.height = Math.min(e.target.scrollHeight, maxH) + "px";
               }}
               onKeyDown={onKeyDown}
               placeholder="메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"
@@ -2747,7 +2905,7 @@ export default function ChatPage() {
               style={{
                 flex: 1,
                 padding: "10px 14px",
-                fontSize: "14px",
+                fontSize: screenSize === "mobile" ? "16px" : "14px",
                 resize: "none",
                 overflow: "hidden",
                 background: "var(--ct-input)",
@@ -2757,8 +2915,8 @@ export default function ChatPage() {
                 outline: "none",
                 fontFamily: "inherit",
                 lineHeight: "1.5",
-                minHeight: "44px",
-                maxHeight: "160px",
+                minHeight: screenSize === "mobile" ? "52px" : "44px",
+                maxHeight: screenSize === "mobile" ? "200px" : "160px",
               }}
               onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
               onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
@@ -2792,7 +2950,7 @@ export default function ChatPage() {
                 onClick={streaming && !input.trim() && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
                 disabled={uploading || (!streaming && !input.trim() && pendingPreviewFiles.length === 0)}
                 style={{
-                  padding: "10px 20px", fontSize: "14px", fontWeight: 600,
+                  padding: screenSize === "mobile" ? "12px 16px" : "10px 20px", fontSize: screenSize === "mobile" ? "16px" : "14px", fontWeight: 600,
                   background: uploading ? "#9ca3af" : streaming ? (input.trim() || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                   color: "#fff", border: "none", borderRadius: "12px",
                   cursor: uploading ? "wait" : (streaming || input.trim() || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
