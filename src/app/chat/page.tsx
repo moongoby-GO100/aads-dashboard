@@ -472,6 +472,9 @@ export default function ChatPage() {
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [showImageGen, setShowImageGen] = useState(false);
+  const [imageGenPrompt, setImageGenPrompt] = useState("");
+  const [imageGenLoading, setImageGenLoading] = useState(false);
   // 메시지 수정/재지시
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -731,6 +734,9 @@ export default function ChatPage() {
           }
         }
         setMessages((prev) => {
+          // stopped- 메시지가 있으면 DB 폴링으로 중복 추가하지 않음
+          const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
+          if (hasStoppedMsg && !waitingBgResponse) return prev;
           // ID 기반 dedup
           const existingIds = new Set(prev.map((m) => m.id));
           // content hash 기반 dedup (ai-* 임시 ID vs DB UUID 충돌 방지)
@@ -834,6 +840,48 @@ export default function ChatPage() {
     setRenaming(null);
     setContextMenu(null);
   }
+
+  // ── Image generation ──
+  const handleImageGen = async () => {
+    if (!imageGenPrompt.trim() || !activeSession) return;
+    setImageGenLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/image/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHdrs() },
+        body: JSON.stringify({ prompt: imageGenPrompt }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `user-img-${Date.now()}`,
+            session_id: activeSession.id,
+            role: "user",
+            content: `🎨 이미지 생성: ${imageGenPrompt}`,
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: `ai-img-${Date.now()}`,
+            session_id: activeSession.id,
+            role: "assistant",
+            content: `![generated](${data.url})\n\n> 🖼️ **${data.provider}** 생성 완료`,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+        setShowImageGen(false);
+        setImageGenPrompt("");
+      } else {
+        alert(data.detail || "이미지 생성 실패");
+      }
+    } catch (e) {
+      console.error("이미지 생성 실패:", e);
+      alert("이미지 생성 중 오류가 발생했습니다");
+    } finally {
+      setImageGenLoading(false);
+    }
+  };
 
   // ── Send message (SSE streaming) ──
   async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
@@ -1246,11 +1294,12 @@ export default function ChatPage() {
 
   function stopStreaming() {
     abortCtrl.current?.abort();
-    // 스트리밍 중 버퍼에 내용이 있으면 메시지 목록에 확정 (새 버블 방지)
     const buf = streamBuf;
     setStreaming(false);
     setStreamBuf("");
     setToolStatus(null);
+    setYellowWarning(null);
+    setToolTurnInfo(null);
     if (buf && activeSession) {
       const stoppedMsg: ChatMessage = {
         id: `stopped-${Date.now()}`,
@@ -1266,6 +1315,26 @@ export default function ChatPage() {
         method: "POST",
         headers: { ...authHdrs() },
       }).catch(() => {});
+      // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
+      setTimeout(() => {
+        if (!activeSession) return;
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
+          .then((msgs) => {
+            if (activeSessionRef.current !== activeSession.id) return;
+            const filtered = msgs.filter((m) => m.intent !== "streaming_placeholder");
+            // stopped 메시지가 있으면 유지하면서 DB 메시지와 병합
+            setMessages((prev) => {
+              const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
+              const dbIds = new Set(filtered.map((m) => m.id));
+              // DB에 없는 stopped 메시지만 끝에 추가
+              const merged = [...filtered, ...stoppedMsgs.filter((m) => !dbIds.has(m.id))];
+              return merged.sort(
+                (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+              );
+            });
+          })
+          .catch(() => {});
+      }, 1500);
     }
   }
 
@@ -1486,6 +1555,87 @@ export default function ChatPage() {
       }}
       onClick={() => setContextMenu(null)}
     >
+      {/* ── Image generation modal ── */}
+      {showImageGen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowImageGen(false); }}
+        >
+          <div
+            style={{
+              background: "var(--ct-card, #1e2130)",
+              borderRadius: "16px",
+              padding: "24px",
+              width: "400px",
+              maxWidth: "90vw",
+              border: "1px solid var(--ct-border, #2d3148)",
+            }}
+          >
+            <h3 style={{ color: "#a78bfa", marginBottom: "16px", fontSize: "1rem" }}>
+              🎨 AI 이미지 생성
+            </h3>
+            <textarea
+              value={imageGenPrompt}
+              onChange={(e) => setImageGenPrompt(e.target.value)}
+              placeholder="이미지 프롬프트 입력 (예: 서울 야경, 미래도시, 귀여운 강아지...)"
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleImageGen(); } }}
+              style={{
+                width: "100%",
+                height: "100px",
+                background: "var(--ct-bg, #0f1117)",
+                border: "1px solid var(--ct-border, #2d3148)",
+                borderRadius: "8px",
+                color: "var(--ct-text, #e2e8f0)",
+                padding: "10px",
+                fontSize: "0.85rem",
+                resize: "none",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ display: "flex", gap: "8px", marginTop: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowImageGen(false)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--ct-border, #2d3148)",
+                  background: "transparent",
+                  color: "var(--ct-text2, #94a3b8)",
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleImageGen}
+                disabled={imageGenLoading}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                  color: "#fff",
+                  cursor: imageGenLoading ? "wait" : "pointer",
+                  fontWeight: 600,
+                  opacity: imageGenLoading ? 0.7 : 1,
+                }}
+              >
+                {imageGenLoading ? "생성 중..." : "생성"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Keyframe styles ── */}
       <style>{`
         @keyframes ct-bounce {
@@ -2838,6 +2988,7 @@ export default function ChatPage() {
               { icon: "🔍", label: "검색", prefix: "[검색]" },
               { icon: "🧪", label: "딥리서치", prefix: "[딥리서치]" },
               { icon: "📎", label: "파일", action: "file" as const },
+              { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
               { icon: "📹", label: "동영상", prefix: "[동영상]" },
               { icon: "🎤", label: "음성", prefix: "[음성]" },
             ].map((chip) => (
@@ -2846,6 +2997,10 @@ export default function ChatPage() {
                 onClick={() => {
                   if ("action" in chip && chip.action === "file") {
                     fileInputRef.current?.click();
+                    return;
+                  }
+                  if ("action" in chip && chip.action === "imagegen") {
+                    setShowImageGen(true);
                     return;
                   }
                   if ("prefix" in chip) applyChip(chip.prefix);
