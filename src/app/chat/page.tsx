@@ -890,6 +890,48 @@ export default function ChatPage() {
     if (!content && !hasFiles) return;
     sessionSwitchRef.current = false;
 
+    // 이미지 생성 명령 감지: "이미지: [설명]" 또는 "/img [설명]"
+    const imgMatch = content.match(/^(?:이미지[:：]\s*|\/img\s+)(.+)/i);
+    if (imgMatch && !queuedContent) {
+      const imgPrompt = imgMatch[1].trim();
+      setInput("");
+      setImageGenLoading(true);
+      // 유저 메시지로 표시
+      const userImgMsg: ChatMessage = {
+        id: `tmp-img-${Date.now()}`,
+        session_id: activeSession?.id || "",
+        role: "user",
+        content: content,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userImgMsg]);
+      try {
+        const res = await chatApi("/image/generate", {
+          method: "POST",
+          body: JSON.stringify({ prompt: imgPrompt }),
+        });
+        const imgData = await res.json();
+        const imgSrc = imgData.url || (imgData.data ? `data:image/png;base64,${imgData.data}` : null);
+        const aiImgMsg: ChatMessage = {
+          id: `img-${Date.now()}`,
+          session_id: activeSession?.id || "",
+          role: "assistant",
+          content: imgSrc
+            ? `![생성된 이미지](${imgSrc})
+
+> 프롬프트: ${imgPrompt}`
+            : "이미지 생성에 실패했습니다.",
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, aiImgMsg]);
+      } catch (e) {
+        console.error("이미지 생성 오류:", e);
+      } finally {
+        setImageGenLoading(false);
+      }
+      return;
+    }
+
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
     if (streaming && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
