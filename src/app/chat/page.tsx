@@ -906,11 +906,10 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, userImgMsg]);
       try {
-        const res = await chatApi("/image/generate", {
+        const imgData = await chatApi<{ url?: string; data?: string; error?: string }>("/image/generate", {
           method: "POST",
           body: JSON.stringify({ prompt: imgPrompt }),
         });
-        const imgData = await res.json();
         const imgSrc = imgData.url || (imgData.data ? `data:image/png;base64,${imgData.data}` : null);
         const aiImgMsg: ChatMessage = {
           id: `img-${Date.now()}`,
