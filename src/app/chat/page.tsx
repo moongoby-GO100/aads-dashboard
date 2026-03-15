@@ -713,24 +713,42 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeSession?.id) return;
     const sid = activeSession.id;
-    const pollInterval = waitingBgResponse ? 2000 : 8000;
+    const pollInterval = waitingBgResponse ? 1000 : 8000;
     const iv = setInterval(async () => {
       // 스트리밍 중이면 폴링 생략 (단, 백그라운드 응답 대기 중이면 폴링 유지)
       if (streaming && !waitingBgResponse) return;
       try {
         const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
         if (!rawLatest || rawLatest.length === 0) return;
-        // streaming_placeholder: 대기 중이면 보여주고, 완료되면 필터
+        // streaming_placeholder: 대기 중이면 실시간 업데이트, 완료되면 필터
         const latest = waitingBgResponse
           ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m)
           : rawLatest.filter((m) => m.intent !== "streaming_placeholder");
         if (latest.length === 0) return;
-        // 백그라운드 응답 대기 중 → AI 응답 도착 감지
+        // 백그라운드 응답 대기 중 → placeholder 실시간 업데이트 + 완료 감지
         if (waitingBgResponse) {
-          const hasNewAi = latest.some((m) => m.role === "assistant");
-          if (hasNewAi) {
+          const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
+          const hasNewFinalAi = rawLatest.some((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          if (hasNewFinalAi && !hasPlaceholder) {
+            // 최종 응답 도착 + placeholder 삭제됨 → 완료
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false);
+          }
+          // placeholder가 있으면 기존 것을 교체 (실시간 진행 상황 표시)
+          if (hasPlaceholder) {
+            const phMsg = rawLatest.find((m) => m.intent === "streaming_placeholder");
+            if (phMsg) {
+              setMessages(prev => {
+                const idx = prev.findIndex((m: any) => m._isPlaceholder || m.intent === "streaming_placeholder");
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = { ...phMsg, content: phMsg.content || "⏳ 생성 중...", _isPlaceholder: true };
+                  return updated;
+                }
+                return [...prev, { ...phMsg, content: phMsg.content || "⏳ 생성 중...", _isPlaceholder: true }];
+              });
+              return; // placeholder 업데이트만 하고 아래 dedup 로직 스킵
+            }
           }
         }
         setMessages((prev) => {
