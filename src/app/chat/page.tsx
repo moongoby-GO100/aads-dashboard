@@ -511,6 +511,7 @@ export default function ChatPage() {
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
+  const [completionToast, setCompletionToast] = useState<string | null>(null);
 
   // ── Init theme ──
   useEffect(() => {
@@ -653,7 +654,7 @@ export default function ChatPage() {
         setTimeout(() => {
           setWaitingBgResponse(false);
           pendingResponseSessions.current.delete(fetchSid);
-        }, 60000);
+        }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
         await loadMessages(false);
       } else if (status.just_completed) {
@@ -739,13 +740,55 @@ export default function ChatPage() {
   }, [messages, streamBuf]);
 
   // ── 백그라운드 메시지 폴링 (Pipeline C / Agent 완료 메시지 실시간 수신) ──
-  // waitingBgResponse=true 이면 2초 빠른 폴링, 아니면 8초 일반 폴링
+  // P1-FIX: waitingBgResponse=true→1초, 아니면 5초(8초→5초 단축) 폴링
+  // + just_completed 감지 시 자동 reload + 토스트 표시
   useEffect(() => {
     if (!activeSession?.id) return;
     const sid = activeSession.id;
-    const pollInterval = waitingBgResponse ? 1000 : 8000;
+    const pollInterval = waitingBgResponse ? 1000 : 5000;
     const iv = setInterval(async () => {
-      // 스트리밍 중이면 폴링 생략 (단, 백그라운드 응답 대기 중이면 폴링 유지)
+      // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
+      // SSE가 중간에 끊겨 streaming=true 상태로 남아도 just_completed를 감지하여 자동 reload
+      try {
+        const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean }>(
+          `/chat/sessions/${sid}/streaming-status`
+        );
+        if (ss.just_completed) {
+          // 완료 감지 → 즉시 메시지 전체 재조회 + 토스트
+          pendingResponseSessions.current.delete(sid);
+          setWaitingBgResponse(false);
+          setStreaming(false);
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=500`);
+          if (freshMsgs) {
+            const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+            setMessages(filtered);
+          }
+          setCompletionToast("응답이 완료되었습니다");
+          setTimeout(() => setCompletionToast(null), 3000);
+          return;
+        }
+        // 서버에서 스트리밍 아님 + 프론트 streaming=true → SSE 끊김 감지 → 상태 리셋 + 메시지 재조회
+        if (!ss.is_streaming && !ss.just_completed && streaming) {
+          setStreaming(false);
+          setWaitingBgResponse(false);
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=500`);
+          if (freshMsgs) {
+            const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+            setMessages(filtered);
+          }
+          return;
+        }
+        // 스트리밍 중인데 waitingBgResponse가 꺼져 있으면 활성화 (세션 복귀 시)
+        if (ss.is_streaming && !waitingBgResponse && !streaming) {
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(sid);
+          setTimeout(() => {
+            setWaitingBgResponse(false);
+            pendingResponseSessions.current.delete(sid);
+          }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
+        }
+      } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
+      // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (streaming && !waitingBgResponse) return;
       try {
         const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
@@ -760,9 +803,18 @@ export default function ChatPage() {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
           const hasNewFinalAi = rawLatest.some((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
           if (hasNewFinalAi && !hasPlaceholder) {
-            // 최종 응답 도착 + placeholder 삭제됨 → 완료
+            // 최종 응답 도착 + placeholder 삭제됨 → 완료: 전체 재조회 + 토스트
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false);
+            try {
+              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=500`);
+              if (allMsgs) {
+                setMessages(allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder"));
+              }
+            } catch { /* 재조회 실패 무시 */ }
+            setCompletionToast("응답이 완료되었습니다");
+            setTimeout(() => setCompletionToast(null), 3000);
+            return;
           }
           // placeholder가 있으면 기존 것을 교체 (실시간 진행 상황 표시)
           if (hasPlaceholder) {
@@ -1044,8 +1096,8 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
 
     abortCtrl.current = new AbortController();
-    // 90초 타임아웃 → heartbeat(10초)가 리셋하므로 정상 연결 시 만료 안 됨
-    // Extended Thinking/Deep Research 등 초기 응답 지연 고려
+    // 90초 비활성 타임아웃 → heartbeat(5초) + 실제 데이터 모두 리셋
+    // 절대 타임아웃(300초)이 무한 연장 방지 안전망
     let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
     }, 90000);
@@ -1142,11 +1194,17 @@ export default function ChatPage() {
           let sseError: Error | null = null;
           try {
             const ev = JSON.parse(raw);
-            // heartbeat skips timeout reset to prevent infinite extension
+            // P0-FIX: heartbeat도 timeout 리셋 — 도구 30s+ 실행 시 연결 유지 필수
+            // 절대 타임아웃(300s)이 무한 연장 방지 안전망 역할
             if (ev.type === "heartbeat") {
-              continue; // keep-alive only -- do NOT reset inactivity timeout
+              resetSseTimeout();
+              // 도구 실행 중 진행상황 표시 (서버가 tool_count/last_tool 포함 시)
+              if (ev.tool_count && ev.last_tool) {
+                setToolStatus(`🔧 ${ev.last_tool} 실행 중... (도구 ${ev.tool_count}회)`);
+              }
+              continue;
             }
-            // Only real data events reset the inactivity timeout
+            // real data events도 timeout 리셋
             resetSseTimeout();
             if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
@@ -1319,6 +1377,16 @@ export default function ChatPage() {
         return;
       }
       if (isAbort || isNetwork) {
+        // P1-FIX: SSE 끊김 → waitingBgResponse 활성화로 빠른 폴링(1s) 전환
+        // 서버에서 백그라운드 생성이 계속될 수 있으므로 just_completed 감지 필요
+        if (sessionId) {
+          pendingResponseSessions.current.add(sessionId);
+          setWaitingBgResponse(true);
+          setTimeout(() => {
+            pendingResponseSessions.current.delete(sessionId!);
+            setWaitingBgResponse(false);
+          }, 120000); // 2분 후 자동 해제
+        }
         // 연결 끊김: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback (최대 3회)
         if (full) {
           setStreamBuf("");
@@ -1384,6 +1452,35 @@ export default function ChatPage() {
       if (!isStale()) {
         // streaming_placeholder 잔여물 정리
         setMessages((prev) => prev.filter((m) => m.intent !== "streaming_placeholder"));
+
+        // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
+        // 백그라운드 완료 메시지를 놓치지 않도록 500ms/2s/5s 3회 원샷 체크
+        if (sessionId) {
+          const _sid = sessionId;
+          const _checkCompletion = async (delay: number) => {
+            await new Promise((r) => setTimeout(r, delay));
+            if (activeSessionRef.current !== _sid) return;
+            try {
+              const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean }>(
+                `/chat/sessions/${_sid}/streaming-status`
+              );
+              if (ss.just_completed) {
+                pendingResponseSessions.current.delete(_sid);
+                setWaitingBgResponse(false);
+                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=500`);
+                if (freshMsgs) {
+                  setMessages(freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder"));
+                }
+                setCompletionToast("응답이 완료되었습니다");
+                setTimeout(() => setCompletionToast(null), 3000);
+              }
+            } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
+          };
+          _checkCompletion(500);
+          _checkCompletion(2000);
+          _checkCompletion(5000);
+        }
+
         // 큐에 대기 중인 메시지가 있으면 자동 전송 (같은 세션일 때만)
         if (msgQueueRef.current.length > 0) {
           const next = msgQueueRef.current.shift()!;
@@ -1472,6 +1569,33 @@ export default function ChatPage() {
     }
     setEditingMsgId(null);
     setEditText("");
+  }
+
+  // ── 메시지 삭제 (user: 메시지+AI응답 삭제, assistant: 해당 응답만 삭제) ──
+  async function handleDeleteMessage(msgId: string, role: string) {
+    if (!confirm(role === "user" ? "이 메시지와 AI 응답을 삭제할까요?" : "이 응답을 삭제할까요?")) return;
+    try {
+      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
+        method: "DELETE",
+        headers: { ...authHdrs() },
+      });
+      if (res.ok) {
+        setMessages((prev) => {
+          if (role === "user") {
+            const idx = prev.findIndex((m) => m.id === msgId);
+            if (idx < 0) return prev;
+            const idsToRemove = new Set([msgId]);
+            const next = prev[idx + 1];
+            if (next && next.role === "assistant") idsToRemove.add(next.id);
+            return prev.filter((m) => !idsToRemove.has(m.id));
+          } else {
+            return prev.filter((m) => m.id !== msgId);
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Delete message failed:", e);
+    }
   }
 
   // ── 방식B: 입력창에 복사 (재지시) ──
@@ -1659,6 +1783,17 @@ export default function ChatPage() {
       }}
       onClick={() => setContextMenu(null)}
     >
+      {/* ── 완료 토스트 ── */}
+      {completionToast && (
+        <div style={{
+          position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+          zIndex: 9999, background: "#22c55e", color: "#fff", padding: "10px 24px",
+          borderRadius: 8, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          animation: "fadeIn 0.3s ease",
+        }}>
+          {completionToast}
+        </div>
+      )}
       {/* ── Image generation modal ── */}
       {showImageGen && (
         <div
@@ -2684,6 +2819,17 @@ export default function ChatPage() {
                       cursor: "pointer",
                     }}
                   >🔄</button>
+                  <button
+                    onClick={() => handleDeleteMessage(msg.id, "user")}
+                    title="메시지 삭제 (AI 응답 포함)"
+                    style={{
+                      width: "28px", height: "28px", borderRadius: "50%",
+                      background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+                      color: "#ef4444", fontSize: "13px",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >🗑️</button>
                 </div>
               )}
 
@@ -2825,22 +2971,40 @@ export default function ChatPage() {
                       color: "var(--ct-text2)",
                       marginTop: "4px",
                       marginLeft: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
                     }}
                   >
-                    {msg.model_used && <span>[{msg.model_used}</span>}
-                    {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
-                    {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
-                    {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
-                    {msg.model_used && <span>]</span>}
-                    {msg.created_at && (
-                      <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
-                        {new Date(msg.created_at).toLocaleString("ko-KR", {
-                          timeZone: "Asia/Seoul",
-                          month: "numeric", day: "numeric",
-                          hour: "2-digit", minute: "2-digit", second: "2-digit",
-                        })}
-                      </span>
-                    )}
+                    <span>
+                      {msg.model_used && <span>[{msg.model_used}</span>}
+                      {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
+                      {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
+                      {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
+                      {msg.model_used && <span>]</span>}
+                      {msg.created_at && (
+                        <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
+                          {new Date(msg.created_at).toLocaleString("ko-KR", {
+                            timeZone: "Asia/Seoul",
+                            month: "numeric", day: "numeric",
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                          })}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id, "assistant")}
+                      title="이 응답 삭제"
+                      style={{
+                        width: "20px", height: "20px", borderRadius: "50%",
+                        background: "transparent", border: "1px solid transparent",
+                        color: "var(--ct-text2)", fontSize: "11px",
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", opacity: 0.4, transition: "opacity 0.2s",
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "#ef4444"; }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
+                    >🗑️</button>
                   </div>
                 )}
               </div>
