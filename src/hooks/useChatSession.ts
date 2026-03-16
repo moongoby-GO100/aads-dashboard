@@ -7,6 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { chatApi, type ChatMessage, type ChatSession, type ChatWorkspace } from "@/services/chatApi";
 import { getStreamSnapshot, getActiveStreamIds } from "@/services/streamManager";
 
+// B3-FIX: 세션 복귀 시 스트리밍 완료 대기 폴링 상수
+const STREAMING_POLL_MS = 3000;
+
 export interface UseChatSessionReturn {
   workspaces: ChatWorkspace[];
   sessions: ChatSession[];
@@ -36,6 +39,8 @@ export function useChatSession(): UseChatSessionReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initRef = useRef(false);
+  // B3-FIX: 스트리밍 완료 대기 폴링 ref
+  const streamingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadWorkspaces = useCallback(async () => {
     setLoading(true);
@@ -79,13 +84,45 @@ export function useChatSession(): UseChatSessionReturn {
   }, []);
 
   const selectSession = useCallback(async (s: ChatSession) => {
+    // B3-FIX: 이전 세션의 폴링 정리
+    if (streamingPollRef.current) {
+      clearInterval(streamingPollRef.current);
+      streamingPollRef.current = null;
+    }
+
     setCurrentSession(s);
     setLoading(true);
-    setMessages([]);
+    // B1-FIX: setMessages([]) 즉시초기화 제거 — 새 메시지 로드 완료 후 교체하여 flash 방지
     try {
       const msgs = await chatApi.getMessages(s.id, 50, 0);
-      setMessages(msgs); // API returns ORDER BY created_at ASC (oldest first = correct display order)
+      setMessages(msgs);
+
+      // B3-FIX: 세션 복귀 시 스트리밍 중이면 완료까지 3초마다 메시지 재조회
+      try {
+        const status = await chatApi.getStreamingStatus(s.id);
+        if (status.is_streaming) {
+          streamingPollRef.current = setInterval(async () => {
+            try {
+              const ss = await chatApi.getStreamingStatus(s.id);
+              if (!ss.is_streaming || ss.just_completed) {
+                // 스트리밍 완료 → 최종 메시지 로드 + 폴링 중지
+                if (streamingPollRef.current) {
+                  clearInterval(streamingPollRef.current);
+                  streamingPollRef.current = null;
+                }
+                const freshMsgs = await chatApi.getMessages(s.id, 50, 0);
+                setMessages(freshMsgs);
+              } else {
+                // 스트리밍 진행 중 → 메시지 재조회 (진행 상황 반영)
+                const freshMsgs = await chatApi.getMessages(s.id, 50, 0);
+                setMessages(freshMsgs);
+              }
+            } catch { /* 폴링 실패 무시 */ }
+          }, STREAMING_POLL_MS);
+        }
+      } catch { /* streaming-status 실패 무시 */ }
     } catch (e) {
+      setMessages([]); // 에러 시에만 초기화
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
