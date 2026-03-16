@@ -33,6 +33,8 @@ const STATUS_COLORS: Record<string, string> = {
   error: "#ef4444",
   failed: "#ef4444",
   queued: "#9ca3af",
+  claimed: "#60a5fa",
+  approved: "#34d399",
   stall_detected: "#f97316",
   cancelled: "#6b7280",
 };
@@ -183,7 +185,7 @@ export default function ArtifactTaskMonitor({ sessionId }: { sessionId?: string 
     autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
   };
 
-  const activeTasks = tasks.filter((t) => ["running", "in_progress", "queued", "awaiting_approval", "stall_detected", "error"].includes(t.status));
+  const activeTasks = tasks.filter((t) => ["running", "in_progress", "queued", "claimed", "approved", "awaiting_approval", "stall_detected", "error"].includes(t.status));
 
   return (
     <div className="flex flex-col h-full" style={{ color: "var(--ct-text)" }}>
@@ -269,7 +271,7 @@ export default function ArtifactTaskMonitor({ sessionId }: { sessionId?: string 
                     [{task.project}] {task.title}
                   </div>
                   <div className="text-xs" style={{ color: "var(--ct-text-muted)" }}>
-                    {task.pipeline === "pipeline_c" ? "Pipeline C" : "Pipeline B"} &middot;{" "}
+                    {task.pipeline === "runner" ? "🚀 Runner" : task.pipeline === "agent" ? "🤖 Agent" : task.pipeline === "pipeline_c" ? "Pipeline C" : task.pipeline} &middot;{" "}
                     {task.phase} &middot; {formatElapsed(task.elapsed_sec)}
                   </div>
                 </div>
