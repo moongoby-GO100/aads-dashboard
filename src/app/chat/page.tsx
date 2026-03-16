@@ -659,14 +659,22 @@ export default function ChatPage() {
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
         pendingResponseSessions.current.delete(fetchSid);
-        setWaitingBgResponse(false);
         const msgs = await loadMessages(true);
-        // 완료 직후인데 최종 응답이 아직 DB에 없을 수 있음 → 1.5초 후 재시도
+        // 완료 직후인데 최종 응답이 아직 DB에 없을 수 있음 → 빠른 폴링 + 1.5초 후 재시도
         if (msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+          setWaitingBgResponse(true); // 빠른 폴링(1초) 활성화하여 최종 응답 캐치
           setTimeout(() => {
             if (activeSessionRef.current !== fetchSid) return;
-            loadMessages(true);
+            loadMessages(true).then((retryMsgs) => {
+              if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
+                setWaitingBgResponse(false);
+              }
+              // 여전히 없으면 폴링이 계속 잡아줌 (60초 타임아웃)
+            });
           }, 1500);
+          setTimeout(() => setWaitingBgResponse(false), 60000);
+        } else {
+          setWaitingBgResponse(false);
         }
       } else {
         // 스트리밍 아님 → 일반 로드
