@@ -625,49 +625,72 @@ export default function ChatPage() {
     const isPending = pendingResponseSessions.current.has(activeSession.id);
     // FIX: streaming-status API 확인 전까지 false 유지 (엉뚱한 세션에 버블 표시 방지)
     // isPending이어도 API로 재확인 후 설정
-    // 세션 진입 시 서버에서 스트리밍 상태 확인 (세션 이동 후 돌아왔을 때 '생성 중' 감지)
+    // 세션 진입 시: streaming-status를 먼저 확인 → 결과에 따라 messages fetch
+    // (병렬 실행하면 race condition으로 빈 화면 발생하므로 순차 실행)
+    const fetchSid = activeSession.id;
+    const loadMessages = (filterPlaceholder: boolean) =>
+      chatApi<ChatMessage[]>(`/chat/messages?session_id=${fetchSid}&limit=500`)
+        .then((msgs) => {
+          if (activeSessionRef.current !== fetchSid) return msgs;
+          const processed = filterPlaceholder
+            ? msgs.filter((m) => m.intent !== "streaming_placeholder")
+            : msgs.map((m) =>
+                m.intent === "streaming_placeholder"
+                  ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
+                  : m
+              );
+          setMessages(processed);
+          return processed;
+        });
+
     chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string }>(
-      `/chat/sessions/${activeSession.id}/streaming-status`
-    ).then((status) => {
+      `/chat/sessions/${fetchSid}/streaming-status`
+    ).then(async (status) => {
+      if (activeSessionRef.current !== fetchSid) return;
       if (status.is_streaming) {
         setWaitingBgResponse(true);
-        pendingResponseSessions.current.add(activeSession.id);
+        pendingResponseSessions.current.add(fetchSid);
         setTimeout(() => {
           setWaitingBgResponse(false);
-          pendingResponseSessions.current.delete(activeSession.id);
-        }, 30000);
+          pendingResponseSessions.current.delete(fetchSid);
+        }, 60000);
+        // 스트리밍 중 → placeholder 포함하여 메시지 로드
+        await loadMessages(false);
       } else if (status.just_completed) {
-        // 세션 복귀 시 방금 완료된 응답 감지 → 즉시 메시지 재로드
-        pendingResponseSessions.current.delete(activeSession.id);
+        // 방금 완료 → placeholder 제외하고 메시지 로드
+        pendingResponseSessions.current.delete(fetchSid);
         setWaitingBgResponse(false);
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=500`)
-          .then((msgs) => {
-            if (activeSessionRef.current !== activeSession.id) return;
-            setMessages(msgs.filter((m) => m.intent !== "streaming_placeholder"));
-          }).catch(() => {});
-      }
-    }).catch(() => {});
-    const fetchSid = activeSession.id;
-    chatApi<ChatMessage[]>(`/chat/messages?session_id=${fetchSid}&limit=500`)
-      .then((msgs) => {
-        // FIX: 응답 도착 시 현재 세션과 다르면 무시 (세션 전환 race condition 방지)
-        if (activeSessionRef.current !== fetchSid) return;
-        // streaming_placeholder: 생성 중이면 보여주고, 완료 후에는 필터
-        const processed = msgs.map((m) => {
-          if (m.intent === "streaming_placeholder") {
-            return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
-          }
-          return m;
-        });
-        setMessages(processed);
-        // 마지막 메시지가 AI 응답(비 placeholder)이면 이미 완료된 것 → pending 해제
-        const nonPlaceholder = processed.filter((m) => m.intent !== "streaming_placeholder");
-        if (isPending && nonPlaceholder.length > 0 && nonPlaceholder[nonPlaceholder.length - 1].role === "assistant") {
-          pendingResponseSessions.current.delete(activeSession.id);
-          setWaitingBgResponse(false);
+        const msgs = await loadMessages(true);
+        // 완료 직후인데 최종 응답이 아직 DB에 없을 수 있음 → 1.5초 후 재시도
+        if (msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+          setTimeout(() => {
+            if (activeSessionRef.current !== fetchSid) return;
+            loadMessages(true);
+          }, 1500);
         }
-      })
-      .catch(console.error);
+      } else {
+        // 스트리밍 아님 → 일반 로드
+        const msgs = await loadMessages(true);
+        // pending 세션이었는데 assistant 응답이 없으면 → 재시도 (placeholder 삭제~응답 저장 gap)
+        if (isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+          setWaitingBgResponse(true);
+          setTimeout(() => {
+            if (activeSessionRef.current !== fetchSid) return;
+            loadMessages(true).then((retryMsgs) => {
+              if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
+                setWaitingBgResponse(false);
+                pendingResponseSessions.current.delete(fetchSid);
+              }
+            });
+          }, 2000);
+        } else if (isPending) {
+          pendingResponseSessions.current.delete(fetchSid);
+        }
+      }
+    }).catch(() => {
+      // streaming-status API 실패 시 폴백: 일반 메시지 로드
+      loadMessages(isPending ? false : true);
+    });
     chatApi<Artifact[]>(`/chat/artifacts?session_id=${activeSession.id}`)
       .then(setArtifacts)
       .catch(() => setArtifacts([]));
