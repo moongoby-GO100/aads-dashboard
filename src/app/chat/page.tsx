@@ -471,6 +471,8 @@ export default function ChatPage() {
   const [toolTurnInfo, setToolTurnInfo] = useState<string | null>(null);
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
+  // API 키 상태 표시
+  const [apiKeyInfo, setApiKeyInfo] = useState<{litellm?: string; type?: string; label?: string; cliLabel?: string} | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
@@ -521,6 +523,39 @@ export default function ChatPage() {
     } else if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches) {
       setTheme("light");
     }
+  }, []);
+
+  // ── API 키 상태 조회 (5분 간격) ──
+  useEffect(() => {
+    const fetchKeyStatus = async () => {
+      try {
+        const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+        const token = localStorage.getItem("aads_token");
+        const headers: any = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        // Agent SDK 키 순서 API 우선
+        const keyRes = await fetch(`${BASE}/settings/auth-keys`, { headers });
+        if (keyRes.ok) {
+          const keyData = await keyRes.json();
+          const primary = keyData?.keys?.[0];
+          if (primary) {
+            setApiKeyInfo({ type: "oauth", label: primary.label, cliLabel: primary.label, litellm: primary.prefix });
+            return;
+          }
+        }
+        // 폴백: 기존 health API
+        const res = await fetch(`${BASE}/health/api-keys`);
+        if (res.ok) {
+          const data = await res.json();
+          const lt = data?.anthropic?.litellm;
+          const cli = data?.anthropic?.cli;
+          if (lt) setApiKeyInfo({ litellm: lt.prefix, type: lt.type, label: lt.label, cliLabel: cli?.label });
+        }
+      } catch {}
+    };
+    fetchKeyStatus();
+    const iv = setInterval(fetchKeyStatus, 300_000);
+    return () => clearInterval(iv);
   }, []);
 
   // ── Ctrl+V 클립보드 파일 붙여넣기 (이미지 포함 모든 파일) ──
@@ -3345,6 +3380,40 @@ export default function ChatPage() {
               onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
             />
             <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+              {/* API 키 상태 표시 */}
+              {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
+              <button
+                onClick={async () => {
+                  try {
+                    const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+                    const token = localStorage.getItem("aads_token");
+                    const headers: any = { "Content-Type": "application/json" };
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+                    // 현재 순서 조회
+                    const cur = await fetch(`${BASE}/settings/auth-keys`, { headers }).then(r => r.json());
+                    const currentPrimary = cur?.keys?.[0]?.label || "Naver";
+                    const next = currentPrimary === "Naver" ? "gmail" : "naver";
+                    // 순서 변경
+                    const res = await fetch(`${BASE}/settings/auth-keys`, {
+                      method: "POST", headers, body: JSON.stringify({ primary: next }),
+                    }).then(r => r.json());
+                    const newLabel = res?.keys?.[0]?.label || next;
+                    setApiKeyInfo((prev: any) => ({ ...prev, label: newLabel, cliLabel: newLabel }));
+                  } catch (e) { console.error("key switch:", e); }
+                }}
+                title={`현재: ${apiKeyInfo?.label || "?"} 우선 (클릭하여 전환)`}
+                style={{
+                  fontSize: "10px", whiteSpace: "nowrap",
+                  padding: "2px 8px", borderRadius: "8px",
+                  background: (apiKeyInfo?.label || "").includes("Naver") ? "#22c55e18" : "#3b82f618",
+                  color: (apiKeyInfo?.label || "").includes("Naver") ? "#22c55e" : "#3b82f6",
+                  border: `1px solid ${(apiKeyInfo?.label || "").includes("Naver") ? "#22c55e40" : "#3b82f640"}`,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {(apiKeyInfo?.label || "").includes("Naver") ? "🟢" : "🔵"} {apiKeyInfo?.label || "?"}{apiKeyInfo?.cliLabel && apiKeyInfo.cliLabel !== apiKeyInfo.label ? ` / CLI:${apiKeyInfo.cliLabel}` : ""}
+              </button>
               {/* AADS-190: 세션 비용/턴 표시 */}
               {sessionCost && (
                 <span style={{

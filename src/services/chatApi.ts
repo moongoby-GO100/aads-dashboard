@@ -254,9 +254,9 @@ export interface AuthKeyInfo {
 }
 
 export const authKeyApi = {
-  getKeyOrder: () => req<{ keys: AuthKeyInfo[] }>("/chat/settings/auth-keys"),
+  getKeyOrder: () => req<{ keys: AuthKeyInfo[] }>("/settings/auth-keys"),
   setKeyOrder: (primary: string) =>
-    req<{ ok: boolean; keys: AuthKeyInfo[] }>("/chat/settings/auth-keys", {
+    req<{ ok: boolean; keys: AuthKeyInfo[] }>("/settings/auth-keys", {
       method: "POST",
       body: JSON.stringify({ primary }),
     }),
