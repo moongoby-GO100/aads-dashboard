@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatModelSelector, DEFAULT_CHAT_MODEL, CHAT_MODEL_OPTIONS } from "./ModelSelector";
 import ActionChips, { WELCOME_CHIPS, getDynamicChips } from "./ActionChips";
+import { authKeyApi } from "../../services/chatApi";
 
 interface ChatInputProps {
   onSend: (message: string, modelId: string, files?: File[]) => void;
@@ -41,9 +42,27 @@ export default function ChatInput({
   const [isDragging, setIsDragging] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [primaryKey, setPrimaryKey] = useState<string>("Naver");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // 키 순서 로드
+  useEffect(() => {
+    authKeyApi.getKeyOrder().then((res) => {
+      if (res.keys?.length > 0) setPrimaryKey(res.keys[0].label);
+    }).catch(() => {});
+  }, []);
+
+  const toggleAuthKey = async () => {
+    const next = primaryKey === "Naver" ? "gmail" : "naver";
+    try {
+      const res = await authKeyApi.setKeyOrder(next);
+      if (res.keys?.length > 0) setPrimaryKey(res.keys[0].label);
+    } catch (e) {
+      console.error("key switch failed:", e);
+    }
+  };
 
   // 모델 외부 동기화
   useEffect(() => {
@@ -167,6 +186,7 @@ export default function ChatInput({
       style={{
         borderTop: "1px solid var(--border)",
         background: "var(--bg-card)",
+        paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -241,9 +261,23 @@ export default function ChatInput({
         </div>
       )}
 
-      {/* 모델 셀렉터 */}
-      <div className="mb-2">
+      {/* 모델 셀렉터 + 키 토글 */}
+      <div className="mb-2 flex items-center gap-2">
         <ChatModelSelector value={model} onChange={handleModelChange} />
+        <button
+          onClick={toggleAuthKey}
+          className="text-xs px-2 py-1 rounded-lg transition-all"
+          style={{
+            background: primaryKey === "Naver" ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.12)",
+            color: primaryKey === "Naver" ? "#22c55e" : "#3b82f6",
+            border: `1px solid ${primaryKey === "Naver" ? "rgba(34,197,94,0.3)" : "rgba(59,130,246,0.3)"}`,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+          title={`현재: ${primaryKey} 우선 (클릭하여 전환)`}
+        >
+          {primaryKey === "Naver" ? "🟢" : "🔵"} {primaryKey}
+        </button>
         {isDeepResearch && (
           <p className="text-xs mt-1" style={{ color: "#a78bfa" }}>
             🔬 Deep Research 모드: 소스 탐색 + 분석 + 보고서 생성 (~$3, 1-2분)
@@ -258,7 +292,7 @@ export default function ChatInput({
           background: "var(--bg-main)",
           border: `1px solid ${canSend ? "var(--accent)" : "var(--border)"}`,
           borderRadius: "12px",
-          padding: "8px",
+          padding: "10px",
           transition: "border-color 0.2s",
         }}
       >
@@ -266,11 +300,13 @@ export default function ChatInput({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isStreaming}
-          className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors text-base"
+          className="flex-shrink-0 w-8 h-8 md:w-8 md:h-8 flex items-center justify-center rounded-lg transition-colors text-base"
           style={{
             color: "var(--text-secondary)",
             background: "transparent",
             opacity: isStreaming ? 0.5 : 1,
+            minWidth: "44px",
+            minHeight: "44px",
           }}
           title="파일 첨부"
         >
@@ -294,13 +330,14 @@ export default function ChatInput({
           onPaste={handlePaste}
           disabled={isStreaming}
           rows={1}
-          placeholder={isStreaming ? "AI 응답 생성 중..." : "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"}
-          className="flex-1 resize-none text-sm leading-relaxed outline-none"
+          placeholder={isStreaming ? "AI 응답 생성 중..." : (typeof window !== "undefined" && window.innerWidth < 768 ? "메시지 입력..." : "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)")}
+          className="flex-1 resize-none text-sm md:text-sm leading-relaxed outline-none"
           style={{
             background: "transparent",
             color: "var(--text-primary)",
             border: "none",
-            minHeight: "36px",
+            fontSize: "16px",
+            minHeight: "56px",
             maxHeight: "200px",
             overflowY: "auto",
           }}
@@ -310,12 +347,14 @@ export default function ChatInput({
         <button
           onClick={toggleVoice}
           disabled={isStreaming}
-          className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all text-base"
+          className="flex-shrink-0 w-8 h-8 md:w-8 md:h-8 flex items-center justify-center rounded-lg transition-all text-base"
           style={{
             background: isListening ? "rgba(239,68,68,0.15)" : "transparent",
             color: isListening ? "#ef4444" : "var(--text-secondary)",
             opacity: isStreaming ? 0.5 : 1,
             animation: isListening ? "pulse 1s infinite" : undefined,
+            minWidth: "44px",
+            minHeight: "44px",
           }}
           title={isListening ? "음성 입력 중지" : "음성 입력"}
         >
@@ -326,7 +365,7 @@ export default function ChatInput({
         <button
           onClick={handleSend}
           disabled={!canSend}
-          className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl transition-all text-sm font-bold"
+          className="flex-shrink-0 w-9 h-9 md:w-9 md:h-9 flex items-center justify-center rounded-xl transition-all text-sm font-bold"
           style={{
             background: canSend ? "var(--accent)" : "var(--bg-hover)",
             color: canSend ? "#fff" : "var(--text-secondary)",
@@ -334,6 +373,8 @@ export default function ChatInput({
             cursor: canSend ? "pointer" : "not-allowed",
             transform: canSend ? "scale(1)" : "scale(0.95)",
             transition: "all 0.15s",
+            minWidth: "44px",
+            minHeight: "44px",
           }}
           title="전송 (Enter)"
         >
@@ -341,8 +382,8 @@ export default function ChatInput({
         </button>
       </div>
 
-      {/* 힌트 */}
-      <p className="text-xs mt-1.5 text-center" style={{ color: "var(--text-secondary)", opacity: 0.6 }}>
+      {/* 힌트 — 모바일에서 숨김 */}
+      <p className="text-xs mt-1.5 text-center hidden md:block" style={{ color: "var(--text-secondary)", opacity: 0.6 }}>
         Enter 전송 · Shift+Enter 줄바꿈 · 📎 파일첨부
       </p>
     </div>

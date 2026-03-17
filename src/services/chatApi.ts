@@ -245,3 +245,19 @@ export interface MemoryContextResponse {
     message_count: number;
   }>;
 }
+
+// ─── Auth Key Management ─────────────────────────────────────────────────────
+
+export interface AuthKeyInfo {
+  label: string;
+  prefix: string;
+}
+
+export const authKeyApi = {
+  getKeyOrder: () => req<{ keys: AuthKeyInfo[] }>("/chat/settings/auth-keys"),
+  setKeyOrder: (primary: string) =>
+    req<{ ok: boolean; keys: AuthKeyInfo[] }>("/chat/settings/auth-keys", {
+      method: "POST",
+      body: JSON.stringify({ primary }),
+    }),
+};
