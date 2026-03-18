@@ -690,7 +690,9 @@ export default function ChatPage() {
           return;
         }
         // localStorage에 저장된 세션 복원 시도
-        const savedSid = localStorage.getItem(`aads-chat-activeSession-${activeWs}`);
+        const hashSid = typeof window !== "undefined" && window.location.hash ? window.location.hash.replace(/^#/, "") : null;
+        const lsSid = localStorage.getItem(`aads-chat-activeSession-${activeWs}`);
+        const savedSid = hashSid || lsSid;
         const match = savedSid && loaded.find((s) => s.id === savedSid);
         // BUG-2 FIX: updated_at 기준 정렬 후 최신 세션 선택
         const sorted = [...loaded].sort((a, b) =>
@@ -711,6 +713,12 @@ export default function ChatPage() {
     // 세션 ID를 localStorage에 저장 (페이지 새로고침 시 복원용)
     if (activeSession?.id && activeWs) {
       localStorage.setItem(`aads-chat-activeSession-${activeWs}`, activeSession.id);
+      if (typeof window !== "undefined") {
+        const currentHash = window.location.hash.replace(/^#/, "");
+        if (currentHash !== activeSession.id) {
+          window.history.replaceState(null, "", `#${activeSession.id}`);
+        }
+      }
     }
     // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
     if (streaming) {
@@ -735,7 +743,13 @@ export default function ChatPage() {
     setWaitingBgResponse(false);
     setStreamBuf("");
     setSelectedArtifactIdx(0);
-    if (!activeSession) { setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null); return; }
+    if (!activeSession) {
+      setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null);
+      if (typeof window !== "undefined" && window.location.hash) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      return;
+    }
     // 백그라운드 생성 중이던 세션이면 빠른 폴링 시작
     const isPending = pendingResponseSessions.current.has(activeSession.id);
     // FIX: streaming-status API 확인 전까지 false 유지 (엉뚱한 세션에 버블 표시 방지)
