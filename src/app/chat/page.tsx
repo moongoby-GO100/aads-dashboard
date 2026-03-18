@@ -49,6 +49,18 @@ interface ChatMessage {
   created_at?: string;
   // 로컬 첨부 이미지 미리보기 URL (DB 저장 안 됨, 렌더링 전용)
   attachmentPreviews?: string[];
+  // 서버에서 반환된 첨부파일 목록
+  attachments?: Array<{
+    type?: string;
+    file_id?: string;
+    file_url?: string;
+    thumbnail_url?: string;
+    base64?: string;
+    name?: string;
+    mime?: string;
+    mime_type?: string;
+    media_type?: string;
+  }>;
 }
 interface Artifact {
   id: string;
@@ -1337,23 +1349,30 @@ export default function ChatPage() {
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
     if (streaming && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
+      // 첨부파일 캡처 후 즉시 클리어
+      const interruptAttachments = pendingAttachments.current.length > 0
+        ? [...pendingAttachments.current] : [];
+      pendingAttachments.current = [];
+      setPendingPreviewFiles([]);
       msgQueueRef.current.push(interruptContent);
       setQueueCount(msgQueueRef.current.length);
       setInput(""); chatInputRef.current?.clear();
       if (textareaRef.current) textareaRef.current.style.height = "auto";
-      // 대화창에 추가 지시를 user 메시지로 즉시 표시
+      // 대화창에 추가 지시를 user 메시지로 즉시 표시 (첨부파일 포함)
+      const attachLabel = interruptAttachments.length > 0
+        ? ` 📎 ${interruptAttachments.length}개 파일` : "";
       setMessages(prev => [...prev, {
         id: `interrupt-${Date.now()}`,
         session_id: activeSession?.id || "",
         role: "user" as const,
-        content: `💬 **[추가 지시]** ${interruptContent}`,
+        content: `💬 **[추가 지시]** ${interruptContent}${attachLabel}`,
         created_at: new Date().toISOString(),
       }]);
-      // 백엔드 인터럽트 큐에 push
+      // 백엔드 인터럽트 큐에 push (첨부파일 포함)
       if (activeSession?.id) {
         chatApi(`/chat/sessions/${activeSession.id}/interrupt`, {
           method: "POST",
-          body: JSON.stringify({ content: interruptContent }),
+          body: JSON.stringify({ content: interruptContent, attachments: interruptAttachments }),
         }).then(() => {
           // interrupt API 성공 → 큐에서 제거 (done 후 재전송 방지)
           const idx = msgQueueRef.current.indexOf(interruptContent);
@@ -1366,7 +1385,7 @@ export default function ChatPage() {
         });
       }
       // 추가 지시 접수 안내
-      setYellowWarning(`추가 지시 접수됨 (대기 ${msgQueueRef.current.length}건)`);
+      setYellowWarning(`추가 지시 접수됨 (대기 ${msgQueueRef.current.length}건)${attachLabel}`);
       setTimeout(() => setYellowWarning(null), 5000);
       return;
     }
@@ -1975,14 +1994,33 @@ export default function ChatPage() {
         const mediaType = file.type || `image/${ext === "jpg" ? "jpeg" : ext}`;
         pendingAttachments.current.push({ type: "image", base64, media_type: mediaType, name: file.name });
       } else if (isText) {
-        // 텍스트 파일: 최대 500KB 내용 읽기 → ephemeral document layer로 전달
-        const content = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => resolve("");
-          reader.readAsText(file.slice(0, 500_000));
-        });
-        pendingAttachments.current.push({ type: "text", name: file.name, content });
+        // 텍스트 파일: 서버 업로드 시도 → fallback: 로컬 읽기
+        if (_sid) {
+          try {
+            const result = await uploadChatFile(file, _sid);
+            pendingAttachments.current.push({
+              type: "text", file_id: result.file_id, name: result.original_name,
+              file_url: result.file_url, file_size: result.file_size,
+            });
+          } catch {
+            // fallback: 로컬 읽기
+            const content = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => resolve("");
+              reader.readAsText(file.slice(0, 500_000));
+            });
+            pendingAttachments.current.push({ type: "text", name: file.name, content });
+          }
+        } else {
+          const content = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve("");
+            reader.readAsText(file.slice(0, 500_000));
+          });
+          pendingAttachments.current.push({ type: "text", name: file.name, content });
+        }
       } else if (ext === "pdf" || file.type === "application/pdf") {
         // PDF: 서버 업로드 시도 → fallback base64
         if (_sid) {
@@ -3154,7 +3192,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          {messages.map((msg, idx) => (
+          {useMemo(() => messages.map((msg, idx) => (
             <div
               key={msg.id || idx}
               className="ct-msg-enter group"
@@ -3316,21 +3354,38 @@ export default function ChatPage() {
                         }),
                   }}
                 >
-                  {msg.role === "user" && msg.attachmentPreviews && msg.attachmentPreviews.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                      {msg.attachmentPreviews.map((url, pi) => (
-                        <img
-                          key={pi}
-                          src={url}
-                          alt="첨부 이미지"
-                          style={{
+                  {/* 첨부 이미지 표시: 로컬 프리뷰 → 서버 file_url → 레거시 base64 */}
+                  {msg.role === "user" && (() => {
+                    const previews = msg.attachmentPreviews || [];
+                    const serverAtts = (msg.attachments || []).filter(
+                      (a) => (a.type === "image" || a.mime_type?.startsWith("image/") || a.media_type?.startsWith("image/")) && (a.file_url || a.base64)
+                    );
+                    if (previews.length === 0 && serverAtts.length === 0) return null;
+                    return (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                        {previews.map((url, pi) => (
+                          <img key={`p-${pi}`} src={url} alt="첨부 이미지" style={{
                             maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
                             borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                          }} />
+                        ))}
+                        {serverAtts.map((att, si) => {
+                          const src = att.file_url
+                            ? `${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}${att.file_url}`
+                            : att.base64
+                              ? `data:${att.mime_type || att.media_type || att.mime || "image/png"};base64,${att.base64}`
+                              : "";
+                          if (!src) return null;
+                          return (
+                            <img key={`s-${si}`} src={src} alt={att.name || "첨부 이미지"} style={{
+                              maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                              borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
+                            }} />
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {msg.role === "user" ? (
                     msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content)
                   ) : (
@@ -3390,7 +3445,7 @@ export default function ChatPage() {
                 )}
               </div>
             </div>
-          ))}
+          )), [messages, streaming, editingMsgId, editText])}
 
           {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) */}
           {waitingBgResponse && !streaming && (
