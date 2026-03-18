@@ -1551,12 +1551,8 @@ export default function ChatPage() {
               // 무조건 큐 카운트 동기화 (배지 확실 해제)
               setQueueCount(msgQueueRef.current.length);
               // 토스트로만 알림 (assistant 메시지 추가 안 함 → 중복 방지)
-              setYellowWarning(`✅ 추가 지시 반영됨`);
+              setYellowWarning(`✅ 추가 지시 반영됨 (대기 ${msgQueueRef.current.length}건)`);
               setTimeout(() => setYellowWarning(null), 3000);
-              // 큐 비었으면 warning 즉시 해제
-              if (msgQueueRef.current.length === 0) {
-                setTimeout(() => setYellowWarning(null), 3000);
-              }
             } else if (ev.type === "error") {
               // error를 inner catch 밖으로 전파 (inner catch가 삼키지 않도록)
               sseError = new Error(ev.error || ev.content || "Unknown streaming error");
