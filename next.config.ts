@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  experimental: {},
+  experimental: {
+    reactCompiler: true,
+  },
   async rewrites() {
     return [
       {
