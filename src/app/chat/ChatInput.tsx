@@ -76,7 +76,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
         rows={1}
         style={{
           flex: 1,
-          padding: "10px 14px",
+          padding: screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px",
           fontSize: screenSize === "mobile" ? "16px" : "14px",
           resize: "none",
           overflow: "hidden",
@@ -87,8 +87,8 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
           outline: "none",
           fontFamily: "inherit",
           lineHeight: "1.5",
-          minHeight: screenSize === "mobile" ? "52px" : "44px",
-          maxHeight: screenSize === "mobile" ? "200px" : "160px",
+          minHeight: screenSize === "mobile" ? "44px" : "44px",
+          maxHeight: screenSize === "mobile" ? "140px" : "160px",
         }}
         inputMode="text"
         enterKeyHint="send"

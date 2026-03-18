@@ -124,3 +124,39 @@ body {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ── Mobile Input Redesign (KakaoTalk/ChatGPT hybrid) ── */
+
+/* Mobile action grid: 3x2 grid with generous touch targets */
+@media (max-width: 767px) {
+  .ct-action-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: var(--ct-hover);
+    border-radius: 14px;
+    border: 1px solid var(--ct-border);
+    animation: ct-slide-up 0.2s ease;
+  }
+  .ct-action-grid button {
+    min-height: 44px;
+  }
+}
+
+@keyframes ct-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobile: hide MemoryContextBar details, show only icon */
+@media (max-width: 767px) {
+  .ct-bottom-nav {
+    min-height: 48px;
+  }
+  .ct-bottom-nav button {
+    min-height: 48px;
+    padding: 6px 4px 4px;
+  }
+}

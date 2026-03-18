@@ -51,7 +51,6 @@ export default function ChatPage() {
   const [apiKeyInfo, setApiKeyInfo] = useState<{litellm?: string; type?: string; label?: string; cliLabel?: string} | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
-  const [showMobileActions, setShowMobileActions] = useState(false);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
   const [imageGenLoading, setImageGenLoading] = useState(false);
   // 메시지 수정/재지시
@@ -67,7 +66,6 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: ChatSession } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
-  const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const [selectedArtifactIdx, setSelectedArtifactIdx] = useState(0);
 
   // ── 프로젝트 추가 모달 ──
@@ -194,7 +192,6 @@ export default function ChatPage() {
 
   // ── Responsive ──
   useEffect(() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     function check() {
       const w = window.innerWidth;
       const size: ScreenSize = w >= 1280 ? "desktop" : w >= 768 ? "tablet" : "mobile";
@@ -203,13 +200,9 @@ export default function ChatPage() {
       else if (size === "tablet") { setLeftOpen(false); }
       else { setLeftOpen(true); }
     }
-    function debouncedCheck() {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(check, 300);
-    }
     check();
-    window.addEventListener("resize", debouncedCheck);
-    return () => { window.removeEventListener("resize", debouncedCheck); if (debounceTimer) clearTimeout(debounceTimer); };
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   // ── Load workspaces (restore last active from localStorage) ──
@@ -1694,26 +1687,6 @@ export default function ChatPage() {
     dashboard: artifacts.filter((a) => a.artifact_type === "dashboard").length,
   };
 
-  // C1: swipe gesture handlers
-  function onSwipeStart(e: React.TouchEvent) {
-    if (screenSize === "desktop") return;
-    const t = e.touches[0];
-    swipeRef.current = { startX: t.clientX, startY: t.clientY, t: Date.now() };
-  }
-  function onSwipeEnd(e: React.TouchEvent) {
-    if (screenSize === "desktop" || !swipeRef.current) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipeRef.current.startX;
-    const dy = t.clientY - swipeRef.current.startY;
-    const dt = Date.now() - swipeRef.current.t;
-    swipeRef.current = null;
-    if (dt > 500 || Math.abs(dy) > Math.abs(dx)) return;
-    if (dx > 80 && !mobileOverlay) setMobileOverlay("sidebar");
-    else if (dx < -80 && !mobileOverlay) setMobileOverlay("artifact");
-    else if (dx < -80 && mobileOverlay === "sidebar") setMobileOverlay(null);
-    else if (dx > 80 && mobileOverlay === "artifact") setMobileOverlay(null);
-  }
-
   // Responsive: whether to show overlays
   const showLeftSidebar =
     screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
@@ -1728,7 +1701,7 @@ export default function ChatPage() {
       style={{
         ...vars,
         display: "flex",
-        height: "100dvh",
+        height: "100vh",
         overflow: "hidden",
         background: "var(--ct-bg)",
         color: "var(--ct-text)",
@@ -1737,8 +1710,6 @@ export default function ChatPage() {
         position: "relative",
       }}
       onClick={() => setContextMenu(null)}
-      onTouchStart={onSwipeStart}
-      onTouchEnd={onSwipeEnd}
     >
       {updateAvailable && <UpdateBanner onRefresh={doRefresh} />}
       {/* ── 완료 토스트 ── */}
@@ -2611,7 +2582,6 @@ export default function ChatPage() {
         {/* Messages */}
         <div
           ref={messagesContainerRef}
-          className="ct-messages-scroll"
           style={{
             flex: 1,
             overflowY: "auto",
@@ -3114,8 +3084,7 @@ export default function ChatPage() {
         {/* Input Area */}
         <div
           style={{
-            padding: screenSize === "mobile" ? "8px 8px" : "12px 14px",
-            paddingBottom: screenSize === "mobile" ? "calc(56px + env(safe-area-inset-bottom, 0px))" : "12px",
+            padding: screenSize === "mobile" ? "10px 10px" : "12px 14px",
             borderTop: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             flexShrink: 0,
@@ -3222,59 +3191,55 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Action chips — mobile: toggled grid / desktop: always visible row */}
-          {(screenSize !== "mobile" || showMobileActions) && (
-            <div
-              className={screenSize === "mobile" ? "ct-action-grid" : undefined}
-              style={screenSize !== "mobile" ? {
-                display: "flex", gap: "6px", marginBottom: "8px", flexWrap: "wrap",
-              } : undefined}
-            >
-              {[
-                { icon: "🔍", label: "검색", prefix: "[검색]" },
-                { icon: "🧪", label: "딥리서치", prefix: "[딥리서치]" },
-                { icon: "📎", label: "파일", action: "file" as const },
-                { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
-                { icon: "📹", label: "동영상", prefix: "[동영상]" },
-                { icon: "🎤", label: "음성", prefix: "[음성]" },
-              ].map((chip) => (
-                <button
-                  key={chip.label}
-                  onClick={() => {
-                    if ("action" in chip && chip.action === "file") {
-                      fileInputRef.current?.click();
-                      if (screenSize === "mobile") setShowMobileActions(false);
-                      return;
-                    }
-                    if ("action" in chip && chip.action === "imagegen") {
-                      setShowImageGen(true);
-                      if (screenSize === "mobile") setShowMobileActions(false);
-                      return;
-                    }
-                    if ("prefix" in chip) {
-                      applyChip(chip.prefix);
-                      if (screenSize === "mobile") setShowMobileActions(false);
-                    }
-                  }}
-                  style={{
-                    padding: screenSize === "mobile" ? "10px 14px" : "4px 10px",
-                    fontSize: screenSize === "mobile" ? "14px" : "12px",
-                    background: "var(--ct-hover)",
-                    border: "1px solid var(--ct-border)",
-                    borderRadius: screenSize === "mobile" ? "12px" : "16px",
-                    cursor: "pointer",
-                    color: "var(--ct-text)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    ...(screenSize === "mobile" ? { justifyContent: "center" } : {}),
-                  }}
-                >
-                  {chip.icon} {chip.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Action chips */}
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              marginBottom: "8px",
+              flexWrap: "wrap",
+            }}
+          >
+            {[
+              { icon: "🔍", label: "검색", prefix: "[검색]" },
+              { icon: "🧪", label: "딥리서치", prefix: "[딥리서치]" },
+              { icon: "📎", label: "파일", action: "file" as const },
+              { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
+              { icon: "📹", label: "동영상", prefix: "[동영상]" },
+              { icon: "🎤", label: "음성", prefix: "[음성]" },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                onClick={() => {
+                  if ("action" in chip && chip.action === "file") {
+                    fileInputRef.current?.click();
+                    return;
+                  }
+                  if ("action" in chip && chip.action === "imagegen") {
+                    setShowImageGen(true);
+                    return;
+                  }
+                  if ("prefix" in chip) applyChip(chip.prefix);
+                }}
+                style={{
+                  padding: screenSize === "mobile" ? "6px 12px" : "4px 10px",
+                  fontSize: screenSize === "mobile" ? "14px" : "12px",
+                  background: "var(--ct-hover)",
+                  border: "1px solid var(--ct-border)",
+                  borderRadius: "16px",
+                  cursor: "pointer",
+                  color: "var(--ct-text2)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--ct-accent)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--ct-border)")}
+              >
+                {chip.icon} {chip.label}
+              </button>
+            ))}
+          </div>
 
           {/* 재지시 모드 배너 (방식B) */}
           {editMode && (
@@ -3293,58 +3258,14 @@ export default function ChatPage() {
               </button>
             </div>
           )}
-          {/* Textarea + send button — mobile: [+] [textarea [send]] */}
-          <div style={{ display: "flex", gap: screenSize === "mobile" ? "6px" : "8px", alignItems: "flex-end" }}>
-            {/* Mobile "+" toggle button */}
-            {screenSize === "mobile" && (
-              <button
-                onClick={() => setShowMobileActions(!showMobileActions)}
-                style={{
-                  width: "44px", height: "44px", flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: showMobileActions ? "var(--ct-accent)" : "var(--ct-hover)",
-                  color: showMobileActions ? "#fff" : "var(--ct-text)",
-                  border: "1px solid var(--ct-border)",
-                  borderRadius: "50%", cursor: "pointer",
-                  fontSize: "20px", fontWeight: 300,
-                  transition: "all 0.2s",
-                }}
-              >
-                {showMobileActions ? "✕" : "+"}
-              </button>
-            )}
-            {/* Textarea wrapper with integrated send */}
-            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end" }}>
-              <ChatInput
-                ref={chatInputRef}
-                screenSize={screenSize}
-                onKeyDown={onKeyDown}
-                onHasInput={setHasInput}
-                placeholder={screenSize === "mobile" ? "메시지 입력..." : undefined}
-              />
-              {/* Mobile: send button inside textarea area */}
-              {screenSize === "mobile" && (
-                <button
-                  onClick={streaming && !hasInput && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
-                  disabled={uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0)}
-                  style={{
-                    position: "absolute", right: "6px", bottom: "6px",
-                    width: "36px", height: "36px",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    background: uploading ? "#9ca3af" : streaming ? (hasInput || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
-                    color: "#fff", border: "none", borderRadius: "50%",
-                    cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
-                    opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.4 : 1,
-                    transition: "all 0.2s",
-                    fontSize: "16px",
-                  }}
-                >
-                  {uploading ? "⏳" : streaming ? (hasInput ? "📋" : "⏹") : "➤"}
-                </button>
-              )}
-            </div>
-            {/* Desktop: separate button group */}
-            {screenSize !== "mobile" && (
+          {/* Textarea + send button */}
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            <ChatInput
+              ref={chatInputRef}
+              screenSize={screenSize}
+              onKeyDown={onKeyDown}
+              onHasInput={setHasInput}
+            />
             <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
               {/* API 키 상태 표시 */}
               {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
@@ -3416,7 +3337,7 @@ export default function ChatPage() {
                 onClick={streaming && !hasInput && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
                 disabled={uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0)}
                 style={{
-                  padding: "10px 20px", fontSize: "14px", fontWeight: 600,
+                  padding: screenSize === "mobile" ? "12px 16px" : "10px 20px", fontSize: screenSize === "mobile" ? "16px" : "14px", fontWeight: 600,
                   background: uploading ? "#9ca3af" : streaming ? (hasInput || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                   color: "#fff", border: "none", borderRadius: "12px",
                   cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
@@ -3427,27 +3348,7 @@ export default function ChatPage() {
                 {uploading ? "업로드중..." : streaming ? (hasInput ? "대기 전송" : "⏹ 중단") : "전송"}
               </button>
             </div>
-            )}
           </div>
-          {/* Mobile: queue count badge */}
-          {screenSize === "mobile" && queueCount > 0 && (
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-              padding: "4px 10px", marginTop: "6px", fontSize: "12px",
-              background: "#f59e0b20", border: "1px solid #f59e0b60",
-              borderRadius: "10px", color: "#f59e0b",
-            }}>
-              <span>📋 대기 {queueCount}건</span>
-              <button
-                onClick={() => { msgQueueRef.current = []; setQueueCount(0); }}
-                style={{
-                  padding: "2px 8px", fontSize: "11px", fontWeight: 600,
-                  background: "#f59e0b", color: "#fff", border: "none", borderRadius: "6px",
-                  cursor: "pointer",
-                }}
-              >취소</button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -3869,23 +3770,6 @@ export default function ChatPage() {
             </div>
           )}
         </div>
-      )}
-      {/* C2: mobile bottom nav */}
-      {screenSize !== "desktop" && (
-        <nav className="ct-bottom-nav">
-          <button className={mobileOverlay === "sidebar" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "sidebar" ? null : "sidebar")}>
-            <span className="icon">💬</span><span>세션</span>
-          </button>
-          <button onClick={() => createSession()}>
-            <span className="icon">✏️</span><span>새대화</span>
-          </button>
-          <button className={mobileOverlay === "artifact" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "artifact" ? null : "artifact")}>
-            <span className="icon">📄</span><span>아티팩트</span>
-          </button>
-          <button onClick={toggleTheme}>
-            <span className="icon">{theme === "dark" ? "☀️" : "🌙"}</span><span>테마</span>
-          </button>
-        </nav>
       )}
     </div>
   );
