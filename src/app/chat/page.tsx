@@ -1,6 +1,7 @@
 // AADS-dashboard-rebuild: 2026-03-18T13:48-final
 "use client";
-import { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo } from "react";
+import ChatInput, { ChatInputHandle } from "./ChatInput";
 import { MODEL_OPTIONS, DEFAULT_MODEL } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
@@ -89,6 +90,28 @@ async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
+}
+
+// ── File upload helper ──
+async function uploadChatFile(file: File, sessionId: string): Promise<{
+  file_id: string;
+  original_name: string;
+  mime_type: string;
+  file_size: number;
+  width?: number;
+  height?: number;
+  thumbnail_url?: string;
+  file_url?: string;
+}> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/chat/files/upload?session_id=${sessionId}&uploaded_by=user`, {
+    method: "POST",
+    headers: { ...authHdrs() },
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  return res.json();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -487,6 +510,7 @@ export default function ChatPage() {
 
   // ── Chat state ──
   const [input, setInput] = useState("");
+  const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
@@ -539,6 +563,7 @@ export default function ChatPage() {
   const isInitialLoadRef = useRef(true);
   const isNearBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatInputRef = useRef<ChatInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, any>>>([]);
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
@@ -1263,7 +1288,7 @@ export default function ChatPage() {
 
   // ── Send message (SSE streaming) ──
   async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
-    const content = queuedContent || input.trim();
+    const content = queuedContent || (chatInputRef.current?.getValue() || input).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
     sessionSwitchRef.current = false;
@@ -1272,7 +1297,7 @@ export default function ChatPage() {
     const imgMatch = content.match(/^(?:이미지[:：]\s*|\/img\s+)(.+)/i);
     if (imgMatch && !queuedContent) {
       const imgPrompt = imgMatch[1].trim();
-      setInput("");
+      setInput(""); chatInputRef.current?.clear();
       setImageGenLoading(true);
       // 유저 메시지로 표시
       const userImgMsg: ChatMessage = {
@@ -1314,7 +1339,7 @@ export default function ChatPage() {
       const interruptContent = content || "(파일 첨부)";
       msgQueueRef.current.push(interruptContent);
       setQueueCount(msgQueueRef.current.length);
-      setInput("");
+      setInput(""); chatInputRef.current?.clear();
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       // 대화창에 추가 지시를 user 메시지로 즉시 표시
       setMessages(prev => [...prev, {
@@ -1355,7 +1380,7 @@ export default function ChatPage() {
       sessionId = s.id;
     }
 
-    setInput("");
+    setInput(""); chatInputRef.current?.clear();
     setEditMode(null);
     setStreaming(true);
     setStreamBuf("");
@@ -1452,7 +1477,7 @@ export default function ChatPage() {
           429: "요청이 너무 많습니다.",
         };
         // 실패 시 사용자 메시지를 입력창에 복원
-        setInput(content);
+        setInput(content); chatInputRef.current?.setValue(content);
         // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
@@ -1886,7 +1911,7 @@ export default function ChatPage() {
 
   // ── 방식B: 입력창에 복사 (재지시) ──
   function handleCopyToInput(content: string) {
-    setInput(content);
+    setInput(content); chatInputRef.current?.setValue(content);
     setEditMode("resend");
     // 포커스
     setTimeout(() => {
@@ -1911,6 +1936,7 @@ export default function ChatPage() {
     ]);
     const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv", "flv", "m4v"]);
     const VIDEO_MAX_BYTES = 20 * 1024 * 1024; // 20MB
+    const _sid = activeSession?.id;
 
     for (const file of fileArray) {
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
@@ -1918,14 +1944,31 @@ export default function ChatPage() {
       const isText = TEXT_EXTS.has(ext) || file.type.startsWith("text/");
       const isVideo = VIDEO_EXTS.has(ext) || file.type.startsWith("video/");
 
-      if (isImage) {
-        // 이미지: base64 인코딩 → Claude Vision API로 전달
+      // 이미지: 서버 업로드 → file_id 기반 (fallback: base64)
+      if (isImage && _sid) {
+        try {
+          const result = await uploadChatFile(file, _sid);
+          pendingAttachments.current.push({
+            type: "image", file_id: result.file_id,
+            media_type: result.mime_type, name: result.original_name,
+            file_url: result.file_url, thumbnail_url: result.thumbnail_url,
+          });
+        } catch {
+          // fallback: base64
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          const mediaType = file.type || `image/${ext === "jpg" ? "jpeg" : ext}`;
+          pendingAttachments.current.push({ type: "image", base64, media_type: mediaType, name: file.name });
+        }
+      } else if (isImage) {
+        // 세션 없으면 기존 base64 방식
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1] ?? ""); // "data:image/...;base64,XXX" → "XXX"
-          };
+          reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
@@ -1941,28 +1984,57 @@ export default function ChatPage() {
         });
         pendingAttachments.current.push({ type: "text", name: file.name, content });
       } else if (ext === "pdf" || file.type === "application/pdf") {
-        // PDF: base64 인코딩 → 서버에서 텍스트 추출
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1] ?? "");
-          };
-          reader.onerror = () => resolve("");
-          reader.readAsDataURL(file);
-        });
-        pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
-      } else if (isVideo) {
-        // 동영상: 20MB 이하 → base64 인코딩 → Gemini API 분석
-        if (file.size > VIDEO_MAX_BYTES) {
-          pendingAttachments.current.push({ type: "file", name: file.name, error: `동영상 파일이 너무 큽니다 (최대 20MB). 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB` });
+        // PDF: 서버 업로드 시도 → fallback base64
+        if (_sid) {
+          try {
+            const result = await uploadChatFile(file, _sid);
+            pendingAttachments.current.push({
+              type: "pdf", file_id: result.file_id, name: result.original_name,
+              media_type: "application/pdf", file_url: result.file_url,
+            });
+          } catch {
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+              reader.onerror = () => resolve("");
+              reader.readAsDataURL(file);
+            });
+            pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+          }
         } else {
           const base64 = await new Promise<string>((resolve) => {
             const reader = new FileReader();
-            reader.onload = () => {
-              const result = reader.result as string;
-              resolve(result.split(",")[1] ?? "");
-            };
+            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(file);
+          });
+          pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+        }
+      } else if (isVideo) {
+        // 동영상: 20MB 이하 → 서버 업로드 시도 → fallback base64
+        if (file.size > VIDEO_MAX_BYTES) {
+          pendingAttachments.current.push({ type: "file", name: file.name, error: `동영상 파일이 너무 큽니다 (최대 20MB). 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB` });
+        } else if (_sid) {
+          try {
+            const result = await uploadChatFile(file, _sid);
+            pendingAttachments.current.push({
+              type: "video", file_id: result.file_id, name: result.original_name,
+              media_type: result.mime_type, file_url: result.file_url,
+            });
+          } catch {
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+              reader.onerror = () => resolve("");
+              reader.readAsDataURL(file);
+            });
+            const mediaType = file.type || `video/${ext}`;
+            pendingAttachments.current.push({ type: "video", base64, name: file.name, media_type: mediaType });
+          }
+        } else {
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
             reader.onerror = () => resolve("");
             reader.readAsDataURL(file);
           });
@@ -1970,8 +2042,20 @@ export default function ChatPage() {
           pendingAttachments.current.push({ type: "video", base64, name: file.name, media_type: mediaType });
         }
       } else {
-        // 기타 파일: 이름만 기록
-        pendingAttachments.current.push({ type: "file", name: file.name });
+        // 기타 파일: 서버 업로드 시도
+        if (_sid) {
+          try {
+            const result = await uploadChatFile(file, _sid);
+            pendingAttachments.current.push({
+              type: "file", file_id: result.file_id, name: result.original_name,
+              file_url: result.file_url, file_size: result.file_size,
+            });
+          } catch {
+            pendingAttachments.current.push({ type: "file", name: file.name });
+          }
+        } else {
+          pendingAttachments.current.push({ type: "file", name: file.name });
+        }
       }
     }
     textareaRef.current?.focus();
@@ -1992,7 +2076,7 @@ export default function ChatPage() {
 
   // ── Action chips ──
   function applyChip(prefix: string) {
-    setInput((prev) => (prev ? `${prefix} ${prev}` : `${prefix} `));
+    setInput((prev) => (prev ? `${prefix} ${prev}` : `${prefix} `)); setHasInput(true);
     textareaRef.current?.focus();
   }
 
@@ -2006,7 +2090,7 @@ export default function ChatPage() {
       e.preventDefault();
       const removed = msgQueueRef.current.pop();
       setQueueCount(msgQueueRef.current.length);
-      if (removed) setInput(removed);
+      if (removed) { setInput(removed); chatInputRef.current?.setValue(removed); }
       return;
     }
     if (e.ctrlKey && e.key === "]") {
@@ -2519,7 +2603,7 @@ export default function ChatPage() {
             </div>
 
             {/* Workspace + Sessions */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px" }}>
+            <div style={{ flex: 1, overflowY: "auto", contain: "content", padding: "0 8px" }}>
               {workspaces.map((ws) => (
                 <div key={ws.id} style={{ marginBottom: "4px" }}>
                   {/* Workspace header */}
@@ -3248,7 +3332,7 @@ export default function ChatPage() {
                     </div>
                   )}
                   {msg.role === "user" ? (
-                    msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : msg.content
+                    msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content)
                   ) : (
                     <MarkdownBlock text={msg.content} />
                   )}
@@ -3599,7 +3683,7 @@ export default function ChatPage() {
               fontSize: "12px", color: "var(--ct-accent)",
             }}>
               <span>🔄 이전 메시지를 수정하여 재전송합니다</span>
-              <button onClick={() => { setEditMode(null); setInput(""); }}
+              <button onClick={() => { setEditMode(null); setInput(""); chatInputRef.current?.clear(); }}
                 style={{ marginLeft: "8px", padding: "2px 8px", borderRadius: "6px",
                   background: "rgba(255,255,255,0.1)", border: "none", color: "var(--ct-text2)",
                   cursor: "pointer", fontSize: "11px" }}>
@@ -3609,39 +3693,11 @@ export default function ChatPage() {
           )}
           {/* Textarea + send button */}
           <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                const val = e.target.value;
-                // 높이 조절은 즉시 (DOM 직접 조작이므로 리렌더 불필요)
-                e.target.style.height = "auto";
-                const maxH = window.innerWidth < 768 ? 200 : 160;
-                e.target.style.height = Math.min(e.target.scrollHeight, maxH) + "px";
-                setInput(val);
-              }}
+            <ChatInput
+              ref={chatInputRef}
+              screenSize={screenSize}
               onKeyDown={onKeyDown}
-              placeholder="메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"
-              rows={1}
-              disabled={false}
-              style={{
-                flex: 1,
-                padding: "10px 14px",
-                fontSize: screenSize === "mobile" ? "16px" : "14px",
-                resize: "none",
-                overflow: "hidden",
-                background: "var(--ct-input)",
-                color: "var(--ct-text)",
-                border: "1px solid var(--ct-border)",
-                borderRadius: "12px",
-                outline: "none",
-                fontFamily: "inherit",
-                lineHeight: "1.5",
-                minHeight: screenSize === "mobile" ? "52px" : "44px",
-                maxHeight: screenSize === "mobile" ? "200px" : "160px",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
+              onHasInput={setHasInput}
             />
             <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
               {/* API 키 상태 표시 */}
@@ -3711,18 +3767,18 @@ export default function ChatPage() {
               )}
               {/* 전송/대기추가/중단 버튼 */}
               <button
-                onClick={streaming && !input.trim() && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
-                disabled={uploading || (!streaming && !input.trim() && pendingPreviewFiles.length === 0)}
+                onClick={streaming && !hasInput && pendingPreviewFiles.length === 0 ? stopStreaming : () => { if (!uploading) sendMessage(); }}
+                disabled={uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0)}
                 style={{
                   padding: screenSize === "mobile" ? "12px 16px" : "10px 20px", fontSize: screenSize === "mobile" ? "16px" : "14px", fontWeight: 600,
-                  background: uploading ? "#9ca3af" : streaming ? (input.trim() || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
+                  background: uploading ? "#9ca3af" : streaming ? (hasInput || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                   color: "#fff", border: "none", borderRadius: "12px",
-                  cursor: uploading ? "wait" : (streaming || input.trim() || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
-                  opacity: uploading || (!streaming && !input.trim() && pendingPreviewFiles.length === 0) ? 0.5 : 1,
+                  cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
+                  opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.5 : 1,
                   transition: "background 0.2s", whiteSpace: "nowrap",
                 }}
               >
-                {uploading ? "업로드중..." : streaming ? (input.trim() ? "대기 전송" : "⏹ 중단") : "전송"}
+                {uploading ? "업로드중..." : streaming ? (hasInput ? "대기 전송" : "⏹ 중단") : "전송"}
               </button>
             </div>
           </div>
