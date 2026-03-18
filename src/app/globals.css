@@ -38,3 +38,89 @@ body {
   from{opacity:0.7} to{opacity:1}
 }
 .ct-msg-enter { animation: ct-fade 0.2s ease; }
+
+/* ── Mobile optimizations (AADS Mobile Phase A/B/C) ── */
+
+/* C3: Pull-to-refresh 방지 + 스크롤 성능 */
+.ct-messages-scroll {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout paint;
+  will-change: transform;
+}
+
+/* C1: 사이드바/아티팩트 오버레이 트랜지션 */
+.ct-overlay-sidebar {
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s ease;
+}
+.ct-overlay-artifact {
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s ease;
+}
+.ct-overlay-backdrop {
+  transition: opacity 0.25s ease;
+}
+
+/* B4: 모바일 터치 타겟 최소 크기 */
+@media (max-width: 767px) {
+  .ct-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ct-touch-target-sm {
+    min-height: 36px;
+    min-width: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* C2: 모바일 하단 네비게이션 */
+.ct-bottom-nav {
+  display: none;
+}
+@media (max-width: 767px) {
+  .ct-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 150;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--ct-border);
+    background: var(--ct-sb);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .ct-bottom-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px 6px;
+    background: none;
+    border: none;
+    color: var(--ct-text2);
+    font-size: 10px;
+    cursor: pointer;
+    min-height: 50px;
+  }
+  .ct-bottom-nav button.active {
+    color: var(--ct-accent);
+  }
+  .ct-bottom-nav button span.icon {
+    font-size: 20px;
+  }
+}
+
+/* 안전 영역 하단 패딩 (하단 네비가 있을 때 입력창 위로 밀어올림) */
+@media (max-width: 767px) {
+  .ct-input-area-mobile {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}

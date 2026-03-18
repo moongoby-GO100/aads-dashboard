@@ -90,6 +90,8 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
           minHeight: screenSize === "mobile" ? "52px" : "44px",
           maxHeight: screenSize === "mobile" ? "200px" : "160px",
         }}
+        inputMode="text"
+        enterKeyHint="send"
         onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
         onBlur={(e) => (e.target.style.borderColor = "var(--ct-border)")}
       />

@@ -66,6 +66,7 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: ChatSession } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
+  const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const [selectedArtifactIdx, setSelectedArtifactIdx] = useState(0);
 
   // ── 프로젝트 추가 모달 ──
@@ -192,6 +193,7 @@ export default function ChatPage() {
 
   // ── Responsive ──
   useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     function check() {
       const w = window.innerWidth;
       const size: ScreenSize = w >= 1280 ? "desktop" : w >= 768 ? "tablet" : "mobile";
@@ -200,9 +202,13 @@ export default function ChatPage() {
       else if (size === "tablet") { setLeftOpen(false); }
       else { setLeftOpen(true); }
     }
+    function debouncedCheck() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(check, 300);
+    }
     check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    window.addEventListener("resize", debouncedCheck);
+    return () => { window.removeEventListener("resize", debouncedCheck); if (debounceTimer) clearTimeout(debounceTimer); };
   }, []);
 
   // ── Load workspaces (restore last active from localStorage) ──
@@ -1687,6 +1693,26 @@ export default function ChatPage() {
     dashboard: artifacts.filter((a) => a.artifact_type === "dashboard").length,
   };
 
+  // C1: swipe gesture handlers
+  function onSwipeStart(e: React.TouchEvent) {
+    if (screenSize === "desktop") return;
+    const t = e.touches[0];
+    swipeRef.current = { startX: t.clientX, startY: t.clientY, t: Date.now() };
+  }
+  function onSwipeEnd(e: React.TouchEvent) {
+    if (screenSize === "desktop" || !swipeRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeRef.current.startX;
+    const dy = t.clientY - swipeRef.current.startY;
+    const dt = Date.now() - swipeRef.current.t;
+    swipeRef.current = null;
+    if (dt > 500 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx > 80 && !mobileOverlay) setMobileOverlay("sidebar");
+    else if (dx < -80 && !mobileOverlay) setMobileOverlay("artifact");
+    else if (dx < -80 && mobileOverlay === "sidebar") setMobileOverlay(null);
+    else if (dx > 80 && mobileOverlay === "artifact") setMobileOverlay(null);
+  }
+
   // Responsive: whether to show overlays
   const showLeftSidebar =
     screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
@@ -1701,7 +1727,7 @@ export default function ChatPage() {
       style={{
         ...vars,
         display: "flex",
-        height: "100vh",
+        height: "100dvh",
         overflow: "hidden",
         background: "var(--ct-bg)",
         color: "var(--ct-text)",
@@ -1710,6 +1736,8 @@ export default function ChatPage() {
         position: "relative",
       }}
       onClick={() => setContextMenu(null)}
+      onTouchStart={onSwipeStart}
+      onTouchEnd={onSwipeEnd}
     >
       {updateAvailable && <UpdateBanner onRefresh={doRefresh} />}
       {/* ── 완료 토스트 ── */}
@@ -2582,6 +2610,7 @@ export default function ChatPage() {
         {/* Messages */}
         <div
           ref={messagesContainerRef}
+          className="ct-messages-scroll"
           style={{
             flex: 1,
             overflowY: "auto",
@@ -3085,6 +3114,7 @@ export default function ChatPage() {
         <div
           style={{
             padding: screenSize === "mobile" ? "10px 10px" : "12px 14px",
+            paddingBottom: screenSize === "mobile" ? "calc(66px + env(safe-area-inset-bottom, 0px))" : "12px",
             borderTop: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             flexShrink: 0,
@@ -3770,6 +3800,23 @@ export default function ChatPage() {
             </div>
           )}
         </div>
+      )}
+      {/* C2: mobile bottom nav */}
+      {screenSize !== "desktop" && (
+        <nav className="ct-bottom-nav">
+          <button className={mobileOverlay === "sidebar" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "sidebar" ? null : "sidebar")}>
+            <span className="icon">💬</span><span>세션</span>
+          </button>
+          <button onClick={() => createSession()}>
+            <span className="icon">✏️</span><span>새대화</span>
+          </button>
+          <button className={mobileOverlay === "artifact" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "artifact" ? null : "artifact")}>
+            <span className="icon">📄</span><span>아티팩트</span>
+          </button>
+          <button onClick={toggleTheme}>
+            <span className="icon">{theme === "dark" ? "☀️" : "🌙"}</span><span>테마</span>
+          </button>
+        </nav>
       )}
     </div>
   );
