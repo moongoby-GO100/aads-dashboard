@@ -15,24 +15,39 @@ import SourceCard from "./SourceCard";
 
 // ─── Inline Markdown Renderer ────────────────────────────────────────────────
 
+function isSafeUrl(url: string): boolean {
+  const trimmed = url.trim().toLowerCase();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
+  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return true;
+  // Block dangerous schemes
+  if (trimmed.startsWith("javascript:") || trimmed.startsWith("data:") || trimmed.startsWith("vbscript:")) return false;
+  // Relative URLs without scheme are safe
+  if (!trimmed.includes(":")) return true;
+  return false;
+}
+
 function renderInline(text: string, key?: number): React.ReactNode {
   const parts: React.ReactNode[] = [];
   // 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
-  const re = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  const re = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|(https?:\/\/[^\s<>)"\]]+))/g;
   let last = 0, m: RegExpExecArray | null, idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last)
       parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
     if (m[3]) {
-      // 이미지: ![alt](url)
+      // 이미지: ![alt](url) — only allow safe URLs
+      const imgSrc = isSafeUrl(m[3]) ? m[3] : "";
       parts.push(
-        <img key={`img${key}-${idx++}`} src={m[3]} alt={m[2] || ""} loading="lazy"
-          style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
+        imgSrc
+          ? <img key={`img${key}-${idx++}`} src={imgSrc} alt={m[2] || ""} loading="lazy"
+              style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
+          : <span key={`img${key}-${idx++}`}>[image blocked: unsafe URL]</span>
       );
     } else if (m[5]) {
-      // 링크: [text](url)
+      // 링크: [text](url) — only allow safe URLs
+      const linkHref = isSafeUrl(m[5]) ? m[5] : "#";
       parts.push(
-        <a key={`a${key}-${idx++}`} href={m[5]} target="_blank" rel="noopener noreferrer"
+        <a key={`a${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
           style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[4]}</a>
       );
     } else if (m[6]) parts.push(<strong key={`b${key}-${idx++}`} className="font-semibold">{m[6]}</strong>);
@@ -42,6 +57,13 @@ function renderInline(text: string, key?: number): React.ReactNode {
         <code key={`c${key}-${idx++}`} className="px-1 py-0.5 rounded text-xs font-mono"
           style={{ background: "rgba(255,255,255,0.1)", color: "#f9c74f" }}>{m[8]}</code>
       );
+    else if (m[9]) {
+      // plain URL 자동 링크 변환
+      parts.push(
+        <a key={`au${key}-${idx++}`} href={m[9]} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[9]}</a>
+      );
+    }
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last)}</span>);
