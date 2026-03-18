@@ -1,4 +1,4 @@
-// AADS-dashboard-rebuild-trigger: 2026-03-18T13:38
+// AADS-dashboard-rebuild: 2026-03-18T13:48-final
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback } from "react";
 import { MODEL_OPTIONS, DEFAULT_MODEL } from "@/components/chat/ModelSelector";
