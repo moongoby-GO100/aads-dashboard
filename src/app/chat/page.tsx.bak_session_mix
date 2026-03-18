@@ -570,12 +570,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeSession?.id) return;
     const sid = activeSession.id;
-    // BUG-SESSION-MIX FIX: cancelled 클로저로 세션 전환 시 in-flight 폴링 응답 폐기
-    let cancelled = false;
     // PERF: 고정 1초 interval, waitingBg 아닐 때는 5틱마다 실행 (=5초)
     let tickCount = 0;
     const iv = setInterval(async () => {
-      if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
       if (isInitialLoadRef.current) return;
       const _streaming = streamingRef.current;
@@ -587,13 +584,11 @@ export default function ChatPage() {
         const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean }>(
           `/chat/sessions/${sid}/streaming-status`
         );
-        if (cancelled) return;
         if (ss.just_completed) {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false);
           setStreaming(false);
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=1000&sort=desc`).then(msgs => msgs.reverse());
-          if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
@@ -612,7 +607,6 @@ export default function ChatPage() {
           setStreaming(false);
           setWaitingBgResponse(false);
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=1000&sort=desc`).then(msgs => msgs.reverse());
-          if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
@@ -635,7 +629,6 @@ export default function ChatPage() {
       if (_streaming && !_waitingBg) return;
       try {
         const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
-        if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
           ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m)
@@ -649,7 +642,6 @@ export default function ChatPage() {
             setWaitingBgResponse(false);
             try {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=1000&sort=desc`).then(msgs => msgs.reverse());
-              if (cancelled) return;
               if (allMsgs) {
                 const filtered = allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
                 if (filtered.length > 0) {
@@ -709,7 +701,7 @@ export default function ChatPage() {
         });
       } catch { /* 폴링 실패 무시 */ }
     }, 1000); // 고정 1초 간격, 내부에서 waitingBg 여부에 따라 실행 여부 결정
-    return () => { cancelled = true; clearInterval(iv); };
+    return () => clearInterval(iv);
   }, [activeSession?.id]); // PERF: 의존성을 세션 ID만으로 축소
 
   // ── Toggle theme ──
