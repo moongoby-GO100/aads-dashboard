@@ -547,6 +547,8 @@ export default function ChatPage() {
   const activeSessionRef = useRef<string | null>(null);
   // BUG-2 FIX: 초기 로드와 워크스페이스 전환 구분
   const initialWsLoadRef = useRef(true);
+  // BUG-REFRESH FIX: 초기 마운트 시 hash 삭제 방지
+  const isFirstMountRef = useRef(true);
   // 스트리밍 중인 세션 ID 추적 — 세션 전환 시 다른 세션 내용 깜빡임 방지
   const streamingSessionRef = useRef<string | null>(null);
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
@@ -682,7 +684,7 @@ export default function ChatPage() {
       setMessages([]);
     }
     chatApi<ChatSession[]>(`/chat/sessions?workspace_id=${activeWs}`)
-      .then((loaded) => {
+      .then(async (loaded) => {
         setSessions(loaded);
         if (loaded.length === 0) {
           setActiveSession(null);
@@ -693,7 +695,22 @@ export default function ChatPage() {
         const hashSid = typeof window !== "undefined" && window.location.hash ? window.location.hash.replace(/^#/, "") : null;
         const lsSid = localStorage.getItem(`aads-chat-activeSession-${activeWs}`);
         const savedSid = hashSid || lsSid;
-        const match = savedSid && loaded.find((s) => s.id === savedSid);
+        let match = savedSid ? loaded.find((s) => s.id === savedSid) : null;
+        // BUG-REFRESH FIX: 목록에 없으면 직접 API로 조회 시도
+        if (savedSid && !match) {
+          try {
+            const directSession = await chatApi<ChatSession>(`/chat/sessions/${savedSid}`);
+            if (directSession && directSession.workspace_id === activeWs) {
+              loaded.unshift(directSession);
+              setSessions([directSession, ...loaded.filter(s => s.id !== directSession.id)]);
+              setActiveSession(directSession);
+              console.log("[session-restore]", { savedSid, matchFound: false, directFetch: true, chosenId: directSession.id, totalSessions: loaded.length });
+              return;
+            }
+          } catch {
+            // 세션이 삭제된 경우 무시하고 fallback
+          }
+        }
         // BUG-2 FIX: updated_at 기준 정렬 후 최신 세션 선택
         const sorted = [...loaded].sort((a, b) =>
           new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
@@ -707,6 +724,11 @@ export default function ChatPage() {
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
+    // BUG-REFRESH FIX: 초기 마운트 시 activeSession이 null이면 hash 클리어 없이 리턴
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      if (!activeSession) return;
+    }
     // 먼저 이전 세션ID 저장 (ref 업데이트 전에 읽어야 함)
     const prevSid = activeSessionRef.current;
     activeSessionRef.current = activeSession?.id || null;
