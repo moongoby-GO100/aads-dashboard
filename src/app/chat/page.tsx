@@ -659,9 +659,33 @@ export default function ChatPage() {
   // ── Load workspaces (restore last active from localStorage) ──
   useEffect(() => {
     chatApi<Workspace[]>("/chat/workspaces")
-      .then((ws) => {
+      .then(async (ws) => {
         setWorkspaces(ws);
         if (ws.length === 0) return;
+
+        // 1. URL hash에서 세션 ID 추출
+        const hashSid = typeof window !== "undefined" && window.location.hash
+          ? window.location.hash.replace(/^#/, "")
+          : null;
+
+        // 2. hash 세션이 있으면 해당 세션의 워크스페이스를 먼저 확인
+        if (hashSid) {
+          try {
+            const session = await chatApi<ChatSession>(`/chat/sessions/${hashSid}`);
+            if (session && session.workspace_id) {
+              const wsMatch = ws.find((w) => w.id === session.workspace_id);
+              if (wsMatch) {
+                console.log("[ws-restore] hash session workspace found", { hashSid, wsId: wsMatch.id, wsName: wsMatch.name });
+                setActiveWs(wsMatch.id);
+                return;
+              }
+            }
+          } catch {
+            // 세션이 삭제된 경우 무시하고 fallback
+          }
+        }
+
+        // 3. hash 세션 없으면 기존 localStorage 복원
         const savedWs = localStorage.getItem("aads-chat-activeWs");
         const match = savedWs && ws.find((w) => w.id === savedWs);
         setActiveWs(match ? match.id : ws[0].id);
