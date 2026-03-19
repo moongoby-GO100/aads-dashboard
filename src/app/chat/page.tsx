@@ -2909,8 +2909,7 @@ export default function ChatPage() {
                   const ta = chatInputRef.current;
                   if (ta) {
                     const cur = ta.getValue();
-                    ta.setValue(cur + "
-");
+                    ta.setValue(cur + "\n");
                     ta.focus();
                   }
                 }}
