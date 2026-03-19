@@ -2902,30 +2902,6 @@ export default function ChatPage() {
                 {showMobileActions ? "✕" : "+"}
               </button>
             )}
-            {/* Mobile: newline button */}
-            {screenSize === "mobile" && (
-              <button
-                onClick={() => {
-                  const ta = chatInputRef.current;
-                  if (ta) {
-                    const cur = ta.getValue();
-                    ta.setValue(cur + "
-");
-                    ta.focus();
-                  }
-                }}
-                style={{
-                  width: "36px", height: "44px", flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "none", border: "none",
-                  color: "var(--ct-text2)", cursor: "pointer",
-                  fontSize: "18px", padding: 0,
-                }}
-                title="줄바꿈"
-              >
-                ↵
-              </button>
-            )}
             {/* Textarea wrapper with integrated send */}
             <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end" }}>
               <ChatInput
@@ -2933,7 +2909,7 @@ export default function ChatPage() {
                 screenSize={screenSize}
                 onKeyDown={onKeyDown}
                 onHasInput={setHasInput}
-                placeholder={screenSize === "mobile" ? "메시지 입력... (↵으로 줄바꿈)" : undefined}
+                placeholder={screenSize === "mobile" ? "메시지 입력..." : undefined}
               />
               {/* Mobile: send button inside textarea area */}
               {screenSize === "mobile" && (
@@ -3095,7 +3071,23 @@ export default function ChatPage() {
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
         activeSession={activeSession} copyArtifact={copyArtifact} toDirective={toDirective}
       />
-
+      {/* C2: mobile bottom nav */}
+      {screenSize !== "desktop" && (
+        <nav className="ct-bottom-nav">
+          <button className={mobileOverlay === "sidebar" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "sidebar" ? null : "sidebar")}>
+            <span className="icon">💬</span><span>세션</span>
+          </button>
+          <button onClick={() => createSession()}>
+            <span className="icon">✏️</span><span>새대화</span>
+          </button>
+          <button className={mobileOverlay === "artifact" ? "active" : ""} onClick={() => setMobileOverlay(mobileOverlay === "artifact" ? null : "artifact")}>
+            <span className="icon">📄</span><span>아티팩트</span>
+          </button>
+          <button onClick={toggleTheme}>
+            <span className="icon">{theme === "dark" ? "☀️" : "🌙"}</span><span>테마</span>
+          </button>
+        </nav>
+      )}
     </div>
   );
 }
