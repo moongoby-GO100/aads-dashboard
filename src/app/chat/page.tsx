@@ -1195,7 +1195,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if (streamingRef.current && !queuedContent) {
+    if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
