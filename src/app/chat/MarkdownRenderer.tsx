@@ -3,6 +3,11 @@ import React, { useState } from "react";
 
 // AADS Markdown Renderer — extracted from page.tsx (Phase 2)
 
+const isSafeUrl = (url: string) => {
+  const u = url.trim().toLowerCase();
+  return !u.startsWith("javascript:") && !u.startsWith("data:") && !u.startsWith("vbscript:");
+};
+
 function processInline(text: string): React.ReactNode {
   // Split by inline code first
   const codeParts = text.split(/(`[^`\n]+`)/g);
@@ -31,16 +36,21 @@ function processInline(text: string): React.ReactNode {
       const seg = linkParts[li] || "";
       if (seg) withLinks.push(<span key={`${i}-l${li}`}>{seg}</span>);
       if (li + 2 < linkParts.length) {
+        const linkUrl = linkParts[li + 2];
         withLinks.push(
-          <a
-            key={`${i}-a${li}`}
-            href={linkParts[li + 2]}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--ct-accent)", textDecoration: "underline" }}
-          >
-            {linkParts[li + 1]}
-          </a>
+          isSafeUrl(linkUrl) ? (
+            <a
+              key={`${i}-a${li}`}
+              href={linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--ct-accent)", textDecoration: "underline" }}
+            >
+              {linkParts[li + 1]}
+            </a>
+          ) : (
+            <span key={`${i}-a${li}`}>{linkParts[li + 1]}</span>
+          )
         );
       }
     }
@@ -59,7 +69,7 @@ function processInline(text: string): React.ReactNode {
         const urlRegex = /(https?:\/\/[^\s<>"')\]},;]+)/g;
         const urlParts = bp.split(urlRegex);
         return urlParts.map((up: string, k: number) => {
-          if (up.match(/^https?:\/\//)) {
+          if (up.match(/^https?:\/\//) && isSafeUrl(up)) {
             // Remove trailing punctuation that's likely not part of URL
             const cleaned = up.replace(/[.),:;!?]+$/, "");
             const trailing = up.slice(cleaned.length);
@@ -117,7 +127,7 @@ function InlineMd({ text }: { text: string }) {
     // Images: ![alt](url)
     if (line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/)) {
       const m = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
-      if (m) {
+      if (m && isSafeUrl(m[2])) {
         return (
           <img
             key={li}
@@ -283,7 +293,7 @@ function CopyableCodeBlock({ lang, code }: { lang: string; code: string }) {
         <iframe
           srcDoc={code}
           style={{ width: "100%", height: "540px", border: "none", background: "#fff" }}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
           title="HTML Preview"
         />
       </div>

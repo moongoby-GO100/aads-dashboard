@@ -1,6 +1,6 @@
 // AADS-dashboard-rebuild: refactored
 "use client";
-import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, memo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo, memo } from "react";
 import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
@@ -36,7 +36,6 @@ const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   return (
     <div
-      key={msg.id || idx}
       className="ct-msg-enter group"
       style={{
         display: "flex",
@@ -238,7 +237,7 @@ const MessageItem = memo(function MessageItem({
         {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
         {msg.role === "user" && msg.created_at && (
           <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
-            {(msg as any).edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
+            {msg.edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
@@ -376,6 +375,14 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, any>>>([]);
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
+  // C-2: Object URL 캐싱 + 메모리 누수 방지
+  const pendingPreviewUrls = useMemo(
+    () => pendingPreviewFiles.map((f) => f.type.startsWith("image/") ? URL.createObjectURL(f) : null),
+    [pendingPreviewFiles]
+  );
+  useEffect(() => {
+    return () => { pendingPreviewUrls.forEach((u) => u && URL.revokeObjectURL(u)); };
+  }, [pendingPreviewUrls]);
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
@@ -394,6 +401,7 @@ export default function ChatPage() {
   // ── Performance: ref로 폴링 useEffect 의존성 폭탄 방지 ──
   const streamingRef = useRef(streaming);
   const waitingBgRef = useRef(waitingBgResponse);
+  const waitingBgTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { streamingRef.current = streaming; }, [streaming]);
   useEffect(() => { waitingBgRef.current = waitingBgResponse; }, [waitingBgResponse]);
 
@@ -622,6 +630,7 @@ export default function ChatPage() {
     setEditText("");
     // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
     setMessages([]);
+    if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
     setWaitingBgResponse(false);
     setStreamBuf("");
     setSelectedArtifactIdx(0);
@@ -670,7 +679,8 @@ export default function ChatPage() {
       if (status.is_streaming) {
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(fetchSid);
-        setTimeout(() => {
+        if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+        waitingBgTimeoutRef.current = setTimeout(() => {
           setWaitingBgResponse(false);
           pendingResponseSessions.current.delete(fetchSid);
         }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
@@ -692,7 +702,8 @@ export default function ChatPage() {
               // 여전히 없으면 폴링이 계속 잡아줌 (60초 타임아웃)
             });
           }, 1500);
-          setTimeout(() => setWaitingBgResponse(false), 60000);
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => setWaitingBgResponse(false), 60000);
         } else {
           setWaitingBgResponse(false);
         }
@@ -894,7 +905,8 @@ export default function ChatPage() {
         if (ss.is_streaming && !_waitingBg && !_streaming) {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
-          setTimeout(() => {
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
             setWaitingBgResponse(false);
             pendingResponseSessions.current.delete(sid);
           }, 180000);
@@ -1206,11 +1218,14 @@ export default function ChatPage() {
     streamingSessionRef.current = sessionId;
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
-    // 첨부 이미지 미리보기 URL 캡처 (메시지 버블 표시용) 후 state 초기화
-    const _previewUrls = pendingPreviewFiles
+    // C-3: stale closure 방지 — state 초기화 전에 로컬 변수로 캡처
+    const filesToSend = [...pendingPreviewFiles];
+    setPendingPreviewFiles([]);
+
+    // 첨부 이미지 미리보기 URL 캡처 (메시지 버블 표시용)
+    const _previewUrls = filesToSend
       .filter((f) => f.type.startsWith("image/"))
       .map((f) => URL.createObjectURL(f));
-    setPendingPreviewFiles([]);
 
     // 이 요청의 세션 ID 캡처 — 세션 전환 감지용
     const requestSessionId = sessionId;
@@ -1246,7 +1261,7 @@ export default function ChatPage() {
 
     let full = "";
     try {
-      const rawFiles = [...pendingPreviewFiles];
+      const rawFiles = filesToSend;
       const attachments = pendingAttachments.current.length > 0
         ? [...pendingAttachments.current] : [];
       pendingAttachments.current = [];
@@ -1669,7 +1684,7 @@ export default function ChatPage() {
   }
 
   // ── 방식A: 수정 후 재전송 ──
-  async function handleEditResend(msgId: string, newContent: string) {
+  const handleEditResend = useCallback(async (msgId: string, newContent: string) => {
     if (!activeSession) return;
     try {
       // 1) 기존 메시지 + AI 응답 삭제
@@ -1698,10 +1713,10 @@ export default function ChatPage() {
     }
     setEditingMsgId(null);
     setEditText("");
-  }
+  }, [activeSession, sendMessage]);
 
   // ── 메시지 삭제 (user: 메시지+AI응답 삭제, assistant: 해당 응답만 삭제) ──
-  async function handleDeleteMessage(msgId: string, role: string) {
+  const handleDeleteMessage = useCallback(async (msgId: string, role: string) => {
     if (!confirm(role === "user" ? "이 메시지와 AI 응답을 삭제할까요?" : "이 응답을 삭제할까요?")) return;
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
@@ -1725,10 +1740,10 @@ export default function ChatPage() {
     } catch (e) {
       console.error("Delete message failed:", e);
     }
-  }
+  }, []);
 
   // ── 방식B: 입력창에 복사 (재지시) ──
-  function handleCopyToInput(content: string) {
+  const handleCopyToInput = useCallback((content: string) => {
     setInput(content); chatInputRef.current?.setValue(content);
     setEditMode("resend");
     // 포커스
@@ -1736,7 +1751,7 @@ export default function ChatPage() {
       const ta = document.querySelector("textarea");
       if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
     }, 100);
-  }
+  }, []);
 
   // ── File attachment (클라이언트 측 inline 변환 — 서버 업로드 불필요) ──
   async function handleFiles(files: FileList | File[] | null) {
@@ -2806,9 +2821,9 @@ export default function ChatPage() {
                 const isImg = file.type.startsWith("image/");
                 return (
                   <div key={i} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                    {isImg ? (
+                    {isImg && pendingPreviewUrls[i] ? (
                       <img
-                        src={URL.createObjectURL(file)}
+                        src={pendingPreviewUrls[i]}
                         alt={file.name}
                         style={{
                           width: "64px", height: "64px", objectFit: "cover",
