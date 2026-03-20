@@ -233,7 +233,6 @@ export default function ChatPage() {
             if (session && session.workspace_id) {
               const wsMatch = ws.find((w) => w.id === session.workspace_id);
               if (wsMatch) {
-                console.log("[ws-restore] hash session workspace found", { hashSid, wsId: wsMatch.id, wsName: wsMatch.name });
                 setActiveWs(wsMatch.id);
                 return;
               }
@@ -286,7 +285,6 @@ export default function ChatPage() {
               loaded.unshift(directSession);
               setSessions([directSession, ...loaded.filter(s => s.id !== directSession.id)]);
               setActiveSession(directSession);
-              console.log("[session-restore]", { savedSid, matchFound: false, directFetch: true, chosenId: directSession.id, totalSessions: loaded.length });
               return;
             }
           } catch {
@@ -298,7 +296,6 @@ export default function ChatPage() {
           new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
         );
         const chosen = match || sorted[0];
-        console.log("[session-restore]", { savedSid, matchFound: !!match, chosenId: chosen?.id, fallbackId: sorted[0]?.id, totalSessions: loaded.length });
         setActiveSession(chosen);
       })
       .catch(console.error);
