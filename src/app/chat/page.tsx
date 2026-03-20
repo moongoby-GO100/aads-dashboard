@@ -396,6 +396,7 @@ export default function ChatPage() {
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
   const [completionToast, setCompletionToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
 
   // ── Performance: ref로 폴링 useEffect 의존성 폭탄 방지 ──
@@ -404,6 +405,22 @@ export default function ChatPage() {
   const waitingBgTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { streamingRef.current = streaming; }, [streaming]);
   useEffect(() => { waitingBgRef.current = waitingBgResponse; }, [waitingBgResponse]);
+
+  // ── H-3: sendMessage useCallback 안정화용 ref ──
+  const activeSessionObjRef = useRef(activeSession);
+  const modelRef = useRef(model);
+  const activeWsRef = useRef(activeWs);
+  const pendingPreviewFilesRef = useRef(pendingPreviewFiles);
+  const inputRef = useRef(input);
+  const toolStatusRef = useRef(toolStatus);
+  const screenSizeRef = useRef(screenSize);
+  useEffect(() => { activeSessionObjRef.current = activeSession; }, [activeSession]);
+  useEffect(() => { modelRef.current = model; }, [model]);
+  useEffect(() => { activeWsRef.current = activeWs; }, [activeWs]);
+  useEffect(() => { pendingPreviewFilesRef.current = pendingPreviewFiles; }, [pendingPreviewFiles]);
+  useEffect(() => { inputRef.current = input; }, [input]);
+  useEffect(() => { toolStatusRef.current = toolStatus; }, [toolStatus]);
+  useEffect(() => { screenSizeRef.current = screenSize; }, [screenSize]);
 
   // ── 토스트 디바운스 (5초 내 중복 차단) ──
   const showCompletionToast = useCallback((msg: string) => {
@@ -536,7 +553,10 @@ export default function ChatPage() {
         const match = savedWs && ws.find((w) => w.id === savedWs);
         setActiveWs(match ? match.id : ws[0].id);
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
+      });
   }, []);
 
   // ── Load sessions on workspace change (restore last session from localStorage) ──
@@ -587,7 +607,10 @@ export default function ChatPage() {
         const chosen = match || sorted[0];
         setActiveSession(chosen);
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
+      });
   }, [activeWs]);
 
   // ── Load messages & artifacts on session change ──
@@ -1002,25 +1025,26 @@ export default function ChatPage() {
   }
 
   // ── Session management ──
-  async function createSession(workspaceId?: string) {
-    const wsId = workspaceId || activeWs;
+  const createSession = useCallback(async function createSession(workspaceId?: string) {
+    const wsId = workspaceId || activeWsRef.current;
     if (!wsId) return null;
     try {
       const s = await chatApi<ChatSession>("/chat/sessions", {
         method: "POST",
-        body: JSON.stringify({ workspace_id: wsId, title: "새 대화", current_model: model }),
+        body: JSON.stringify({ workspace_id: wsId, title: "새 대화", current_model: modelRef.current }),
       });
       setSessions((prev) => [s, ...prev]);
       isInitialLoadRef.current = true;
       setActiveSession(s);
       setMessages([]);
-      if (screenSize !== "desktop") setMobileOverlay(null);
+      if (screenSizeRef.current !== "desktop") setMobileOverlay(null);
       return s;
     } catch (e) {
       console.error(e);
       return null;
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function addProject() {
     const code = newProjectCode.trim().toUpperCase();
@@ -1110,8 +1134,8 @@ export default function ChatPage() {
   };
 
   // ── Send message (SSE streaming) ──
-  async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
-    const content = queuedContent || (chatInputRef.current?.getValue() || input).trim();
+  const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
+    const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
     sessionSwitchRef.current = false;
@@ -1125,7 +1149,7 @@ export default function ChatPage() {
       // 유저 메시지로 표시
       const userImgMsg: ChatMessage = {
         id: `tmp-img-${Date.now()}`,
-        session_id: activeSession?.id || "",
+        session_id: activeSessionObjRef.current?.id || "",
         role: "user",
         content: content,
         created_at: new Date().toISOString(),
@@ -1139,7 +1163,7 @@ export default function ChatPage() {
         const imgSrc = imgData.url || (imgData.data ? `data:image/png;base64,${imgData.data}` : null);
         const aiImgMsg: ChatMessage = {
           id: `img-${Date.now()}`,
-          session_id: activeSession?.id || "",
+          session_id: activeSessionObjRef.current?.id || "",
           role: "assistant",
           content: imgSrc
             ? `![생성된 이미지](${imgSrc})
@@ -1158,7 +1182,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if (streaming && !queuedContent) {
+    if (streamingRef.current && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
@@ -1174,14 +1198,14 @@ export default function ChatPage() {
         ? ` 📎 ${interruptAttachments.length}개 파일` : "";
       setMessages(prev => [...prev, {
         id: `interrupt-${Date.now()}`,
-        session_id: activeSession?.id || "",
+        session_id: activeSessionObjRef.current?.id || "",
         role: "user" as const,
         content: `💬 **[추가 지시]** ${interruptContent}${attachLabel}`,
         created_at: new Date().toISOString(),
       }]);
       // 백엔드 인터럽트 큐에 push (첨부파일 포함)
-      if (activeSession?.id) {
-        chatApi(`/chat/sessions/${activeSession.id}/interrupt`, {
+      if (activeSessionObjRef.current?.id) {
+        chatApi(`/chat/sessions/${activeSessionObjRef.current.id}/interrupt`, {
           method: "POST",
           body: JSON.stringify({ content: interruptContent, attachments: interruptAttachments }),
         }).then(() => {
@@ -1202,9 +1226,9 @@ export default function ChatPage() {
     }
 
     // Auto-create session if none active
-    let sessionId = activeSession?.id;
+    let sessionId = activeSessionObjRef.current?.id;
     if (!sessionId) {
-      if (!activeWs) return;
+      if (!activeWsRef.current) return;
       const s = await createSession();
       if (!s) return;
       sessionId = s.id;
@@ -1219,7 +1243,7 @@ export default function ChatPage() {
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
     // C-3: stale closure 방지 — state 초기화 전에 로컬 변수로 캡처
-    const filesToSend = [...pendingPreviewFiles];
+    const filesToSend = [...pendingPreviewFilesRef.current];
     setPendingPreviewFiles([]);
 
     // 첨부 이미지 미리보기 URL 캡처 (메시지 버블 표시용)
@@ -1274,13 +1298,13 @@ export default function ChatPage() {
         const formData = new FormData();
         formData.append("session_id", sessionId!);
         formData.append("content", content);
-        if (model) formData.append("model_override", model);
+        if (modelRef.current) formData.append("model_override", modelRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
         fetchBody = formData;
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: model, attachments });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments });
       }
 
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
@@ -1361,7 +1385,7 @@ export default function ChatPage() {
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
               if (!isStale()) setStreamBuf(full);
-              if (toolStatus && !isStale()) setToolStatus(null);
+              if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
               full += ev.text;
@@ -1634,7 +1658,8 @@ export default function ChatPage() {
         setQueueCount(0);
       }
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSession, showCompletionToast]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
@@ -1685,7 +1710,7 @@ export default function ChatPage() {
 
   // ── 방식A: 수정 후 재전송 ──
   const handleEditResend = useCallback(async (msgId: string, newContent: string) => {
-    if (!activeSession) return;
+    if (!activeSessionObjRef.current) return;
     try {
       // 1) 기존 메시지 + AI 응답 삭제
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
@@ -1713,7 +1738,7 @@ export default function ChatPage() {
     }
     setEditingMsgId(null);
     setEditText("");
-  }, [activeSession, sendMessage]);
+  }, [sendMessage]);
 
   // ── 메시지 삭제 (user: 메시지+AI응답 삭제, assistant: 해당 응답만 삭제) ──
   const handleDeleteMessage = useCallback(async (msgId: string, role: string) => {
@@ -2605,6 +2630,13 @@ export default function ChatPage() {
                   })}
                 </div>
               </div>
+            </div>
+          )}
+
+          {loadError && (
+            <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#ef4444", margin: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{loadError}</span>
+              <button onClick={() => { setLoadError(null); window.location.reload(); }} style={{ background: "#ef4444", color: "white", border: "none", borderRadius: "4px", padding: "4px 12px", cursor: "pointer" }}>새로고침</button>
             </div>
           )}
 
