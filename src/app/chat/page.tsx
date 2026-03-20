@@ -908,7 +908,7 @@ export default function ChatPage() {
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-          const isAutoTrigger979 = _lastUser979?.content?.startsWith("[시스템]") || _lastUser979?.intent === "auto_reaction" || _lastUser979?.intent === "system_trigger" || _lastAi979?.intent === "auto_reaction";
+          const isAutoTrigger979 = _lastUser979?.content?.startsWith("[시스템]") || _lastUser979?.intent === "auto_reaction" || _lastUser979?.intent === "system_trigger" || _lastAi979?.intent === "auto_reaction" || _lastAi979?.intent === "interrupted";
           if (!isAutoTrigger979) {
             showCompletionToast("응답이 완료되었습니다");
           }
@@ -970,7 +970,7 @@ export default function ChatPage() {
             // rawLatest는 이미 DESC(최신순) — .reverse() 제거하여 최신 user 메시지 기준 판단
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-            const isAutoTrigger = _lastUser1029?.content?.startsWith("[시스템]") || _lastUser1029?.intent === "auto_reaction" || _lastUser1029?.intent === "system_trigger" || _lastAi1029?.intent === "auto_reaction";
+            const isAutoTrigger = _lastUser1029?.content?.startsWith("[시스템]") || _lastUser1029?.intent === "auto_reaction" || _lastUser1029?.intent === "system_trigger" || _lastAi1029?.intent === "auto_reaction" || _lastAi1029?.intent === "interrupted";
             if (!isAutoTrigger) {
               showCompletionToast("응답이 완료되었습니다");
             }
@@ -1647,7 +1647,7 @@ export default function ChatPage() {
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-                const isAutoTrigger1696 = _lastUser1696?.content?.startsWith("[시스템]") || _lastUser1696?.intent === "auto_reaction" || _lastUser1696?.intent === "system_trigger" || _lastAi1696?.intent === "auto_reaction";
+                const isAutoTrigger1696 = _lastUser1696?.content?.startsWith("[시스템]") || _lastUser1696?.intent === "auto_reaction" || _lastUser1696?.intent === "system_trigger" || _lastAi1696?.intent === "auto_reaction" || _lastAi1696?.intent === "interrupted";
                 if (!isAutoTrigger1696) {
                   showCompletionToast("응답이 완료되었습니다");
                 }
