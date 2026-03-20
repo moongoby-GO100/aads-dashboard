@@ -66,12 +66,23 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
       }
     }, [onHasInput]);
 
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        const val = taRef.current?.value ?? localInput;
+        if (!val.trim()) {
+          e.preventDefault();
+          return;
+        }
+      }
+      onKeyDown(e);
+    }, [localInput, onKeyDown]);
+
     return (
       <textarea
         ref={taRef}
         value={localInput}
         onChange={handleChange}
-        onKeyDown={onKeyDown}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder || "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"}
         rows={1}
         style={{

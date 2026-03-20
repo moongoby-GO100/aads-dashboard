@@ -554,7 +554,6 @@ export default function ChatPage() {
         setActiveWs(match ? match.id : ws[0].id);
       })
       .catch((err) => {
-        console.error(err);
         setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
       });
   }, []);
@@ -607,8 +606,7 @@ export default function ChatPage() {
         const chosen = match || sorted[0];
         setActiveSession(chosen);
       })
-      .catch((err) => {
-        console.error(err);
+      .catch(() => {
         setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
       });
   }, [activeWs]);
@@ -690,8 +688,7 @@ export default function ChatPage() {
           }
           return processed;
         })
-        .catch((err) => {
-          console.error("loadMessages failed:", err);
+        .catch(() => {
           return [] as ChatMessage[];
         });
 
@@ -1039,8 +1036,7 @@ export default function ChatPage() {
       setMessages([]);
       if (screenSizeRef.current !== "desktop") setMobileOverlay(null);
       return s;
-    } catch (e) {
-      console.error(e);
+    } catch {
       return null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1065,7 +1061,7 @@ export default function ChatPage() {
       setNewProjectCode("");
       setNewProjectName("");
       setNewProjectIcon("📁");
-    } catch (e) { console.error("Failed to add project:", e); }
+    } catch { /* ignore */ }
   }
 
   async function deleteSession(id: string) {
@@ -1073,7 +1069,7 @@ export default function ChatPage() {
       await chatApi(`/chat/sessions/${id}`, { method: "DELETE" });
       setSessions((prev) => prev.filter((s) => s.id !== id));
       if (activeSession?.id === id) { setActiveSession(null); setMessages([]); }
-    } catch (e) { console.error(e); }
+    } catch { /* ignore */ }
     setContextMenu(null);
   }
 
@@ -1086,7 +1082,7 @@ export default function ChatPage() {
       });
       setSessions((prev) => prev.map((s) => (s.id === renaming.id ? updated : s)));
       if (activeSession?.id === renaming.id) setActiveSession(updated);
-    } catch (e) { console.error(e); }
+    } catch { /* ignore */ }
     setRenaming(null);
     setContextMenu(null);
   }
@@ -1126,7 +1122,6 @@ export default function ChatPage() {
         alert(data.detail || "이미지 생성 실패");
       }
     } catch (e) {
-      console.error("이미지 생성 실패:", e);
       alert("이미지 생성 중 오류가 발생했습니다");
     } finally {
       setImageGenLoading(false);
@@ -1173,8 +1168,8 @@ export default function ChatPage() {
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, aiImgMsg]);
-      } catch (e) {
-        console.error("이미지 생성 오류:", e);
+      } catch {
+        // 이미지 생성 오류
       } finally {
         setImageGenLoading(false);
       }
@@ -1652,7 +1647,6 @@ export default function ChatPage() {
 
         // 스트리밍 완료 시 큐 잔여분 전체 클리어 (interrupt로 이미 전달됨)
         if (msgQueueRef.current.length > 0) {
-          console.log("[queue-clear] streaming done, clearing", msgQueueRef.current.length, "remaining queued messages (already sent via interrupt)");
           msgQueueRef.current = [];
         }
         setQueueCount(0);
@@ -1734,7 +1728,6 @@ export default function ChatPage() {
       // 2) 수정된 내용으로 재전송
       await sendMessage(newContent);
     } catch (e) {
-      console.error("Edit resend failed:", e);
     }
     setEditingMsgId(null);
     setEditText("");
@@ -1763,7 +1756,6 @@ export default function ChatPage() {
         });
       }
     } catch (e) {
-      console.error("Delete message failed:", e);
     }
   }, []);
 
@@ -3055,7 +3047,7 @@ export default function ChatPage() {
                     }).then(r => r.json());
                     const newLabel = res?.keys?.[0]?.label || next;
                     setApiKeyInfo((prev: any) => ({ ...prev, label: newLabel, cliLabel: newLabel }));
-                  } catch (e) { console.error("key switch:", e); }
+                  } catch { /* ignore */ }
                 }}
                 title={`현재: ${apiKeyInfo?.label || "?"} 우선 (클릭하여 전환)`}
                 style={{
