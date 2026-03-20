@@ -9,7 +9,7 @@
  * 기존 유지:
  * - delta, done, error, thought_summary, sources (하위 호환)
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { chatApi, type SourceItem, type SSEChunk } from "@/services/chatApi";
 import { reportError } from "@/services/errorReporter";
 import { registerStream, updateStreamText, completeStream } from "@/services/streamManager";
@@ -88,12 +88,23 @@ export function useChatSSE() {
   }, []);
 
   const cancelStream = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     readerRef.current?.cancel();
     readerRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     setState((s) => ({ ...s, isStreaming: false }));
   }, []);
+
+  // 언마운트 시 리소스 정리
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [cancelStream]);
 
   const sendMessage = useCallback(
     async (
@@ -287,7 +298,17 @@ export function useChatSSE() {
                   return;
 
                 } else if (chunk.type === "error") {
-                  throw new Error(chunk.content || "스트리밍 오류");
+                  // 서버 명시적 에러는 재시도하지 않고 즉시 종료
+                  if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                  const errMsg = chunk.content || "스트리밍 오류";
+                  completeStream(sessionId, "", errMsg);
+                  setState((s) => ({
+                    ...s,
+                    isStreaming: false,
+                    isResearching: false,
+                    error: errMsg,
+                  }));
+                  return;
                 }
               }
             }
