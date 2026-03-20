@@ -398,6 +398,7 @@ export default function ChatPage() {
   const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
+  const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
 
   // ── Performance: ref로 폴링 useEffect 의존성 폭탄 방지 ──
   const streamingRef = useRef(streaming);
@@ -910,7 +911,10 @@ export default function ChatPage() {
           const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
           const isAutoTrigger979 = _lastUser979?.content?.startsWith("[시스템]") || _lastUser979?.intent === "auto_reaction" || _lastUser979?.intent === "system_trigger" || _lastAi979?.intent === "auto_reaction" || _lastAi979?.intent === "interrupted";
           if (!isAutoTrigger979) {
+            if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
             showCompletionToast("응답이 완료되었습니다");
+          } else if (_lastAi979?.id) {
+            lastToastedAiIdRef.current = _lastAi979.id;  // 자동트리거도 ID 기록 — 이중 토스트 방지
           }
           return;
         }
@@ -951,7 +955,8 @@ export default function ChatPage() {
         if (latest.length === 0) return;
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
-          const hasNewFinalAi = rawLatest.some((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          const _latestFinalAi = rawLatest.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          const hasNewFinalAi = _latestFinalAi && _latestFinalAi.id !== lastToastedAiIdRef.current;
           // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
           if (hasNewFinalAi) {
             pendingResponseSessions.current.delete(sid);
@@ -972,7 +977,10 @@ export default function ChatPage() {
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
             const isAutoTrigger = _lastUser1029?.content?.startsWith("[시스템]") || _lastUser1029?.intent === "auto_reaction" || _lastUser1029?.intent === "system_trigger" || _lastAi1029?.intent === "auto_reaction" || _lastAi1029?.intent === "interrupted";
             if (!isAutoTrigger) {
+              if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
               showCompletionToast("응답이 완료되었습니다");
+            } else if (_lastAi1029?.id) {
+              lastToastedAiIdRef.current = _lastAi1029.id;
             }
             return;
           }
@@ -1649,7 +1657,10 @@ export default function ChatPage() {
                 const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
                 const isAutoTrigger1696 = _lastUser1696?.content?.startsWith("[시스템]") || _lastUser1696?.intent === "auto_reaction" || _lastUser1696?.intent === "system_trigger" || _lastAi1696?.intent === "auto_reaction" || _lastAi1696?.intent === "interrupted";
                 if (!isAutoTrigger1696) {
+                  if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
                   showCompletionToast("응답이 완료되었습니다");
+                } else if (_lastAi1696?.id) {
+                  lastToastedAiIdRef.current = _lastAi1696.id;
                 }
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
