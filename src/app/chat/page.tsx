@@ -414,6 +414,8 @@ export default function ChatPage() {
   const inputRef = useRef(input);
   const toolStatusRef = useRef(toolStatus);
   const screenSizeRef = useRef(screenSize);
+  const uploadingRef = useRef(uploading);
+  const queueCountRef = useRef(queueCount);
   useEffect(() => { activeSessionObjRef.current = activeSession; }, [activeSession]);
   useEffect(() => { modelRef.current = model; }, [model]);
   useEffect(() => { activeWsRef.current = activeWs; }, [activeWs]);
@@ -421,6 +423,8 @@ export default function ChatPage() {
   useEffect(() => { inputRef.current = input; }, [input]);
   useEffect(() => { toolStatusRef.current = toolStatus; }, [toolStatus]);
   useEffect(() => { screenSizeRef.current = screenSize; }, [screenSize]);
+  useEffect(() => { uploadingRef.current = uploading; }, [uploading]);
+  useEffect(() => { queueCountRef.current = queueCount; }, [queueCount]);
 
   // ── 토스트 디바운스 (5초 내 중복 차단) ──
   const showCompletionToast = useCallback((msg: string) => {
@@ -901,8 +905,11 @@ export default function ChatPage() {
             }
           }
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
+          // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-          if (!_lastUser979?.content?.startsWith("[시스템]") && _lastUser979?.intent !== "auto_reaction") {
+          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          const isAutoTrigger979 = _lastUser979?.content?.startsWith("[시스템]") || _lastUser979?.intent === "auto_reaction" || _lastUser979?.intent === "system_trigger" || _lastAi979?.intent === "auto_reaction";
+          if (!isAutoTrigger979) {
             showCompletionToast("응답이 완료되었습니다");
           }
           return;
@@ -960,8 +967,11 @@ export default function ChatPage() {
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
-            const _lastUser1029 = rawLatest?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-            if (!_lastUser1029?.content?.startsWith("[시스템]") && _lastUser1029?.intent !== "auto_reaction") {
+            // rawLatest는 이미 DESC(최신순) — .reverse() 제거하여 최신 user 메시지 기준 판단
+            const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
+            const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+            const isAutoTrigger = _lastUser1029?.content?.startsWith("[시스템]") || _lastUser1029?.intent === "auto_reaction" || _lastUser1029?.intent === "system_trigger" || _lastAi1029?.intent === "auto_reaction";
+            if (!isAutoTrigger) {
               showCompletionToast("응답이 완료되었습니다");
             }
             return;
@@ -1636,7 +1646,9 @@ export default function ChatPage() {
                 }
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-                if (!_lastUser1696?.content?.startsWith("[시스템]") && _lastUser1696?.intent !== "auto_reaction") {
+                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+                const isAutoTrigger1696 = _lastUser1696?.content?.startsWith("[시스템]") || _lastUser1696?.intent === "auto_reaction" || _lastUser1696?.intent === "system_trigger" || _lastAi1696?.intent === "auto_reaction";
+                if (!isAutoTrigger1696) {
                   showCompletionToast("응답이 완료되었습니다");
                 }
               }
@@ -1949,13 +1961,13 @@ export default function ChatPage() {
     textareaRef.current?.focus();
   }
 
-  // ── Keyboard ──
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  // ── Keyboard (useCallback으로 안정화 → ChatInput memo 유효화, IME 깨짐 방지) ──
+  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 한글 IME 조합 중이면 키 이벤트 무시 (깨짐 방지)
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!uploading) sendMessage(); return; }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!uploadingRef.current) sendMessage(); return; }
     // Ctrl+Z: 마지막 큐 메시지 취소
-    if (e.ctrlKey && e.key === "z" && queueCount > 0) {
+    if (e.ctrlKey && e.key === "z" && queueCountRef.current > 0) {
       e.preventDefault();
       const removed = msgQueueRef.current.pop();
       setQueueCount(msgQueueRef.current.length);
@@ -1966,7 +1978,7 @@ export default function ChatPage() {
       e.preventDefault();
       setArtifactMode((m) => (m === "full" ? "mini" : m === "mini" ? "hidden" : "full"));
     }
-  }
+  }, [sendMessage]);
 
   // ── Context menu ──
   function onSessionContextMenu(e: React.MouseEvent, session: ChatSession) {
