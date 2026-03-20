@@ -9,7 +9,7 @@
  * 기존 유지:
  * - delta, done, error, thought_summary, sources (하위 호환)
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { chatApi, type SourceItem, type SSEChunk } from "@/services/chatApi";
 import { reportError } from "@/services/errorReporter";
 import { registerStream, updateStreamText, completeStream } from "@/services/streamManager";
@@ -81,19 +81,33 @@ export function useChatSSE() {
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // B2-FIX: streaming_status 3초 폴링 — SSE 끊김 시 just_completed 감지
+  const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSessionRef = useRef<string | null>(null);
 
-  const resetStream = useCallback(() => {
-    setState(INITIAL_STREAM);
+  const stopStatusPoll = useCallback(() => {
+    if (statusPollRef.current) {
+      clearInterval(statusPollRef.current);
+      statusPollRef.current = null;
+    }
   }, []);
+
+  const resetStream = useCallback(() => {
+    stopStatusPoll();
+    setState(INITIAL_STREAM);
+  }, [stopStatusPoll]);
 
   const cancelStream = useCallback(() => {
     readerRef.current?.cancel();
     readerRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
+    stopStatusPoll();
     setState((s) => ({ ...s, isStreaming: false }));
-  }, []);
+  }, [stopStatusPoll]);
+
+  // B2-FIX: 컴포넌트 언마운트 시 폴링 정리
+  useEffect(() => () => stopStatusPoll(), [stopStatusPoll]);
 
   const sendMessage = useCallback(
     async (
@@ -113,7 +127,40 @@ export function useChatSSE() {
       registerStream(sessionId);
       activeSessionRef.current = sessionId;
 
-      // pollFallback: SSE 완전 실패 시 1회성 안전장치 (중복 폴링 아님)
+      // B2-FIX: streaming_status 3초 폴링 시작 — SSE 끊김 시 just_completed 자동 감지
+      stopStatusPoll();
+      statusPollRef.current = setInterval(async () => {
+        if (activeSessionRef.current !== sessionId) { stopStatusPoll(); return; }
+        try {
+          const ss = await chatApi.getStreamingStatus(sessionId);
+          if (ss.just_completed) {
+            stopStatusPoll();
+            // just_completed 감지 → 메시지 재조회하여 최종 응답 반영
+            const msgs = await chatApi.getMessages(sessionId, 50, 0);
+            const lastAI = [...msgs].reverse().find((m) => m.role === "assistant");
+            if (lastAI) {
+              setState((s) => ({
+                ...s,
+                isStreaming: false,
+                streamingText: lastAI.content,
+                error: null,
+              }));
+              completeStream(sessionId, lastAI.content);
+              onDone?.(lastAI.content, {
+                modelUsed: lastAI.model_used || null,
+                inputTokens: lastAI.input_tokens || null,
+                outputTokens: lastAI.output_tokens || null,
+                costUsd: lastAI.cost_usd || null,
+                sources: lastAI.sources || [],
+                thoughtSummary: null,
+                thinkingText: null,
+                toolsUsed: [],
+              });
+            }
+          }
+        } catch { /* 폴링 실패 무시 — SSE가 정상이면 불필요 */ }
+      }, 3000);
+
       const pollFallback = async (): Promise<boolean> => {
         try {
           await new Promise((r) => setTimeout(r, 3000));
@@ -255,6 +302,7 @@ export function useChatSSE() {
 
                 } else if (chunk.type === "done") {
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                  stopStatusPoll(); // B2-FIX: 정상 완료 시 폴링 중지
                   const meta: StreamMeta = {
                     modelUsed: chunk.model_used || chunk.model || null,
                     inputTokens: chunk.input_tokens || null,
@@ -312,6 +360,7 @@ export function useChatSSE() {
             return doStream();
           }
 
+          stopStatusPoll(); // B2-FIX: 에러 시 폴링 중지
           const recovered = await pollFallback();
           if (!recovered) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -336,7 +385,7 @@ export function useChatSSE() {
 
       await doStream();
     },
-    []
+    [stopStatusPoll]
   );
 
   return { state, sendMessage, cancelStream, resetStream };

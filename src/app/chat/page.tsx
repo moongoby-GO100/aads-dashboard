@@ -1,6 +1,6 @@
 // AADS-dashboard-rebuild: refactored
 "use client";
-import { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, memo } from "react";
 import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
@@ -15,6 +15,287 @@ import UpdateBanner from "@/components/UpdateBanner";
 import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
+
+// ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
+interface MessageItemProps {
+  msg: ChatMessage;
+  idx: number;
+  streaming: boolean;
+  editingMsgId: string | null;
+  editText: string;
+  setEditingMsgId: (id: string | null) => void;
+  setEditText: (text: string) => void;
+  handleDeleteMessage: (id: string, role: string) => void;
+  handleCopyToInput: (content: string) => void;
+  handleEditResend: (msgId: string, newContent: string) => void;
+}
+
+const MessageItem = memo(function MessageItem({
+  msg, idx, streaming, editingMsgId, editText,
+  setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
+}: MessageItemProps) {
+  return (
+    <div
+      key={msg.id || idx}
+      className="ct-msg-enter group"
+      style={{
+        display: "flex",
+        justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+      }}
+    >
+      {/* 방식A/B 버튼: 사용자 메시지 왼쪽에 호버 시 표시 */}
+      {msg.role === "user" && msg.intent === "system_trigger" && (
+        <div style={{ marginBottom: "4px", marginRight: "4px", textAlign: "right" }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
+            background: "rgba(59,130,246,0.15)", color: "#3b82f6", border: "1px solid #3b82f633",
+          }}>⚙️ 시스템 트리거</span>
+        </div>
+      )}
+      {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
+        <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => {
+              setEditingMsgId(msg.id);
+              setEditText(msg.content);
+            }}
+            title="수정 후 재전송"
+            style={{
+              width: "28px", height: "28px", borderRadius: "50%",
+              background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
+              color: "var(--ct-text2)", fontSize: "13px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >✏️</button>
+          <button
+            onClick={() => handleCopyToInput(msg.content)}
+            title="입력창에 복사 (재지시)"
+            style={{
+              width: "28px", height: "28px", borderRadius: "50%",
+              background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
+              color: "var(--ct-text2)", fontSize: "13px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >🔄</button>
+          <button
+            onClick={() => handleDeleteMessage(msg.id, "user")}
+            title="메시지 삭제 (AI 응답 포함)"
+            style={{
+              width: "28px", height: "28px", borderRadius: "50%",
+              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+              color: "#ef4444", fontSize: "13px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >🗑️</button>
+        </div>
+      )}
+
+      <div style={{ maxWidth: "80%" }}>
+        {/* 출처 배지: Pipeline C / Agent / System */}
+        {msg.role === "assistant" && (() => {
+          const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
+            pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+            agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
+            system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
+          };
+          const badge = msg.intent ? badgeMap[msg.intent] : null;
+          return badge ? (
+            <div style={{ marginBottom: "4px", marginLeft: "4px" }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: "4px",
+                padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
+                background: badge.bg, color: badge.color, border: `1px solid ${badge.color}33`,
+              }}>{badge.icon} {badge.label}</span>
+            </div>
+          ) : null;
+        })()}
+        {/* 인라인 편집 모드 (방식A) */}
+        {msg.role === "user" && editingMsgId === msg.id ? (
+          <div style={{
+            borderRadius: "18px", overflow: "hidden",
+            border: "2px solid var(--ct-accent)", borderBottomRightRadius: "4px",
+          }}>
+            <textarea
+              autoFocus
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditResend(msg.id, editText.trim()); }
+                if (e.key === "Escape") { setEditingMsgId(null); setEditText(""); }
+              }}
+              style={{
+                width: "100%", padding: "12px 16px", fontSize: "14px",
+                background: "rgba(109,40,217,0.15)", color: "#fff",
+                border: "none", outline: "none", resize: "none",
+                minHeight: "60px", maxHeight: "200px", lineHeight: "1.6",
+              }}
+              rows={Math.min(editText.split("\n").length + 1, 8)}
+            />
+            <div style={{
+              display: "flex", justifyContent: "flex-end", gap: "8px",
+              padding: "8px 12px", background: "rgba(0,0,0,0.3)",
+            }}>
+              <button
+                onClick={() => { setEditingMsgId(null); setEditText(""); }}
+                style={{
+                  fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
+                  background: "var(--ct-ai)", color: "var(--ct-text2)", border: "none", cursor: "pointer",
+                }}
+              >취소</button>
+              <button
+                onClick={() => handleEditResend(msg.id, editText.trim())}
+                style={{
+                  fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
+                  background: "var(--ct-accent)", color: "#fff", border: "none", cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >수정 후 재전송</button>
+            </div>
+          </div>
+        ) : (
+        <div
+          style={{
+            padding: "12px 16px",
+            borderRadius: "18px",
+            fontSize: "14px",
+            lineHeight: "1.6",
+            ...(msg.role === "user"
+              ? msg.intent === "system_trigger"
+                ? {
+                    background: "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.1))",
+                    color: "var(--ct-text)",
+                    border: "1px solid #3b82f644",
+                    borderBottomRightRadius: "4px",
+                    whiteSpace: "pre-wrap" as const,
+                    fontStyle: "italic" as const,
+                  }
+                : {
+                    background: "var(--ct-user)",
+                    color: "#fff",
+                    borderBottomRightRadius: "4px",
+                    whiteSpace: "pre-wrap",
+                  }
+              : {
+                  background: msg.intent === "streaming_placeholder"
+                    ? "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.15))"
+                    : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                    ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
+                    : "var(--ct-ai)",
+                  color: "var(--ct-text)",
+                  border: msg.intent === "streaming_placeholder"
+                    ? "1px solid #3b82f666"
+                    : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
+                    ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
+                    : "1px solid var(--ct-border)",
+                  ...(msg.intent === "streaming_placeholder" ? { animation: "pulse 2s ease-in-out infinite" } : {}),
+                  borderBottomLeftRadius: "4px",
+                }),
+          }}
+        >
+          {/* 첨부 이미지 표시: 로컬 프리뷰 → 서버 file_url → 레거시 base64 */}
+          {msg.role === "user" && (() => {
+            const previews = msg.attachmentPreviews || [];
+            const serverAtts = (msg.attachments || []).filter(
+              (a) => (a.type === "image" || a.mime_type?.startsWith("image/") || a.media_type?.startsWith("image/")) && (a.file_url || a.base64)
+            );
+            if (previews.length === 0 && serverAtts.length === 0) return null;
+            return (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                {previews.map((url, pi) => (
+                  <img key={`p-${pi}`} src={url} alt="첨부 이미지" style={{
+                    maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                    borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
+                  }} />
+                ))}
+                {serverAtts.map((att, si) => {
+                  const src = att.file_url
+                    ? `${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}${att.file_url}`
+                    : att.base64
+                      ? `data:${att.mime_type || att.media_type || att.mime || "image/png"};base64,${att.base64}`
+                      : "";
+                  if (!src) return null;
+                  return (
+                    <img key={`s-${si}`} src={src} alt={att.name || "첨부 이미지"} style={{
+                      maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                      borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
+                    }} />
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {msg.role === "user" ? (
+            msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content)
+          ) : (
+            <MarkdownBlock text={msg.content} />
+          )}
+        </div>
+        )}
+        {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
+        {msg.role === "user" && msg.created_at && (
+          <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
+            {(msg as any).edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
+            {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+        {msg.role === "assistant" && (
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--ct-text2)",
+              marginTop: "4px",
+              marginLeft: "4px",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <span>
+              {msg.model_used && <span>[{msg.model_used}</span>}
+              {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
+              {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
+              {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
+              {msg.model_used && <span>]</span>}
+              {msg.created_at && (
+                <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
+                  {new Date(msg.created_at).toLocaleString("ko-KR", {
+                    timeZone: "Asia/Seoul",
+                    month: "numeric", day: "numeric",
+                    hour: "2-digit", minute: "2-digit", second: "2-digit",
+                  })}
+                </span>
+              )}
+            </span>
+            <button
+              onClick={() => handleDeleteMessage(msg.id, "assistant")}
+              title="이 응답 삭제"
+              style={{
+                width: "20px", height: "20px", borderRadius: "50%",
+                background: "transparent", border: "1px solid transparent",
+                color: "var(--ct-text2)", fontSize: "11px",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", opacity: 0.4, transition: "opacity 0.2s",
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "#ef4444"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
+            >🗑️</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}, (prev, next) =>
+  prev.msg.id === next.msg.id &&
+  prev.msg.content === next.msg.content &&
+  prev.msg.role === next.msg.role &&
+  prev.streaming === next.streaming &&
+  prev.editingMsgId === next.editingMsgId &&
+  (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true)
+);
 
 // Main component
 // ══════════════════════════════════════════════════════════════════
@@ -511,27 +792,18 @@ export default function ChatPage() {
     if (isInitialLoadRef.current) {
       if (messages.length === 0) return; // FIX-2: 빈 DOM에서 stabilizer 낭비 방지
       container.scrollTop = container.scrollHeight;
-      let attempts = 0;
-      let lastScrollHeight = container.scrollHeight;
-      let stableCount = 0;
-      const stabilizer = setInterval(() => {
+      // PERF: ResizeObserver로 DOM 변화 감지 (setInterval 50ms → 이벤트 기반)
+      const observer = new ResizeObserver(() => {
         container.scrollTop = container.scrollHeight;
-        // FIX-1: scrollHeight가 안정될 때까지 계속 (최대 3초)
-        if (container.scrollHeight === lastScrollHeight) {
-          stableCount++;
-        } else {
-          stableCount = 0; // 아직 DOM 변화 중 → 리셋
-          lastScrollHeight = container.scrollHeight;
-        }
-        attempts++;
-        // scrollHeight가 5회 연속 동일(250ms 안정) 또는 최대 60회(3초) 도달 시 종료
-        if (stableCount >= 5 || attempts >= 60) {
-          clearInterval(stabilizer);
-          isInitialLoadRef.current = false;
-          isNearBottomRef.current = true;
-        }
-      }, 50);
-      return () => clearInterval(stabilizer);
+      });
+      observer.observe(container);
+      // 3초 후 자동 해제 (초기 로드 완료)
+      const timeout = setTimeout(() => {
+        observer.disconnect();
+        isInitialLoadRef.current = false;
+        isNearBottomRef.current = true;
+      }, 3000);
+      return () => { observer.disconnect(); clearTimeout(timeout); };
     } else if (isNearBottomRef.current) {
       // near-bottom일 때만 smooth 스크롤
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -641,7 +913,8 @@ export default function ChatPage() {
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
           const hasNewFinalAi = rawLatest.some((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-          if (hasNewFinalAi && !hasPlaceholder) {
+          // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
+          if (hasNewFinalAi) {
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false);
             try {
@@ -2320,260 +2593,21 @@ export default function ChatPage() {
             </div>
           )}
 
-          {useMemo(() => messages.map((msg, idx) => (
-            <div
+          {messages.map((msg, idx) => (
+            <MessageItem
               key={msg.id || idx}
-              className="ct-msg-enter group"
-              style={{
-                display: "flex",
-                justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-              }}
-            >
-              {/* 방식A/B 버튼: 사용자 메시지 왼쪽에 호버 시 표시 */}
-              {msg.role === "user" && msg.intent === "system_trigger" && (
-                <div style={{ marginBottom: "4px", marginRight: "4px", textAlign: "right" }}>
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: "4px",
-                    padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
-                    background: "rgba(59,130,246,0.15)", color: "#3b82f6", border: "1px solid #3b82f633",
-                  }}>⚙️ 시스템 트리거</span>
-                </div>
-              )}
-              {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
-                <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => {
-                      setEditingMsgId(msg.id);
-                      setEditText(msg.content);
-                    }}
-                    title="수정 후 재전송"
-                    style={{
-                      width: "28px", height: "28px", borderRadius: "50%",
-                      background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
-                      color: "var(--ct-text2)", fontSize: "13px",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer",
-                    }}
-                  >✏️</button>
-                  <button
-                    onClick={() => handleCopyToInput(msg.content)}
-                    title="입력창에 복사 (재지시)"
-                    style={{
-                      width: "28px", height: "28px", borderRadius: "50%",
-                      background: "var(--ct-ai)", border: "1px solid var(--ct-border)",
-                      color: "var(--ct-text2)", fontSize: "13px",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer",
-                    }}
-                  >🔄</button>
-                  <button
-                    onClick={() => handleDeleteMessage(msg.id, "user")}
-                    title="메시지 삭제 (AI 응답 포함)"
-                    style={{
-                      width: "28px", height: "28px", borderRadius: "50%",
-                      background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
-                      color: "#ef4444", fontSize: "13px",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer",
-                    }}
-                  >🗑️</button>
-                </div>
-              )}
-
-              <div style={{ maxWidth: "80%" }}>
-                {/* 출처 배지: Pipeline C / Agent / System */}
-                {msg.role === "assistant" && (() => {
-                  const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
-                    pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
-                    agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
-                    system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
-                  };
-                  const badge = msg.intent ? badgeMap[msg.intent] : null;
-                  return badge ? (
-                    <div style={{ marginBottom: "4px", marginLeft: "4px" }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", gap: "4px",
-                        padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
-                        background: badge.bg, color: badge.color, border: `1px solid ${badge.color}33`,
-                      }}>{badge.icon} {badge.label}</span>
-                    </div>
-                  ) : null;
-                })()}
-                {/* 인라인 편집 모드 (방식A) */}
-                {msg.role === "user" && editingMsgId === msg.id ? (
-                  <div style={{
-                    borderRadius: "18px", overflow: "hidden",
-                    border: "2px solid var(--ct-accent)", borderBottomRightRadius: "4px",
-                  }}>
-                    <textarea
-                      autoFocus
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditResend(msg.id, editText.trim()); }
-                        if (e.key === "Escape") { setEditingMsgId(null); setEditText(""); }
-                      }}
-                      style={{
-                        width: "100%", padding: "12px 16px", fontSize: "14px",
-                        background: "rgba(109,40,217,0.15)", color: "#fff",
-                        border: "none", outline: "none", resize: "none",
-                        minHeight: "60px", maxHeight: "200px", lineHeight: "1.6",
-                      }}
-                      rows={Math.min(editText.split("\n").length + 1, 8)}
-                    />
-                    <div style={{
-                      display: "flex", justifyContent: "flex-end", gap: "8px",
-                      padding: "8px 12px", background: "rgba(0,0,0,0.3)",
-                    }}>
-                      <button
-                        onClick={() => { setEditingMsgId(null); setEditText(""); }}
-                        style={{
-                          fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
-                          background: "var(--ct-ai)", color: "var(--ct-text2)", border: "none", cursor: "pointer",
-                        }}
-                      >취소</button>
-                      <button
-                        onClick={() => handleEditResend(msg.id, editText.trim())}
-                        style={{
-                          fontSize: "12px", padding: "4px 12px", borderRadius: "8px",
-                          background: "var(--ct-accent)", color: "#fff", border: "none", cursor: "pointer",
-                          fontWeight: 600,
-                        }}
-                      >수정 후 재전송</button>
-                    </div>
-                  </div>
-                ) : (
-                <div
-                  style={{
-                    padding: "12px 16px",
-                    borderRadius: "18px",
-                    fontSize: "14px",
-                    lineHeight: "1.6",
-                    ...(msg.role === "user"
-                      ? msg.intent === "system_trigger"
-                        ? {
-                            background: "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.1))",
-                            color: "var(--ct-text)",
-                            border: "1px solid #3b82f644",
-                            borderBottomRightRadius: "4px",
-                            whiteSpace: "pre-wrap" as const,
-                            fontStyle: "italic" as const,
-                          }
-                        : {
-                            background: "var(--ct-user)",
-                            color: "#fff",
-                            borderBottomRightRadius: "4px",
-                            whiteSpace: "pre-wrap",
-                          }
-                      : {
-                          background: msg.intent === "streaming_placeholder"
-                            ? "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.15))"
-                            : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
-                            ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
-                            : "var(--ct-ai)",
-                          color: "var(--ct-text)",
-                          border: msg.intent === "streaming_placeholder"
-                            ? "1px solid #3b82f666"
-                            : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
-                            ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
-                            : "1px solid var(--ct-border)",
-                          ...(msg.intent === "streaming_placeholder" ? { animation: "pulse 2s ease-in-out infinite" } : {}),
-                          borderBottomLeftRadius: "4px",
-                        }),
-                  }}
-                >
-                  {/* 첨부 이미지 표시: 로컬 프리뷰 → 서버 file_url → 레거시 base64 */}
-                  {msg.role === "user" && (() => {
-                    const previews = msg.attachmentPreviews || [];
-                    const serverAtts = (msg.attachments || []).filter(
-                      (a) => (a.type === "image" || a.mime_type?.startsWith("image/") || a.media_type?.startsWith("image/")) && (a.file_url || a.base64)
-                    );
-                    if (previews.length === 0 && serverAtts.length === 0) return null;
-                    return (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                        {previews.map((url, pi) => (
-                          <img key={`p-${pi}`} src={url} alt="첨부 이미지" style={{
-                            maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
-                            borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
-                          }} />
-                        ))}
-                        {serverAtts.map((att, si) => {
-                          const src = att.file_url
-                            ? `${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}${att.file_url}`
-                            : att.base64
-                              ? `data:${att.mime_type || att.media_type || att.mime || "image/png"};base64,${att.base64}`
-                              : "";
-                          if (!src) return null;
-                          return (
-                            <img key={`s-${si}`} src={src} alt={att.name || "첨부 이미지"} style={{
-                              maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
-                              borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
-                            }} />
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                  {msg.role === "user" ? (
-                    msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content)
-                  ) : (
-                    <MarkdownBlock text={msg.content} />
-                  )}
-                </div>
-                )}
-                {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
-                {msg.role === "user" && msg.created_at && (
-                  <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
-                    {(msg as any).edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
-                    {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                )}
-                {msg.role === "assistant" && (
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--ct-text2)",
-                      marginTop: "4px",
-                      marginLeft: "4px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    <span>
-                      {msg.model_used && <span>[{msg.model_used}</span>}
-                      {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
-                      {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
-                      {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
-                      {msg.model_used && <span>]</span>}
-                      {msg.created_at && (
-                        <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
-                          {new Date(msg.created_at).toLocaleString("ko-KR", {
-                            timeZone: "Asia/Seoul",
-                            month: "numeric", day: "numeric",
-                            hour: "2-digit", minute: "2-digit", second: "2-digit",
-                          })}
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      onClick={() => handleDeleteMessage(msg.id, "assistant")}
-                      title="이 응답 삭제"
-                      style={{
-                        width: "20px", height: "20px", borderRadius: "50%",
-                        background: "transparent", border: "1px solid transparent",
-                        color: "var(--ct-text2)", fontSize: "11px",
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", opacity: 0.4, transition: "opacity 0.2s",
-                      }}
-                      onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "#ef4444"; }}
-                      onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
-                    >🗑️</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )), [messages, streaming, editingMsgId, editText])}
+              msg={msg}
+              idx={idx}
+              streaming={streaming}
+              editingMsgId={editingMsgId}
+              editText={editText}
+              setEditingMsgId={setEditingMsgId}
+              setEditText={setEditText}
+              handleDeleteMessage={handleDeleteMessage}
+              handleCopyToInput={handleCopyToInput}
+              handleEditResend={handleEditResend}
+            />
+          ))}
 
           {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) */}
           {waitingBgResponse && !streaming && (
