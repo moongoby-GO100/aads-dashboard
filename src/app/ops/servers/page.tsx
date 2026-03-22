@@ -79,7 +79,7 @@ async function fetchServerHealth(
 ): Promise<ServerHealth> {
   const url = serverId === "68"
     ? "/api/v1/ops/health-check"
-    : `http://${ip}:9090/health`;
+    : `/api/v1/ops/server-health/${serverId}`;
 
   try {
     const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
