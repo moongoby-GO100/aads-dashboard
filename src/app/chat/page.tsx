@@ -3318,6 +3318,16 @@ export default function ChatPage() {
                 screenSize={screenSize}
                 onKeyDown={onKeyDown}
                 onHasInput={setHasInput}
+                onLocalMessage={(text) => {
+                  const localMsg: ChatMessage = {
+                    id: `local-${Date.now()}`,
+                    session_id: activeSessionObjRef.current?.id || "",
+                    role: "assistant",
+                    content: text,
+                    created_at: new Date().toISOString(),
+                  };
+                  setMessages((prev) => [...prev, localMsg]);
+                }}
                 placeholder={screenSize === "mobile" ? "메시지 입력... (↵으로 줄바꿈)" : undefined}
               />
               {/* Mobile: send button inside textarea area */}
