@@ -31,13 +31,14 @@ interface MessageItemProps {
   handleEditResend: (msgId: string, newContent: string) => void;
   onRegenerate?: (msgId: string) => void;
   onReplyTo?: (msg: ChatMessage) => void;
+  onBranch?: (msg: ChatMessage) => void;
   allMessages?: ChatMessage[];
 }
 
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
-  onRegenerate, onReplyTo, allMessages,
+  onRegenerate, onReplyTo, onBranch, allMessages,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -50,8 +51,19 @@ const MessageItem = memo(function MessageItem({
       style={{
         display: "flex",
         justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+        ...(msg.branch_id ? { marginLeft: "24px", borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "12px" } : {}),
       }}
     >
+      {/* P2-2: 분기 배지 */}
+      {msg.branch_point_id && msg.role === "user" && (
+        <div style={{ marginBottom: "4px", marginRight: "4px", textAlign: "right" }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: 600,
+            background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid #22c55e33",
+          }}>🔀 분기</span>
+        </div>
+      )}
       {/* 방식A/B 버튼: 사용자 메시지 왼쪽에 호버 시 표시 */}
       {msg.role === "user" && msg.intent === "system_trigger" && (
         <div style={{ marginBottom: "4px", marginRight: "4px", textAlign: "right" }}>
@@ -89,6 +101,19 @@ const MessageItem = memo(function MessageItem({
               cursor: "pointer",
             }}
           >🔄</button>
+          {onBranch && (
+            <button
+              onClick={() => onBranch(msg)}
+              title="여기서 분기 (다른 질문으로 대화 분기)"
+              style={{
+                width: "28px", height: "28px", borderRadius: "50%",
+                background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)",
+                color: "#22c55e", fontSize: "13px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >🔀</button>
+          )}
           <button
             onClick={() => handleDeleteMessage(msg.id, "user")}
             title="메시지 삭제 (AI 응답 포함)"
@@ -398,6 +423,10 @@ export default function ChatPage() {
   const [editText, setEditText] = useState("");
   const [editMode, setEditMode] = useState<string | null>(null);  // 재지시 배너용
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
+  // P2-2: 대화 분기
+  const [branchPoint, setBranchPoint] = useState<ChatMessage | null>(null);
+  const branchPointRef = useRef(branchPoint);
+  useEffect(() => { branchPointRef.current = branchPoint; }, [branchPoint]);
 
   // 배포 버전 체크 (30초 간격)
   const { updateAvailable, doRefresh, setStreaming: setVersionStreaming } = useVersionCheck(30000);
@@ -445,6 +474,8 @@ export default function ChatPage() {
   useEffect(() => {
     return () => { pendingPreviewUrls.forEach((u) => u && URL.revokeObjectURL(u)); };
   }, [pendingPreviewUrls]);
+  // P2-2: 분기 모드 활성화 시 입력창 포커스
+  useEffect(() => { if (branchPoint) textareaRef.current?.focus(); }, [branchPoint]);
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
@@ -1373,6 +1404,9 @@ export default function ChatPage() {
     setInput(""); chatInputRef.current?.clear();
     setEditMode(null);
     setReplyToMessage(null);
+    // P2-2: 분기 모드 캡처 후 초기화
+    const _capturedBranch = branchPointRef.current;
+    setBranchPoint(null);
     setStreaming(true);
     setStreamBuf("");
     setToolLogs([]);
@@ -1401,6 +1435,7 @@ export default function ChatPage() {
       created_at: new Date().toISOString(),
       attachmentPreviews: _previewUrls.length > 0 ? _previewUrls : undefined,
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
+      ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -1431,8 +1466,14 @@ export default function ChatPage() {
 
       let fetchBody: BodyInit;
       let fetchHeaders: Record<string, string> = { ...authHdrs() };
+      let fetchUrl = `${BASE_URL}/chat/messages/send`;
 
-      if (rawFiles.length > 0) {
+      // P2-2: 분기 모드일 때 branch endpoint 사용
+      if (_capturedBranch) {
+        fetchHeaders["Content-Type"] = "application/json";
+        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments });
+        fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
+      } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
         const formData = new FormData();
         formData.append("session_id", sessionId!);
@@ -1447,7 +1488,7 @@ export default function ChatPage() {
         fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
-      const res = await fetch(`${BASE_URL}/chat/messages/send`, {
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: fetchHeaders,
         body: fetchBody,
@@ -3133,6 +3174,7 @@ export default function ChatPage() {
               handleEditResend={handleEditResend}
               onRegenerate={handleRegenerate}
               onReplyTo={setReplyToMessage}
+              onBranch={setBranchPoint}
               allMessages={messages}
             />
           ))}
@@ -3322,6 +3364,28 @@ export default function ChatPage() {
               background: "var(--ct-hover)", borderRadius: "8px",
             }}>
               ⏳ 파일 업로드 중...
+            </div>
+          )}
+
+          {/* P2-2: 분기 모드 배너 */}
+          {branchPoint && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              marginBottom: "6px", padding: "6px 12px",
+              borderLeft: "3px solid #22c55e", background: "rgba(34,197,94,0.08)",
+              borderRadius: "0 8px 8px 0", fontSize: "13px", color: "#22c55e",
+            }}>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                🔀 분기 모드: &quot;{branchPoint.content.slice(0, 80)}{branchPoint.content.length > 80 ? "..." : ""}&quot; 시점에서 분기
+              </span>
+              <button
+                onClick={() => setBranchPoint(null)}
+                style={{
+                  background: "none", border: "none", color: "#22c55e",
+                  cursor: "pointer", fontSize: "16px", padding: "0 4px", lineHeight: 1,
+                }}
+                title="분기 취소"
+              >✕</button>
             </div>
           )}
 

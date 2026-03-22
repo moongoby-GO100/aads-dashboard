@@ -66,6 +66,8 @@ export interface ChatMessage {
   sources: SourceItem[] | null;
   thought_summary: string | null;
   edited_at: string | null;
+  branch_id?: string | null;
+  branch_point_id?: string | null;
   created_at: string;
 }
 
