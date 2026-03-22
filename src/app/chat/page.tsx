@@ -2913,6 +2913,34 @@ export default function ChatPage() {
             ))}
           </select>
 
+          {/* Export session */}
+          {activeSession && (
+            <button
+              onClick={() => {
+                const a = document.createElement("a");
+                a.href = `${BASE_URL}/chat/sessions/${activeSession.id}/export?format=markdown`;
+                a.download = "";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }}
+              title="대화 내보내기 (.md)"
+              style={{
+                padding: "5px 10px",
+                fontSize: "12px",
+                background: "var(--ct-hover)",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                color: "var(--ct-text2)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              ⬇ 내보내기
+            </button>
+          )}
+
           {/* Artifact toggle */}
           <button
             onClick={() =>
