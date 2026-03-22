@@ -28,12 +28,20 @@ interface MessageItemProps {
   handleDeleteMessage: (id: string, role: string) => void;
   handleCopyToInput: (content: string) => void;
   handleEditResend: (msgId: string, newContent: string) => void;
+  onReplyTo?: (msg: ChatMessage) => void;
+  allMessages?: ChatMessage[];
 }
 
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
+  onReplyTo, allMessages,
 }: MessageItemProps) {
+  // reply_to_id가 있으면 원본 메시지 찾기
+  const replyTarget = msg.reply_to_id && allMessages
+    ? allMessages.find((m) => m.id === msg.reply_to_id)
+    : null;
+
   return (
     <div
       className="ct-msg-enter group"
@@ -94,6 +102,17 @@ const MessageItem = memo(function MessageItem({
       )}
 
       <div style={{ maxWidth: "80%" }}>
+        {/* Reply-to 인용 표시 */}
+        {replyTarget && (
+          <div style={{
+            marginBottom: "4px", marginLeft: "4px", padding: "4px 10px",
+            borderLeft: "3px solid var(--ct-accent)", background: "rgba(99,102,241,0.08)",
+            borderRadius: "0 8px 8px 0", fontSize: "12px", color: "var(--ct-text2)",
+            maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            ↩ {replyTarget.content.slice(0, 100)}{replyTarget.content.length > 100 ? "..." : ""}
+          </div>
+        )}
         {/* 출처 배지: Pipeline C / Agent / System */}
         {msg.role === "assistant" && (() => {
           const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
@@ -269,6 +288,21 @@ const MessageItem = memo(function MessageItem({
                 </span>
               )}
             </span>
+            {onReplyTo && !streaming && !msg.id.startsWith("tmp-") && (
+              <button
+                onClick={() => onReplyTo(msg)}
+                title="이 응답에 답글"
+                style={{
+                  width: "20px", height: "20px", borderRadius: "50%",
+                  background: "transparent", border: "1px solid transparent",
+                  color: "var(--ct-text2)", fontSize: "11px",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", opacity: 0.4, transition: "opacity 0.2s",
+                }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--ct-accent)"; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
+              >↩</button>
+            )}
             <button
               onClick={() => handleDeleteMessage(msg.id, "assistant")}
               title="이 응답 삭제"
@@ -291,6 +325,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.id === next.msg.id &&
   prev.msg.content === next.msg.content &&
   prev.msg.role === next.msg.role &&
+  prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.editingMsgId === next.editingMsgId &&
   (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true)
@@ -340,6 +375,7 @@ export default function ChatPage() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editMode, setEditMode] = useState<string | null>(null);  // 재지시 배너용
+  const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
 
   // 배포 버전 체크 (30초 간격)
   const { updateAvailable, doRefresh, setStreaming: setVersionStreaming } = useVersionCheck(30000);
@@ -1275,6 +1311,7 @@ export default function ChatPage() {
 
     setInput(""); chatInputRef.current?.clear();
     setEditMode(null);
+    setReplyToMessage(null);
     setStreaming(true);
     setStreamBuf("");
     setToolLogs([]);
@@ -1343,7 +1380,7 @@ export default function ChatPage() {
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessage ? { reply_to_id: replyToMessage.id } : {}) });
       }
 
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
@@ -2715,6 +2752,8 @@ export default function ChatPage() {
               handleDeleteMessage={handleDeleteMessage}
               handleCopyToInput={handleCopyToInput}
               handleEditResend={handleEditResend}
+              onReplyTo={setReplyToMessage}
+              allMessages={messages}
             />
           ))}
 
@@ -2903,6 +2942,28 @@ export default function ChatPage() {
               background: "var(--ct-hover)", borderRadius: "8px",
             }}>
               ⏳ 파일 업로드 중...
+            </div>
+          )}
+
+          {/* Reply-to 인용 미리보기 바 */}
+          {replyToMessage && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              marginBottom: "6px", padding: "6px 12px",
+              borderLeft: "3px solid var(--ct-accent)", background: "var(--ct-hover)",
+              borderRadius: "0 8px 8px 0", fontSize: "13px", color: "var(--ct-text2)",
+            }}>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                ↩ {replyToMessage.content.slice(0, 100)}{replyToMessage.content.length > 100 ? "..." : ""}
+              </span>
+              <button
+                onClick={() => setReplyToMessage(null)}
+                style={{
+                  background: "none", border: "none", color: "var(--ct-text2)",
+                  cursor: "pointer", fontSize: "16px", padding: "0 4px", lineHeight: 1,
+                }}
+                title="답글 취소"
+              >✕</button>
             </div>
           )}
 

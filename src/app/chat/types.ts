@@ -35,6 +35,7 @@ export interface ChatMessage {
   cost?: string | number;
   created_at?: string;
   edited_at?: string;
+  reply_to_id?: string;
   attachmentPreviews?: string[];
   attachments?: Array<{
     type?: string;
