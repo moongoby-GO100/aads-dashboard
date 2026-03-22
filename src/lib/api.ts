@@ -258,4 +258,19 @@ export const api = {
     request<any>(`/chat/research?topic=${encodeURIComponent(topic)}`),
   getChatResearchHistory: (limit = 50) =>
     request<any>(`/chat/research/history?limit=${limit}`),
+
+  // Memory Evolution Dashboard
+  getOpsMemoryStats: () => request<any>("/ops/memory/stats"),
+  getOpsMemoryEntries: (params?: { category?: string; project?: string; search?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.project) q.set("project", params.project);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    const qs = q.toString();
+    return request<any>(`/ops/memory/entries${qs ? "?" + qs : ""}`);
+  },
+  deleteOpsMemoryEntry: (source: string, id: string) =>
+    request<any>(`/ops/memory/entries/${encodeURIComponent(source)}/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };

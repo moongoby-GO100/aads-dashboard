@@ -28,13 +28,30 @@ function isSafeUrl(url: string): boolean {
 
 function renderInline(text: string, key?: number): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
-  const re = /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|(https?:\/\/[^\s<>)"\]]+))/g;
+  // 멘션, 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
+  const re = /(@(?:KIS|GO100|AADS|SF|NTV2|NAS)\b|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|(https?:\/\/[^\s<>)"\]]+))/gi;
   let last = 0, m: RegExpExecArray | null, idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last)
       parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
-    if (m[3]) {
+    if (m[0].startsWith("@") && /^@(?:KIS|GO100|AADS|SF|NTV2|NAS)$/i.test(m[0])) {
+      // P2-7: 멘션 칩 렌더링
+      parts.push(
+        <span key={`mention${key}-${idx++}`}
+          style={{
+            display: "inline-block",
+            padding: "1px 6px",
+            borderRadius: 4,
+            fontSize: "0.85em",
+            fontWeight: 600,
+            background: "rgba(99,102,241,0.15)",
+            color: "#818cf8",
+            verticalAlign: "baseline",
+          }}>
+          {m[0]}
+        </span>
+      );
+    } else if (m[3]) {
       // 이미지: ![alt](url) — only allow safe URLs
       const imgSrc = isSafeUrl(m[3]) ? m[3] : "";
       parts.push(

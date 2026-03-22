@@ -16,6 +16,7 @@ const navItems = [
   { href: "/ops", label: "운영 현황", icon: "📊" },
   { href: "/ops/recovery", label: "Recovery", icon: "🔄" },
   { href: "/ops/servers", label: "Servers", icon: "🖥️" },
+  { href: "/ops/memory", label: "메모리", icon: "🧠" },
   { href: "/lessons", label: "교훈", icon: "💡" },
   { href: "/flow", label: "FLOW", icon: "🔄" },
   { href: "/reports", label: "Reports", icon: "📊" },
