@@ -404,6 +404,9 @@ export default function ChatPage() {
 
   // ── UI state ──
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [tagEditSession, setTagEditSession] = useState<{ id: string; tags: string[] } | null>(null);
+  const [tagInput, setTagInput] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: ChatSession } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
@@ -1188,6 +1191,27 @@ export default function ChatPage() {
       if (activeSession?.id === id) { setActiveSession(null); setMessages([]); }
     } catch { /* ignore */ }
     setContextMenu(null);
+  }
+
+  async function togglePin(session: ChatSession) {
+    try {
+      const updated = await chatApi<ChatSession>(`/chat/sessions/${session.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ pinned: !session.pinned }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, pinned: updated.pinned } : s)));
+    } catch { /* ignore */ }
+    setContextMenu(null);
+  }
+
+  async function updateSessionTags(sessionId: string, tags: string[]) {
+    try {
+      const updated = await chatApi<ChatSession>(`/chat/sessions/${sessionId}`, {
+        method: "PUT",
+        body: JSON.stringify({ tags }),
+      });
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, tags: updated.tags || [] } : s)));
+    } catch { /* ignore */ }
   }
 
   async function commitRename() {
@@ -2231,8 +2255,14 @@ export default function ChatPage() {
   const activeWsObj = workspaces.find((w) => w.id === activeWs);
   const activeWsName = activeWsObj?.name || "워크스페이스";
   const filteredSessions = sessions.filter(
-    (s) => !search || s.title.toLowerCase().includes(search.toLowerCase())
+    (s) => {
+      if (search && !s.title.toLowerCase().includes(search.toLowerCase())) return false;
+      if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
+      return true;
+    }
   );
+  // 전체 세션에서 사용 중인 태그 목록 수집
+  const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
   const filteredArtifacts = artifacts.filter((a) => {
     if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
     if (artifactTab === "code") return a.artifact_type === "code";
@@ -2447,6 +2477,22 @@ export default function ChatPage() {
         >
           {[
             {
+              icon: contextMenu.session.pinned ? "📌" : "📌",
+              label: contextMenu.session.pinned ? "고정 해제" : "고정",
+              color: "var(--ct-text)",
+              action: () => togglePin(contextMenu.session),
+            },
+            {
+              icon: "🏷️",
+              label: "태그 편집",
+              color: "var(--ct-text)",
+              action: () => {
+                setTagEditSession({ id: contextMenu.session.id, tags: [...(contextMenu.session.tags || [])] });
+                setTagInput("");
+                setContextMenu(null);
+              },
+            },
+            {
               icon: "✏️",
               label: "이름 변경",
               color: "var(--ct-text)",
@@ -2483,6 +2529,126 @@ export default function ChatPage() {
               {item.icon} {item.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* ── 태그 편집 모달 ── */}
+      {tagEditSession && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 3000,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setTagEditSession(null)}
+        >
+          <div
+            style={{
+              background: "var(--ct-card)", borderRadius: "12px", padding: "20px",
+              width: "340px", maxWidth: "90vw",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--ct-text)", marginBottom: "12px" }}>
+              태그 편집
+            </div>
+            {/* 현재 태그 */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px", minHeight: "28px" }}>
+              {tagEditSession.tags.map((t) => (
+                <span
+                  key={t}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "4px",
+                    padding: "3px 8px", fontSize: "11px", borderRadius: "12px",
+                    background: "var(--ct-accent)", color: "#fff",
+                  }}
+                >
+                  {t}
+                  <button
+                    onClick={() => {
+                      const next = tagEditSession.tags.filter((x) => x !== t);
+                      setTagEditSession({ ...tagEditSession, tags: next });
+                    }}
+                    style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      color: "#fff", fontSize: "12px", padding: "0 2px", lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            {/* 기본 태그 제안 */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
+              {["KIS", "GO100", "AADS", "SF", "NTV2", "기능개선", "버그수정", "전략"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => {
+                    if (!tagEditSession.tags.includes(t)) {
+                      setTagEditSession({ ...tagEditSession, tags: [...tagEditSession.tags, t] });
+                    }
+                  }}
+                  style={{
+                    padding: "2px 8px", fontSize: "10px", borderRadius: "10px",
+                    background: tagEditSession.tags.includes(t) ? "var(--ct-accent)" : "var(--ct-hover)",
+                    color: tagEditSession.tags.includes(t) ? "#fff" : "var(--ct-text2)",
+                    border: "1px solid var(--ct-border)", cursor: "pointer",
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {/* 커스텀 태그 입력 */}
+            <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && tagInput.trim()) {
+                    if (!tagEditSession.tags.includes(tagInput.trim())) {
+                      setTagEditSession({ ...tagEditSession, tags: [...tagEditSession.tags, tagInput.trim()] });
+                    }
+                    setTagInput("");
+                  }
+                }}
+                placeholder="커스텀 태그 입력..."
+                style={{
+                  flex: 1, padding: "6px 10px", fontSize: "12px",
+                  background: "var(--ct-input)", color: "var(--ct-text)",
+                  border: "1px solid var(--ct-border)", borderRadius: "6px", outline: "none",
+                }}
+              />
+            </div>
+            {/* 저장/취소 */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                onClick={() => setTagEditSession(null)}
+                style={{
+                  padding: "6px 14px", fontSize: "12px", borderRadius: "6px",
+                  background: "var(--ct-hover)", color: "var(--ct-text)",
+                  border: "1px solid var(--ct-border)", cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  updateSessionTags(tagEditSession.id, tagEditSession.tags);
+                  setTagEditSession(null);
+                }}
+                style={{
+                  padding: "6px 14px", fontSize: "12px", borderRadius: "6px",
+                  background: "var(--ct-accent)", color: "#fff",
+                  border: "none", cursor: "pointer",
+                }}
+              >
+                저장
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2646,6 +2812,7 @@ export default function ChatPage() {
         search={search} setSearch={setSearch}
         createSession={createSession} setShowAddProject={setShowAddProject}
         theme={theme} toggleTheme={toggleTheme}
+        tagFilter={tagFilter} setTagFilter={setTagFilter} allTags={allTags}
       />
 
 

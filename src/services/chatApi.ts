@@ -42,6 +42,7 @@ export interface ChatSession {
   workspace_id: string;
   title: string | null;
   pinned: boolean;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
@@ -132,7 +133,7 @@ export const chatApi = {
       method: "POST",
       body: JSON.stringify({ workspace_id: workspaceId, title: title || null }),
     }),
-  updateSession: (sessionId: string, data: { title?: string; pinned?: boolean }) =>
+  updateSession: (sessionId: string, data: { title?: string; pinned?: boolean; tags?: string[] }) =>
     req<ChatSession>(`/chat/sessions/${sessionId}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteSession: (sessionId: string) =>
     req<void>(`/chat/sessions/${sessionId}`, { method: "DELETE" }),

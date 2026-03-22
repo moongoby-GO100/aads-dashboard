@@ -27,6 +27,9 @@ export interface ChatSidebarProps {
   setShowAddProject: (v: boolean) => void;
   theme: Theme;
   toggleTheme: () => void;
+  tagFilter: string | null;
+  setTagFilter: (v: string | null) => void;
+  allTags: string[];
 }
 
 /** 좌측 사이드바 — 세션 목록, 워크스페이스, 테마 토글 */
@@ -39,6 +42,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
     activeSession, setActiveSession, isInitialLoadRef,
     onSessionContextMenu, search, setSearch,
     createSession, setShowAddProject, theme, toggleTheme,
+    tagFilter, setTagFilter, allTags,
   } = props;
 
   const showLeftSidebar = screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
@@ -171,6 +175,36 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                 boxSizing: "border-box",
               }}
             />
+            {/* 태그 필터 칩 */}
+            {allTags.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>
+                <button
+                  onClick={() => setTagFilter(null)}
+                  style={{
+                    padding: "2px 8px", fontSize: "10px", borderRadius: "10px",
+                    background: !tagFilter ? "var(--ct-accent)" : "var(--ct-hover)",
+                    color: !tagFilter ? "#fff" : "var(--ct-text2)",
+                    border: "1px solid var(--ct-border)", cursor: "pointer",
+                  }}
+                >
+                  전체
+                </button>
+                {allTags.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTagFilter(tagFilter === t ? null : t)}
+                    style={{
+                      padding: "2px 8px", fontSize: "10px", borderRadius: "10px",
+                      background: tagFilter === t ? "var(--ct-accent)" : "var(--ct-hover)",
+                      color: tagFilter === t ? "#fff" : "var(--ct-text2)",
+                      border: "1px solid var(--ct-border)", cursor: "pointer",
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Workspace + Sessions */}
@@ -206,8 +240,10 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                 </button>
 
                 {/* Sessions */}
-                {activeWs === ws.id &&
-                  filteredSessions.map((s) => (
+                {activeWs === ws.id && (() => {
+                  const pinned = filteredSessions.filter((s) => s.pinned);
+                  const unpinned = filteredSessions.filter((s) => !s.pinned);
+                  const renderSession = (s: ChatSession) => (
                     <div key={s.id} style={{ marginBottom: "1px" }}>
                       {renaming?.id === s.id ? (
                         <div style={{ padding: "3px 6px" }}>
@@ -271,23 +307,67 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
                             }}
                           >
-                            {s.title || "새 대화"}
+                            {s.pinned && <span style={{ fontSize: "10px", flexShrink: 0 }}>📌</span>}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {s.title || "새 대화"}
+                            </span>
                           </div>
                           <div
                             style={{
                               fontSize: "10px",
                               opacity: 0.65,
                               marginTop: "2px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
                             }}
                           >
-                            {s.message_count ?? 0}개 메시지
+                            <span>{s.message_count ?? 0}개 메시지</span>
+                            {(s.tags || []).length > 0 && (
+                              <span style={{ display: "inline-flex", gap: "2px", marginLeft: "2px" }}>
+                                {s.tags.slice(0, 2).map((t) => (
+                                  <span
+                                    key={t}
+                                    style={{
+                                      padding: "0 4px",
+                                      borderRadius: "6px",
+                                      background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
+                                      fontSize: "9px",
+                                    }}
+                                  >
+                                    {t}
+                                  </span>
+                                ))}
+                                {s.tags.length > 2 && (
+                                  <span style={{ fontSize: "9px" }}>+{s.tags.length - 2}</span>
+                                )}
+                              </span>
+                            )}
                           </div>
                         </button>
                       )}
                     </div>
-                  ))}
+                  );
+                  return (
+                    <>
+                      {pinned.map(renderSession)}
+                      {pinned.length > 0 && unpinned.length > 0 && (
+                        <div style={{
+                          height: "1px",
+                          background: "var(--ct-border)",
+                          margin: "4px 10px",
+                          opacity: 0.6,
+                        }} />
+                      )}
+                      {unpinned.map(renderSession)}
+                    </>
+                  );
+                })()}
               </div>
             ))}
 

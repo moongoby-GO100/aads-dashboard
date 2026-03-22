@@ -16,6 +16,7 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
   pinned: boolean;
+  tags: string[];
   message_count: number;
   cost_total?: string | number;
 }
