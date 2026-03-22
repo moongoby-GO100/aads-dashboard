@@ -10,6 +10,7 @@ import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
+import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
 import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
@@ -28,6 +29,7 @@ interface MessageItemProps {
   handleDeleteMessage: (id: string, role: string) => void;
   handleCopyToInput: (content: string) => void;
   handleEditResend: (msgId: string, newContent: string) => void;
+  onRegenerate?: (msgId: string) => void;
   onReplyTo?: (msg: ChatMessage) => void;
   allMessages?: ChatMessage[];
 }
@@ -35,7 +37,7 @@ interface MessageItemProps {
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
-  onReplyTo, allMessages,
+  onRegenerate, onReplyTo, allMessages,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -119,6 +121,7 @@ const MessageItem = memo(function MessageItem({
             pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
             agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
             system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
+            regenerated: { icon: "🔄", label: "이전 응답", color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
           };
           const badge = msg.intent ? badgeMap[msg.intent] : null;
           return badge ? (
@@ -210,6 +213,7 @@ const MessageItem = memo(function MessageItem({
                     ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
                   ...(msg.intent === "streaming_placeholder" ? { animation: "pulse 2s ease-in-out infinite" } : {}),
+                  ...(msg.intent === "regenerated" ? { opacity: 0.45 } : {}),
                   borderBottomLeftRadius: "4px",
                 }),
           }}
@@ -304,6 +308,22 @@ const MessageItem = memo(function MessageItem({
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
+            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && (
+              <button
+                onClick={() => onRegenerate(msg.id)}
+                title="다시 생성"
+                style={{
+                  width: "28px", height: "28px", borderRadius: "6px",
+                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+                  color: "#22c55e", fontSize: "14px",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+                  marginLeft: "4px",
+                }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; (e.target as HTMLElement).style.borderColor = "#22c55e"; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
+              >🔄</button>
+            )}
             <button
               onClick={() => handleDeleteMessage(msg.id, "assistant")}
               title="이 응답 삭제"
@@ -326,6 +346,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.id === next.msg.id &&
   prev.msg.content === next.msg.content &&
   prev.msg.role === next.msg.role &&
+  prev.msg.intent === next.msg.intent &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.editingMsgId === next.editingMsgId &&
@@ -386,6 +407,7 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; session: ChatSession } | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const [selectedArtifactIdx, setSelectedArtifactIdx] = useState(0);
 
@@ -1872,6 +1894,113 @@ export default function ChatPage() {
     }
   }, []);
 
+  // ── AI 응답 재생성 (Regenerate) ──
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const handleRegenerate = useCallback(async (msgId: string) => {
+    if (!activeSessionObjRef.current || streaming) return;
+    const sessionId = activeSessionObjRef.current.id;
+
+    setRegeneratingId(msgId);
+    setStreaming(true);
+    setStreamBuf("");
+    setToolLogs([]);
+    streamingSessionRef.current = sessionId;
+
+    const requestSessionId = sessionId;
+    const isStale = () => activeSessionRef.current !== requestSessionId;
+
+    abortCtrl.current = new AbortController();
+    let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000);
+    const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000); };
+    const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 300000);
+
+    let full = "";
+    try {
+      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate`, {
+        method: "POST",
+        headers: { ...authHdrs() },
+        signal: abortCtrl.current.signal,
+      });
+      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (isStale()) { reader.cancel(); break; }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (isStale()) break;
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") continue;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.type === "heartbeat") { resetSseTimeout(); continue; }
+            resetSseTimeout();
+            if (ev.type === "delta" && typeof ev.content === "string") {
+              full += ev.content;
+              if (!isStale()) setStreamBuf(full);
+            } else if (ev.type === "token" && typeof ev.text === "string") {
+              full += ev.text;
+              if (!isStale()) setStreamBuf(full);
+            } else if (ev.type === "done") {
+              setStreamBuf("");
+              setStreaming(false);
+              setToolStatus(null);
+              setToolLogs([]);
+              if (ev.session_cost) setSessionCost(ev.session_cost);
+              if (ev.session_turns) setSessionTurns(ev.session_turns);
+              // 기존 AI 메시지 intent를 regenerated로 표시 + 새 메시지 추가
+              const finalMsg: ChatMessage = ev.message || {
+                id: ev.message_id || `regen-${Date.now()}`,
+                session_id: sessionId,
+                role: "assistant",
+                content: full,
+                created_at: new Date().toISOString(),
+                model_used: ev.model,
+                input_tokens: ev.input_tokens,
+                output_tokens: ev.output_tokens,
+                cost_usd: ev.cost_usd,
+              };
+              setMessages((prev) => {
+                // 기존 메시지의 intent를 regenerated로 변경
+                const updated = prev.map((m) =>
+                  m.id === msgId ? { ...m, intent: "regenerated" } : m
+                );
+                // 새 메시지 추가 (기존 메시지 바로 뒤에)
+                const idx = updated.findIndex((m) => m.id === msgId);
+                if (idx >= 0) {
+                  updated.splice(idx + 1, 0, finalMsg);
+                  return [...updated];
+                }
+                return [...updated, finalMsg];
+              });
+              break;
+            }
+          } catch {}
+        }
+      }
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "재생성 실패";
+      console.error("regenerate error:", errMsg);
+    } finally {
+      clearTimeout(sseTimeout);
+      clearTimeout(maxStreamTimeout);
+      setStreaming(false);
+      setStreamBuf("");
+      setRegeneratingId(null);
+    }
+  }, [streaming]);
+
   // ── 방식B: 입력창에 복사 (재지시) ──
   const handleCopyToInput = useCallback((content: string) => {
     setInput(content); chatInputRef.current?.setValue(content);
@@ -2144,6 +2273,35 @@ export default function ChatPage() {
     screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
   const showArtifactPanel =
     screenSize === "desktop" ? artifactMode !== "hidden" : mobileOverlay === "artifact";
+
+  // ── 키보드 단축키 ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      // Ctrl/Cmd + N: 새 대화
+      if (mod && e.key === "n") {
+        e.preventDefault();
+        createSession();
+      }
+      // Ctrl/Cmd + Shift + S: 사이드바 토글
+      if (mod && e.shiftKey && (e.key === "S" || e.key === "s")) {
+        e.preventDefault();
+        setLeftOpen((prev) => !prev);
+      }
+      // Escape: 스트리밍 중단
+      if (e.key === "Escape" && streamingRef.current) {
+        e.preventDefault();
+        stopStreaming();
+      }
+      // Ctrl/Cmd + /: 단축키 도움말
+      if (mod && e.key === "/") {
+        e.preventDefault();
+        setShowShortcutHelp((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [createSession]);
 
   // ══════════════════════════════════════════════════════════════════
   // Render
@@ -2778,6 +2936,7 @@ export default function ChatPage() {
               handleDeleteMessage={handleDeleteMessage}
               handleCopyToInput={handleCopyToInput}
               handleEditResend={handleEditResend}
+              onRegenerate={handleRegenerate}
               onReplyTo={setReplyToMessage}
               allMessages={messages}
             />
@@ -3321,6 +3480,9 @@ export default function ChatPage() {
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
         activeSession={activeSession} copyArtifact={copyArtifact} toDirective={toDirective}
       />
+
+      {/* 키보드 단축키 도움말 모달 */}
+      <ShortcutHelp open={showShortcutHelp} onClose={() => setShowShortcutHelp(false)} />
 
     </div>
   );
