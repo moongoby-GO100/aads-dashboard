@@ -478,6 +478,7 @@ export default function ChatPage() {
   const modelRef = useRef(model);
   const activeWsRef = useRef(activeWs);
   const pendingPreviewFilesRef = useRef(pendingPreviewFiles);
+  const replyToMessageRef = useRef(replyToMessage);
   const inputRef = useRef(input);
   const toolStatusRef = useRef(toolStatus);
   const screenSizeRef = useRef(screenSize);
@@ -487,6 +488,7 @@ export default function ChatPage() {
   useEffect(() => { modelRef.current = model; }, [model]);
   useEffect(() => { activeWsRef.current = activeWs; }, [activeWs]);
   useEffect(() => { pendingPreviewFilesRef.current = pendingPreviewFiles; }, [pendingPreviewFiles]);
+  useEffect(() => { replyToMessageRef.current = replyToMessage; }, [replyToMessage]);
   useEffect(() => { inputRef.current = input; }, [input]);
   useEffect(() => { toolStatusRef.current = toolStatus; }, [toolStatus]);
   useEffect(() => { screenSizeRef.current = screenSize; }, [screenSize]);
@@ -1389,11 +1391,12 @@ export default function ChatPage() {
         formData.append("content", content);
         if (modelRef.current) formData.append("model_override", modelRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
+        if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
         fetchBody = formData;
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessage ? { reply_to_id: replyToMessage.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(`${BASE_URL}/chat/messages/send`, {
