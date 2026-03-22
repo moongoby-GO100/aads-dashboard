@@ -1346,6 +1346,7 @@ export default function ChatPage() {
     const requestSessionId = sessionId;
     const isStale = () => activeSessionRef.current !== requestSessionId;
 
+    const _capturedReplyTo = replyToMessageRef.current;
     const userMsg: ChatMessage = {
       id: `tmp-${Date.now()}`,
       session_id: sessionId,
@@ -1353,6 +1354,7 @@ export default function ChatPage() {
       content,
       created_at: new Date().toISOString(),
       attachmentPreviews: _previewUrls.length > 0 ? _previewUrls : undefined,
+      ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
     };
     setMessages((prev) => [...prev, userMsg]);
 
