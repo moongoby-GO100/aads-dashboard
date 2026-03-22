@@ -400,6 +400,11 @@ export default function ChatPage() {
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
 
+  // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
+  const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
+    return !!(lastUser?.content?.startsWith("[시스템]") || lastUser?.intent === "auto_reaction" || lastUser?.intent === "system_trigger" || lastAi?.intent === "auto_reaction" || lastAi?.intent === "interrupted");
+  };
+
   // ── Performance: ref로 폴링 useEffect 의존성 폭탄 방지 ──
   const streamingRef = useRef(streaming);
   const waitingBgRef = useRef(waitingBgResponse);
@@ -909,8 +914,7 @@ export default function ChatPage() {
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-          const isAutoTrigger979 = _lastUser979?.content?.startsWith("[시스템]") || _lastUser979?.intent === "auto_reaction" || _lastUser979?.intent === "system_trigger" || _lastAi979?.intent === "auto_reaction" || _lastAi979?.intent === "interrupted";
-          if (!isAutoTrigger979) {
+          if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
             if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
             showCompletionToast("응답이 완료되었습니다");
           } else if (_lastAi979?.id) {
@@ -975,8 +979,7 @@ export default function ChatPage() {
             // rawLatest는 이미 DESC(최신순) — .reverse() 제거하여 최신 user 메시지 기준 판단
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-            const isAutoTrigger = _lastUser1029?.content?.startsWith("[시스템]") || _lastUser1029?.intent === "auto_reaction" || _lastUser1029?.intent === "system_trigger" || _lastAi1029?.intent === "auto_reaction" || _lastAi1029?.intent === "interrupted";
-            if (!isAutoTrigger) {
+            if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
               if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
               showCompletionToast("응답이 완료되었습니다");
             } else if (_lastAi1029?.id) {
@@ -1562,7 +1565,8 @@ export default function ChatPage() {
         if (sessionId) {
           pendingResponseSessions.current.add(sessionId);
           setWaitingBgResponse(true);
-          setTimeout(() => {
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false);
           }, 120000); // 2분 후 자동 해제
@@ -1626,8 +1630,11 @@ export default function ChatPage() {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
       // 스트리밍 상태는 항상 해제 — 세션 전환 여부와 무관하게 무한 버블 방지
-      streamingSessionRef.current = null;
-      setStreaming(false);
+      // BUG-13 FIX: session check
+      if (streamingSessionRef.current === sessionId) {
+        streamingSessionRef.current = null;
+        setStreaming(false);
+      }
       setStreamBuf("");
       setToolStatus(null);
       if (!isStale()) {
@@ -1655,8 +1662,7 @@ export default function ChatPage() {
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
-                const isAutoTrigger1696 = _lastUser1696?.content?.startsWith("[시스템]") || _lastUser1696?.intent === "auto_reaction" || _lastUser1696?.intent === "system_trigger" || _lastAi1696?.intent === "auto_reaction" || _lastAi1696?.intent === "interrupted";
-                if (!isAutoTrigger1696) {
+                if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
                   if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
                   showCompletionToast("응답이 완료되었습니다");
                 } else if (_lastAi1696?.id) {
