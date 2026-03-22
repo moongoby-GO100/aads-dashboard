@@ -293,14 +293,15 @@ const MessageItem = memo(function MessageItem({
                 onClick={() => onReplyTo(msg)}
                 title="이 응답에 답글"
                 style={{
-                  width: "20px", height: "20px", borderRadius: "50%",
-                  background: "transparent", border: "1px solid transparent",
-                  color: "var(--ct-text2)", fontSize: "11px",
+                  width: "28px", height: "28px", borderRadius: "6px",
+                  background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
+                  color: "#6366f1", fontSize: "14px", fontWeight: "bold",
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", opacity: 0.4, transition: "opacity 0.2s",
+                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+                  marginLeft: "4px",
                 }}
-                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "var(--ct-accent)"; }}
-                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.15)"; (e.target as HTMLElement).style.borderColor = "#6366f1"; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
             <button
@@ -1477,6 +1478,12 @@ export default function ChatPage() {
               // AADS-190: 세션 비용/턴 업데이트
               if (ev.session_cost) setSessionCost(ev.session_cost);
               if (ev.session_turns) setSessionTurns(ev.session_turns);
+              // UX: 스트리밍 완료 시 아티팩트 자동 갱신 (실시간 반영)
+              if (activeWsRef.current) {
+                chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWsRef.current}`)
+                  .then(setArtifacts)
+                  .catch(() => {});
+              }
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
               if (full.trim()) {
                 setMessages((prev) => [

@@ -1,5 +1,5 @@
 "use client";
-import { memo } from "react";
+import { memo, useRef, useCallback } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
@@ -25,6 +25,73 @@ export interface ChatArtifactPanelProps {
 }
 
 /** 우측 아티팩트 패널 — 보고서/코드/차트/대시보드/작업 탭 */
+
+/** 아티팩트 본문 영역 — 스크롤 끝 도달 시 자동 전환 + 키보드 ←→ */
+function ArtifactContentArea({ artifactTab, filteredArtifacts, selectedArtifactIdx, setSelectedArtifactIdx, children }: {
+  artifactTab: string;
+  filteredArtifacts: { id: string }[];
+  selectedArtifactIdx: number;
+  setSelectedArtifactIdx: (v: number) => void;
+  children: React.ReactNode;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastNavTime = useRef(0);
+
+  const goNext = useCallback(() => {
+    if (selectedArtifactIdx < filteredArtifacts.length - 1) {
+      setSelectedArtifactIdx(selectedArtifactIdx + 1);
+      lastNavTime.current = Date.now();
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    }
+  }, [selectedArtifactIdx, filteredArtifacts.length, setSelectedArtifactIdx]);
+
+  const goPrev = useCallback(() => {
+    if (selectedArtifactIdx > 0) {
+      setSelectedArtifactIdx(selectedArtifactIdx - 1);
+      lastNavTime.current = Date.now();
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    }
+  }, [selectedArtifactIdx, setSelectedArtifactIdx]);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const el = scrollRef.current;
+    if (!el || Date.now() - lastNavTime.current < 600) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 5;
+    const atTop = el.scrollTop < 5;
+    if (e.deltaY > 30 && atBottom) goNext();
+    else if (e.deltaY < -30 && atTop) goPrev();
+  }, [goNext, goPrev]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); goNext(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); goPrev(); }
+  }, [goNext, goPrev]);
+
+  return (
+    <div
+      ref={scrollRef}
+      tabIndex={0}
+      onWheel={handleWheel}
+      onKeyDown={handleKeyDown}
+      style={{ flex: 1, overflowY: "auto", padding: artifactTab === "tasks" ? "0" : "16px", outline: "none" }}
+    >
+      {children}
+      {filteredArtifacts.length > 1 && artifactTab !== "tasks" && (
+        <div style={{
+          textAlign: "center", padding: "16px 0 8px", fontSize: "11px",
+          color: "var(--ct-text2)", opacity: 0.6,
+        }}>
+          {selectedArtifactIdx < filteredArtifacts.length - 1
+            ? "↓ 스크롤하여 다음 항목"
+            : `${filteredArtifacts.length}/${filteredArtifacts.length} (마지막)`
+          }
+          {" · ←→ 키보드로 전환"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPanelProps) {
   const {
     screenSize, showArtifactPanel, artifactMode, setArtifactMode,
@@ -224,8 +291,13 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               </div>
             )}
 
-            {/* Artifact content */}
-            <div style={{ flex: 1, overflowY: "auto", padding: artifactTab === "tasks" ? "0" : "16px" }}>
+            {/* Artifact content — 스크롤/키보드 네비게이션 */}
+            <ArtifactContentArea
+              artifactTab={artifactTab}
+              filteredArtifacts={filteredArtifacts}
+              selectedArtifactIdx={selectedArtifactIdx}
+              setSelectedArtifactIdx={setSelectedArtifactIdx}
+            >
               {artifactTab === "tasks" ? (
                 <ArtifactTaskMonitor sessionId={activeSession?.id} />
               ) : activeArtifact ? (
@@ -324,7 +396,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   </div>
                 </div>
               )}
-            </div>
+            </ArtifactContentArea>
 
             {/* Artifact actions */}
             {activeArtifact && (
