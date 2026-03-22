@@ -140,6 +140,10 @@ export const chatApi = {
   // Messages
   getMessages: (sessionId: string, limit = 50, offset = 0) =>
     req<ChatMessage[]>(`/chat/messages?session_id=${sessionId}&limit=${limit}&offset=${offset}`),
+  getMessagesCursor: (sessionId: string, limit = 50, cursor?: string) =>
+    req<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+      `/chat/messages?session_id=${sessionId}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+    ),
   getStreamingStatus: (sessionId: string) =>
     req<{ is_streaming: boolean; just_completed?: boolean; content_length?: number; tool_count?: number; last_tool?: string }>(
       `/chat/sessions/${sessionId}/streaming-status`

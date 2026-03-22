@@ -435,29 +435,31 @@ export default function ChatPage() {
   const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
 
-  // PERF: 이전 메시지 로드 (스크롤 위로 올릴 때)
+  // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
-    if (!activeSession?.id || messages.length === 0) return;
+    if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
-    const olderMsgs = await chatApi<ChatMessage[]>(
-      `/chat/messages?session_id=${activeSession.id}&limit=100&offset=${messages.length}&sort=desc`
-    ).then(msgs => msgs.reverse()).catch(() => []);
-    if (olderMsgs.length > 0) {
-      setHasMoreMessages(olderMsgs.length >= 100);
-      const filtered = olderMsgs.filter(m => m.intent !== "streaming_placeholder");
+    const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+      `/chat/messages?session_id=${activeSession.id}&limit=100&cursor=${encodeURIComponent(nextCursor)}`
+    ).catch(() => null);
+    if (result && result.messages.length > 0) {
+      setHasMoreMessages(result.has_more);
+      setNextCursor(result.next_cursor);
+      const filtered = result.messages.filter(m => m.intent !== "streaming_placeholder");
       setMessages(prev => [...filtered, ...prev]);
-      // 스크롤 위치 유지 (새 메시지가 위에 추가되므로)
       requestAnimationFrame(() => {
         if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
       });
     } else {
       setHasMoreMessages(false);
+      setNextCursor(null);
     }
-  }, [activeSession?.id, messages.length]);
+  }, [activeSession?.id, messages.length, nextCursor]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -720,6 +722,7 @@ export default function ChatPage() {
     setEditText("");
     // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
     setMessages([]);
+    setNextCursor(null);
     if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
     setWaitingBgResponse(false);
     setStreamBuf("");
@@ -741,11 +744,14 @@ export default function ChatPage() {
     // BUG-1 FIX: cancelled 클로저로 race condition 방지 (activeSessionRef 대신)
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${fetchSid}&limit=100&sort=desc`)
-        .then((msgs) => msgs.reverse())
-        .then((msgs) => {
+      chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+        `/chat/messages?session_id=${fetchSid}&limit=100`
+      )
+        .then((result) => {
+          const msgs = result.messages;
           if (cancelled) return msgs;
-          setHasMoreMessages(msgs.length >= 100);
+          setHasMoreMessages(result.has_more);
+          setNextCursor(result.next_cursor);
           const processed = filterPlaceholder
             ? msgs.filter((m) => m.intent !== "streaming_placeholder")
             : msgs.map((m) =>
@@ -862,7 +868,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`)
+      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`)
         .then((msgs) => msgs.reverse())
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -875,16 +881,22 @@ export default function ChatPage() {
     return () => clearTimeout(timer);
   }, [activeSession?.id, messages.length, streaming]);
 
-  // 스크롤 이벤트로 near-bottom 감지
+  // 스크롤 이벤트로 near-bottom 감지 + 맨 위 도달 시 이전 메시지 자동 로드
+  const loadingOlderRef = useRef(false);
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 150;
+      // 맨 위 근접 시 이전 메시지 자동 로드
+      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current) {
+        loadingOlderRef.current = true;
+        loadOlderMessages().finally(() => { loadingOlderRef.current = false; });
+      }
     };
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [hasMoreMessages, loadOlderMessages]);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
@@ -962,7 +974,7 @@ export default function ChatPage() {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false);
           setStreaming(false);
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -986,7 +998,7 @@ export default function ChatPage() {
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
           setStreaming(false);
           setWaitingBgResponse(false);
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -1010,7 +1022,7 @@ export default function ChatPage() {
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
-        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc`);
+        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0&sort=desc`);
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
@@ -1026,7 +1038,7 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false);
             try {
-              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`).then(msgs => msgs.reverse());
+              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
               if (cancelled) return;
               if (allMsgs) {
                 const filtered = allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -1666,7 +1678,7 @@ export default function ChatPage() {
             // 최종 실패 시 전체 메시지 리로드
             try {
               const allMsgs = await chatApi<ChatMessage[]>(
-                `/chat/messages?session_id=${sessionId}&limit=100&sort=desc`
+                `/chat/messages?session_id=${sessionId}&limit=100&offset=0&sort=desc`
               ).then(msgs => msgs.reverse());
               setMessages(allMsgs);
             } catch {
@@ -1722,7 +1734,7 @@ export default function ChatPage() {
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false);
-                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=100&sort=desc`).then(msgs => msgs.reverse());
+                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
                 if (freshMsgs) {
                   setMessages(freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder"));
                 }
@@ -1777,7 +1789,7 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=100&sort=desc`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=100&offset=0&sort=desc`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
@@ -2611,6 +2623,7 @@ export default function ChatPage() {
           {hasMoreMessages && (
             <button
               onClick={loadOlderMessages}
+              disabled={loadingOlderRef.current}
               style={{
                 alignSelf: "center",
                 padding: "6px 16px",
@@ -2621,6 +2634,7 @@ export default function ChatPage() {
                 borderRadius: "8px",
                 cursor: "pointer",
                 marginBottom: "8px",
+                opacity: loadingOlderRef.current ? 0.6 : 1,
               }}
             >
               ▲ 이전 대화 불러오기
