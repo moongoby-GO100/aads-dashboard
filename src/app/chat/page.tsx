@@ -449,6 +449,14 @@ export default function ChatPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectIcon, setNewProjectIcon] = useState("📁");
 
+  // ── Prompt Templates (P2-10) ──
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<Array<{ id: string; title: string; content: string; category: string; usage_count: number; created_at: string; updated_at: string }>>([]);
+  const [templateTab, setTemplateTab] = useState("전체");
+  const [showNewTemplate, setShowNewTemplate] = useState(false);
+  const [newTplTitle, setNewTplTitle] = useState("");
+  const [newTplCategory, setNewTplCategory] = useState("일반");
+
   // ── Proactive Briefing ──
   const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean } | null>(null);
   const briefingShownRef = useRef<Set<string>>(new Set());
@@ -1065,6 +1073,12 @@ export default function ChatPage() {
             }
           }
           return;
+        }
+        // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
+        if (!ss.is_streaming && !ss.just_completed && _waitingBg && !_streaming) {
+          setWaitingBgResponse(false);
+          pendingResponseSessions.current.delete(sid);
+          if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
         }
         // 스트리밍 중인데 waitingBgResponse가 꺼져 있으면 활성화 (세션 복귀 시)
         if (ss.is_streaming && !_waitingBg && !_streaming) {
@@ -1683,8 +1697,19 @@ export default function ChatPage() {
               setYellowWarning(`✅ 추가 지시 반영됨 (대기 ${msgQueueRef.current.length}건)`);
               setTimeout(() => setYellowWarning(null), 3000);
             } else if (ev.type === "error") {
-              // error를 inner catch 밖으로 전파 (inner catch가 삼키지 않도록)
-              sseError = new Error(ev.error || ev.content || "Unknown streaming error");
+              // R3: LLM 장애 시 사용자에게 즉시 안내 메시지 표시
+              const errorContent = ev.error || ev.content || "Unknown streaming error";
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `llm-err-${Date.now()}`,
+                  session_id: requestSessionId,
+                  role: "assistant" as const,
+                  content: `⚠️ AI 응답 생성에 실패했습니다.\n\n사유: ${errorContent}\n\n잠시 후 다시 시도해주세요.`,
+                  created_at: new Date().toISOString(),
+                },
+              ]);
+              sseError = new Error(errorContent);
             }
           } catch {
             // ignore malformed SSE lines (JSON parse 실패 등)
@@ -2254,6 +2279,39 @@ export default function ChatPage() {
   function applyChip(prefix: string) {
     setInput((prev) => (prev ? `${prefix} ${prev}` : `${prefix} `)); setHasInput(true);
     textareaRef.current?.focus();
+  }
+
+  // ── P2-10: 템플릿 함수들 ──
+  async function fetchTemplates() {
+    try {
+      const list = await chatApi<Array<{ id: string; title: string; content: string; category: string; usage_count: number; created_at: string; updated_at: string }>>("/chat/templates");
+      setTemplates(list);
+    } catch { /* ignore */ }
+  }
+  async function handleUseTemplate(tpl: { id: string; content: string }) {
+    try { await chatApi(`/chat/templates/${tpl.id}/use`, { method: "POST" }); } catch { /* ignore */ }
+    setShowTemplates(false);
+    chatInputRef.current?.setValue(tpl.content);
+    setInput(tpl.content);
+    setHasInput(true);
+    chatInputRef.current?.focus();
+  }
+  async function handleCreateTemplate() {
+    const content = chatInputRef.current?.getValue()?.trim() || "";
+    if (!newTplTitle.trim() || !content) return;
+    try {
+      await chatApi("/chat/templates", {
+        method: "POST",
+        body: JSON.stringify({ title: newTplTitle.trim(), content, category: newTplCategory }),
+      });
+      setNewTplTitle("");
+      setNewTplCategory("일반");
+      setShowNewTemplate(false);
+      fetchTemplates();
+    } catch { /* ignore */ }
+  }
+  async function handleDeleteTemplate(id: string) {
+    try { await chatApi(`/chat/templates/${id}`, { method: "DELETE" }); fetchTemplates(); } catch { /* ignore */ }
   }
 
   // ── Keyboard (useCallback으로 안정화 → ChatInput memo 유효화, IME 깨짐 방지) ──
@@ -3471,6 +3529,7 @@ export default function ChatPage() {
                 { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
+                { icon: "📋", label: "템플릿", action: "template" as const },
               ].map((chip) => (
                 <button
                   key={chip.label}
@@ -3482,6 +3541,12 @@ export default function ChatPage() {
                     }
                     if ("action" in chip && chip.action === "imagegen") {
                       setShowImageGen(true);
+                      if (screenSize === "mobile") setShowMobileActions(false);
+                      return;
+                    }
+                    if ("action" in chip && chip.action === "template") {
+                      fetchTemplates();
+                      setShowTemplates(true);
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
@@ -3749,6 +3814,126 @@ export default function ChatPage() {
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
         activeSession={activeSession} copyArtifact={copyArtifact} toDirective={toDirective}
       />
+
+      {/* P2-10: 프롬프트 템플릿 모달 */}
+      {showTemplates && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowTemplates(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: "var(--ct-bg)", border: "1px solid var(--ct-border)", borderRadius: "16px",
+            width: "min(520px, 90vw)", maxHeight: "70vh", display: "flex", flexDirection: "column",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 20px", borderBottom: "1px solid var(--ct-border)",
+            }}>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--ct-text)" }}>📋 프롬프트 템플릿</span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => setShowNewTemplate(!showNewTemplate)} style={{
+                  padding: "4px 12px", fontSize: "12px", borderRadius: "8px",
+                  background: "var(--ct-accent)", color: "#fff", border: "none", cursor: "pointer",
+                }}>+ 저장</button>
+                <button onClick={() => setShowTemplates(false)} style={{
+                  padding: "4px 8px", background: "none", border: "none",
+                  color: "var(--ct-text2)", cursor: "pointer", fontSize: "18px",
+                }}>✕</button>
+              </div>
+            </div>
+            {/* 새 템플릿 저장 폼 */}
+            {showNewTemplate && (
+              <div style={{
+                padding: "12px 20px", borderBottom: "1px solid var(--ct-border)",
+                display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap",
+              }}>
+                <input
+                  value={newTplTitle} onChange={(e) => setNewTplTitle(e.target.value)}
+                  placeholder="템플릿 제목"
+                  style={{
+                    flex: 1, minWidth: "120px", padding: "6px 10px", fontSize: "13px",
+                    background: "var(--ct-hover)", border: "1px solid var(--ct-border)",
+                    borderRadius: "8px", color: "var(--ct-text)", outline: "none",
+                  }}
+                />
+                <select value={newTplCategory} onChange={(e) => setNewTplCategory(e.target.value)} style={{
+                  padding: "6px 10px", fontSize: "13px",
+                  background: "var(--ct-hover)", border: "1px solid var(--ct-border)",
+                  borderRadius: "8px", color: "var(--ct-text)", outline: "none",
+                }}>
+                  {["운영", "개발", "분석", "일반"].map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <button onClick={handleCreateTemplate} style={{
+                  padding: "6px 14px", fontSize: "13px", borderRadius: "8px",
+                  background: "var(--ct-accent)", color: "#fff", border: "none", cursor: "pointer",
+                }}>저장</button>
+              </div>
+            )}
+            {/* 카테고리 탭 */}
+            <div style={{
+              display: "flex", gap: "4px", padding: "12px 20px 0",
+              borderBottom: "1px solid var(--ct-border)",
+            }}>
+              {["전체", "운영", "개발", "분석", "일반"].map((cat) => (
+                <button key={cat} onClick={() => setTemplateTab(cat)} style={{
+                  padding: "6px 14px", fontSize: "12px", fontWeight: templateTab === cat ? 700 : 400,
+                  borderRadius: "8px 8px 0 0", cursor: "pointer",
+                  background: templateTab === cat ? "var(--ct-hover)" : "transparent",
+                  color: templateTab === cat ? "var(--ct-accent)" : "var(--ct-text2)",
+                  border: templateTab === cat ? "1px solid var(--ct-border)" : "1px solid transparent",
+                  borderBottom: templateTab === cat ? "1px solid var(--ct-bg)" : "1px solid transparent",
+                  marginBottom: "-1px",
+                }}>{cat}</button>
+              ))}
+            </div>
+            {/* 템플릿 목록 */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+              {templates
+                .filter((t) => templateTab === "전체" || t.category === templateTab)
+                .map((tpl) => (
+                  <div key={tpl.id} style={{
+                    display: "flex", alignItems: "center", gap: "12px",
+                    padding: "10px 12px", margin: "4px 0", borderRadius: "10px",
+                    background: "var(--ct-hover)", cursor: "pointer",
+                    transition: "background 0.15s",
+                  }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--ct-border)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--ct-hover)")}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }} onClick={() => handleUseTemplate(tpl)}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--ct-text)", marginBottom: "4px" }}>
+                        {tpl.title}
+                        <span style={{
+                          marginLeft: "8px", fontSize: "10px", padding: "1px 6px",
+                          borderRadius: "6px", background: "var(--ct-bg)", color: "var(--ct-text2)",
+                        }}>{tpl.category}</span>
+                      </div>
+                      <div style={{
+                        fontSize: "11px", color: "var(--ct-text2)",
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      }}>{tpl.content}</div>
+                    </div>
+                    <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
+                      {tpl.usage_count}회
+                    </span>
+                    <button onClick={() => handleDeleteTemplate(tpl.id)} style={{
+                      padding: "2px 6px", background: "none", border: "none",
+                      color: "var(--ct-text2)", cursor: "pointer", fontSize: "14px",
+                      opacity: 0.5,
+                    }} title="삭제">✕</button>
+                  </div>
+                ))}
+              {templates.filter((t) => templateTab === "전체" || t.category === templateTab).length === 0 && (
+                <div style={{ padding: "24px", textAlign: "center", color: "var(--ct-text2)", fontSize: "13px" }}>
+                  템플릿이 없습니다
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 키보드 단축키 도움말 모달 */}
       <ShortcutHelp open={showShortcutHelp} onClose={() => setShowShortcutHelp(false)} />
