@@ -65,3 +65,39 @@ fi
 STATUS=$(docker inspect "$CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "unknown")
 log "배포 완료 — 상태: $STATUS"
 log "AADS Dashboard 무중단 배포 성공"
+
+# Step 5: 프론트엔드 QA 자동 실행
+log "Step 5: 프론트엔드 QA 실행 (30초 안정화 대기 후)"
+sleep 30
+QA_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/v1/visual-qa/full-qa" \
+    -H "Content-Type: application/json" \
+    -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
+    --max-time 120 2>/dev/null || echo '{"error":"QA API 호출 실패"}')
+
+QA_RESULT=$(echo "$QA_RESPONSE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get('overall_result', d.get('verdict', 'UNKNOWN')))
+except:
+    print('ERROR')
+" 2>/dev/null || echo "ERROR")
+
+if [[ "$QA_RESULT" == *"FAIL"* ]]; then
+    log "⚠️ Step 5: 프론트엔드 QA 실패 — $QA_RESULT (배포는 유지, 알림만)"
+    # 텔레그램 알림 (환경변수 있으면 발송)
+    if [[ -f "${COMPOSE_DIR}/.env" ]]; then
+        _TG_TOKEN=$(grep -oP '^TELEGRAM_BOT_TOKEN=\K.*' "${COMPOSE_DIR}/.env" 2>/dev/null || true)
+        _TG_CHAT=$(grep -oP '^TELEGRAM_CHAT_ID=\K.*' "${COMPOSE_DIR}/.env" 2>/dev/null || true)
+        if [[ -n "$_TG_TOKEN" && -n "$_TG_CHAT" ]]; then
+            curl -sf -X POST "https://api.telegram.org/bot${_TG_TOKEN}/sendMessage" \
+                -d chat_id="${_TG_CHAT}" \
+                -d text="⚠️ [Dashboard QA FAIL] 배포는 완료되었으나 QA 검사 실패: ${QA_RESULT}" \
+                -d parse_mode=HTML >/dev/null 2>&1 || true
+        fi
+    fi
+elif [[ "$QA_RESULT" == "ERROR" ]]; then
+    log "⚠️ Step 5: QA API 응답 파싱 실패 — 수동 확인 필요"
+else
+    log "Step 5: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
+fi
