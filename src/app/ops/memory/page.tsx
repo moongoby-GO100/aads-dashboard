@@ -265,6 +265,15 @@ export default function MemoryDashboardPage() {
               {loading ? "..." : learningHealth ? `대화 ${learningHealth.messages}건 / 학습 ${learningHealth.learnings}건` : "—"}
             </div>
           </div>
+          <div style={{
+            ...statCardStyle,
+            background: (stats?.usage_stats?.never_used_7d ?? 0) >= 50 ? "var(--bg-danger, #fef2f2)" : (stats?.usage_stats?.never_used_7d ?? 0) >= 20 ? "var(--bg-warning, #fffbeb)" : "var(--bg-card)",
+          }}>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>미사용 메모리 (7일)</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: (stats?.usage_stats?.never_used_7d ?? 0) >= 50 ? "var(--danger, #ef4444)" : (stats?.usage_stats?.never_used_7d ?? 0) >= 20 ? "var(--warning)" : "var(--text-primary)" }}>
+              {loading ? "..." : (stats?.usage_stats?.never_used_7d ?? 0)}<span style={{ fontSize: 13, fontWeight: 400 }}>건</span>
+            </div>
+          </div>
         </div>
 
         {/* ── 중단: 차트 영역 ── */}
@@ -324,14 +333,14 @@ export default function MemoryDashboardPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["카테고리", "키", "내용 (200자 미리보기)", "품질", "갱신일", "액션"].map((h) => (
+                  {["카테고리", "키", "내용 (200자 미리보기)", "품질", "사용 횟수", "갱신일", "액션"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "8px 6px", color: "var(--text-secondary)", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>{loading ? "로딩 중..." : "데이터 없음"}</td></tr>
+                  <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: "var(--text-secondary)" }}>{loading ? "로딩 중..." : "데이터 없음"}</td></tr>
                 ) : entries.map((entry) => {
                   const conf = entry.confidence ?? entry.quality_score ?? 0;
                   return (
@@ -355,6 +364,15 @@ export default function MemoryDashboardPage() {
                         <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600,
                           background: `${qualityColor(conf)}22`, color: qualityColor(conf) }}>
                           {conf.toFixed(2)}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                        <span style={{
+                          display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600,
+                          background: (entry.usage_count ?? 0) >= 10 ? "#3b82f622" : (entry.usage_count ?? 0) === 0 ? "var(--bg-hover)" : "transparent",
+                          color: (entry.usage_count ?? 0) >= 10 ? "#3b82f6" : (entry.usage_count ?? 0) === 0 ? "var(--text-secondary)" : "var(--text-primary)",
+                        }}>
+                          {entry.usage_count ?? 0}
                         </span>
                       </td>
                       <td style={{ padding: "8px 6px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
