@@ -1511,16 +1511,18 @@ export default function ChatPage() {
 
       if (!res.ok) {
         const statusCode = res.status;
-        // 502/503: 서버 재시작 — 자동 재시도 (최대 2회, 5초 간격)
-        if ((statusCode === 502 || statusCode === 503) && !retryCount) {
+        // 502/503/504: 서버 재시작 — 자동 재시도 (최대 3회, 지수 백오프)
+        if ((statusCode === 502 || statusCode === 503 || statusCode === 504) && (retryCount || 0) < 3) {
           // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
           setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
           setStreaming(false);
           setStreamBuf("");
-          setToolStatus("🔄 서버 재시작 감지 — 5초 후 자동 재전송...");
-          await new Promise((r) => setTimeout(r, 5000));
+          const attempt = (retryCount || 0) + 1;
+          const delay = Math.min(5000 * Math.pow(1.5, attempt - 1), 15000);
+          setToolStatus(`🔄 서버 재시작 감지 — ${Math.round(delay/1000)}초 후 자동 재전송 (${attempt}/3)...`);
+          await new Promise((r) => setTimeout(r, delay));
           setToolStatus(null);
-          return sendMessage(content, undefined, (retryCount || 0) + 1);
+          return sendMessage(content, undefined, attempt);
         }
         const _errMap: Record<number, string> = {
           502: "서버가 재시작 중입니다.",
