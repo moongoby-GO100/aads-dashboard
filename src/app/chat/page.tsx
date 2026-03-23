@@ -1561,6 +1561,11 @@ export default function ChatPage() {
             const ev = JSON.parse(raw);
             // P0-FIX: heartbeat도 timeout 리셋 — 도구 30s+ 실행 시 연결 유지 필수
             // 절대 타임아웃(300s)이 무한 연장 방지 안전망 역할
+            if (ev.type === "stream_start") {
+              // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
+              resetSseTimeout();
+              continue;
+            }
             if (ev.type === "heartbeat") {
               resetSseTimeout();
               // 도구 실행 중 진행상황 표시 (서버가 tool_count/last_tool 포함 시)
@@ -1767,32 +1772,47 @@ export default function ChatPage() {
             setWaitingBgResponse(false);
           }, 120000); // 2분 후 자동 해제
         }
-        // 연결 끊김: 누적된 텍스트가 있으면 표시, 없으면 폴링 fallback (최대 3회)
+
+        // SSE 재연결 프로토콜: 부분 응답 보존 + 완성 응답 복구
+        setToolStatus("🔄 연결 끊김 — 자동 복구 중...");
+
+        // 1. 부분 응답이 있으면 먼저 표시
         if (full) {
           setStreamBuf("");
           setMessages((prev) => [
             ...prev,
-            { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full },
+            { id: `ai-partial-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full + "\n\n⚠️ *연결이 끊겨 응답이 잘렸을 수 있습니다.*" },
           ]);
-        } else {
-          setStreamBuf("");
-          let recovered = false;
-          for (let retry = 0; retry < 3; retry++) {
-            await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
-            try {
-              const msgs = await chatApi<ChatMessage[]>(
-                `/chat/messages?session_id=${sessionId}&limit=5&offset=0`
-              );
-              const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
-              if (aiMsg) {
-                setMessages((prev) => [...prev, aiMsg]);
-                recovered = true;
-                break;
+        }
+
+        // 2. 서버에서 완성된 응답 확인 (최대 5회, 지수 백오프)
+        let recovered = false;
+        for (let retry = 0; retry < 5; retry++) {
+          await new Promise((r) => setTimeout(r, 2000 * Math.pow(1.5, retry)));
+          setToolStatus(`🔄 응답 복구 시도 ${retry + 1}/5...`);
+          try {
+            const resp = await chatApi<{found: boolean; message?: ChatMessage}>(
+              `/chat/sessions/${sessionId}/last-response`
+            );
+            if (resp.found && resp.message) {
+              // 부분 응답보다 완성 응답이 더 길면 교체
+              if (!full || resp.message.content.length > full.length) {
+                setMessages((prev) => {
+                  const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-"));
+                  return [...filtered, resp.message!];
+                });
               }
-            } catch { /* retry */ }
-          }
-          if (!recovered) {
-            // 최종 실패 시 전체 메시지 리로드
+              recovered = true;
+              setToolStatus(null);
+              break;
+            }
+          } catch { /* retry */ }
+        }
+
+        if (!recovered) {
+          setToolStatus(null);
+          // 부분 응답도 없었으면 전체 리로드
+          if (!full) {
             try {
               const allMsgs = await chatApi<ChatMessage[]>(
                 `/chat/messages?session_id=${sessionId}&limit=100&offset=0&sort=desc`

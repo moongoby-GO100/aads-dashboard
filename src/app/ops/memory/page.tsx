@@ -123,6 +123,8 @@ export default function MemoryDashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ source: string; id: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deduplicating, setDeduplicating] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [learningHealth, setLearningHealth] = useState<any>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -145,10 +147,17 @@ export default function MemoryDashboardPage() {
     } catch (e) { console.error("Memory entries error:", e); }
   }, [filterCategory, filterProject, searchText, page]);
 
+  const fetchLearningHealth = useCallback(async () => {
+    try {
+      const data = await api.getOpsMemoryLearningHealth();
+      setLearningHealth(data);
+    } catch (e) { console.error("Learning health error:", e); }
+  }, []);
+
   const fetchAll = useCallback(async () => {
-    await Promise.allSettled([fetchStats(), fetchEntries()]);
+    await Promise.allSettled([fetchStats(), fetchEntries(), fetchLearningHealth()]);
     setLoading(false);
-  }, [fetchStats, fetchEntries]);
+  }, [fetchStats, fetchEntries, fetchLearningHealth]);
 
   useEffect(() => {
     fetchAll();
@@ -245,6 +254,15 @@ export default function MemoryDashboardPage() {
             <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>활성 교정</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--warning)" }}>
               {loading ? "..." : (activeCorrections + activeLow)}<span style={{ fontSize: 13, fontWeight: 400 }}>건</span>
+            </div>
+          </div>
+          <div style={{
+            ...statCardStyle,
+            background: learningHealth?.healthy ? "var(--bg-success, #f0fdf4)" : learningHealth?.action_needed === "rescan" ? "var(--bg-danger, #fef2f2)" : "var(--bg-warning, #fffbeb)",
+          }}>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>학습 헬스</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: learningHealth?.healthy ? "var(--success)" : learningHealth?.action_needed === "rescan" ? "var(--danger, #ef4444)" : "var(--warning)" }}>
+              {loading ? "..." : learningHealth ? `대화 ${learningHealth.messages}건 / 학습 ${learningHealth.learnings}건` : "—"}
             </div>
           </div>
         </div>

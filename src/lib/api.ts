@@ -275,4 +275,6 @@ export const api = {
     request<any>(`/ops/memory/entries/${encodeURIComponent(source)}/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deduplicateOpsMemory: () =>
     request<any>("/ops/memory/deduplicate", { method: "POST" }),
+  getOpsMemoryLearningHealth: () =>
+    request<any>("/ops/memory/learning-health"),
 };
