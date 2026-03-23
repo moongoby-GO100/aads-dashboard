@@ -294,7 +294,7 @@ function CopyableCodeBlock({ lang, code }: { lang: string; code: string }) {
         <iframe
           srcDoc={code}
           style={{ width: "100%", height: "540px", border: "none", background: "#fff" }}
-          sandbox="allow-scripts"
+          sandbox=""
           title="HTML Preview"
         />
       </div>
