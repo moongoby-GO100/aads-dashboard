@@ -502,6 +502,8 @@ export default function ChatPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
+  const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
@@ -559,13 +561,22 @@ export default function ChatPage() {
   useEffect(() => { uploadingRef.current = uploading; }, [uploading]);
   useEffect(() => { queueCountRef.current = queueCount; }, [queueCount]);
 
+  // ── 타이머 ref 언마운트 정리 ──
+  useEffect(() => {
+    return () => {
+      if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
+      if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+    };
+  }, []);
+
   // ── 토스트 디바운스 (5초 내 중복 차단) ──
   const showCompletionToast = useCallback((msg: string) => {
     const now = Date.now();
     if (now - lastToastTimeRef.current < 5000) return;
     lastToastTimeRef.current = now;
     setCompletionToast(msg);
-    setTimeout(() => setCompletionToast(null), 3000);
+    if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
+    completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
   }, []);
 
   // ── Init theme ──
@@ -1429,7 +1440,8 @@ export default function ChatPage() {
       }
       // 추가 지시 접수 안내
       setYellowWarning(`추가 지시 접수됨 (대기 ${msgQueueRef.current.length}건)${attachLabel}`);
-      setTimeout(() => setYellowWarning(null), 5000);
+      if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+      yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
       return;
     }
 
@@ -1729,7 +1741,8 @@ export default function ChatPage() {
               setQueueCount(msgQueueRef.current.length);
               // 토스트로만 알림 (assistant 메시지 추가 안 함 → 중복 방지)
               setYellowWarning(`✅ 추가 지시 반영됨 (대기 ${msgQueueRef.current.length}건)`);
-              setTimeout(() => setYellowWarning(null), 3000);
+              if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+              yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 3000);
             } else if (ev.type === "error") {
               // R3: LLM 장애 시 사용자에게 즉시 안내 메시지 표시
               const errorContent = ev.error || ev.content || "Unknown streaming error";
