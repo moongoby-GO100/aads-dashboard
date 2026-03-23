@@ -702,7 +702,11 @@ export default function ChatPage() {
         setActiveWs(match ? match.id : ws[0].id);
       })
       .catch((err) => {
-        setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
+        console.error("워크스페이스 로드 실패:", err);
+        const detail = err?.status ? `(${err.status})` : "(네트워크 오류)";
+        setYellowWarning(`워크스페이스 목록 로드 실패 ${detail}`);
+        if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+        yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
       });
   }, []);
 
@@ -754,8 +758,12 @@ export default function ChatPage() {
         const chosen = match || sorted[0];
         setActiveSession(chosen);
       })
-      .catch(() => {
-        setLoadError("데이터를 불러오지 못했습니다. 새로고침해 주세요.");
+      .catch((err) => {
+        console.error("세션 목록 로드 실패:", err);
+        const detail = err?.status ? `(${err.status})` : "(네트워크 오류)";
+        setYellowWarning(`세션 목록 로드 실패 ${detail}`);
+        if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+        yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
       });
   }, [activeWs]);
 
@@ -841,7 +849,12 @@ export default function ChatPage() {
           }
           return processed;
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("메시지 로드 실패:", err);
+          const detail = err?.status ? `(${err.status})` : "(네트워크 오류)";
+          setYellowWarning(`메시지 로드 실패 ${detail}`);
+          if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+          yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
           return [] as ChatMessage[];
         });
 
