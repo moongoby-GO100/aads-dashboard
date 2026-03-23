@@ -496,6 +496,7 @@ export default function ChatPage() {
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
+  const [bgPartialContent, setBgPartialContent] = useState("");
   const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -809,7 +810,7 @@ export default function ChatPage() {
     setMessages([]);
     setNextCursor(null);
     if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
-    setWaitingBgResponse(false);
+    setWaitingBgResponse(false); setBgPartialContent("");
     setStreamBuf("");
     setSelectedArtifactIdx(0);
     if (!activeSession) {
@@ -867,7 +868,7 @@ export default function ChatPage() {
         pendingResponseSessions.current.add(fetchSid);
         if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
         waitingBgTimeoutRef.current = setTimeout(() => {
-          setWaitingBgResponse(false);
+          setWaitingBgResponse(false); setBgPartialContent("");
           pendingResponseSessions.current.delete(fetchSid);
         }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
@@ -883,15 +884,15 @@ export default function ChatPage() {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
               if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
-                setWaitingBgResponse(false);
+                setWaitingBgResponse(false); setBgPartialContent("");
               }
               // 여전히 없으면 폴링이 계속 잡아줌 (60초 타임아웃)
             });
           }, 1500);
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
-          waitingBgTimeoutRef.current = setTimeout(() => setWaitingBgResponse(false), 60000);
+          waitingBgTimeoutRef.current = setTimeout(() => { setWaitingBgResponse(false); setBgPartialContent(""); }, 60000);
         } else {
-          setWaitingBgResponse(false);
+          setWaitingBgResponse(false); setBgPartialContent("");
         }
       } else {
         // 스트리밍 아님 → 일반 로드
@@ -903,7 +904,7 @@ export default function ChatPage() {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
               if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
-                setWaitingBgResponse(false);
+                setWaitingBgResponse(false); setBgPartialContent("");
                 pendingResponseSessions.current.delete(fetchSid);
               }
             });
@@ -914,7 +915,7 @@ export default function ChatPage() {
         // 서버 재시작으로 인한 미완료 대화 감지: 마지막 메시지가 user이고 10분 이내
         if (!isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           const lastMsg = msgs[msgs.length - 1];
-          const msgAge = Date.now() - new Date(lastMsg.created_at).getTime();
+          const msgAge = Date.now() - new Date(lastMsg.created_at || Date.now()).getTime();
           if (msgAge < 10 * 60 * 1000) {
             setToolStatus("🔄 이전 응답이 중단되었습니다 — 자동 재전송 중...");
             setWaitingBgResponse(true);
@@ -925,7 +926,7 @@ export default function ChatPage() {
               setToolStatus(null);
               loadMessages(true).then((retryMsgs) => {
                 if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
-                  setWaitingBgResponse(false);
+                  setWaitingBgResponse(false); setBgPartialContent("");
                   pendingResponseSessions.current.delete(fetchSid);
                 }
                 // 여전히 user가 마지막이면 폴링이 계속 잡아줌
@@ -933,7 +934,7 @@ export default function ChatPage() {
             }, 5000);
             if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
             waitingBgTimeoutRef.current = setTimeout(() => {
-              setWaitingBgResponse(false);
+              setWaitingBgResponse(false); setBgPartialContent("");
               pendingResponseSessions.current.delete(fetchSid);
             }, 120000);
           }
@@ -1083,13 +1084,14 @@ export default function ChatPage() {
       if (!_waitingBg && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
       try {
-        const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean }>(
+        const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string }>(
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
+        if (ss.partial_content) setBgPartialContent(ss.partial_content);
         if (ss.just_completed) {
           pendingResponseSessions.current.delete(sid);
-          setWaitingBgResponse(false);
+          setWaitingBgResponse(false); setBgPartialContent("");
           setStreaming(false);
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
@@ -1114,7 +1116,7 @@ export default function ChatPage() {
         // 서버에서 스트리밍 아님 + 프론트 streaming=true → SSE 끊김 감지
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
           setStreaming(false);
-          setWaitingBgResponse(false);
+          setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -1127,7 +1129,7 @@ export default function ChatPage() {
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
         if (!ss.is_streaming && !ss.just_completed && _waitingBg && !_streaming) {
-          setWaitingBgResponse(false);
+          setWaitingBgResponse(false); setBgPartialContent("");
           pendingResponseSessions.current.delete(sid);
           if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
         }
@@ -1137,7 +1139,7 @@ export default function ChatPage() {
           pendingResponseSessions.current.add(sid);
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => {
-            setWaitingBgResponse(false);
+            setWaitingBgResponse(false); setBgPartialContent("");
             pendingResponseSessions.current.delete(sid);
           }, 180000);
         }
@@ -1159,7 +1161,7 @@ export default function ChatPage() {
           // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
           if (hasNewFinalAi) {
             pendingResponseSessions.current.delete(sid);
-            setWaitingBgResponse(false);
+            setWaitingBgResponse(false); setBgPartialContent("");
             try {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
               if (cancelled) return;
@@ -1824,7 +1826,7 @@ export default function ChatPage() {
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
-            setWaitingBgResponse(false);
+            setWaitingBgResponse(false); setBgPartialContent("");
           }, 120000); // 2분 후 자동 해제
         }
 
@@ -1925,7 +1927,7 @@ export default function ChatPage() {
               );
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
-                setWaitingBgResponse(false);
+                setWaitingBgResponse(false); setBgPartialContent("");
                 const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
                 if (freshMsgs) {
                   setMessages(freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder"));
@@ -3343,6 +3345,11 @@ export default function ChatPage() {
                   백그라운드에서 응답 생성 중...
                 </span>
               </div>
+              {bgPartialContent && (
+                <div style={{ marginTop: "8px", padding: "8px 12px", fontSize: "13px", color: "var(--ct-text)", opacity: 0.85, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "200px", overflowY: "auto", lineHeight: "1.5" }}>
+                  {bgPartialContent.length > 500 ? bgPartialContent.slice(-500) + "..." : bgPartialContent}
+                </div>
+              )}
             </div>
           )}
 
