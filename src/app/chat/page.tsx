@@ -1332,10 +1332,10 @@ export default function ChatPage() {
         setShowImageGen(false);
         setImageGenPrompt("");
       } else {
-        alert(data.detail || "이미지 생성 실패");
+        setYellowWarning(data.detail || "이미지 생성 실패");
       }
     } catch (e) {
-      alert("이미지 생성 중 오류가 발생했습니다");
+      setYellowWarning("이미지 생성 중 오류가 발생했습니다");
     } finally {
       setImageGenLoading(false);
     }
@@ -2395,7 +2395,7 @@ export default function ChatPage() {
   async function toDirective(artifact: Artifact) {
     const text = `TITLE: ${artifact.title}\nDESCRIPTION: |\n  ${artifact.content.split("\n").join("\n  ")}`;
     await navigator.clipboard?.writeText(text).catch(() => {});
-    alert("지시서 형식이 클립보드에 복사되었습니다.");
+    showCompletionToast("지시서 형식이 클립보드에 복사되었습니다");
   }
 
   // ── Derived ──
