@@ -276,7 +276,7 @@ const MessageItem = memo(function MessageItem({
             );
           })()}
           {msg.role === "user" ? (
-            msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content)
+            msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
           ) : (
             <MarkdownBlock text={msg.content} />
           )}

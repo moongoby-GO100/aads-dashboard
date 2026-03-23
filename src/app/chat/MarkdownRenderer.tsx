@@ -8,7 +8,8 @@ const isSafeUrl = (url: string) => {
   return !u.startsWith("javascript:") && !u.startsWith("data:") && !u.startsWith("vbscript:");
 };
 
-function processInline(text: string): React.ReactNode {
+function processInline(text: string, opts?: { linkColor?: string }): React.ReactNode {
+  const _lc = opts?.linkColor || "var(--ct-accent)";
   // Split by inline code first
   const codeParts = text.split(/(`[^`\n]+`)/g);
   return codeParts.map((part, i) => {
@@ -44,7 +45,7 @@ function processInline(text: string): React.ReactNode {
               href={linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "var(--ct-accent)", textDecoration: "underline" }}
+              style={{ color: _lc, textDecoration: "underline" }}
             >
               {linkParts[li + 1]}
             </a>
@@ -79,7 +80,7 @@ function processInline(text: string): React.ReactNode {
                   href={cleaned}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "var(--ct-accent)", textDecoration: "underline", wordBreak: "break-all" }}
+                  style={{ color: _lc, textDecoration: "underline", wordBreak: "break-all" }}
                 >
                   {cleaned}
                 </a>
@@ -94,7 +95,7 @@ function processInline(text: string): React.ReactNode {
   });
 }
 
-function InlineMd({ text }: { text: string }) {
+function InlineMd({ text, linkColor }: { text: string; linkColor?: string }) {
   const lines = text.split("\n");
 
   // Group consecutive lines starting with | into table blocks
@@ -150,7 +151,7 @@ function InlineMd({ text }: { text: string }) {
           key={li}
           style={{ fontWeight: 700, fontSize: "14px", marginTop: "10px", marginBottom: "4px" }}
         >
-          {processInline(line.slice(4))}
+          {processInline(line.slice(4), { linkColor })}
         </div>
       );
     if (line.startsWith("## "))
@@ -159,7 +160,7 @@ function InlineMd({ text }: { text: string }) {
           key={li}
           style={{ fontWeight: 700, fontSize: "15px", marginTop: "12px", marginBottom: "6px" }}
         >
-          {processInline(line.slice(3))}
+          {processInline(line.slice(3), { linkColor })}
         </div>
       );
     if (line.startsWith("# "))
@@ -168,25 +169,25 @@ function InlineMd({ text }: { text: string }) {
           key={li}
           style={{ fontWeight: 700, fontSize: "17px", marginTop: "14px", marginBottom: "8px" }}
         >
-          {processInline(line.slice(2))}
+          {processInline(line.slice(2), { linkColor })}
         </div>
       );
     if (line.match(/^[-*] /))
       return (
         <div key={li} style={{ paddingLeft: "16px", display: "flex", gap: "6px" }}>
           <span>•</span>
-          <span>{processInline(line.slice(2))}</span>
+          <span>{processInline(line.slice(2), { linkColor })}</span>
         </div>
       );
     if (line.match(/^\d+\. /))
       return (
         <div key={li} style={{ paddingLeft: "16px" }}>
-          {processInline(line)}
+          {processInline(line, { linkColor })}
         </div>
       );
     return (
       <span key={li}>
-        {processInline(line)}
+        {processInline(line, { linkColor })}
         {li < total - 1 && <br />}
       </span>
     );
@@ -229,7 +230,7 @@ function InlineMd({ text }: { text: string }) {
                             background: "var(--ct-code)",
                           }}
                         >
-                          {processInline(cell)}
+                          {processInline(cell, { linkColor })}
                         </th>
                       ))}
                     </tr>
@@ -240,7 +241,7 @@ function InlineMd({ text }: { text: string }) {
                     <tr key={ri}>
                       {parseTableCells(row).map((cell, ci) => (
                         <td key={ci} style={cellStyle}>
-                          {processInline(cell)}
+                          {processInline(cell, { linkColor })}
                         </td>
                       ))}
                     </tr>
@@ -334,7 +335,7 @@ function CopyableCodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
-function MarkdownBlock({ text }: { text: string }) {
+function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }) {
   const parts = text.split(/(```[\s\S]*?```)/g);
   return (
     <div>
@@ -345,7 +346,7 @@ function MarkdownBlock({ text }: { text: string }) {
           const code = firstNl >= 0 ? part.slice(firstNl + 1).replace(/```$/, "") : part.slice(3).replace(/```$/, "");
           return <CopyableCodeBlock key={i} lang={lang} code={code} />;
         }
-        return <InlineMd key={i} text={part} />;
+        return <InlineMd key={i} text={part} linkColor={linkColor} />;
       })}
     </div>
   );
