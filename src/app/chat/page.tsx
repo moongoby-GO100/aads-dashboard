@@ -887,6 +887,33 @@ export default function ChatPage() {
         } else if (isPending) {
           pendingResponseSessions.current.delete(fetchSid);
         }
+        // 서버 재시작으로 인한 미완료 대화 감지: 마지막 메시지가 user이고 10분 이내
+        if (!isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
+          const lastMsg = msgs[msgs.length - 1];
+          const msgAge = Date.now() - new Date(lastMsg.created_at).getTime();
+          if (msgAge < 10 * 60 * 1000) {
+            setToolStatus("🔄 이전 응답이 중단되었습니다 — 자동 재전송 중...");
+            setWaitingBgResponse(true);
+            pendingResponseSessions.current.add(fetchSid);
+            // 서버 백그라운드 auto_resume이 처리 중일 수 있으므로 폴링으로 응답 대기
+            setTimeout(() => {
+              if (cancelled) return;
+              setToolStatus(null);
+              loadMessages(true).then((retryMsgs) => {
+                if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
+                  setWaitingBgResponse(false);
+                  pendingResponseSessions.current.delete(fetchSid);
+                }
+                // 여전히 user가 마지막이면 폴링이 계속 잡아줌
+              });
+            }, 5000);
+            if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+            waitingBgTimeoutRef.current = setTimeout(() => {
+              setWaitingBgResponse(false);
+              pendingResponseSessions.current.delete(fetchSid);
+            }, 120000);
+          }
+        }
       }
     }).catch(() => {
       // streaming-status API 실패 시 폴백: 일반 메시지 로드
