@@ -842,7 +842,7 @@ export default function ChatPage() {
             ? msgs.filter((m) => m.intent !== "streaming_placeholder")
             : msgs.map((m) =>
                 m.intent === "streaming_placeholder"
-                  ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
+                  ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." }
                   : m
               );
           if (processed.length > 0 || msgs.length === 0) {
@@ -1151,7 +1151,7 @@ export default function ChatPage() {
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
-          ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m)
+          ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." } : m)
           : rawLatest.filter((m) => m.intent !== "streaming_placeholder");
         if (latest.length === 0) return;
         if (_waitingBg) {
@@ -1191,10 +1191,10 @@ export default function ChatPage() {
                 const idx = prev.findIndex((m) => m.intent === "streaming_placeholder");
                 if (idx >= 0) {
                   const updated = [...prev];
-                  updated[idx] = { ...phMsg, content: phMsg.content || "⏳ 생성 중..." };
+                  updated[idx] = { ...phMsg, content: phMsg.content || bgPartialContent || "⏳ 생성 중..." };
                   return updated;
                 }
-                return [...prev, { ...phMsg, content: phMsg.content || "⏳ 생성 중..." }];
+                return [...prev, { ...phMsg, content: phMsg.content || bgPartialContent || "⏳ 생성 중..." }];
               });
               return;
             }
