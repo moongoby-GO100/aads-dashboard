@@ -1846,7 +1846,7 @@ export default function ChatPage() {
           try {
             const resumeResp = await fetch(
               `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
-              { headers: { "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}` } }
+              { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` } }
             );
             if (!resumeResp.ok || !resumeResp.body) throw new Error("resume failed");
 
