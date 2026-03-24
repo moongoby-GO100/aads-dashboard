@@ -1883,6 +1883,9 @@ export default function ChatPage() {
                     }
                     resumed = true;
                     break;
+                  } else if (rev.type === "resume_generating") {
+                    // 서버에서 아직 생성 중 — 이전 답변 전송 안 함, polling으로 전환
+                    break;
                   } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
                     break;
                   } else if (rev.type === "heartbeat") {
@@ -1921,13 +1924,18 @@ export default function ChatPage() {
             await new Promise((r) => setTimeout(r, 2000 * Math.pow(1.5, retry)));
             if (isStale()) break;
             try {
-              const resp = await chatApi<{found: boolean; message?: ChatMessage}>(
+              const resp = await chatApi<{found: boolean; generating?: boolean; message?: ChatMessage}>(
                 `/chat/sessions/${sessionId}/last-response`
               );
+              // generating=true → 아직 생성 중, 이전 답변 교체 금지
+              if ((resp as any).generating) {
+                // 폴링으로 완료 대기
+                break;
+              }
               if (resp.found && resp.message) {
                 if (!frozenContent || resp.message.content.length > frozenContent.length) {
                   setMessages((prev) => {
-                    const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-"));
+                    const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-") && m.intent !== "streaming_placeholder");
                     return [...filtered, resp.message!];
                   });
                   setStreaming(false);
