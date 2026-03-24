@@ -1088,11 +1088,19 @@ export default function ChatPage() {
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
-        if (ss.partial_content) setBgPartialContent(ss.partial_content);
+        if (ss.partial_content) {
+          setBgPartialContent(ss.partial_content);
+          // Invisible Recovery: streaming=true + waitingBg=true → partial_content를 streamBuf에 주입 (타이핑 효과)
+          if (_streaming && _waitingBg) {
+            setStreamBuf(ss.partial_content);
+          }
+        }
         if (ss.just_completed) {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
           setStreaming(false);
+          setStreamBuf("");
+          streamingSessionRef.current = null;
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -1116,6 +1124,8 @@ export default function ChatPage() {
         // 서버에서 스트리밍 아님 + 프론트 streaming=true → SSE 끊김 감지
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
           setStreaming(false);
+          setStreamBuf("");
+          streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
@@ -1819,20 +1829,17 @@ export default function ChatPage() {
         return;
       }
       if (isAbort || isNetwork) {
-        // SSE 재연결 프로토콜: stream-resume 엔드포인트로 자동 재연결
+        // ── Invisible Recovery: 같은 버블 유지 + 무음 재연결 ──
+        // SSE가 끊겨도 streaming=true 유지, streamBuf에 기존 텍스트 보존 (버블 사라짐 방지)
+        // toolStatus는 설정하지 않음 (무음 재연결)
+        const frozenContent = full;  // 끊기 직전까지의 텍스트 캡처
+        // streaming=true 유지 → AI 버블 그대로 보임
+
         if (sessionId) {
           pendingResponseSessions.current.add(sessionId);
-          setWaitingBgResponse(true);
-          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
-          waitingBgTimeoutRef.current = setTimeout(() => {
-            pendingResponseSessions.current.delete(sessionId!);
-            setWaitingBgResponse(false); setBgPartialContent("");
-          }, 120000);
         }
 
-        setToolStatus("🔄 재연결 중...");
-
-        // SSE resume 시도 — 끊긴 지점(full.length)부터 이어서 스트리밍
+        // SSE resume 시도 — 끊긴 지점(full.length)부터 이어서 스트리밍 (무음)
         let resumed = false;
         for (let reconnAttempt = 0; reconnAttempt < 3; reconnAttempt++) {
           if (isStale()) break;
@@ -1861,10 +1868,9 @@ export default function ChatPage() {
                   if (rev.type === "delta" && rev.content) {
                     full += rev.content;
                     if (!isStale()) setStreamBuf(full);
-                    setToolStatus(null); // 재연결 성공 — 상태 표시 제거
                     resumed = true;
                   } else if (rev.type === "resume_done") {
-                    // 스트리밍 완료
+                    // 스트리밍 완료 — 자연스럽게 전환
                     gotFinal = true;
                     setStreamBuf("");
                     setStreaming(false);
@@ -1880,6 +1886,7 @@ export default function ChatPage() {
                   } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
                     break;
                   } else if (rev.type === "heartbeat") {
+                    // heartbeat 수신 = 서버 생존 확인, 무음 유지
                     if (rev.tool_count && rev.last_tool) {
                       setToolStatus(`🔧 ${rev.last_tool} 실행 중... (도구 ${rev.tool_count}회)`);
                     }
@@ -1890,40 +1897,53 @@ export default function ChatPage() {
             }
             if (resumed) break;
           } catch {
-            // 재연결 실패 — 1초 대기 후 재시도
+            // 재연결 실패 — 짧은 대기 후 재시도 (무음)
             await new Promise((r) => setTimeout(r, 1000 * (reconnAttempt + 1)));
-            setToolStatus(`🔄 재연결 시도 ${reconnAttempt + 2}/3...`);
           }
         }
 
-        // resume 실패 시 기존 폴백: last-response 확인
+        // resume 실패 → polling 모드 전환 (Invisible: 같은 버블에서 partial_content 이어쓰기)
         if (!resumed && !gotFinal) {
-          if (full) {
-            setStreamBuf("");
-            setMessages((prev) => [
-              ...prev,
-              { id: `ai-partial-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full + "\n\n⚠️ *연결이 끊겨 응답이 잘렸을 수 있습니다.*" },
-            ]);
-          }
+          // streaming=true 유지 + frozenContent를 streamBuf에 유지 (버블 사라짐 방지)
+          if (!isStale()) setStreamBuf(frozenContent);
+
+          // waitingBgResponse 활성화하되 streaming도 유지 → 폴링이 partial_content를 streamBuf에 주입
+          setWaitingBgResponse(true);
+          setBgPartialContent(frozenContent);  // 폴링에서 비교 기준점
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
+            pendingResponseSessions.current.delete(sessionId!);
+            setWaitingBgResponse(false); setBgPartialContent("");
+          }, 120000);
+
+          // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
             await new Promise((r) => setTimeout(r, 2000 * Math.pow(1.5, retry)));
+            if (isStale()) break;
             try {
               const resp = await chatApi<{found: boolean; message?: ChatMessage}>(
                 `/chat/sessions/${sessionId}/last-response`
               );
               if (resp.found && resp.message) {
-                if (!full || resp.message.content.length > full.length) {
+                if (!frozenContent || resp.message.content.length > frozenContent.length) {
                   setMessages((prev) => {
                     const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-"));
                     return [...filtered, resp.message!];
                   });
+                  setStreaming(false);
+                  setStreamBuf("");
+                  setWaitingBgResponse(false); setBgPartialContent("");
+                  gotFinal = true;
                 }
-                setToolStatus(null);
                 break;
               }
             } catch { /* retry */ }
           }
-          setToolStatus(null);
+          // 최종 폴백 실패 시에도 버블 유지 — 폴링(streaming-status)이 partial_content/just_completed 감지
+          if (!gotFinal && frozenContent) {
+            // 부분 텍스트를 ai-partial 메시지로 저장 (streaming 종료 후에도 보이도록)
+            // streaming은 유지 → 폴링에서 just_completed 감지 시 최종 교체
+          }
         }
       } else {
         setMessages((prev) => [
@@ -1939,13 +1959,17 @@ export default function ChatPage() {
     } finally {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
-      // 스트리밍 상태는 항상 해제 — 세션 전환 여부와 무관하게 무한 버블 방지
-      // BUG-13 FIX: session check
+      // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
+      // 폴링이 just_completed 감지 시 streaming을 해제함
+      const _isInvisibleRecovery = waitingBgRef.current;
       if (streamingSessionRef.current === sessionId) {
-        streamingSessionRef.current = null;
-        setStreaming(false);
+        if (!_isInvisibleRecovery) {
+          streamingSessionRef.current = null;
+          setStreaming(false);
+          setStreamBuf("");
+        }
+        // invisible recovery 모드: streaming + streamBuf 유지 → 커서 깜박임 계속 표시
       }
-      setStreamBuf("");
       setToolStatus(null);
       if (!isStale()) {
         // streaming_placeholder 잔여물 정리
@@ -2699,6 +2723,9 @@ export default function ChatPage() {
           0%,80%,100%{transform:scale(0.6);opacity:0.4}
           40%{transform:scale(1);opacity:1}
         }
+        @keyframes ct-blink {
+          0%,100%{opacity:1} 50%{opacity:0}
+        }
         @keyframes ct-theme {
           from{opacity:0.7} to{opacity:1}
         }
@@ -3385,7 +3412,7 @@ export default function ChatPage() {
             />
           ))}
 
-          {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) — 일반 스트리밍과 달리 기존에 중지 UI 없음 → /stop 연동 */}
+          {/* Invisible Recovery: 백그라운드 응답 — streaming=false일 때만 표시 (streaming=true면 스트리밍 버블이 대신 표시) */}
           {waitingBgResponse && !streaming && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
@@ -3394,27 +3421,38 @@ export default function ChatPage() {
                   borderRadius: "18px",
                   borderBottomLeftRadius: "4px",
                   fontSize: "14px",
+                  lineHeight: "1.6",
                   maxWidth: "80%",
                   background: "var(--ct-ai)",
                   color: "var(--ct-text)",
                   border: "1px solid var(--ct-border)",
-                  display: "flex", alignItems: "center", gap: "8px",
                 }}
               >
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    style={{
-                      width: "7px", height: "7px", borderRadius: "50%",
-                      background: "var(--ct-accent)", display: "inline-block",
-                      animation: "ct-bounce 1.2s infinite",
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-                <span style={{ fontSize: "13px", color: "var(--ct-muted)" }}>
-                  백그라운드에서 응답 생성 중...
-                </span>
+                {bgPartialContent ? (
+                  <>
+                    <MarkdownBlock text={bgPartialContent} />
+                    <span style={{
+                      display: "inline-block", width: "2px", height: "14px",
+                      background: "var(--ct-accent)", marginLeft: "2px",
+                      animation: "ct-blink 1s step-end infinite",
+                      verticalAlign: "text-bottom",
+                    }} />
+                  </>
+                ) : (
+                  <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
+                    {[0, 1, 2].map((i) => (
+                      <span
+                        key={i}
+                        style={{
+                          width: "7px", height: "7px", borderRadius: "50%",
+                          background: "var(--ct-accent)", display: "inline-block",
+                          animation: "ct-bounce 1.2s infinite",
+                          animationDelay: `${i * 0.2}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -3431,11 +3469,6 @@ export default function ChatPage() {
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
               >■ 중지</button>
-              {bgPartialContent && (
-                <div style={{ marginTop: "8px", padding: "8px 12px", fontSize: "13px", color: "var(--ct-text)", opacity: 0.85, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "200px", overflowY: "auto", lineHeight: "1.5" }}>
-                  {bgPartialContent.length > 500 ? bgPartialContent.slice(-500) + "..." : bgPartialContent}
-                </div>
-              )}
             </div>
           )}
 
