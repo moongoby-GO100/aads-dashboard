@@ -2004,6 +2004,40 @@ export default function ChatPage() {
     }
   }
 
+  /** 백그라운드 생성 중(waitingBgResponse) 전용 — 서버 /stop + 플래그·타이머 정리 (UI에 중지 버튼 없을 때 대비) */
+  function stopBackgroundStreaming() {
+    if (!activeSession) return;
+    if (waitingBgTimeoutRef.current) {
+      clearTimeout(waitingBgTimeoutRef.current);
+      waitingBgTimeoutRef.current = null;
+    }
+    setWaitingBgResponse(false);
+    setBgPartialContent("");
+    fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
+      method: "POST",
+      headers: { ...authHdrs() },
+    }).catch(() => {});
+    const sid = activeSession.id;
+    setTimeout(() => {
+      if (activeSessionRef.current !== sid) return;
+      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`)
+        .then((msgs) => msgs.reverse())
+        .then((msgs) => {
+          if (activeSessionRef.current !== sid) return;
+          const filtered = msgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+          setMessages((prev) => {
+            const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
+            const dbIds = new Set(filtered.map((m) => m.id));
+            const merged = [...filtered, ...stoppedMsgs.filter((m) => !dbIds.has(m.id))];
+            return merged.sort(
+              (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+            );
+          });
+        })
+        .catch(() => {});
+    }, 1200);
+  }
+
   // ── 방식A: 수정 후 재전송 ──
   const handleEditResend = useCallback(async (msgId: string, newContent: string) => {
     if (!activeSessionObjRef.current) return;
@@ -3314,9 +3348,9 @@ export default function ChatPage() {
             />
           ))}
 
-          {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) */}
+          {/* 백그라운드 응답 생성 중 indicator (세션 이동 후 복귀 시) — 일반 스트리밍과 달리 기존에 중지 UI 없음 → /stop 연동 */}
           {waitingBgResponse && !streaming && (
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 style={{
                   padding: "12px 16px",
@@ -3345,6 +3379,21 @@ export default function ChatPage() {
                   백그라운드에서 응답 생성 중...
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={stopBackgroundStreaming}
+                style={{
+                  marginTop: "4px", marginLeft: "4px",
+                  padding: "2px 8px",
+                  fontSize: "11px", fontWeight: 500,
+                  background: "transparent", color: "var(--ct-muted)",
+                  border: "1px solid var(--ct-border)", borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
+              >■ 중지</button>
               {bgPartialContent && (
                 <div style={{ marginTop: "8px", padding: "8px 12px", fontSize: "13px", color: "var(--ct-text)", opacity: 0.85, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "200px", overflowY: "auto", lineHeight: "1.5" }}>
                   {bgPartialContent.length > 500 ? bgPartialContent.slice(-500) + "..." : bgPartialContent}
