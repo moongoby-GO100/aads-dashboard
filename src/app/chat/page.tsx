@@ -1809,6 +1809,7 @@ export default function ChatPage() {
         setToolStatus(null);
       }
     } catch (e: unknown) {
+      let gotFinal = false;
       const err = e as Error;
       const isAbort = err.name === "AbortError";
       const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed");
