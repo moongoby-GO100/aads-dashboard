@@ -237,7 +237,7 @@ const MessageItem = memo(function MessageItem({
                     : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
                     ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
-                  ...(msg.intent === "streaming_placeholder" ? { animation: "pulse 2s ease-in-out infinite" } : {}),
+                  
                   ...(msg.intent === "regenerated" ? { opacity: 0.45 } : {}),
                   borderBottomLeftRadius: "4px",
                 }),
@@ -1818,8 +1818,7 @@ export default function ChatPage() {
         return;
       }
       if (isAbort || isNetwork) {
-        // P1-FIX: SSE 끊김 → waitingBgResponse 활성화로 빠른 폴링(1s) 전환
-        // 서버에서 백그라운드 생성이 계속될 수 있으므로 just_completed 감지 필요
+        // SSE 재연결 프로토콜: stream-resume 엔드포인트로 자동 재연결
         if (sessionId) {
           pendingResponseSessions.current.add(sessionId);
           setWaitingBgResponse(true);
@@ -1827,66 +1826,103 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-          }, 120000); // 2분 후 자동 해제
+          }, 120000);
         }
 
-        // SSE 재연결 프로토콜: 부분 응답 보존 + 완성 응답 복구
-        setToolStatus("🔄 연결 끊김 — 자동 복구 중...");
+        setToolStatus("🔄 재연결 중...");
 
-        // 1. 부분 응답이 있으면 먼저 표시
-        if (full) {
-          setStreamBuf("");
-          setMessages((prev) => [
-            ...prev,
-            { id: `ai-partial-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full + "\n\n⚠️ *연결이 끊겨 응답이 잘렸을 수 있습니다.*" },
-          ]);
-        }
-
-        // 2. 서버에서 완성된 응답 확인 (최대 5회, 지수 백오프)
-        let recovered = false;
-        for (let retry = 0; retry < 5; retry++) {
-          await new Promise((r) => setTimeout(r, 2000 * Math.pow(1.5, retry)));
-          setToolStatus(`🔄 응답 복구 시도 ${retry + 1}/5...`);
+        // SSE resume 시도 — 끊긴 지점(full.length)부터 이어서 스트리밍
+        let resumed = false;
+        for (let reconnAttempt = 0; reconnAttempt < 3; reconnAttempt++) {
+          if (isStale()) break;
           try {
-            const resp = await chatApi<{found: boolean; message?: ChatMessage}>(
-              `/chat/sessions/${sessionId}/last-response`
+            const resumeResp = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
+              { headers: { "Authorization": `Bearer ${localStorage.getItem("auth_token") || ""}` } }
             );
-            if (resp.found && resp.message) {
-              // 부분 응답보다 완성 응답이 더 길면 교체
-              if (!full || resp.message.content.length > full.length) {
-                setMessages((prev) => {
-                  const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-"));
-                  return [...filtered, resp.message!];
-                });
+            if (!resumeResp.ok || !resumeResp.body) throw new Error("resume failed");
+
+            const resumeReader = resumeResp.body.getReader();
+            const resumeDecoder = new TextDecoder();
+            let resumeBuf = "";
+
+            while (true) {
+              const { done: rDone, value: rVal } = await resumeReader.read();
+              if (rDone) break;
+              resumeBuf += resumeDecoder.decode(rVal, { stream: true });
+              const rLines = resumeBuf.split("\n");
+              resumeBuf = rLines.pop() || "";
+
+              for (const rLine of rLines) {
+                if (!rLine.startsWith("data: ")) continue;
+                try {
+                  const rev = JSON.parse(rLine.slice(6).trim());
+                  if (rev.type === "delta" && rev.content) {
+                    full += rev.content;
+                    if (!isStale()) setStreamBuf(full);
+                    setToolStatus(null); // 재연결 성공 — 상태 표시 제거
+                    resumed = true;
+                  } else if (rev.type === "resume_done") {
+                    // 스트리밍 완료
+                    gotFinal = true;
+                    setStreamBuf("");
+                    setStreaming(false);
+                    setToolStatus(null);
+                    if (full.trim()) {
+                      setMessages((prev) => [
+                        ...prev.filter((m) => m.intent !== "streaming_placeholder" && !m.id.startsWith("ai-partial-")),
+                        { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant" as const, content: full, created_at: new Date().toISOString() },
+                      ]);
+                    }
+                    resumed = true;
+                    break;
+                  } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
+                    break;
+                  } else if (rev.type === "heartbeat") {
+                    if (rev.tool_count && rev.last_tool) {
+                      setToolStatus(`🔧 ${rev.last_tool} 실행 중... (도구 ${rev.tool_count}회)`);
+                    }
+                  }
+                } catch { /* skip malformed */ }
               }
-              recovered = true;
-              setToolStatus(null);
-              break;
+              if (gotFinal) break;
             }
-          } catch { /* retry */ }
+            if (resumed) break;
+          } catch {
+            // 재연결 실패 — 1초 대기 후 재시도
+            await new Promise((r) => setTimeout(r, 1000 * (reconnAttempt + 1)));
+            setToolStatus(`🔄 재연결 시도 ${reconnAttempt + 2}/3...`);
+          }
         }
 
-        if (!recovered) {
-          setToolStatus(null);
-          // 부분 응답도 없었으면 전체 리로드
-          if (!full) {
-            try {
-              const allMsgs = await chatApi<ChatMessage[]>(
-                `/chat/messages?session_id=${sessionId}&limit=100&offset=0&sort=desc`
-              ).then(msgs => msgs.reverse());
-              setMessages(allMsgs);
-            } catch {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: `err-${Date.now()}`,
-                  session_id: sessionId!,
-                  role: "assistant",
-                  content: "⚠️ 연결이 끊겼습니다. 페이지를 새로고침해주세요.",
-                },
-              ]);
-            }
+        // resume 실패 시 기존 폴백: last-response 확인
+        if (!resumed && !gotFinal) {
+          if (full) {
+            setStreamBuf("");
+            setMessages((prev) => [
+              ...prev,
+              { id: `ai-partial-${Date.now()}`, session_id: sessionId!, role: "assistant", content: full + "\n\n⚠️ *연결이 끊겨 응답이 잘렸을 수 있습니다.*" },
+            ]);
           }
+          for (let retry = 0; retry < 3; retry++) {
+            await new Promise((r) => setTimeout(r, 2000 * Math.pow(1.5, retry)));
+            try {
+              const resp = await chatApi<{found: boolean; message?: ChatMessage}>(
+                `/chat/sessions/${sessionId}/last-response`
+              );
+              if (resp.found && resp.message) {
+                if (!full || resp.message.content.length > full.length) {
+                  setMessages((prev) => {
+                    const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-"));
+                    return [...filtered, resp.message!];
+                  });
+                }
+                setToolStatus(null);
+                break;
+              }
+            } catch { /* retry */ }
+          }
+          setToolStatus(null);
         }
       } else {
         setMessages((prev) => [
