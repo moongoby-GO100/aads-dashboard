@@ -1,6 +1,7 @@
 "use client";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { login } from "@/lib/auth";
 
 function LoginForm() {
@@ -60,6 +61,12 @@ function LoginForm() {
       >
         {loading ? "로그인 중..." : "로그인"}
       </button>
+      <p className="text-center text-sm text-gray-500 mt-4">
+        계정이 없으신가요?{" "}
+        <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+          회원가입
+        </Link>
+      </p>
     </form>
   );
 }

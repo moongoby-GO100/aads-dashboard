@@ -40,6 +40,23 @@ export function logout() {
   }
 }
 
+export async function register(email: string, password: string, name: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "회원가입 실패" }));
+    throw new Error(err.detail || "회원가입 실패");
+  }
+  const data = await res.json();
+  if (typeof window !== "undefined") {
+    localStorage.setItem(TOKEN_KEY, data.token);
+  }
+  return data.token;
+}
+
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
