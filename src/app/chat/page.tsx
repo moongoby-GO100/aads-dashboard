@@ -279,18 +279,29 @@ const MessageItem = memo(function MessageItem({
             msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
           ) : (
             <>
-              {msg.tools_called && Array.isArray(msg.tools_called) && msg.tools_called.length > 0 && msg.tools_called[0]?.type && (
-                <div style={{marginBottom: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.85em'}}>
+              {msg.tools_called && Array.isArray(msg.tools_called) && msg.tools_called.length > 0 && (
+                <div style={{marginBottom: '8px', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', fontSize: '0.85em'}}>
                   {msg.tools_called.map((ev: any, i: number) => (
-                    <div key={i} style={{padding: '2px 0', opacity: 0.85}}>
+                    <div key={i} style={{padding: '2px 0', display: 'flex', alignItems: 'center', gap: '6px'}}>
                       {ev.type === 'tool_use' && (
-                        <span>🔧 <strong>{ev.tool_name}</strong> 실행{ev.tool_input ? ` — ${JSON.stringify(ev.tool_input).slice(0, 100)}` : ''}</span>
+                        <>
+                          <span>🔧</span>
+                          <span style={{fontWeight: 600}}>{ev.tool_name}</span>
+                          <span style={{opacity: 0.6, fontSize: '0.9em'}}>호출</span>
+                        </>
                       )}
                       {ev.type === 'tool_result' && (
-                        <span>✅ <strong>{ev.tool_name}</strong> 완료{ev.content ? ` — ${String(ev.content).slice(0, 150)}` : ''}</span>
+                        <>
+                          <span>✅</span>
+                          <span style={{fontWeight: 600}}>{ev.tool_name}</span>
+                          <span style={{opacity: 0.6, fontSize: '0.9em'}}>완료</span>
+                        </>
                       )}
                       {ev.type === 'thinking' && (
-                        <span style={{opacity: 0.6}}>💭 {String(ev.content || '').slice(0, 100)}</span>
+                        <>
+                          <span>💭</span>
+                          <span style={{opacity: 0.7}}>{typeof ev.content === 'string' ? ev.content.slice(0, 100) : ''}</span>
+                        </>
                       )}
                     </div>
                   ))}

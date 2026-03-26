@@ -278,7 +278,26 @@ const MessageItem = memo(function MessageItem({
           {msg.role === "user" ? (
             msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
           ) : (
-            <MarkdownBlock text={msg.content} />
+            <>
+              {msg.tools_called && Array.isArray(msg.tools_called) && msg.tools_called.length > 0 && msg.tools_called[0]?.type && (
+                <div style={{marginBottom: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.85em'}}>
+                  {msg.tools_called.map((ev: any, i: number) => (
+                    <div key={i} style={{padding: '2px 0', opacity: 0.85}}>
+                      {ev.type === 'tool_use' && (
+                        <span>🔧 <strong>{ev.tool_name}</strong> 실행{ev.tool_input ? ` — ${JSON.stringify(ev.tool_input).slice(0, 100)}` : ''}</span>
+                      )}
+                      {ev.type === 'tool_result' && (
+                        <span>✅ <strong>{ev.tool_name}</strong> 완료{ev.content ? ` — ${String(ev.content).slice(0, 150)}` : ''}</span>
+                      )}
+                      {ev.type === 'thinking' && (
+                        <span style={{opacity: 0.6}}>💭 {String(ev.content || '').slice(0, 100)}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <MarkdownBlock text={msg.content} />
+            </>
           )}
         </div>
         )}
@@ -375,7 +394,8 @@ const MessageItem = memo(function MessageItem({
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.editingMsgId === next.editingMsgId &&
-  (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true)
+  (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
+  prev.msg.tools_called === next.msg.tools_called
 );
 
 // Main component
@@ -1101,6 +1121,8 @@ export default function ChatPage() {
           setStreaming(false);
           setStreamBuf("");
           streamingSessionRef.current = null;
+          // 끊김 복구 후 대기 메시지 큐 클리어 (interrupt로 이미 전달됨 or 폐기)
+          if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -1127,6 +1149,8 @@ export default function ChatPage() {
           setStreamBuf("");
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
+          // 끊김 후 대화 못이어가는 문제 방지 — 대기 큐 클리어
+          if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -1549,11 +1573,13 @@ export default function ChatPage() {
       let fetchBody: BodyInit;
       let fetchHeaders: Record<string, string> = { ...authHdrs() };
       let fetchUrl = `${BASE_URL}/chat/messages/send`;
+      // Stage 3: idempotency key — 502 재시도 시 동일 메시지 중복 저장 방지
+      const _idempotencyKey = crypto.randomUUID();
 
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments });
+        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
       } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
@@ -1563,11 +1589,12 @@ export default function ChatPage() {
         if (modelRef.current) formData.append("model_override", modelRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
         if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
+        formData.append("idempotency_key", _idempotencyKey);
         fetchBody = formData;
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(fetchUrl, {
