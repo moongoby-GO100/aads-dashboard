@@ -1,6 +1,6 @@
 {
   "type": "full",
-  "collected_at": "2026-03-06T13:09:09.566795+09:00",
+  "collected_at": "2026-03-26T13:00:44.747559+09:00",
   "server": "68",
   "system": {
     "disk_usage": "",
@@ -44,7 +44,7 @@
         "docker-compose.yml": true,
         "Dockerfile": true,
         ".env": true,
-        "Makefile": false
+        "Makefile": true
       },
       "env_keys": "no .env",
       "git_branch": "no git",
@@ -94,5 +94,7 @@
     "sites_enabled": "not found",
     "server_names": "not found"
   },
-  "cron": "no crontab"
+  "cron": "no crontab",
+  "trigger": "event",
+  "event_reason": "git_commit"
 }
