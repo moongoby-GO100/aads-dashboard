@@ -2,11 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/_next", "/favicon.ico", "/api", "/conversations", "/manifest.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
+const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.headers.get("host") || "";
+  const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
+
+  // kakaobot.newtalk.kr 호스트: /kakaobot/* 만 허용
+  if (isKakaobot) {
+    // 루트 → /kakaobot 리다이렉트
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/kakaobot", request.url));
+    }
+    // 허용 경로 체크
+    const allowed = KAKAOBOT_ALLOWED.some((p) => pathname.startsWith(p));
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/kakaobot", request.url));
+    }
+  }
+
+  // 공개 경로는 인증 불필요
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
+
+  // 인증 체크
   const token = request.cookies.get("aads_token")?.value;
   if (!token) {
     const loginUrl = new URL("/login", request.url);
@@ -17,5 +38,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon\.ico|manifest\.json|icon-|apple-touch-icon|sw\.js|manifest\.webmanifest).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|manifest\\.json|icon-|apple-touch-icon|sw\\.js|manifest\\.webmanifest).*)"],
 };
