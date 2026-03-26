@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Generated {
   id: string;
@@ -77,7 +77,7 @@ export default function AIWriterPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="AI 문구 생성기" />
+      <KakaoBotHeader title="AI 문구 생성기" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

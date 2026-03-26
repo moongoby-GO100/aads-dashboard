@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Scheduled {
   id: string;
@@ -49,7 +49,7 @@ export default function ScheduledPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="예약 발송 관리" />
+      <KakaoBotHeader title="예약 발송 관리" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 상단 통계 */}

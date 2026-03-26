@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Template {
   id: string;
@@ -72,7 +72,7 @@ export default function TemplatesPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="템플릿 관리" />
+      <KakaoBotHeader title="템플릿 관리" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 카테고리 탭 */}

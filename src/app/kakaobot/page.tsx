@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Stats {
   total_contacts: number;
@@ -35,7 +35,7 @@ export default function KakaoBotDashboard() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FAFAFA" }}>
-      <Header title="💬 카카오봇 대시보드" />
+      <KakaoBotHeader title="💬 카카오봇 대시보드" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 상단 통계 */}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Anniversary {
   id: string;
@@ -75,7 +75,7 @@ export default function AnniversariesPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="기념일 캘린더" />
+      <KakaoBotHeader title="기념일 캘린더" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 컨트롤 바 */}

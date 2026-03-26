@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface Settings {
   auto_send_enabled: boolean;
@@ -81,7 +81,7 @@ export default function SettingsPage() {
 
   if (loading) return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="KakaoBot 설정" />
+      <KakaoBotHeader title="KakaoBot 설정" />
       <div className="flex-1 flex items-center justify-center">
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>
       </div>
@@ -90,7 +90,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="KakaoBot 설정" />
+      <KakaoBotHeader title="KakaoBot 설정" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
         <div className="max-w-2xl mx-auto space-y-4">
 

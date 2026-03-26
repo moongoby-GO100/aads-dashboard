@@ -6,12 +6,20 @@ import { initGlobalErrorHandlers } from "@/services/errorReporter";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isKakaobot, setIsKakaobot] = useState(false);
   const pathname = usePathname();
 
-  // AADS-190: 글로벌 에러 핸들러 1회 초기화
   useEffect(() => { initGlobalErrorHandlers(); }, []);
+  useEffect(() => { setIsKakaobot(window.location.hostname.includes("kakaobot")); }, []);
 
-  if (pathname === "/login" || pathname.startsWith("/chat")) {
+  const hideSidebar =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/kakaobot") ||
+    isKakaobot;
+
+  if (hideSidebar) {
     return <>{children}</>;
   }
 

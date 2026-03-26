@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Header from "@/components/Header";
+import KakaoBotHeader from "@/components/KakaoBotHeader";
 
 interface HistoryItem {
   id: string;
@@ -53,7 +53,7 @@ export default function HistoryPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="발송 이력 · 통계" />
+      <KakaoBotHeader title="발송 이력 · 통계" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 통계 카드 */}
