@@ -85,10 +85,20 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
 
 function LoginPageInner() {
   const [isKakaobot, setIsKakaobot] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setIsKakaobot(window.location.hostname.includes("kakaobot"));
+    setMounted(true);
   }, []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-400 text-sm">로딩 중...</div>
+      </div>
+    );
+  }
 
   if (isKakaobot) {
     return (

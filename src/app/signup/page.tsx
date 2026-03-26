@@ -7,6 +7,7 @@ import { register } from "@/lib/auth";
 export default function SignupPage() {
   const router = useRouter();
   const [isKakaobot, setIsKakaobot] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +17,7 @@ export default function SignupPage() {
 
   useEffect(() => {
     setIsKakaobot(window.location.hostname.includes("kakaobot"));
+    setMounted(true);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,6 +121,14 @@ export default function SignupPage() {
       </p>
     </form>
   );
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-400 text-sm">로딩 중...</div>
+      </div>
+    );
+  }
 
   if (isKakaobot) {
     return (

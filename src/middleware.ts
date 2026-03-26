@@ -26,6 +26,8 @@ export function middleware(request: NextRequest) {
     if (!allowed) {
       return NextResponse.redirect(new URL("/kakaobot", request.url));
     }
+    // kakaobot 허용 경로는 인증 없이 통과
+    return NextResponse.next();
   }
 
   // 공개 경로는 인증 불필요
