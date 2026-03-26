@@ -1521,7 +1521,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
+    if (streamingRef.current && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
@@ -2018,7 +2018,7 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-          }, 180000);
+          }, 30000);
 
           // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
@@ -2072,12 +2072,22 @@ export default function ChatPage() {
       // 폴링이 just_completed 감지 시 streaming을 해제함
       const _isInvisibleRecovery = waitingBgRef.current;
       if (streamingSessionRef.current === sessionId) {
+        streamingSessionRef.current = null;  // 항상 해제
         if (!_isInvisibleRecovery) {
-          streamingSessionRef.current = null;
           setStreaming(false);
           setStreamBuf("");
+        } else {
+          // invisible recovery: 폴링이 완료 감지할 때까지 streaming 유지
+          // 하지만 30초 안전장치 — 폴링도 실패하면 강제 해제
+          setTimeout(() => {
+            if (waitingBgRef.current) {
+              setWaitingBgResponse(false);
+              setBgPartialContent("");
+              setStreaming(false);
+              setStreamBuf("");
+            }
+          }, 30000);
         }
-        // invisible recovery 모드: streaming + streamBuf 유지 → 커서 깜박임 계속 표시
       }
       setToolStatus(null);
       if (!isStale()) {
