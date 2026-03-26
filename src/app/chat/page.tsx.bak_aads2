@@ -278,26 +278,7 @@ const MessageItem = memo(function MessageItem({
           {msg.role === "user" ? (
             msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
           ) : (
-            <>
-              {msg.tools_called && Array.isArray(msg.tools_called) && msg.tools_called.length > 0 && msg.tools_called[0]?.type && (
-                <div style={{marginBottom: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.85em'}}>
-                  {msg.tools_called.map((ev: any, i: number) => (
-                    <div key={i} style={{padding: '2px 0', opacity: 0.85}}>
-                      {ev.type === 'tool_use' && (
-                        <span>🔧 <strong>{ev.tool_name}</strong> 실행{ev.tool_input ? ` — ${JSON.stringify(ev.tool_input).slice(0, 100)}` : ''}</span>
-                      )}
-                      {ev.type === 'tool_result' && (
-                        <span>✅ <strong>{ev.tool_name}</strong> 완료{ev.content ? ` — ${String(ev.content).slice(0, 150)}` : ''}</span>
-                      )}
-                      {ev.type === 'thinking' && (
-                        <span style={{opacity: 0.6}}>💭 {String(ev.content || '').slice(0, 100)}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <MarkdownBlock text={msg.content} />
-            </>
+            <MarkdownBlock text={msg.content} />
           )}
         </div>
         )}
@@ -394,8 +375,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.editingMsgId === next.editingMsgId &&
-  (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
-  prev.msg.tools_called === next.msg.tools_called
+  (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true)
 );
 
 // Main component

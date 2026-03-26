@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/kakaobot/ai-writer", label: "AI 생성", icon: "✨" },
   { href: "/kakaobot/scheduled", label: "예약발송", icon: "⏰" },
   { href: "/kakaobot/history", label: "이력", icon: "📊" },
+  { href: "/kakaobot/agent", label: "PC 에이전트", icon: "💻" },
   { href: "/kakaobot/settings", label: "설정", icon: "⚙️" },
 ];
 

@@ -51,13 +51,6 @@ export interface ChatMessage {
     mime_type?: string;
     media_type?: string;
   }>;
-  tools_called?: Array<{
-    type: string;
-    tool_name: string;
-    tool_use_id?: string;
-    tool_input?: any;
-    content?: string;
-  }>;
 }
 
 export interface Artifact {

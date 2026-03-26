@@ -27,6 +27,7 @@ const menuCards = [
   { href: "/kakaobot/ai-writer", icon: "✨", title: "AI 문구 생성기", desc: "AI가 상황에 맞는 메시지 3개를 추천합니다", color: "#ec4899" },
   { href: "/kakaobot/scheduled", icon: "⏰", title: "예약 발송", desc: "예약된 메시지를 확인하고 관리합니다", color: "#22c55e" },
   { href: "/kakaobot/history", icon: "📊", title: "발송 이력", desc: "발송 기록과 통계를 확인합니다", color: "#06b6d4" },
+  { href: "/kakaobot/agent", icon: "💻", title: "PC 에이전트", desc: "카카오톡 PC 자동 발송 에이전트 설치", color: "#0ea5e9" },
   { href: "/kakaobot/settings", icon: "⚙️", title: "설정", desc: "자동발송, 기본 톤, 채널 설정", color: "#64748b" },
 ];
 
