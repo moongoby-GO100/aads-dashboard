@@ -1233,7 +1233,11 @@ export default function ChatPage() {
             });
             return replaced ? updated : prev;
           }
-          return [...prev, ...newMsgs].sort(
+          // FIX: DB 메시지 도착 시 클라이언트 임시 메시지(ai-*/stopped-*/tmp-*) 제거 → 버블 중복 방지
+          const cleanPrev = prev.filter((m) =>
+            !(m.id.startsWith("ai-") || m.id.startsWith("stopped-") || m.id.startsWith("tmp-"))
+          );
+          return [...cleanPrev, ...newMsgs].sort(
             (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
           );
         });
@@ -1378,7 +1382,7 @@ export default function ChatPage() {
   };
 
   // ── Send message (SSE streaming) ──
-  const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number) {
+  const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number, _existingMsgId?: string) {
     const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
@@ -1479,7 +1483,7 @@ export default function ChatPage() {
       sessionId = s.id;
     }
 
-    setInput(""); chatInputRef.current?.clear();
+    if (!_existingMsgId) { if (!_existingMsgId) { setInput(""); chatInputRef.current?.clear(); } }
     setEditMode(null);
     setReplyToMessage(null);
     // P2-2: 분기 모드 캡처 후 초기화
@@ -1506,7 +1510,7 @@ export default function ChatPage() {
 
     const _capturedReplyTo = replyToMessageRef.current;
     const userMsg: ChatMessage = {
-      id: `tmp-${Date.now()}`,
+      id: _existingMsgId || `tmp-${Date.now()}`,
       session_id: sessionId,
       role: "user",
       content,
@@ -1515,7 +1519,7 @@ export default function ChatPage() {
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
-    setMessages((prev) => [...prev, userMsg]);
+    if (!_existingMsgId) { if (!_existingMsgId) { setMessages((prev) => [...prev, userMsg]); } }
 
     abortCtrl.current = new AbortController();
     // 90초 비활성 타임아웃 → heartbeat(5초) + 실제 데이터 모두 리셋
@@ -1577,8 +1581,10 @@ export default function ChatPage() {
         const statusCode = res.status;
         // 502/503/504: 서버 재시작 — 자동 재시도 (최대 3회, 지수 백오프)
         if ((statusCode === 502 || statusCode === 503 || statusCode === 504) && (retryCount || 0) < 3) {
-          // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
-          setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+          // 사용자 메시지 버블 유지 — 깜빡임 방지 (재시도 중에도 화면에 남음)
+
+
+
           setStreaming(false);
           setStreamBuf("");
           const attempt = (retryCount || 0) + 1;
@@ -1586,7 +1592,7 @@ export default function ChatPage() {
           setToolStatus(`🔄 서버 재시작 감지 — ${Math.round(delay/1000)}초 후 자동 재전송 (${attempt}/3)...`);
           await new Promise((r) => setTimeout(r, delay));
           setToolStatus(null);
-          return sendMessage(content, undefined, attempt);
+          return sendMessage(content, undefined, attempt, userMsg.id);
         }
         const _errMap: Record<number, string> = {
           502: "서버가 재시작 중입니다.",
@@ -1841,7 +1847,7 @@ export default function ChatPage() {
 
         // SSE resume 시도 — 끊긴 지점(full.length)부터 이어서 스트리밍 (무음)
         let resumed = false;
-        for (let reconnAttempt = 0; reconnAttempt < 3; reconnAttempt++) {
+        for (let reconnAttempt = 0; reconnAttempt < 5; reconnAttempt++) {
           if (isStale()) break;
           try {
             const resumeResp = await fetch(
@@ -1900,8 +1906,9 @@ export default function ChatPage() {
             }
             if (resumed) break;
           } catch {
-            // 재연결 실패 — 짧은 대기 후 재시도 (무음)
-            await new Promise((r) => setTimeout(r, 1000 * (reconnAttempt + 1)));
+            // 재연결 실패 — 지수 백오프 + 지터 (무음)
+            const backoff = Math.min(1000 * Math.pow(2, reconnAttempt), 16000) + Math.random() * 1000;
+            await new Promise((r) => setTimeout(r, backoff));
           }
         }
 
@@ -1917,7 +1924,7 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-          }, 120000);
+          }, 180000);
 
           // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
@@ -2013,7 +2020,7 @@ export default function ChatPage() {
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
           };
-          _checkCompletion(1000);
+          _checkCompletion(300);
         }
 
         // 스트리밍 완료 시 큐 잔여분 전체 클리어 (interrupt로 이미 전달됨)
@@ -2043,6 +2050,12 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, stoppedMsg]);
     }
+    // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
+    requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
+      isNearBottomRef.current = true;
+    });
     // 백엔드 프로세스도 강제 중단
     if (activeSession) {
       fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
@@ -2066,6 +2079,11 @@ export default function ChatPage() {
               return merged.sort(
                 (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
               );
+            });
+            // FIX: DB 동기화 후에도 스크롤 맨 아래로
+            requestAnimationFrame(() => {
+              const container = messagesContainerRef.current;
+              if (container) container.scrollTop = container.scrollHeight;
             });
           })
           .catch(() => {});
