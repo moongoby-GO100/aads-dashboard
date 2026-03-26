@@ -1815,9 +1815,9 @@ export default function ChatPage() {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${requestSessionId}&limit=5&offset=0`
             );
-            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
+            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
             if (aiMsg) {
-              setMessages((prev) => [...prev, aiMsg]);
+              setMessages((prev) => [...prev.filter((m) => m.intent !== "streaming_placeholder"), aiMsg]);
               break;
             }
           } catch { /* retry */ }
