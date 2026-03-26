@@ -80,6 +80,28 @@ body {
 
 
 
+/* ── KakaoBot 전용 테마 (data-theme="kakaobot") ── */
+[data-theme="kakaobot"] {
+  --bg-primary: #FAFAFA;
+  --bg-card: #FFFFFF;
+  --bg-hover: #FFF9DB;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B7280;
+  --border: #E5E7EB;
+  --accent: #FFE812;
+  --accent-hover: #F5DC00;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --background: #FAFAFA;
+  --foreground: #1A1A1A;
+}
+
+[data-theme="kakaobot"] body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
 /* ── Mobile Input Redesign (KakaoTalk/ChatGPT hybrid) ── */
 
 /* Mobile action grid: 3x2 grid with generous touch targets */

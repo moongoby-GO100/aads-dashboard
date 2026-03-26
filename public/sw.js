@@ -1,6 +1,6 @@
 // AADS Dashboard Service Worker — PWA 설치용
 const CACHE_NAME = 'aads-v1';
-const PRECACHE_URLS = ['/login', '/chat'];
+const PRECACHE_URLS = ['/login', '/chat', '/kakaobot'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

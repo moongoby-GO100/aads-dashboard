@@ -1,0 +1,16 @@
+{
+  "name": "카카오봇 — AI 메시지 서비스",
+  "short_name": "카카오봇",
+  "description": "AI 기반 카카오톡 자동 메시지 서비스",
+  "start_url": "/kakaobot",
+  "display": "standalone",
+  "background_color": "#FAFAFA",
+  "theme_color": "#FFE812",
+  "orientation": "portrait-primary",
+  "icons": [
+    {"src": "/icon-kakaobot-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-kakaobot-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-kakaobot-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "/icon-kakaobot-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

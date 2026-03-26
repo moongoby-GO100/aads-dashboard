@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/_next", "/favicon.ico", "/api", "/conversations", "/manifest.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/signup", "/_next", "/favicon.ico", "/api", "/conversations", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
-const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,6 +15,12 @@ export function middleware(request: NextRequest) {
     if (pathname === "/") {
       return NextResponse.redirect(new URL("/kakaobot", request.url));
     }
+
+    // manifest.json → manifest-kakaobot.json 리라이트
+    if (pathname === "/manifest.json") {
+      return NextResponse.rewrite(new URL("/manifest-kakaobot.json", request.url));
+    }
+
     // 허용 경로 체크
     const allowed = KAKAOBOT_ALLOWED.some((p) => pathname.startsWith(p));
     if (!allowed) {
@@ -38,5 +44,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|manifest\\.json|icon-|apple-touch-icon|sw\\.js|manifest\\.webmanifest).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|manifest\\.json|manifest-kakaobot\\.json|icon-|apple-touch-icon|sw\\.js|manifest\\.webmanifest).*)"],
 };
