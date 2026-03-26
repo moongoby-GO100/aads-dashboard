@@ -2,6 +2,15 @@
 import { useEffect, useState } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Settings {
   auto_send_enabled: boolean;
   default_tone: string;
@@ -13,7 +22,7 @@ interface Settings {
   marketing_enabled: boolean;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 
 const TONES = [
   { value: "friendly", label: "따뜻한 😊" },
@@ -53,7 +62,7 @@ export default function SettingsPage() {
   const [saveMsg, setSaveMsg] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/kakao-bot/settings`)
+    fetch(`${API}/kakao-bot/settings`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.settings) setSettings(prev => ({ ...prev, ...d.settings })); })
       .catch(() => {})
@@ -66,7 +75,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`${API}/kakao-bot/settings`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(settings),
       });
       setSaveMsg(res.ok ? "저장되었습니다" : "저장 실패");

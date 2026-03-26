@@ -2,6 +2,15 @@
 import { useEffect, useState } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Anniversary {
   id: string;
   contact_name: string;
@@ -12,7 +21,7 @@ interface Anniversary {
   auto_send: boolean;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 const TYPES = ["생일", "결혼기념일", "입사기념일", "개업기념일", "기타"];
 const MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 
@@ -27,7 +36,7 @@ export default function AnniversariesPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/kakao-bot/anniversaries`)
+    fetch(`${API}/kakao-bot/anniversaries`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : { anniversaries: [] })
       .then(d => setAnniversaries(d.anniversaries || []))
       .catch(() => {})
@@ -37,7 +46,7 @@ export default function AnniversariesPage() {
   const handleSubmit = async () => {
     await fetch(`${API}/kakao-bot/anniversaries`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(form),
     });
     setShowForm(false);

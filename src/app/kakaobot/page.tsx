@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Stats {
   total_contacts: number;
   total_templates: number;
@@ -26,7 +35,7 @@ export default function KakaoBotDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}/kakao-bot/stats`)
+    fetch(`${"/api/v1"}/kakao-bot/stats`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(setStats)
       .catch(() => {})

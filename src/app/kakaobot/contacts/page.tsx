@@ -2,6 +2,15 @@
 import { useEffect, useState, useCallback } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Contact {
   id: string;
   name: string;
@@ -12,7 +21,7 @@ interface Contact {
   created_at: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 
 const RELATIONSHIPS = ["가족", "친구", "직장동료", "거래처", "지인", "기타"];
 const GROUPS = ["전체", "가족", "친구", "직장", "거래처", "VIP"];
@@ -29,7 +38,7 @@ export default function ContactsPage() {
 
   const fetchContacts = useCallback(() => {
     setLoading(true);
-    fetch(`${API}/kakao-bot/contacts`)
+    fetch(`${API}/kakao-bot/contacts`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : { contacts: [] })
       .then(d => setContacts(d.contacts || []))
       .catch(() => {})
@@ -50,7 +59,7 @@ export default function ContactsPage() {
     const url = editId ? `${API}/kakao-bot/contacts/${editId}` : `${API}/kakao-bot/contacts`;
     await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(form),
     });
     setShowForm(false);
@@ -61,7 +70,7 @@ export default function ContactsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
-    await fetch(`${API}/kakao-bot/contacts/${id}`, { method: "DELETE" });
+    await fetch(`${API}/kakao-bot/contacts/${id}`, { method: "DELETE", headers: getAuthHeaders() });
     fetchContacts();
   };
 

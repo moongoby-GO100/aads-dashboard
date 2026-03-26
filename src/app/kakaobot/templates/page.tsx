@@ -2,6 +2,15 @@
 import { useEffect, useState, useCallback } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Template {
   id: string;
   category: string;
@@ -12,7 +21,7 @@ interface Template {
   created_at: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 const CATEGORIES = [
   { key: "all", label: "전체" },
   { key: "birthday", label: "🎂 생일" },
@@ -39,7 +48,7 @@ export default function TemplatesPage() {
   const fetchTemplates = useCallback(() => {
     setLoading(true);
     const q = activeTab !== "all" ? `?category=${activeTab}` : "";
-    fetch(`${API}/kakao-bot/templates${q}`)
+    fetch(`${API}/kakao-bot/templates${q}`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : { templates: [] })
       .then(d => setTemplates(d.templates || []))
       .catch(() => {})
@@ -51,7 +60,7 @@ export default function TemplatesPage() {
   const handleSubmit = async () => {
     const method = editId ? "PUT" : "POST";
     const url = editId ? `${API}/kakao-bot/templates/${editId}` : `${API}/kakao-bot/templates`;
-    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    await fetch(url, { method, headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify(form) });
     setShowForm(false);
     setEditId(null);
     setForm({ category: "custom", title: "", content: "", tone: "friendly" });
@@ -60,7 +69,7 @@ export default function TemplatesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("삭제하시겠습니까?")) return;
-    await fetch(`${API}/kakao-bot/templates/${id}`, { method: "DELETE" });
+    await fetch(`${API}/kakao-bot/templates/${id}`, { method: "DELETE", headers: getAuthHeaders() });
     fetchTemplates();
   };
 

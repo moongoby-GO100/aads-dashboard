@@ -1483,7 +1483,7 @@ export default function ChatPage() {
       sessionId = s.id;
     }
 
-    if (!_existingMsgId) { if (!_existingMsgId) { setInput(""); chatInputRef.current?.clear(); } }
+    if (!_existingMsgId) { setInput(""); chatInputRef.current?.clear(); }
     setEditMode(null);
     setReplyToMessage(null);
     // P2-2: 분기 모드 캡처 후 초기화
@@ -1519,7 +1519,7 @@ export default function ChatPage() {
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
-    if (!_existingMsgId) { if (!_existingMsgId) { setMessages((prev) => [...prev, userMsg]); } }
+    if (!_existingMsgId) { setMessages((prev) => [...prev, userMsg]); }
 
     abortCtrl.current = new AbortController();
     // 90초 비활성 타임아웃 → heartbeat(5초) + 실제 데이터 모두 리셋
@@ -1582,7 +1582,6 @@ export default function ChatPage() {
         // 502/503/504: 서버 재시작 — 자동 재시도 (최대 3회, 지수 백오프)
         if ((statusCode === 502 || statusCode === 503 || statusCode === 504) && (retryCount || 0) < 3) {
           // 사용자 메시지 버블 유지 — 깜빡임 방지 (재시도 중에도 화면에 남음)
-
 
 
           setStreaming(false);
@@ -1815,9 +1814,9 @@ export default function ChatPage() {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${requestSessionId}&limit=5&offset=0`
             );
-            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant");
             if (aiMsg) {
-              setMessages((prev) => [...prev.filter((m) => m.intent !== "streaming_placeholder"), aiMsg]);
+              setMessages((prev) => [...prev, aiMsg]);
               break;
             }
           } catch { /* retry */ }
@@ -2050,12 +2049,6 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, stoppedMsg]);
     }
-    // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
-    requestAnimationFrame(() => {
-      const container = messagesContainerRef.current;
-      if (container) container.scrollTop = container.scrollHeight;
-      isNearBottomRef.current = true;
-    });
     // 백엔드 프로세스도 강제 중단
     if (activeSession) {
       fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
@@ -2079,11 +2072,6 @@ export default function ChatPage() {
               return merged.sort(
                 (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
               );
-            });
-            // FIX: DB 동기화 후에도 스크롤 맨 아래로
-            requestAnimationFrame(() => {
-              const container = messagesContainerRef.current;
-              if (container) container.scrollTop = container.scrollHeight;
             });
           })
           .catch(() => {});

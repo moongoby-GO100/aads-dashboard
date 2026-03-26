@@ -2,6 +2,15 @@
 import { useEffect, useState, useCallback } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Scheduled {
   id: string;
   contact_name: string;
@@ -12,7 +21,7 @@ interface Scheduled {
   created_at: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 const STATUS_COLORS: Record<string, { bg: string; color: string; label: string }> = {
   pending: { bg: "rgba(245,158,11,0.15)", color: "#f59e0b", label: "대기중" },
   sent: { bg: "rgba(34,197,94,0.15)", color: "#22c55e", label: "발송완료" },
@@ -28,7 +37,7 @@ export default function ScheduledPage() {
   const fetchItems = useCallback(() => {
     setLoading(true);
     const q = statusFilter !== "all" ? `?status=${statusFilter}` : "";
-    fetch(`${API}/kakao-bot/scheduled${q}`)
+    fetch(`${API}/kakao-bot/scheduled${q}`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : { scheduled: [] })
       .then(d => setItems(d.scheduled || []))
       .catch(() => {})
@@ -39,7 +48,7 @@ export default function ScheduledPage() {
 
   const handleCancel = async (id: string) => {
     if (!confirm("예약을 취소하시겠습니까?")) return;
-    await fetch(`${API}/kakao-bot/scheduled/${id}/cancel`, { method: "POST" });
+    await fetch(`${API}/kakao-bot/scheduled/${id}/cancel`, { method: "POST", headers: getAuthHeaders() });
     fetchItems();
   };
 

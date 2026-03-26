@@ -2,6 +2,15 @@
 import { useEffect, useState } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface HistoryItem {
   id: string;
   contact_name: string;
@@ -19,7 +28,7 @@ interface HistoryStats {
   by_month: { month: string; count: number }[];
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 
 const CATEGORY_COLORS: Record<string, string> = {
   birthday: "#ec4899",
@@ -38,8 +47,8 @@ export default function HistoryPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/kakao-bot/history`).then(r => r.ok ? r.json() : { history: [] }),
-      fetch(`${API}/kakao-bot/history/stats`).then(r => r.ok ? r.json() : null),
+      fetch(`${API}/kakao-bot/history`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : { history: [] }),
+      fetch(`${API}/kakao-bot/history/stats`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null),
     ])
       .then(([h, s]) => {
         setHistory(h.history || []);

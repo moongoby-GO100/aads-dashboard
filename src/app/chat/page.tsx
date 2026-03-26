@@ -1549,11 +1549,13 @@ export default function ChatPage() {
       let fetchBody: BodyInit;
       let fetchHeaders: Record<string, string> = { ...authHdrs() };
       let fetchUrl = `${BASE_URL}/chat/messages/send`;
+      // Stage 3: idempotency key — 502 재시도 시 동일 메시지 중복 저장 방지
+      const _idempotencyKey = crypto.randomUUID();
 
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments });
+        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
       } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
@@ -1563,11 +1565,12 @@ export default function ChatPage() {
         if (modelRef.current) formData.append("model_override", modelRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
         if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
+        formData.append("idempotency_key", _idempotencyKey);
         fetchBody = formData;
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(fetchUrl, {

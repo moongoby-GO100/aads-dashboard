@@ -2,13 +2,22 @@
 import { useState } from "react";
 import KakaoBotHeader from "@/components/KakaoBotHeader";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token")
+    || document.cookie.split("; ").find(r => r.startsWith("aads_token="))?.split("=")[1]
+    || null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 interface Generated {
   id: string;
   content: string;
   tone: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const API = typeof window !== "undefined" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 const SITUATIONS = ["생일 축하", "결혼기념일", "감사 인사", "안부 인사", "축하 메시지", "위로", "마케팅", "기타"];
 const RELATIONSHIPS = ["가족", "친구", "직장 동료", "거래처", "연인", "지인"];
 const TONES = [
@@ -36,9 +45,9 @@ export default function AIWriterPage() {
     try {
       const res = await fetch(`${API}/kakao-bot/ai/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
-          situation,
+          occasion: situation,
           relationship,
           tone,
           recipient_name: recipientName || undefined,
@@ -48,7 +57,10 @@ export default function AIWriterPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setResults(data.candidates || []);
+        const candidates: Generated[] = (data.candidates || []).map((c: string | Generated, i: number) =>
+          typeof c === "string" ? { id: `gen-${i}`, content: c, tone } : c
+        );
+        setResults(candidates);
       }
     } catch { /* ignore */ }
     setGenerating(false);
@@ -58,7 +70,7 @@ export default function AIWriterPage() {
     const content = editingId === item.id ? editContent : item.content;
     await fetch(`${API}/kakao-bot/templates`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({
         category: "custom",
         title: `AI 생성 - ${situation}`,
