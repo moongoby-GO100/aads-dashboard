@@ -30,7 +30,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "업데이트는 어떻게 하나요?",
-    a: "자동 업데이트를 지원합니다. 에이전트 실행 시 새 버전이 있으면 자동으로 업데이트됩니다. 또는 이 페이지에서 최신 버전을 다시 다운로드하여 덮어쓰기 설치할 수 있습니다.",
+    a: "자동 업데이트를 지원합니다. EXE 실행 시 새 버전이 있으면 자동으로 업데이트됩니다. 또는 이 페이지에서 최신 버전을 다시 다운로드하여 덮어쓰기 설치할 수 있습니다.",
   },
 ];
 
@@ -47,7 +47,7 @@ export default function AgentPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const downloadUrl = `${API}/kakao-bot/agent/download`;
+  const downloadUrl = `${API}/kakao-bot/agent/download-exe`;
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FAFAFA" }}>
@@ -94,12 +94,12 @@ export default function AgentPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>ZIP</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>EXE</span>
               </div>
             </div>
             <a
               href={downloadUrl}
-              download="kakaobot-agent.zip"
+              download="kakaobot-setup.exe"
               className="flex items-center justify-center gap-2 w-full rounded-xl py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
               style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}
             >
@@ -121,25 +121,25 @@ export default function AgentPage() {
                 {
                   step: 1,
                   title: "에이전트 다운로드",
-                  desc: "위 다운로드 버튼을 클릭하여 ZIP 파일을 저장합니다.",
+                  desc: "위 다운로드 버튼을 클릭하여 EXE 설치 파일을 저장합니다.",
                   icon: "⬇️",
                 },
                 {
                   step: 2,
-                  title: "압축 해제 후 카카오톡 로그인",
-                  desc: "ZIP 파일의 압축을 해제한 후, 카카오톡 PC 버전을 실행하고 계정에 로그인합니다.",
-                  icon: "📂",
+                  title: "카카오톡 PC 로그인",
+                  desc: "카카오톡 PC 버전을 실행하고 계정에 로그인합니다.",
+                  icon: "💬",
                 },
                 {
                   step: 3,
-                  title: "에이전트 실행",
-                  desc: "압축 해제된 폴더에서 run.bat을 실행합니다. (Python 환경의 경우 python agent.py)",
+                  title: "EXE 실행",
+                  desc: "다운로드한 kakaobot-setup.exe를 더블클릭하여 실행합니다.",
                   icon: "▶️",
                 },
                 {
                   step: 4,
                   title: "토큰 입력 후 연결 확인",
-                  desc: "에이전트 실행 창에 아래 에이전트 등록 섹션에서 발급받은 토큰을 입력하면 서버와 자동 연결됩니다.",
+                  desc: "EXE 실행 창에 아래 에이전트 등록 섹션에서 발급받은 토큰을 입력하면 서버와 자동 연결됩니다.",
                   icon: "🔑",
                 },
               ].map((item) => (
@@ -165,7 +165,7 @@ export default function AgentPage() {
               {[
                 { icon: "🪟", label: "운영체제", value: "Windows 10 이상" },
                 { icon: "💬", label: "카카오톡", value: "PC 버전 최신" },
-                { icon: "🐍", label: "Python", value: "3.11 이상" },
+                { icon: "💾", label: "디스크", value: "100MB 이상" },
               ].map((req) => (
                 <div key={req.label} className="rounded-lg p-3 text-center" style={{ background: "#FAFAFA", border: "1px solid #E5E7EB" }}>
                   <div className="text-2xl mb-1">{req.icon}</div>
