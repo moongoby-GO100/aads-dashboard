@@ -259,6 +259,23 @@ export const api = {
   getChatResearchHistory: (limit = 50) =>
     request<any>(`/chat/research/history?limit=${limit}`),
 
+  // PC Agent
+  getPCAgents: () => request<any>("/pc-agent/agents"),
+  sendPCCommand: (agent_id: string, command_type: string, params?: Record<string, unknown>) =>
+    request<any>("/pc-agent/execute", {
+      method: "POST",
+      body: JSON.stringify({ agent_id, command_type, params: params || {} }),
+    }),
+  getPCResult: (command_id: string, timeout = 30) =>
+    request<any>(`/pc-agent/result/${encodeURIComponent(command_id)}?timeout=${timeout}`),
+  startPCStream: (agent_id: string, config?: { fps?: number; quality?: number; scale?: number }) =>
+    request<any>(`/pc-agent/stream/${encodeURIComponent(agent_id)}/start`, {
+      method: "POST",
+      body: JSON.stringify(config || {}),
+    }),
+  stopPCStream: (agent_id: string) =>
+    request<any>(`/pc-agent/stream/${encodeURIComponent(agent_id)}/stop`, { method: "POST" }),
+
   // Memory Evolution Dashboard
   getOpsMemoryStats: () => request<any>("/ops/memory/stats"),
   getOpsMemoryEntries: (params?: { category?: string; project?: string; search?: string; page?: number; page_size?: number }) => {
