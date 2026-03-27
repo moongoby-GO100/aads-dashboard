@@ -294,4 +294,17 @@ export const api = {
     request<any>("/ops/memory/deduplicate", { method: "POST" }),
   getOpsMemoryLearningHealth: () =>
     request<any>("/ops/memory/learning-health"),
+
+  // CEO 아젠다 관리
+  getAgendas: (params?: { status?: string; project?: string; priority?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.project) q.set("project", params.project);
+    if (params?.priority) q.set("priority", params.priority);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<any>(`/agenda${qs ? "?" + qs : ""}`);
+  },
+  getAgenda: (id: number) => request<any>(`/agenda/${id}`),
 };
