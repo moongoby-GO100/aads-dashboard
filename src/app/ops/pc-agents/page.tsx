@@ -257,7 +257,8 @@ export default function PCAgentsPage() {
               {/* 스크린샷은 이미지로 표시 */}
               {(() => {
                 const r = cmdResult as Record<string, unknown>;
-                const img = r?.result?.image || r?.image;
+                const nested = r?.result as Record<string, unknown> | undefined;
+                const img = nested?.image || r?.image;
                 if (commandType === "screenshot" && img) {
                   return (
                     <img

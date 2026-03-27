@@ -58,6 +58,10 @@ export interface ChatMessage {
     tool_input?: any;
     content?: string;
   }>;
+  confidence_label?: "db_realtime" | "ai_inference" | "mixed";
+  thought_summary?: string;
+  bookmarked?: boolean;
+  sources?: Array<Record<string, unknown>>;
 }
 
 export interface Artifact {

@@ -12,6 +12,8 @@
 import React, { useState } from "react";
 import type { ChatMessage } from "@/services/chatApi";
 import SourceCard from "./SourceCard";
+import ConfidenceBadge from "./ConfidenceBadge";
+import InlineChart from "./InlineChart";
 
 // ─── Inline Markdown Renderer ────────────────────────────────────────────────
 
@@ -133,7 +135,11 @@ function MarkdownContent({ content }: { content: string }) {
         codeLines.push(lines[i]);
         i++;
       }
-      elements.push(<CodeBlock key={`cb${i}`} lang={lang} code={codeLines.join("\n")} />);
+      if (lang === "chart") {
+        elements.push(<InlineChart key={`chart${i}`} raw={codeLines.join("\n")} />);
+      } else {
+        elements.push(<CodeBlock key={`cb${i}`} lang={lang} code={codeLines.join("\n")} />);
+      }
       i++;
       continue;
     }
@@ -547,7 +553,7 @@ export default function ChatBubble({
 
         {/* 메타 정보 */}
         {!isStreaming && (
-          <p className="text-xs mt-1 ml-1" style={{ color: "var(--text-secondary)" }}>
+          <p className="text-xs mt-1 ml-1 flex items-center flex-wrap gap-1" style={{ color: "var(--text-secondary)" }}>
             {message.model_used && <span>[{message.model_used}</span>}
             {displayTokensIn ? ` · ${displayTokensIn.toLocaleString()}in` : ""}
             {displayTokensOut ? ` · ${displayTokensOut.toLocaleString()}out` : ""}
@@ -560,6 +566,9 @@ export default function ChatBubble({
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
                 })}
               </span>
+            )}
+            {message.confidence_label && (
+              <ConfidenceBadge label={message.confidence_label} />
             )}
           </p>
         )}

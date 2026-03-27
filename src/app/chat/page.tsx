@@ -9,6 +9,8 @@ import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
+import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
+import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
@@ -401,6 +403,9 @@ const MessageItem = memo(function MessageItem({
                     hour: "2-digit", minute: "2-digit", second: "2-digit",
                   })}
                 </span>
+              )}
+              {msg.confidence_label && (
+                <ConfidenceBadge label={msg.confidence_label} />
               )}
             </span>
             {onReplyTo && !streaming && !msg.id.startsWith("tmp-") && (
@@ -1789,6 +1794,7 @@ export default function ChatPage() {
                     input_tokens: ev.input_tokens || undefined,
                     output_tokens: ev.output_tokens || undefined,
                     cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                    confidence_label: ev.confidence_label || undefined,
                     created_at: new Date().toISOString(),
                   },
                 ]);
@@ -3418,6 +3424,11 @@ export default function ChatPage() {
               ▲ 이전 대화 불러오기
             </button>
           )}
+          {/* P0-4: 세션 요약 카드 — 세션에 메시지가 있을 때 최초 진입 시 표시 */}
+          {activeSession?.id && messages.length > 0 && (
+            <SessionSummaryCard sessionId={activeSession.id} />
+          )}
+
           {messages.length === 0 && !streaming && (
             <div
               style={{

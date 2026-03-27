@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import InlineChart from "@/components/chat/InlineChart";
 
 // AADS Markdown Renderer — extracted from page.tsx (Phase 2)
 
@@ -344,6 +345,9 @@ function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }
           const firstNl = part.indexOf("\n");
           const lang = firstNl > 3 ? part.slice(3, firstNl).trim() : "";
           const code = firstNl >= 0 ? part.slice(firstNl + 1).replace(/```$/, "") : part.slice(3).replace(/```$/, "");
+          if (lang === "chart") {
+            return <InlineChart key={i} raw={code} />;
+          }
           return <CopyableCodeBlock key={i} lang={lang} code={code} />;
         }
         return <InlineMd key={i} text={part} linkColor={linkColor} />;

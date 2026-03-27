@@ -69,6 +69,7 @@ export interface ChatMessage {
   branch_id?: string | null;
   branch_point_id?: string | null;
   created_at: string;
+  confidence_label?: "db_realtime" | "ai_inference" | "mixed" | null;
 }
 
 export interface SourceItem {
