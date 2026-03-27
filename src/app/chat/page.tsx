@@ -1631,6 +1631,7 @@ export default function ChatPage() {
     }, 3600000);
 
     let full = "";
+    let _invisibleRecoveryActivated = false;
     try {
       const rawFiles = filesToSend;
       const attachments = pendingAttachments.current.length > 0
@@ -1944,10 +1945,19 @@ export default function ChatPage() {
         for (let reconnAttempt = 0; reconnAttempt < 5; reconnAttempt++) {
           if (isStale()) break;
           try {
-            const resumeResp = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
-              { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` } }
-            );
+            const resumeAbort = new AbortController();
+            const resumeTimeout = setTimeout(() => resumeAbort.abort(), 120000);
+            let resumeResp: Response;
+            try {
+              resumeResp = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
+                { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
+              );
+            } catch (resumeFetchErr) {
+              clearTimeout(resumeTimeout);
+              throw resumeFetchErr;
+            }
+            clearTimeout(resumeTimeout);
             if (!resumeResp.ok || !resumeResp.body) throw new Error("resume failed");
 
             const resumeReader = resumeResp.body.getReader();
@@ -1984,7 +1994,8 @@ export default function ChatPage() {
                     resumed = true;
                     break;
                   } else if (rev.type === "resume_generating") {
-                    // 서버에서 아직 생성 중 — 이전 답변 전송 안 함, polling으로 전환
+                    // 서버에서 아직 생성 중 — 재시도 낭비 방지, 즉시 polling 전환
+                    reconnAttempt = 999;
                     break;
                   } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
                     break;
@@ -2013,6 +2024,7 @@ export default function ChatPage() {
 
           // waitingBgResponse 활성화하되 streaming도 유지 → 폴링이 partial_content를 streamBuf에 주입
           setWaitingBgResponse(true);
+          _invisibleRecoveryActivated = true;
           setBgPartialContent(frozenContent);  // 폴링에서 비교 기준점
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => {
@@ -2070,7 +2082,7 @@ export default function ChatPage() {
       clearTimeout(maxStreamTimeout);
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
-      const _isInvisibleRecovery = waitingBgRef.current;
+      const _isInvisibleRecovery = _invisibleRecoveryActivated || waitingBgRef.current;
       if (streamingSessionRef.current === sessionId) {
         streamingSessionRef.current = null;  // 항상 해제
         if (!_isInvisibleRecovery) {
@@ -2079,7 +2091,8 @@ export default function ChatPage() {
         } else {
           // invisible recovery: 폴링이 완료 감지할 때까지 streaming 유지
           // 하지만 30초 안전장치 — 폴링도 실패하면 강제 해제
-          setTimeout(() => {
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
             if (waitingBgRef.current) {
               setWaitingBgResponse(false);
               setBgPartialContent("");
@@ -2145,6 +2158,7 @@ export default function ChatPage() {
     setToolStatus(null);
     setYellowWarning(null);
     setToolTurnInfo(null);
+    isNearBottomRef.current = false;
     if (buf && activeSession) {
       const stoppedMsg: ChatMessage = {
         id: `stopped-${Date.now()}`,
@@ -2175,6 +2189,7 @@ export default function ChatPage() {
             if (activeSessionRef.current !== activeSession.id) return;
             const filtered = msgs.filter((m) => m.intent !== "streaming_placeholder");
             // stopped 메시지가 있으면 유지하면서 DB 메시지와 병합
+            isNearBottomRef.current = false;
             setMessages((prev) => {
               const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
               const dbIds = new Set(filtered.map((m) => m.id));
@@ -2188,6 +2203,7 @@ export default function ChatPage() {
             requestAnimationFrame(() => {
               const container = messagesContainerRef.current;
               if (container) container.scrollTop = container.scrollHeight;
+              isNearBottomRef.current = true;
             });
           })
           .catch(() => {});
