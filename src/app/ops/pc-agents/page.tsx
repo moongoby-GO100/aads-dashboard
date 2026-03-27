@@ -256,7 +256,7 @@ export default function PCAgentsPage() {
             <div className="rounded p-3" style={{ background: "var(--bg-main)", border: "1px solid var(--border)" }}>
               {/* 스크린샷은 이미지로 표시 */}
               {(() => {
-                const r = cmdResult as Record<string, unknown>;
+                const r = cmdResult as Record<string, any>;
                 const nested = r?.result as Record<string, unknown> | undefined;
                 const img = nested?.image || r?.image;
                 if (commandType === "screenshot" && img) {
