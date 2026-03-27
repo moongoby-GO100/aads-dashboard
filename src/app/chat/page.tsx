@@ -1625,10 +1625,10 @@ export default function ChatPage() {
       }, 90000);
     };
 
-    // 절대 타임아웃 15분 — heartbeat와 무관하게 streaming 강제 종료
+    // 절대 타임아웃 1시간 — heartbeat와 무관하게 streaming 강제 종료
     const maxStreamTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 900000);
+    }, 3600000);
 
     let full = "";
     try {
@@ -2304,7 +2304,7 @@ export default function ChatPage() {
     abortCtrl.current = new AbortController();
     let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000);
     const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000); };
-    const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 900000);
+    const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 3600000);
 
     let full = "";
     try {
