@@ -140,14 +140,38 @@ export default function PCAgentsPage() {
     return Date.now() - last < 30000;
   };
 
+  const handleDownloadAgent = () => {
+    const url = `${BASE_URL}/kakao-bot/agent/download`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kakaobot-agent.zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
     <div className="p-6 space-y-6" style={{ color: "var(--text-primary)" }}>
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">🖥️</span>
-        <div>
-          <h1 className="text-xl font-bold">PC Agent 관리</h1>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>연결된 PC 원격 제어</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🖥️</span>
+          <div>
+            <h1 className="text-xl font-bold">PC Agent 관리</h1>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>연결된 PC 원격 제어</p>
+          </div>
         </div>
+        <button
+          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-opacity hover:opacity-80"
+          style={{ background: "var(--accent)", color: "#fff" }}
+          onClick={handleDownloadAgent}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          PC Agent 다운로드
+        </button>
       </div>
 
       {/* PC 목록 */}
