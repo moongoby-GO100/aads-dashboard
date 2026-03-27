@@ -517,68 +517,6 @@ const MessageItem = memo(function MessageItem({
             >🗑️</button>
           </div>
         )}
-        {/* user bottom action buttons */}
-        {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
-          <div style={{
-            display: "flex", justifyContent: "flex-end", gap: "4px",
-            marginTop: "4px", marginRight: "4px",
-          }}>
-            <button
-              onClick={() => { setEditingMsgId(msg.id); setEditText(msg.content); }}
-              title="수정 후 재전송"
-              style={{
-                width: "26px", height: "26px", borderRadius: "6px",
-                background: "rgba(109,40,217,0.08)", border: "1px solid rgba(109,40,217,0.2)",
-                color: "var(--ct-text2)", fontSize: "12px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(109,40,217,0.15)"; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(109,40,217,0.08)"; }}
-            >✏️</button>
-            <button
-              onClick={() => handleCopyToInput(msg.content)}
-              title="입력창에 복사 (재지시)"
-              style={{
-                width: "26px", height: "26px", borderRadius: "6px",
-                background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)",
-                color: "var(--ct-text2)", fontSize: "12px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(59,130,246,0.15)"; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(59,130,246,0.08)"; }}
-            >🔄</button>
-            {onBranch && (
-              <button
-                onClick={() => onBranch?.(msg)}
-                title="여기서 분기"
-                style={{
-                  width: "26px", height: "26px", borderRadius: "6px",
-                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
-                  color: "#22c55e", fontSize: "12px",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; }}
-                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; }}
-              >🔀</button>
-            )}
-            <button
-              onClick={() => handleDeleteMessage(msg.id, "user")}
-              title="메시지 삭제 (AI 응답 포함)"
-              style={{
-                width: "26px", height: "26px", borderRadius: "6px",
-                background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-                color: "#ef4444", fontSize: "12px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(239,68,68,0.15)"; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(239,68,68,0.08)"; }}
-            >🗑️</button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1864,6 +1802,8 @@ export default function ChatPage() {
             if (ev.type === "stream_start") {
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
               resetSseTimeout();
+              // 즉시 typing placeholder — 첫 delta 수신 전 빈 버블 방지
+              if (!isStale()) setStreamBuf("분석 중...");
               continue;
             }
             if (ev.type === "heartbeat") {
@@ -1884,7 +1824,8 @@ export default function ChatPage() {
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
-              if (!isStale()) setStreamBuf(full);
+              // 첫 delta: thinking placeholder("분석 중...") 자동 교체
+              if (!isStale()) setStreamBuf(full || "");
               if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
@@ -1966,6 +1907,8 @@ export default function ChatPage() {
               }
             } else if (ev.type === "thinking" && ev.content) {
               setToolStatus("💭 사고 중...");
+              // thinking 텍스트가 있으면 streamBuf에 즉시 표시 — delta가 오면 자동 교체됨
+              if (!isStale() && !full) setStreamBuf(ev.content || "분석 중...");
             } else if (ev.type === "sdk_session") {
               setToolStatus("🤖 Agent SDK 연결됨");
             } else if (ev.type === "sdk_complete") {
