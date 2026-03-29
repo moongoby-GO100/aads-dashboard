@@ -1190,8 +1190,9 @@ export default function ChatPage() {
       }, 3000);
       return () => { observer.disconnect(); clearTimeout(timeout); };
     } else if (isNearBottomRef.current) {
-      // near-bottom일 때만 smooth 스크롤
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      // near-bottom일 때만 instant 스크롤 (smooth는 이전 위치에서 애니메이션 → 튀어감 방지)
+      const container2 = messagesContainerRef.current;
+      if (container2) container2.scrollTop = container2.scrollHeight;
     }
   }, [messages]); // streamBuf 의존성 제거!
 
@@ -1226,7 +1227,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     // BUG-SESSION-MIX FIX: cancelled 클로저로 세션 전환 시 in-flight 폴링 응답 폐기
     let cancelled = false;
-    // PERF: 고정 1초 interval, waitingBg 아닐 때는 5틱마다 실행 (=5초)
+    // PERF: 3초 interval, waitingBg=true 3초/아닐 때 15초 폴링 (성능 최적화)
     let tickCount = 0;
     const iv = setInterval(async () => {
       if (cancelled) return;
@@ -1404,7 +1405,7 @@ export default function ChatPage() {
           );
         });
       } catch { /* 폴링 실패 무시 */ }
-    }, 1000); // 고정 1초 간격, 내부에서 waitingBg 여부에 따라 실행 여부 결정
+    }, 3000); // 3초 간격: waitingBg=true 3초, 아닐 때 15초 폴링 (성능 최적화)
     return () => { cancelled = true; clearInterval(iv); };
   }, [activeSession?.id]); // PERF: 의존성을 세션 ID만으로 축소
 
