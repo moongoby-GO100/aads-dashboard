@@ -1688,12 +1688,12 @@ export default function ChatPage() {
     // 절대 타임아웃(300초)이 무한 연장 방지 안전망
     let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 90000);
+    }, 150000);
     const resetSseTimeout = () => {
       clearTimeout(sseTimeout);
       sseTimeout = setTimeout(() => {
         abortCtrl.current?.abort();
-      }, 90000);
+      }, 150000);
     };
 
     // 절대 타임아웃 1시간 — heartbeat와 무관하게 streaming 강제 종료
@@ -2395,8 +2395,8 @@ export default function ChatPage() {
     const isStale = () => activeSessionRef.current !== requestSessionId;
 
     abortCtrl.current = new AbortController();
-    let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000);
-    const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000); };
+    let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 150000);
+    const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 150000); };
     const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 3600000);
 
     let full = "";

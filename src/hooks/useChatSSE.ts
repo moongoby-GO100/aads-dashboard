@@ -73,7 +73,7 @@ const INITIAL_STREAM: StreamState = {
   yellowLimitWarning: null,
 };
 
-const SSE_INACTIVITY_MS = 90_000; // heartbeat(10s) 기준 — 90초간 무응답 시에만 타임아웃
+const SSE_INACTIVITY_MS = 150_000; // heartbeat 기준 — 150초간 무응답 시에만 타임아웃
 const MAX_RETRY = 3;
 
 export function useChatSSE() {
