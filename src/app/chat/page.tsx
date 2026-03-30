@@ -1229,12 +1229,17 @@ export default function ChatPage() {
     let cancelled = false;
     // PERF: 3초 interval, waitingBg=true 3초/아닐 때 15초 폴링 (성능 최적화)
     let tickCount = 0;
+    let prevWaitingBg = false; // waitingBg 전환 감지용
     const iv = setInterval(async () => {
       if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
       if (isInitialLoadRef.current) return;
       const _streaming = streamingRef.current;
       const _waitingBg = waitingBgRef.current;
+      // PERF-FIX: waitingBg true->false 전환 시 tickCount 리셋
+      // 대기 중 카운터가 증가하여 false 전환 직후 즉시 실행되는 현상 방지
+      if (prevWaitingBg && !_waitingBg) { tickCount = 0; }
+      prevWaitingBg = _waitingBg;
       tickCount++;
       if (!_waitingBg && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
