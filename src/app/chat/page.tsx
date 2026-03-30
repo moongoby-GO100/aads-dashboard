@@ -142,10 +142,10 @@ const MessageItem = memo(function MessageItem({
             ↩ {replyTarget.content.slice(0, 100)}{replyTarget.content.length > 100 ? "..." : ""}
           </div>
         )}
-        {/* 출처 배지: Pipeline C / Agent / System */}
+        {/* 출처 배지: Pipeline Runner / Agent / System */}
         {msg.role === "assistant" && (() => {
           const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
-            pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+            pipeline_runner: { icon: "🤖", label: "Pipeline Runner", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
             agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
             system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
             regenerated: { icon: "🔄", label: "이전 응답", color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
@@ -230,14 +230,14 @@ const MessageItem = memo(function MessageItem({
               : {
                   background: msg.intent === "streaming_placeholder"
                     ? "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.15))"
-                    : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
-                    ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_c" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
+                    : msg.intent && ["pipeline_runner","agent_result","system_recovery"].includes(msg.intent)
+                    ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_runner" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
                     : "var(--ct-ai)",
                   color: "var(--ct-text)",
                   border: msg.intent === "streaming_placeholder"
                     ? "1px solid #3b82f666"
-                    : msg.intent && ["pipeline_c","agent_result","system_recovery"].includes(msg.intent)
-                    ? `1px solid ${msg.intent === "pipeline_c" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
+                    : msg.intent && ["pipeline_runner","agent_result","system_recovery"].includes(msg.intent)
+                    ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
                   
                   ...(msg.intent === "regenerated" ? { opacity: 0.45 } : {}),
@@ -289,7 +289,7 @@ const MessageItem = memo(function MessageItem({
                   web_search: "🔍", web_search_brave: "🔍", search_naver: "🔍", search_kakao: "🔍",
                   jina_read: "🌐", crawl4ai_fetch: "🌐", deep_crawl: "🌐", deep_research: "🔬",
                   health_check: "💊", get_all_service_status: "📊",
-                  pipeline_c_start: "🚀", delegate_to_agent: "🤖",
+                  pipeline_runner_submit: "🚀", delegate_to_agent: "🤖",
                   save_note: "📝", recall_notes: "🧠", generate_image: "🎨",
                   send_telegram: "📨", fact_check: "🔎", evaluate_alerts: "🔔",
                 };
@@ -657,6 +657,7 @@ export default function ChatPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
+  const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1218,7 +1219,7 @@ export default function ChatPage() {
     }
   }, [briefing]);
 
-  // ── 백그라운드 메시지 폴링 (Pipeline C / Agent 완료 메시지 실시간 수신) ──
+  // ── 백그라운드 메시지 폴링 (Pipeline Runner / Agent 완료 메시지 실시간 수신) ──
   // P1-FIX: waitingBgResponse=true→1초, 아니면 5초 폴링
   // + just_completed 감지 시 자동 reload + 토스트 표시
   // PERF: streaming/waitingBgResponse를 ref로 참조하여 의존성 폭탄 방지
@@ -1243,8 +1244,9 @@ export default function ChatPage() {
       tickCount++;
       if (!_waitingBg && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
+      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string } | null = null;
       try {
-        const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string }>(
+        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string }>(
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
@@ -1263,12 +1265,17 @@ export default function ChatPage() {
           streamingSessionRef.current = null;
           // 끊김 복구 후 대기 메시지 큐 클리어 (interrupt로 이미 전달됨 or 폐기)
           if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
-              setMessages(filtered);
+              setMessages(prev => {
+                const freshIds = new Set(filtered.map(m => m.id));
+                const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
+                const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
+                return [...preserved, ...filtered];
+              });
             }
           }
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -1295,12 +1302,17 @@ export default function ChatPage() {
           setWaitingBgResponse(false); setBgPartialContent("");
           // 끊김 후 대화 못이어가는 문제 방지 — 대기 큐 클리어
           if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
-              setMessages(filtered);
+              setMessages(prev => {
+                const freshIds = new Set(filtered.map(m => m.id));
+                const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
+                const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
+                return [...preserved, ...filtered];
+              });
             }
           }
           return;
@@ -1322,10 +1334,14 @@ export default function ChatPage() {
           }, 180000);
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
+      // PERF: streaming-status에서 last_message_id 캡처 — 변경 없으면 messages fetch skip
+      const _ssLastMsgId = ss?.last_message_id || null;
+      if (_ssLastMsgId && _ssLastMsgId === lastKnownMsgIdRef.current && !_waitingBg) return;
+      if (_ssLastMsgId) lastKnownMsgIdRef.current = _ssLastMsgId;
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
-        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0&sort=desc`);
+        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0&sort=desc&fields=minimal`);
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
@@ -1341,12 +1357,17 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false); setBgPartialContent("");
             try {
-              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
+              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
               if (cancelled) return;
               if (allMsgs) {
                 const filtered = allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
                 if (filtered.length > 0) {
-                  setMessages(filtered);
+                  setMessages(prev => {
+                    const freshIds = new Set(filtered.map(m => m.id));
+                    const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
+                    const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
+                    return [...preserved, ...filtered];
+                  });
                 }
               }
             } catch { /* 재조회 실패 무시 */ }
@@ -1883,7 +1904,7 @@ export default function ChatPage() {
                 web_search: "🔍", web_search_brave: "🔍", jina_read: "🌐",
                 crawl4ai_fetch: "🌐", deep_crawl: "🌐", deep_research: "🔬",
                 health_check: "💊", get_all_service_status: "📊",
-                pipeline_c_start: "🚀", delegate_to_agent: "🤖",
+                pipeline_runner_submit: "🚀", delegate_to_agent: "🤖",
                 save_note: "📝", recall_notes: "🧠",
               };
               const icon = toolIcons[ev.tool_name] || "🔧";
@@ -2204,9 +2225,17 @@ export default function ChatPage() {
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
-                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=100&offset=0&sort=desc`).then(msgs => msgs.reverse());
+                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
                 if (freshMsgs) {
-                  setMessages(freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder"));
+                  const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+                  if (filtered.length > 0) {
+                    setMessages(prev => {
+                      const freshIds = new Set(filtered.map(m => m.id));
+                      const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
+                      const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
+                      return [...preserved, ...filtered];
+                    });
+                  }
                 }
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
