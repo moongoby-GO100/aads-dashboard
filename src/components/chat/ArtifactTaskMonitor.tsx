@@ -271,7 +271,7 @@ export default function ArtifactTaskMonitor({ sessionId }: { sessionId?: string 
                     [{task.project}] {task.title}
                   </div>
                   <div className="text-xs" style={{ color: "var(--ct-text-muted)" }}>
-                    {task.pipeline === "runner" ? "🚀 Runner" : task.pipeline === "agent" ? "🤖 Agent" : task.pipeline === "pipeline_c" ? "Pipeline C" : task.pipeline} &middot;{" "}
+                    {task.pipeline === "runner" ? "🚀 Runner" : task.pipeline === "agent" ? "🤖 Agent" : task.pipeline === "pipeline_runner" ? "Pipeline Runner" : task.pipeline} &middot;{" "}
                     {task.phase} &middot; {formatElapsed(task.elapsed_sec)}
                   </div>
                 </div>

@@ -55,14 +55,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "groq-gpt-oss-120b",         name: "GPT-OSS 120B",              provider: "groq",     cost: "무료" },
   { id: "groq-compound",             name: "Groq Compound",             provider: "groq",     cost: "무료" },
   // -- DeepSeek --
-  { id: "deepseek-chat",             name: "DeepSeek V3",               provider: "deepseek",   cost: "$0.28/$0.42" },
-  { id: "deepseek-reasoner",         name: "DeepSeek R1",               provider: "deepseek",   cost: "$0.55/$2.19" },
-  // -- OpenRouter --
-  { id: "openrouter-grok-4-fast",    name: "Grok 4.1 Fast",             provider: "openrouter", cost: "변동" },
-  { id: "openrouter-deepseek-v3",    name: "DeepSeek V3.2",             provider: "openrouter", cost: "변동" },
-  { id: "openrouter-mistral-small",  name: "Mistral Small",             provider: "openrouter", cost: "변동" },
-  { id: "openrouter-nemotron-free",  name: "Nemotron Free",             provider: "openrouter", cost: "무료" },
-  { id: "openrouter-minimax-m2",     name: "MiniMax M2.7",              provider: "openrouter", cost: "변동" },
+  { id: "deepseek-chat",             name: "DeepSeek V3",               provider: "deepseek", cost: "$0.28/$0.42" },
+  { id: "deepseek-reasoner",         name: "DeepSeek R1",               provider: "deepseek", cost: "$0.55/$2.19" },
 ];
 
 export const DEFAULT_MODEL = "claude-opus-4-6";
@@ -86,12 +80,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "groq-qwen3-32b",          label: "Qwen3 32B",         cost: "무료",   description: "Groq 초고속 · 무료" },
   { id: "groq-kimi-k2",            label: "Kimi K2",           cost: "무료",   description: "수학/금융 최강 · 무료" },
   { id: "deepseek-chat",           label: "DeepSeek V3",       cost: "$0.001", description: "초저가 범용" },
-  { id: "openrouter-grok-4-fast",      label: "Grok 4.1 Fast",     cost: "변동",   description: "OpenRouter · Grok 최신" },
-  { id: "openrouter-deepseek-v3",      label: "DeepSeek V3.2",     cost: "변동",   description: "OpenRouter · DeepSeek 최신" },
-  { id: "openrouter-mistral-small",    label: "Mistral Small",     cost: "변동",   description: "OpenRouter · Mistral 경량" },
-  { id: "openrouter-nemotron-free",    label: "Nemotron Free",     cost: "무료",   description: "OpenRouter · NVIDIA 무료" },
-  { id: "openrouter-minimax-m2",       label: "MiniMax M2.7",      cost: "변동",   description: "OpenRouter · MiniMax 최신" },
-  { id: "deep-research",               label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
+  { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
 ];
 
 export const DEFAULT_CHAT_MODEL = "claude-opus-4-6";
@@ -149,7 +138,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   google: "Google",
   groq: "Groq (무료)",
   deepseek: "DeepSeek",
-  openrouter: "OpenRouter",
 };
 
 interface Props {
@@ -161,7 +149,7 @@ export default function ModelSelector({ value, onChange }: Props) {
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   // Group by provider for optgroup
-  const providers = ["auto", "anthropic", "openai", "google", "groq", "deepseek", "openrouter"];
+  const providers = ["auto", "anthropic", "openai", "google", "groq", "deepseek"];
 
   return (
     <div className="flex items-center gap-2 mb-2">

@@ -9,6 +9,8 @@ import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
+import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
+import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
@@ -74,7 +76,7 @@ const MessageItem = memo(function MessageItem({
           }}>⚙️ 시스템 트리거</span>
         </div>
       )}
-      {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
+      {/* user buttons moved to bottom */ false && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
         <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => {
@@ -103,7 +105,7 @@ const MessageItem = memo(function MessageItem({
           >🔄</button>
           {onBranch && (
             <button
-              onClick={() => onBranch(msg)}
+              onClick={() => onBranch?.(msg)}
               title="여기서 분기 (다른 질문으로 대화 분기)"
               style={{
                 width: "28px", height: "28px", borderRadius: "50%",
@@ -177,7 +179,7 @@ const MessageItem = memo(function MessageItem({
                 width: "100%", padding: "12px 16px", fontSize: "14px",
                 background: "rgba(109,40,217,0.15)", color: "#fff",
                 border: "none", outline: "none", resize: "none",
-                minHeight: "60px", maxHeight: "200px", lineHeight: "1.6",
+                minHeight: "120px", maxHeight: "400px", lineHeight: "1.6",
               }}
               rows={Math.min(editText.split("\n").length + 1, 8)}
             />
@@ -402,6 +404,9 @@ const MessageItem = memo(function MessageItem({
                   })}
                 </span>
               )}
+              {msg.confidence_label && (
+                <ConfidenceBadge label={msg.confidence_label} />
+              )}
             </span>
             {onReplyTo && !streaming && !msg.id.startsWith("tmp-") && (
               <button
@@ -447,6 +452,68 @@ const MessageItem = memo(function MessageItem({
               }}
               onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.color = "#ef4444"; }}
               onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.4"; (e.target as HTMLElement).style.color = "var(--ct-text2)"; }}
+            >🗑️</button>
+          </div>
+        )}
+        {/* user bottom action buttons */}
+        {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
+          <div style={{
+            display: "flex", justifyContent: "flex-end", gap: "4px",
+            marginTop: "4px", marginRight: "4px",
+          }}>
+            <button
+              onClick={() => { setEditingMsgId(msg.id); setEditText(msg.content); }}
+              title="수정 후 재전송"
+              style={{
+                width: "26px", height: "26px", borderRadius: "6px",
+                background: "rgba(109,40,217,0.08)", border: "1px solid rgba(109,40,217,0.2)",
+                color: "var(--ct-text2)", fontSize: "12px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(109,40,217,0.15)"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(109,40,217,0.08)"; }}
+            >✏️</button>
+            <button
+              onClick={() => handleCopyToInput(msg.content)}
+              title="입력창에 복사 (재지시)"
+              style={{
+                width: "26px", height: "26px", borderRadius: "6px",
+                background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)",
+                color: "var(--ct-text2)", fontSize: "12px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(59,130,246,0.15)"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(59,130,246,0.08)"; }}
+            >🔄</button>
+            {onBranch && (
+              <button
+                onClick={() => onBranch?.(msg)}
+                title="여기서 분기"
+                style={{
+                  width: "26px", height: "26px", borderRadius: "6px",
+                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+                  color: "#22c55e", fontSize: "12px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; }}
+              >🔀</button>
+            )}
+            <button
+              onClick={() => handleDeleteMessage(msg.id, "user")}
+              title="메시지 삭제 (AI 응답 포함)"
+              style={{
+                width: "26px", height: "26px", borderRadius: "6px",
+                background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                color: "#ef4444", fontSize: "12px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(239,68,68,0.15)"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(239,68,68,0.08)"; }}
             >🗑️</button>
           </div>
         )}
@@ -1212,6 +1279,10 @@ export default function ChatPage() {
         }
         // 서버에서 스트리밍 아님 + 프론트 streaming=true → SSE 끊김 감지
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
+          // SSE reader가 아직 활성 상태면 streamBuf 유지 (폴링 레이스 방지)
+          if (streamingSessionRef.current) {
+            return;
+          }
           setStreaming(false);
           setStreamBuf("");
           streamingSessionRef.current = null;
@@ -1521,7 +1592,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
+    if (streamingRef.current && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
@@ -1617,20 +1688,21 @@ export default function ChatPage() {
     // 절대 타임아웃(300초)이 무한 연장 방지 안전망
     let sseTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 90000);
+    }, 150000);
     const resetSseTimeout = () => {
       clearTimeout(sseTimeout);
       sseTimeout = setTimeout(() => {
         abortCtrl.current?.abort();
-      }, 90000);
+      }, 150000);
     };
 
-    // 절대 타임아웃 5분 — heartbeat와 무관하게 streaming 강제 종료
+    // 절대 타임아웃 1시간 — heartbeat와 무관하게 streaming 강제 종료
     const maxStreamTimeout = setTimeout(() => {
       abortCtrl.current?.abort();
-    }, 300000);
+    }, 3600000);
 
     let full = "";
+    let _invisibleRecoveryActivated = false;
     try {
       const rawFiles = filesToSend;
       const attachments = pendingAttachments.current.length > 0
@@ -1730,6 +1802,8 @@ export default function ChatPage() {
             if (ev.type === "stream_start") {
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
               resetSseTimeout();
+              // 즉시 typing placeholder — 첫 delta 수신 전 빈 버블 방지
+              if (!isStale()) setStreamBuf("분석 중...");
               continue;
             }
             if (ev.type === "heartbeat") {
@@ -1750,7 +1824,8 @@ export default function ChatPage() {
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
-              if (!isStale()) setStreamBuf(full);
+              // 첫 delta: thinking placeholder("분석 중...") 자동 교체
+              if (!isStale()) setStreamBuf(full || "");
               if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
@@ -1788,6 +1863,7 @@ export default function ChatPage() {
                     input_tokens: ev.input_tokens || undefined,
                     output_tokens: ev.output_tokens || undefined,
                     cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                    confidence_label: ev.confidence_label || undefined,
                     created_at: new Date().toISOString(),
                   },
                 ]);
@@ -1831,6 +1907,8 @@ export default function ChatPage() {
               }
             } else if (ev.type === "thinking" && ev.content) {
               setToolStatus("💭 사고 중...");
+              // thinking 텍스트가 있으면 streamBuf에 즉시 표시 — delta가 오면 자동 교체됨
+              if (!isStale() && !full) setStreamBuf(ev.content || "분석 중...");
             } else if (ev.type === "sdk_session") {
               setToolStatus("🤖 Agent SDK 연결됨");
             } else if (ev.type === "sdk_complete") {
@@ -1944,10 +2022,19 @@ export default function ChatPage() {
         for (let reconnAttempt = 0; reconnAttempt < 5; reconnAttempt++) {
           if (isStale()) break;
           try {
-            const resumeResp = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
-              { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` } }
-            );
+            const resumeAbort = new AbortController();
+            const resumeTimeout = setTimeout(() => resumeAbort.abort(), 120000);
+            let resumeResp: Response;
+            try {
+              resumeResp = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
+                { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
+              );
+            } catch (resumeFetchErr) {
+              clearTimeout(resumeTimeout);
+              throw resumeFetchErr;
+            }
+            clearTimeout(resumeTimeout);
             if (!resumeResp.ok || !resumeResp.body) throw new Error("resume failed");
 
             const resumeReader = resumeResp.body.getReader();
@@ -1984,7 +2071,8 @@ export default function ChatPage() {
                     resumed = true;
                     break;
                   } else if (rev.type === "resume_generating") {
-                    // 서버에서 아직 생성 중 — 이전 답변 전송 안 함, polling으로 전환
+                    // 서버에서 아직 생성 중 — 재시도 낭비 방지, 즉시 polling 전환
+                    reconnAttempt = 999;
                     break;
                   } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
                     break;
@@ -2013,12 +2101,13 @@ export default function ChatPage() {
 
           // waitingBgResponse 활성화하되 streaming도 유지 → 폴링이 partial_content를 streamBuf에 주입
           setWaitingBgResponse(true);
+          _invisibleRecoveryActivated = true;
           setBgPartialContent(frozenContent);  // 폴링에서 비교 기준점
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-          }, 180000);
+          }, 30000);
 
           // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
@@ -2070,14 +2159,25 @@ export default function ChatPage() {
       clearTimeout(maxStreamTimeout);
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
-      const _isInvisibleRecovery = waitingBgRef.current;
+      const _isInvisibleRecovery = _invisibleRecoveryActivated || waitingBgRef.current;
       if (streamingSessionRef.current === sessionId) {
+        streamingSessionRef.current = null;  // 항상 해제
         if (!_isInvisibleRecovery) {
-          streamingSessionRef.current = null;
           setStreaming(false);
           setStreamBuf("");
+        } else {
+          // invisible recovery: 폴링이 완료 감지할 때까지 streaming 유지
+          // 하지만 30초 안전장치 — 폴링도 실패하면 강제 해제
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
+            if (waitingBgRef.current) {
+              setWaitingBgResponse(false);
+              setBgPartialContent("");
+              setStreaming(false);
+              setStreamBuf("");
+            }
+          }, 30000);
         }
-        // invisible recovery 모드: streaming + streamBuf 유지 → 커서 깜박임 계속 표시
       }
       setToolStatus(null);
       if (!isStale()) {
@@ -2135,6 +2235,7 @@ export default function ChatPage() {
     setToolStatus(null);
     setYellowWarning(null);
     setToolTurnInfo(null);
+    isNearBottomRef.current = false;
     if (buf && activeSession) {
       const stoppedMsg: ChatMessage = {
         id: `stopped-${Date.now()}`,
@@ -2165,6 +2266,7 @@ export default function ChatPage() {
             if (activeSessionRef.current !== activeSession.id) return;
             const filtered = msgs.filter((m) => m.intent !== "streaming_placeholder");
             // stopped 메시지가 있으면 유지하면서 DB 메시지와 병합
+            isNearBottomRef.current = false;
             setMessages((prev) => {
               const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
               const dbIds = new Set(filtered.map((m) => m.id));
@@ -2178,6 +2280,7 @@ export default function ChatPage() {
             requestAnimationFrame(() => {
               const container = messagesContainerRef.current;
               if (container) container.scrollTop = container.scrollHeight;
+              isNearBottomRef.current = true;
             });
           })
           .catch(() => {});
@@ -2292,9 +2395,9 @@ export default function ChatPage() {
     const isStale = () => activeSessionRef.current !== requestSessionId;
 
     abortCtrl.current = new AbortController();
-    let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000);
-    const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 90000); };
-    const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 300000);
+    let sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 150000);
+    const resetSseTimeout = () => { clearTimeout(sseTimeout); sseTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 150000); };
+    const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 3600000);
 
     let full = "";
     try {
@@ -3392,6 +3495,11 @@ export default function ChatPage() {
               ▲ 이전 대화 불러오기
             </button>
           )}
+          {/* P0-4: 세션 요약 카드 — 세션에 메시지가 있을 때 최초 진입 시 표시 */}
+          {activeSession?.id && messages.length > 0 && (
+            <SessionSummaryCard sessionId={activeSession.id} />
+          )}
+
           {messages.length === 0 && !streaming && (
             <div
               style={{

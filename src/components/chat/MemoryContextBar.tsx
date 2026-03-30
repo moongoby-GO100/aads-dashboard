@@ -108,7 +108,8 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
   useEffect(() => {
     if (!sessionId) { setData(null); return; }
     fetchData(sessionId);
-    const iv = setInterval(() => fetchData(sessionId), 30_000);
+    // PERF: 30초 → 120초 (CPU 부하 감소 — memory-context는 100KB 응답)
+    const iv = setInterval(() => fetchData(sessionId), 120_000);
     return () => clearInterval(iv);
   }, [sessionId, fetchData]);
 
