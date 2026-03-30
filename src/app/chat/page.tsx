@@ -673,7 +673,11 @@ export default function ChatPage() {
       setHasMoreMessages(result.has_more);
       setNextCursor(result.next_cursor);
       const filtered = result.messages.filter(m => m.intent !== "streaming_placeholder");
-      setMessages(prev => [...filtered, ...prev]);
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id));
+        const unique = filtered.filter(m => !existingIds.has(m.id));
+        return [...unique, ...prev];
+      });
       requestAnimationFrame(() => {
         if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
       });
@@ -1411,22 +1415,46 @@ export default function ChatPage() {
           );
           if (newMsgs.length === 0) {
             let replaced = false;
-            const updated = prev.map((m) => {
-              if (m.id.startsWith("ai-") || m.id.startsWith("tmp-") || m.id.startsWith("stopped-")) {
-                const match = latest.find(
-                  (l) => l.role === m.role && (l.content || "").slice(0, 200) === (m.content || "").slice(0, 200)
-                );
-                if (match) { replaced = true; return match; }
-              }
-              return m;
-            });
+            const updated = prev
+              .map((m) => {
+                if (m.id.startsWith("ai-") || m.id.startsWith("tmp-") || m.id.startsWith("stopped-")) {
+                  const match = latest.find(
+                    (l) => l.role === m.role && (l.content || "").slice(0, 200) === (m.content || "").slice(0, 200)
+                  );
+                  if (match) {
+                    replaced = true;
+                    // Bug 3: match ID가 이미 state에 있으면 temp 메시지 제거 (실제 DB 버전이 이미 존재)
+                    if (existingIds.has(match.id)) return null;
+                    // Bug 1: fields=minimal로 잘린 응답이 긴 기존 content를 덮어쓰지 않도록 보존
+                    const content = (m.content || "").length > (match.content || "").length ? m.content : match.content;
+                    return { ...match, content };
+                  }
+                }
+                return m;
+              })
+              .filter((m) => m !== null) as typeof prev;
             return replaced ? updated : prev;
           }
           // FIX: DB 메시지 도착 시 클라이언트 임시 메시지(ai-*/stopped-*/tmp-*) 제거 → 버블 중복 방지
+          const removedTemps = prev.filter((m) =>
+            m.id.startsWith("ai-") || m.id.startsWith("stopped-") || m.id.startsWith("tmp-")
+          );
           const cleanPrev = prev.filter((m) =>
             !(m.id.startsWith("ai-") || m.id.startsWith("stopped-") || m.id.startsWith("tmp-"))
           );
-          return [...cleanPrev, ...newMsgs].sort(
+          // Bug 1: 제거된 temp 메시지보다 짧은 content를 가진 신규 DB 메시지에 긴 content 복원
+          const preservedNewMsgs = newMsgs.map((m) => {
+            const tempMatch = removedTemps.find((t) =>
+              t.role === m.role &&
+              (t.content || "").slice(0, (m.content || "").length) === (m.content || "") &&
+              (t.content || "").length > (m.content || "").length
+            );
+            return tempMatch ? { ...m, content: tempMatch.content! } : m;
+          });
+          // Bug 3: cleanPrev에 이미 있는 ID는 preservedNewMsgs에서 제거 (중복 방지)
+          const newMsgIds = new Set(preservedNewMsgs.map((m) => m.id));
+          const dedupedCleanPrev = cleanPrev.filter((m) => !newMsgIds.has(m.id));
+          return [...dedupedCleanPrev, ...preservedNewMsgs].sort(
             (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
           );
         });
