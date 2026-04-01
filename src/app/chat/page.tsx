@@ -568,6 +568,7 @@ export default function ChatPage() {
   // API 키 상태 표시
   const [apiKeyInfo, setApiKeyInfo] = useState<{litellm?: string; type?: string; label?: string; cliLabel?: string} | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
@@ -969,7 +970,12 @@ export default function ChatPage() {
     // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
     setMessages([]);
     setNextCursor(null);
+    setMessagesLoading(true);
     if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
+    // A-3: 세션 전환 시 모든 타이머 정리
+    if (completionToastTimerRef.current) { clearTimeout(completionToastTimerRef.current); completionToastTimerRef.current = null; }
+    if (yellowWarningTimerRef.current) { clearTimeout(yellowWarningTimerRef.current); yellowWarningTimerRef.current = null; }
+    setCompletionToast(null);
     setWaitingBgResponse(false); setBgPartialContent("");
     setStreamBuf("");
     setSelectedArtifactIdx(0);
@@ -1008,11 +1014,13 @@ export default function ChatPage() {
           if (processed.length > 0 || msgs.length === 0) {
             setMessages(processed);
           }
+          setMessagesLoading(false);
           return processed;
         })
         .catch((err) => {
           console.error("메시지 로드 실패:", err);
           const detail = err?.status ? `(${err.status})` : "(네트워크 오류)";
+          setMessagesLoading(false);
           setYellowWarning(`메시지 로드 실패 ${detail}`);
           if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
           yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
@@ -1146,7 +1154,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`)
+      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`)
         .then((msgs) => msgs.reverse())
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -1270,7 +1278,7 @@ export default function ChatPage() {
           streamingSessionRef.current = null;
           // 끊김 복구 후 대기 메시지 큐 클리어 (interrupt로 이미 전달됨 or 폐기)
           if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -1307,7 +1315,7 @@ export default function ChatPage() {
           setWaitingBgResponse(false); setBgPartialContent("");
           // 끊김 후 대화 못이어가는 문제 방지 — 대기 큐 클리어
           if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -1346,7 +1354,7 @@ export default function ChatPage() {
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
-        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&offset=0&sort=desc&fields=minimal`);
+        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal`);
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
@@ -1362,7 +1370,7 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false); setBgPartialContent("");
             try {
-              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
+              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
               if (cancelled) return;
               if (allMsgs) {
                 const filtered = allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
@@ -2063,7 +2071,7 @@ export default function ChatPage() {
           await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
           try {
             const msgs = await chatApi<ChatMessage[]>(
-              `/chat/messages?session_id=${requestSessionId}&limit=5&offset=0`
+              `/chat/messages?session_id=${requestSessionId}&limit=5`
             );
             const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
             if (aiMsg) {
@@ -2278,7 +2286,7 @@ export default function ChatPage() {
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
-                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&offset=0&sort=desc`).then(msgs => msgs.reverse());
+                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
                 if (freshMsgs) {
                   const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
                   if (filtered.length > 0) {
@@ -2348,7 +2356,7 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=100&offset=0&sort=desc`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=100&sort=desc`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
@@ -2392,7 +2400,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&offset=0&sort=desc`)
+      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`)
         .then((msgs) => msgs.reverse())
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -3590,7 +3598,25 @@ export default function ChatPage() {
             <SessionSummaryCard sessionId={activeSession.id} />
           )}
 
-          {messages.length === 0 && !streaming && (
+          {/* C-1: 로딩 스켈레톤 */}
+          {messagesLoading && messages.length === 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "20px 0" }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} style={{ display: "flex", gap: "12px", alignItems: i % 2 === 0 ? "flex-end" : "flex-start", flexDirection: "column" }}>
+                  <div style={{
+                    width: i % 2 === 0 ? "60%" : "75%",
+                    height: "60px",
+                    borderRadius: "12px",
+                    background: "var(--ct-bg2)",
+                    animation: "pulse 1.5s ease-in-out infinite",
+                    alignSelf: i % 2 === 0 ? "flex-end" : "flex-start",
+                  }} />
+                </div>
+              ))}
+              <style>{"@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }"}</style>
+            </div>
+          )}
+          {messages.length === 0 && !streaming && !messagesLoading && (
             <div
               style={{
                 textAlign: "center",
