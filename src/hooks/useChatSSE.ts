@@ -98,6 +98,8 @@ export function useChatSSE() {
   const displayTextRef = useRef<string>('');
   const renderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamDoneRef = useRef<boolean>(false);
+  // Phase4: SSE id: 필드 추적 → stream-resume 재연결 시 Last-Event-ID로 사용
+  const lastEventIdRef = useRef<string>("0");
 
   // 렌더 루프: 30ms마다 토큰 버퍼에서 꺼내 화면에 표시
   const startRenderLoop = useCallback(() => {
@@ -228,6 +230,11 @@ export function useChatSSE() {
         };
         resetInactivityTimeout();
 
+        let fullText = "";
+        let thinkingText = "";
+        let thoughtSummary: string | null = null;
+        let sources: SourceItem[] = [];
+        const toolEvents: ToolUseEvent[] = [];
         try {
           const reader = await chatApi.sendMessageStream(
             sessionId, content, modelOverride, abort.signal
@@ -236,11 +243,6 @@ export function useChatSSE() {
 
           const decoder = new TextDecoder();
           let buffer = "";
-          let fullText = "";
-          let thinkingText = "";
-          let thoughtSummary: string | null = null;
-          let sources: SourceItem[] = [];
-          const toolEvents: ToolUseEvent[] = [];
 
           while (true) {
             if (abort.signal.aborted) break;
@@ -449,13 +451,10 @@ export function useChatSSE() {
                   if (rDone) break;
                   resetInactivityTimeout();
                   resumeBuffer += resumeDecoder.decode(rValue, { stream: true });
-                  const rEvents = resumeBuffer.split("
-
-");
+                  const rEvents = resumeBuffer.split("\n\n");
                   resumeBuffer = rEvents.pop() ?? "";
                   for (const rEvent of rEvents) {
-                    for (const rLine of rEvent.split("
-")) {
+                    for (const rLine of rEvent.split("\n")) {
                       const rTrimmed = rLine.trim();
                       if (rTrimmed.startsWith("id:")) {
                         lastEventIdRef.current = rTrimmed.slice(3);

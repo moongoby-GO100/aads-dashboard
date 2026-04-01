@@ -1,24 +1,10 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 
 const geist = Geist({ subsets: ["latin"] });
-
-export async function generateViewport(): Promise<Viewport> {
-  const headersList = await headers();
-  const host = headersList.get("host") || "";
-  const isKakaobot = host.includes("kakaobot");
-
-  return {
-    themeColor: isKakaobot ? "#FFE812" : "#00d4ff",
-    width: "device-width",
-    initialScale: 1,
-    viewportFit: "cover",
-    interactiveWidget: "resizes-content",
-  };
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
@@ -42,6 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
       statusBarStyle: "black-translucent",
       title: isKakaobot ? "카카오봇" : "AADS",
     },
+    themeColor: isKakaobot ? "#FFE812" : "#00d4ff",
   };
 }
 
@@ -49,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
         <script dangerouslySetInnerHTML={{ __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}` }} />
       </head>
       <body className={geist.className}>

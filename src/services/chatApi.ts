@@ -90,7 +90,9 @@ export interface SSEChunk {
     | "sdk_session" | "sdk_complete"
     // AADS-190: Yellow 도구 연속 제한 + 도구턴 자동 연장
     | "yellow_limit"
-    | "tool_turn_limit";
+    | "tool_turn_limit"
+    // AADS-192: resume stream
+    | "resume_done";
   content?: string;
   summary?: string;
   sources?: SourceItem[];
