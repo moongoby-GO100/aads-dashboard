@@ -257,6 +257,10 @@ export function useChatSSE() {
             for (const event of events) {
               for (const line of event.split("\n")) {
                 const trimmed = line.trim();
+                if (trimmed.startsWith("id:")) {
+                  lastEventIdRef.current = trimmed.slice(3);
+                  continue;
+                }
                 if (!trimmed.startsWith("data: ")) continue;
 
                 let chunk: SSEChunk;
@@ -425,6 +429,68 @@ export function useChatSSE() {
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           const isAborted = abort.signal.aborted;
           attempt++;
+
+          // Phase4: stream-resume 재연결 시도 (Last-Event-ID 기반)
+          if (!isAborted && lastEventIdRef.current !== "0") {
+            try {
+              const BASE = process.env.NEXT_PUBLIC_API_URL || "";
+              const resumeResp = await fetch(
+                `${BASE}/api/v1/chat/sessions/${sessionId}/stream-resume?last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
+                { signal: abort.signal }
+              );
+              if (resumeResp.ok && resumeResp.body) {
+                const resumeReader = resumeResp.body.getReader();
+                readerRef.current = resumeReader;
+                const resumeDecoder = new TextDecoder();
+                let resumeBuffer = "";
+                while (true) {
+                  if (abort.signal.aborted) break;
+                  const { done: rDone, value: rValue } = await resumeReader.read();
+                  if (rDone) break;
+                  resetInactivityTimeout();
+                  resumeBuffer += resumeDecoder.decode(rValue, { stream: true });
+                  const rEvents = resumeBuffer.split("
+
+");
+                  resumeBuffer = rEvents.pop() ?? "";
+                  for (const rEvent of rEvents) {
+                    for (const rLine of rEvent.split("
+")) {
+                      const rTrimmed = rLine.trim();
+                      if (rTrimmed.startsWith("id:")) {
+                        lastEventIdRef.current = rTrimmed.slice(3);
+                        continue;
+                      }
+                      if (!rTrimmed.startsWith("data: ")) continue;
+                      let rChunk: SSEChunk;
+                      try { rChunk = JSON.parse(rTrimmed.slice(6)) as SSEChunk; } catch { continue; }
+                      if (rChunk.type === "heartbeat") continue;
+                      if (rChunk.type === "delta" && rChunk.content) {
+                        fullText += rChunk.content;
+                        tokenBufferRef.current.push(rChunk.content);
+                        startRenderLoop();
+                        updateStreamText(sessionId, fullText);
+                      } else if (rChunk.type === "resume_done" || rChunk.type === "done") {
+                        // resume 완료 — 정상 종료 처리
+                        streamDoneRef.current = true;
+                        if (tokenBufferRef.current.length > 0) {
+                          displayTextRef.current += tokenBufferRef.current.join('');
+                          tokenBufferRef.current = [];
+                        }
+                        stopRenderLoop();
+                        setState((s) => ({ ...s, isStreaming: false, isBuffering: false, streamingText: displayTextRef.current }));
+                        completeStream(sessionId, fullText);
+                        onDone?.(fullText, { modelUsed: null, inputTokens: null, outputTokens: null, costUsd: null, sources, thoughtSummary, thinkingText: thinkingText || null, toolsUsed: [...toolEvents] });
+                        return;
+                      }
+                    }
+                  }
+                }
+                // resume stream ended normally
+                return;
+              }
+            } catch { /* resume failed, fall through to retry */ }
+          }
 
           if (attempt < MAX_RETRY && !isAborted) {
             const delay = Math.pow(2, attempt) * 1000;
