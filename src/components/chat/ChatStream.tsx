@@ -2,6 +2,9 @@
 /**
  * AADS-185-C2: ChatStream — 확장된 메시지 렌더링
  * 신규: ThinkingIndicator, 도구 호출 블록, CitationCard, ResearchProgress
+ *
+ * AADS-TOKEN-BUFFER: isBuffering prop 추가
+ * - 버퍼가 비어 텍스트 변화가 없는 구간에 "○ ○ ○" typing indicator 표시
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage, SourceItem } from "@/services/chatApi";
@@ -21,6 +24,8 @@ interface ChatStreamProps {
   isResearching?: boolean;
   researchProgress?: string | null;
   isDeepResearch?: boolean;
+  // AADS-TOKEN-BUFFER: 버퍼 대기 상태 (토큰 수신 중이나 아직 렌더 안 된 상태)
+  isBuffering?: boolean;
   onBookmark?: (id: string) => void;
   onCopy?: (content: string) => void;
   onCreateDirective?: (content: string) => void;
@@ -39,6 +44,7 @@ export default function ChatStream({
   isResearching,
   researchProgress,
   isDeepResearch,
+  isBuffering = false,
   onBookmark,
   onCopy,
   onCreateDirective,
@@ -50,6 +56,33 @@ export default function ChatStream({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showNewMessage, setShowNewMessage] = useState(false);
   const isNearBottomRef = useRef(true);
+
+  // AADS-TOKEN-BUFFER: 버퍼 대기 typing indicator용 지연 표시 (300ms 후 표시)
+  const [showBufferingIndicator, setShowBufferingIndicator] = useState(false);
+  const bufferingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isBuffering && isStreaming && streamingText.length > 0) {
+      // 300ms 이상 버퍼가 비어있을 때만 표시 (짧은 일시정지는 표시 안 함)
+      if (!bufferingTimerRef.current) {
+        bufferingTimerRef.current = setTimeout(() => {
+          setShowBufferingIndicator(true);
+        }, 300);
+      }
+    } else {
+      if (bufferingTimerRef.current) {
+        clearTimeout(bufferingTimerRef.current);
+        bufferingTimerRef.current = null;
+      }
+      setShowBufferingIndicator(false);
+    }
+    return () => {
+      if (bufferingTimerRef.current) {
+        clearTimeout(bufferingTimerRef.current);
+        bufferingTimerRef.current = null;
+      }
+    };
+  }, [isBuffering, isStreaming, streamingText]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -80,6 +113,9 @@ export default function ChatStream({
 
   const isEmpty = messages.length === 0 && !isStreaming;
   const hasActiveTools = toolEvents.some((e) => e.status === "running");
+
+  // AADS-TOKEN-BUFFER: 초기 대기 상태 (텍스트 없음 + 도구 없음 + 리서치 없음)
+  const isInitialWaiting = isStreaming && !thinkingText && !streamingText && toolEvents.length === 0 && !isResearching;
 
   return (
     <div className="relative flex-1 min-h-0">
@@ -115,8 +151,8 @@ export default function ChatStream({
           </div>
         )}
 
-        {/* 스트리밍 중 Thinking (텍스트 없는 초기 상태) */}
-        {isStreaming && !thinkingText && !streamingText && toolEvents.length === 0 && !isResearching && (
+        {/* 초기 대기 상태: 텍스트 없음 (기존 bounce dots) */}
+        {isInitialWaiting && (
           <div className="flex justify-start mb-3">
             <div
               className="px-4 py-3 rounded-2xl text-sm"
@@ -136,6 +172,27 @@ export default function ChatStream({
                 ))}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* AADS-TOKEN-BUFFER: 버퍼 대기 typing indicator (텍스트 출력 중 일시 정지) */}
+        {showBufferingIndicator && (
+          <div className="flex justify-start mb-1 ml-1">
+            <span
+              className="text-xs flex gap-1 items-center"
+              style={{ color: "var(--text-secondary)", opacity: 0.6 }}
+              title="토큰 버퍼 대기 중"
+            >
+              {["○", "○", "○"].map((dot, i) => (
+                <span
+                  key={i}
+                  className="animate-pulse"
+                  style={{ animationDelay: `${i * 0.2}s`, fontSize: "10px" }}
+                >
+                  {dot}
+                </span>
+              ))}
+            </span>
           </div>
         )}
 

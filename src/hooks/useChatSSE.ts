@@ -8,6 +8,12 @@
  * - research.progress / research.complete: Deep Research
  * 기존 유지:
  * - delta, done, error, thought_summary, sources (하위 호환)
+ *
+ * AADS-TOKEN-BUFFER: 토큰 버퍼 렌더링 (30ms 간격)
+ * - 서버에서 수신한 토큰을 tokenBufferRef에 쌓고
+ * - 30ms 마다 렌더 루프가 꺼내어 setStreamingText 호출
+ * - 버퍼가 50개 이상 쌓이면 batch로 따라잡기
+ * - done 이벤트 시 남은 버퍼 즉시 flush
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chatApi, type SourceItem, type SSEChunk } from "@/services/chatApi";
@@ -51,6 +57,8 @@ export interface StreamState {
   sessionCost: string | null;
   sessionTurns: number | null;
   yellowLimitWarning: string | null;
+  // AADS-TOKEN-BUFFER: 버퍼 대기 중 typing indicator용
+  isBuffering: boolean;
 }
 
 const INITIAL_STREAM: StreamState = {
@@ -71,10 +79,12 @@ const INITIAL_STREAM: StreamState = {
   sessionCost: null,
   sessionTurns: null,
   yellowLimitWarning: null,
+  isBuffering: false,
 };
 
 const SSE_INACTIVITY_MS = 150_000; // heartbeat 기준 — 150초간 무응답 시에만 타임아웃
 const MAX_RETRY = 3;
+const RENDER_INTERVAL_MS = 30; // 토큰 렌더 루프 간격
 
 export function useChatSSE() {
   const [state, setState] = useState<StreamState>(INITIAL_STREAM);
@@ -83,21 +93,65 @@ export function useChatSSE() {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSessionRef = useRef<string | null>(null);
 
-  const resetStream = useCallback(() => {
-    setState(INITIAL_STREAM);
+  // AADS-TOKEN-BUFFER: 디스플레이 버퍼 관련 ref
+  const tokenBufferRef = useRef<string[]>([]);
+  const displayTextRef = useRef<string>('');
+  const renderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamDoneRef = useRef<boolean>(false);
+
+  // 렌더 루프: 30ms마다 토큰 버퍼에서 꺼내 화면에 표시
+  const startRenderLoop = useCallback(() => {
+    if (renderTimerRef.current) return; // 이미 실행 중이면 중복 시작 방지
+    renderTimerRef.current = setInterval(() => {
+      const buf = tokenBufferRef.current;
+      if (buf.length > 0) {
+        // 버퍼가 많이 쌓였으면 여러 개씩 소비 (따라잡기)
+        const batchSize = buf.length > 50 ? Math.ceil(buf.length / 10) : 1;
+        const tokens = buf.splice(0, batchSize);
+        displayTextRef.current += tokens.join('');
+        setState((s) => ({ ...s, streamingText: displayTextRef.current, isBuffering: false }));
+      } else if (streamDoneRef.current) {
+        // 버퍼 소진 + 스트림 완료 → 렌더 루프 종료
+        if (renderTimerRef.current) {
+          clearInterval(renderTimerRef.current);
+          renderTimerRef.current = null;
+        }
+      } else {
+        // 버퍼가 비어있지만 스트림은 아직 진행 중 → isBuffering 표시
+        setState((s) => (s.isBuffering ? s : { ...s, isBuffering: true }));
+      }
+    }, RENDER_INTERVAL_MS);
   }, []);
+
+  // 렌더 루프 및 버퍼 정리
+  const stopRenderLoop = useCallback(() => {
+    if (renderTimerRef.current) {
+      clearInterval(renderTimerRef.current);
+      renderTimerRef.current = null;
+    }
+  }, []);
+
+  const resetStream = useCallback(() => {
+    stopRenderLoop();
+    tokenBufferRef.current = [];
+    displayTextRef.current = '';
+    streamDoneRef.current = false;
+    setState(INITIAL_STREAM);
+  }, [stopRenderLoop]);
 
   const cancelStream = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
+    stopRenderLoop();
+    tokenBufferRef.current = [];
     readerRef.current?.cancel();
     readerRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
-    setState((s) => ({ ...s, isStreaming: false }));
-  }, []);
+    setState((s) => ({ ...s, isStreaming: false, isBuffering: false }));
+  }, [stopRenderLoop]);
 
   // 언마운트 시 리소스 정리
   useEffect(() => {
@@ -116,6 +170,12 @@ export function useChatSSE() {
       readerRef.current?.cancel();
       abortRef.current?.abort();
 
+      // 이전 렌더 루프 및 버퍼 초기화
+      stopRenderLoop();
+      tokenBufferRef.current = [];
+      displayTextRef.current = '';
+      streamDoneRef.current = false;
+
       const abort = new AbortController();
       abortRef.current = abort;
 
@@ -131,9 +191,14 @@ export function useChatSSE() {
           const msgs = await chatApi.getMessages(sessionId, 20, 0);
           const lastAI = [...msgs].reverse().find((m) => m.role === "assistant");
           if (lastAI) {
+            // 폴백 복구 시 버퍼 정리 후 즉시 표시
+            stopRenderLoop();
+            tokenBufferRef.current = [];
+            displayTextRef.current = lastAI.content;
             setState((s) => ({
               ...s,
               isStreaming: false,
+              isBuffering: false,
               streamingText: lastAI.content,
               error: null,
             }));
@@ -203,8 +268,11 @@ export function useChatSSE() {
                 if (chunk.type === "heartbeat") continue;
 
                 if (chunk.type === "delta" && chunk.content) {
+                  // AADS-TOKEN-BUFFER: 즉시 렌더링 대신 버퍼에 쌓기
                   fullText += chunk.content;
-                  setState((s) => ({ ...s, streamingText: fullText }));
+                  tokenBufferRef.current.push(chunk.content);
+                  startRenderLoop(); // 이미 실행 중이면 no-op
+                  // streamManager는 fullText 기준으로 업데이트 (즉시)
                   updateStreamText(sessionId, fullText);
 
                 } else if (chunk.type === "thinking" && chunk.content) {
@@ -266,6 +334,16 @@ export function useChatSSE() {
 
                 } else if (chunk.type === "done") {
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+                  // AADS-TOKEN-BUFFER: 버퍼에 남은 토큰 즉시 flush
+                  streamDoneRef.current = true;
+                  if (tokenBufferRef.current.length > 0) {
+                    displayTextRef.current += tokenBufferRef.current.join('');
+                    tokenBufferRef.current = [];
+                  }
+                  // 렌더 루프 정리 (버퍼 소진 감지로 자동 종료되기 전 명시적 정리)
+                  stopRenderLoop();
+
                   const meta: StreamMeta = {
                     modelUsed: chunk.model_used || chunk.model || null,
                     inputTokens: chunk.input_tokens || null,
@@ -279,7 +357,9 @@ export function useChatSSE() {
                   setState((s) => ({
                     ...s,
                     isStreaming: false,
+                    isBuffering: false,
                     isResearching: false,
+                    streamingText: displayTextRef.current,
                     messageId: chunk.message_id || null,
                     modelUsed: meta.modelUsed,
                     inputTokens: meta.inputTokens,
@@ -300,11 +380,18 @@ export function useChatSSE() {
                 } else if (chunk.type === "error") {
                   // 서버 명시적 에러는 재시도하지 않고 즉시 종료
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                  // AADS-TOKEN-BUFFER: 에러 시 버퍼 flush 후 정리
+                  stopRenderLoop();
+                  if (tokenBufferRef.current.length > 0) {
+                    displayTextRef.current += tokenBufferRef.current.join('');
+                    tokenBufferRef.current = [];
+                  }
                   const errMsg = chunk.content || "스트리밍 오류";
                   completeStream(sessionId, "", errMsg);
                   setState((s) => ({
                     ...s,
                     isStreaming: false,
+                    isBuffering: false,
                     isResearching: false,
                     error: errMsg,
                   }));
@@ -315,7 +402,19 @@ export function useChatSSE() {
           }
 
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          setState((s) => ({ ...s, isStreaming: false, isResearching: false }));
+          // AADS-TOKEN-BUFFER: 스트림 루프 종료 시 남은 버퍼 flush
+          stopRenderLoop();
+          if (tokenBufferRef.current.length > 0) {
+            displayTextRef.current += tokenBufferRef.current.join('');
+            tokenBufferRef.current = [];
+          }
+          setState((s) => ({
+            ...s,
+            isStreaming: false,
+            isBuffering: false,
+            isResearching: false,
+            streamingText: displayTextRef.current,
+          }));
           onDone?.(fullText, {
             modelUsed: null, inputTokens: null, outputTokens: null, costUsd: null,
             sources, thoughtSummary,
@@ -335,6 +434,12 @@ export function useChatSSE() {
 
           const recovered = await pollFallback();
           if (!recovered) {
+            // AADS-TOKEN-BUFFER: 에러/재연결 실패 시 버퍼 flush 후 정리
+            stopRenderLoop();
+            if (tokenBufferRef.current.length > 0) {
+              displayTextRef.current += tokenBufferRef.current.join('');
+              tokenBufferRef.current = [];
+            }
             const msg = err instanceof Error ? err.message : String(err);
             const errorType = isAborted ? "STREAM_TIMEOUT" : "SSE_DISCONNECT";
             // AADS-190: StreamManager에 에러 기록 + 백엔드 보고
@@ -348,6 +453,7 @@ export function useChatSSE() {
             setState((s) => ({
               ...s,
               isStreaming: false,
+              isBuffering: false,
               isResearching: false,
               error: isAborted ? "응답 시간 초과. 폴링 복구 실패 — 재시도하세요." : msg,
             }));
@@ -357,7 +463,7 @@ export function useChatSSE() {
 
       await doStream();
     },
-    []
+    [startRenderLoop, stopRenderLoop]
   );
 
   return { state, sendMessage, cancelStream, resetStream };
