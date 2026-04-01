@@ -658,6 +658,7 @@ export default function ChatPage() {
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
+  const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1835,6 +1836,24 @@ export default function ChatPage() {
       let buf = "";
       let gotFinal = false;
 
+      // Phase4: 토큰 버퍼링 — SSE 끊김 시에도 표시 지속 (2초 분량 선행 버퍼)
+      const _tokenQueue: string[] = [];
+      let _displayedText = "";
+      let _drainTimer: ReturnType<typeof setInterval> | null = null;
+      const _startDrain = () => {
+        if (_drainTimer) return;
+        _drainTimer = setInterval(() => {
+          if (_tokenQueue.length > 0) {
+            _displayedText += _tokenQueue.shift()!;
+            if (!isStale()) setStreamBuf(_displayedText);
+          }
+        }, 30);
+      };
+      const _stopDrain = () => {
+        if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
+        while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -1846,6 +1865,8 @@ export default function ChatPage() {
 
         for (const line of lines) {
           if (isStale()) break;
+          // Phase4: Redis Stream entry ID 캡처 (Last-Event-ID 재연결용)
+          if (line.startsWith("id:")) { lastEventIdRef.current = line.slice(3).trim(); continue; }
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
@@ -1879,8 +1900,9 @@ export default function ChatPage() {
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
-              // 첫 delta: thinking placeholder("분석 중...") 자동 교체
-              if (!isStale()) setStreamBuf(full || "");
+              // Phase4: 버퍼에 토큰 추가 → 드레인 타이머가 30ms 간격으로 표시
+              _tokenQueue.push(ev.content);
+              _startDrain();
               if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
@@ -1888,6 +1910,7 @@ export default function ChatPage() {
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               gotFinal = true;
+              _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setStreamBuf("");
               setStreaming(false);
               setToolStatus(null);
@@ -2082,7 +2105,7 @@ export default function ChatPage() {
             let resumeResp: Response;
             try {
               resumeResp = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}`,
+                `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
                 { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
               );
             } catch (resumeFetchErr) {
@@ -2104,6 +2127,8 @@ export default function ChatPage() {
               resumeBuf = rLines.pop() || "";
 
               for (const rLine of rLines) {
+                // Phase4: Redis Stream entry ID 캡처 (재연결 체인용)
+                if (rLine.startsWith("id:")) { lastEventIdRef.current = rLine.slice(3).trim(); continue; }
                 if (!rLine.startsWith("data: ")) continue;
                 try {
                   const rev = JSON.parse(rLine.slice(6).trim());
@@ -2487,6 +2512,8 @@ export default function ChatPage() {
 
         for (const line of lines) {
           if (isStale()) break;
+          // Phase4: Redis Stream entry ID 캡처
+          if (line.startsWith("id:")) { lastEventIdRef.current = line.slice(3).trim(); continue; }
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
