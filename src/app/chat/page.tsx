@@ -463,11 +463,11 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span>
-              {msg.model_used && <span>[{msg.model_used}</span>}
+              {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>[{msg.model_used}</span>}
               {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
               {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
               {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
-              {msg.model_used && <span>]</span>}
+              {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>]</span>}
               {msg.created_at && (
                 <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
                   {new Date(msg.created_at).toLocaleString("ko-KR", {
