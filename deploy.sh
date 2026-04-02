@@ -35,7 +35,7 @@ log "OK: 빌드 성공"
 
 # Step 2: 컨테이너 교체 (빌드된 이미지로 즉시 스왑)
 log "Step 2: 컨테이너 교체"
-docker compose -f "$COMPOSE_FILE" up -d --no-build "$SERVICE"
+docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE"
 log "OK: 컨테이너 교체 완료"
 
 # Step 3: 헬스체크 대기
@@ -55,7 +55,7 @@ if [ $elapsed -ge $MAX_WAIT ]; then
     if [ "$OLD_IMAGE" != "none" ]; then
         docker stop "$CONTAINER" 2>/dev/null || true
         docker rm "$CONTAINER" 2>/dev/null || true
-        docker compose -f "$COMPOSE_FILE" up -d --no-build "$SERVICE"
+        docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE"
         log "WARN: 롤백 완료 — 이전 버전으로 복원"
     fi
     exit 1

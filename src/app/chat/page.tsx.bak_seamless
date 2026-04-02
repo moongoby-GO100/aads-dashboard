@@ -35,18 +35,12 @@ interface MessageItemProps {
   onReplyTo?: (msg: ChatMessage) => void;
   onBranch?: (msg: ChatMessage) => void;
   allMessages?: ChatMessage[];
-  isActiveStreaming?: boolean;
-  streamingContent?: string;
-  streamToolStatus?: string | null;
-  streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
-  onStopStreaming?: () => void;
 }
 
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
-  isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -285,61 +279,6 @@ const MessageItem = memo(function MessageItem({
           })()}
           {msg.role === "user" ? (
             msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
-          ) : isActiveStreaming ? (
-            <>
-              {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
-                <div style={{
-                  fontSize: "12px", borderRadius: "8px",
-                  background: "rgba(108,99,255,0.06)",
-                  border: "1px solid rgba(108,99,255,0.2)",
-                  padding: "8px 10px",
-                  marginBottom: streamingContent ? "8px" : "0",
-                  maxHeight: "180px", overflowY: "auto" as const,
-                }}>
-                  {streamToolLogs?.map((log, i) => (
-                    <div key={i} style={{ marginBottom: "4px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "5px", color: log.icon === "✅" ? "#4ade80" : "var(--ct-accent)" }}>
-                        <span>{log.icon}</span>
-                        <span style={{ fontWeight: 500 }}>{log.text}</span>
-                      </div>
-                      {log.sub && (
-                        <div style={{ color: "#888", fontSize: "11px", marginLeft: "18px", fontFamily: "monospace", wordBreak: "break-all" as const }}>
-                          {log.sub}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {streamToolStatus && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--ct-accent)", marginTop: (streamToolLogs?.length || 0) > 0 ? "4px" : "0" }}>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--ct-accent)", animation: "ct-bounce 1.2s infinite", display: "inline-block" }} />
-                      <span>{streamToolStatus}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {streamingContent ? (
-                <>
-                  <MarkdownBlock text={streamingContent} />
-                  <span style={{
-                    display: "inline-block", width: "2px", height: "14px",
-                    background: "var(--ct-accent)", marginLeft: "2px",
-                    animation: "ct-blink 1s step-end infinite",
-                    verticalAlign: "text-bottom",
-                  }} />
-                </>
-              ) : !streamToolStatus && (!streamToolLogs || streamToolLogs.length === 0) ? (
-                <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} style={{
-                      width: "7px", height: "7px", borderRadius: "50%",
-                      background: "var(--ct-accent)", display: "inline-block",
-                      animation: "ct-bounce 1.2s infinite",
-                      animationDelay: `${i * 0.2}s`,
-                    }} />
-                  ))}
-                </div>
-              ) : null}
-            </>
           ) : (
             <>
               {msg.tools_called && Array.isArray(msg.tools_called) && msg.tools_called.length > 0 && (() => {
@@ -438,19 +377,7 @@ const MessageItem = memo(function MessageItem({
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
-        {isActiveStreaming && onStopStreaming && (
-          <button type="button" onClick={onStopStreaming} style={{
-            marginTop: "4px", marginLeft: "4px", padding: "2px 8px",
-            fontSize: "11px", fontWeight: 500,
-            background: "transparent", color: "var(--ct-muted)",
-            border: "1px solid var(--ct-border)", borderRadius: "10px",
-            cursor: "pointer", transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
-          >■ 중지</button>
-        )}
-        {msg.role === "assistant" && !isActiveStreaming && (
+        {msg.role === "assistant" && (
           <div
             style={{
               fontSize: "11px",
@@ -602,11 +529,7 @@ const MessageItem = memo(function MessageItem({
   prev.streaming === next.streaming &&
   prev.editingMsgId === next.editingMsgId &&
   (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
-  prev.msg.tools_called === next.msg.tools_called &&
-  prev.isActiveStreaming === next.isActiveStreaming &&
-  prev.streamingContent === next.streamingContent &&
-  prev.streamToolStatus === next.streamToolStatus &&
-  prev.streamToolLogs === next.streamToolLogs
+  prev.msg.tools_called === next.msg.tools_called
 );
 
 // Main component
@@ -1363,14 +1286,6 @@ export default function ChatPage() {
               const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiJc?.content) setStreamBuf(_lastAiJc.content);
               setMessages(prev => {
-                // ★ 완전 in-place: placeholder를 최종 AI 메시지로 교체 (같은 React key → 새 버블 방지)
-                const placeholder = prev.find(m => m.intent === "streaming_placeholder");
-                if (placeholder && _lastAiJc) {
-                  // placeholder의 id 유지 → React DOM 재사용 (새 버블 생성 불가)
-                  const inPlaceMsg = { ..._lastAiJc, id: placeholder.id };
-                  return prev.map(m => m.intent === "streaming_placeholder" ? inPlaceMsg : m);
-                }
-                // fallback: placeholder 없을 때
                 const freshIds = new Set(filtered.map(m => m.id));
                 const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
                 const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
@@ -1416,13 +1331,6 @@ export default function ChatPage() {
               const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiSse?.content) setStreamBuf(_lastAiSse.content);
               setMessages(prev => {
-                // ★ 완전 in-place: placeholder를 최종 AI 메시지로 교체 (새 버블 방지)
-                const placeholder = prev.find(m => m.intent === "streaming_placeholder");
-                if (placeholder && _lastAiSse) {
-                  const inPlaceMsg = { ..._lastAiSse, id: placeholder.id };
-                  return prev.map(m => m.intent === "streaming_placeholder" ? inPlaceMsg : m);
-                }
-                // fallback: placeholder 없을 때
                 const freshIds = new Set(filtered.map(m => m.id));
                 const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
                 const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
@@ -1826,8 +1734,6 @@ export default function ChatPage() {
     setStreamBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
-    // 스트리밍 placeholder ID 생성 (messages 추가는 userMsg 생성 후 단일 호출로 순서 보장)
-    const streamingPlaceholderId = `ai-streaming-${Date.now()}`;
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
     // C-3: stale closure 방지 — state 초기화 전에 로컬 변수로 캡처
@@ -1854,19 +1760,7 @@ export default function ChatPage() {
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
-    // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
-    if (!_existingMsgId) {
-      setMessages(prev => [
-        ...prev.filter(m => m.intent !== "streaming_placeholder"),
-        userMsg,
-        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
-      ]);
-    } else {
-      setMessages(prev => [
-        ...prev.filter(m => m.intent !== "streaming_placeholder"),
-        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
-      ]);
-    }
+    if (!_existingMsgId) { if (!_existingMsgId) { setMessages((prev) => [...prev, userMsg]); } }
 
     abortCtrl.current = new AbortController();
     // 90초 비활성 타임아웃 → heartbeat(5초) + 실제 데이터 모두 리셋
@@ -2057,13 +1951,11 @@ export default function ChatPage() {
               }
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
               if (full.trim()) {
-                // ★ in-place 업데이트: placeholder를 최종 응답으로 교체 (새 버블 방지)
-                setMessages((prev) => {
-                  const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                  const finalMsg = {
-                    id: hasPlaceholder
-                      ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
-                      : `ai-${Date.now()}`,
+                setMessages((prev) => [
+                  // 기존 streaming_placeholder 제거 후 최종 응답 추가
+                  ...prev.filter((m) => m.intent !== "streaming_placeholder"),
+                  {
+                    id: `ai-${Date.now()}`,
                     session_id: requestSessionId!,
                     role: "assistant" as const,
                     content: full,
@@ -2074,12 +1966,8 @@ export default function ChatPage() {
                     cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
                     confidence_label: ev.confidence_label || undefined,
                     created_at: new Date().toISOString(),
-                  };
-                  if (hasPlaceholder) {
-                    return prev.map(m => m.intent === "streaming_placeholder" ? finalMsg : m);
-                  }
-                  return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
-                });
+                  },
+                ]);
               }
               break; // done 이벤트 수신 → for 루프 탈출
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -2140,14 +2028,7 @@ export default function ChatPage() {
               setStreamBuf("");
               setStreaming(false);
               setToolStatus(null);
-              // ★ in-place 업데이트
-              setMessages((prev) => {
-                const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                if (hasPlaceholder) {
-                  return prev.map(m => m.intent === "streaming_placeholder" ? (ev.message as ChatMessage) : m);
-                }
-                return [...prev.filter(m => m.intent !== "streaming_placeholder"), ev.message as ChatMessage];
-              });
+              setMessages((prev) => [...prev.filter((m) => m.intent !== "streaming_placeholder"), ev.message as ChatMessage]);
               break; // done → for 루프 탈출
             } else if (ev.type === "yellow_limit") {
               // Yellow 도구 연속 실행 경고
@@ -2170,7 +2051,7 @@ export default function ChatPage() {
               // R3: LLM 장애 시 사용자에게 즉시 안내 메시지 표시
               const errorContent = ev.error || ev.content || "Unknown streaming error";
               setMessages((prev) => [
-                ...prev.filter(m => m.intent !== "streaming_placeholder"),
+                ...prev,
                 {
                   id: `llm-err-${Date.now()}`,
                   session_id: requestSessionId,
@@ -2193,22 +2074,10 @@ export default function ChatPage() {
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
       else if (!gotFinal && full) {
         setStreamBuf("");
-        // ★ in-place 업데이트
-        setMessages((prev) => {
-          const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-          const finalMsg = {
-            id: hasPlaceholder
-              ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
-              : `ai-${Date.now()}`,
-            session_id: requestSessionId!,
-            role: "assistant" as const,
-            content: full,
-          };
-          if (hasPlaceholder) {
-            return prev.map(m => m.intent === "streaming_placeholder" ? finalMsg : m);
-          }
-          return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
-        });
+        setMessages((prev) => [
+          ...prev,
+          { id: `ai-${Date.now()}`, session_id: requestSessionId!, role: "assistant", content: full },
+        ]);
       } else if (!gotFinal && !full) {
         // 도구만 실행되고 텍스트 없이 스트림 종료 — DB에서 응답 복구 시도
         setStreamBuf("");
@@ -2221,14 +2090,7 @@ export default function ChatPage() {
             );
             const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
             if (aiMsg) {
-              // ★ in-place 업데이트
-              setMessages((prev) => {
-                const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                if (hasPlaceholder) {
-                  return prev.map(m => m.intent === "streaming_placeholder" ? aiMsg : m);
-                }
-                return [...prev.filter(m => m.intent !== "streaming_placeholder"), aiMsg];
-              });
+              setMessages((prev) => [...prev.filter((m) => m.intent !== "streaming_placeholder"), aiMsg]);
               break;
             }
           } catch { /* retry */ }
@@ -2300,23 +2162,18 @@ export default function ChatPage() {
                     if (!isStale()) setStreamBuf(full);
                     resumed = true;
                   } else if (rev.type === "resume_done") {
+                    // ★ FIX: 같은 버블 유지 — placeholder ID 재사용 (새 버블 방지)
                     gotFinal = true;
                     setToolStatus(null);
                     if (full.trim()) {
-                      // ★ in-place 업데이트: placeholder를 최종 응답으로 교체
+                      if (!isStale()) setStreamBuf(full);
+                      // ★ FIX: placeholder의 ID를 재사용하여 React가 같은 요소로 인식
                       setMessages((prev) => {
-                        const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                        if (hasPlaceholder) {
-                          return prev.map(m => m.intent === "streaming_placeholder"
-                            ? { ...m, content: full, intent: undefined }
-                            : m
-                          );
-                        }
-                        const _ph = prev.find(m => m.id.startsWith("ai-partial-"));
+                        const _ph = prev.find((m) => m.intent === "streaming_placeholder" || m.id.startsWith("ai-partial-"));
                         const _reuseId = _ph?.id || `ai-${Date.now()}`;
                         const _reuseTime = _ph?.created_at || new Date().toISOString();
                         return [
-                          ...prev.filter(m => !m.id.startsWith("ai-partial-")),
+                          ...prev.filter((m) => m.intent !== "streaming_placeholder" && !m.id.startsWith("ai-partial-")),
                           { id: _reuseId, session_id: sessionId!, role: "assistant" as const, content: full, created_at: _reuseTime },
                         ];
                       });
@@ -2364,15 +2221,7 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-            // ★ FIX: 타임아웃 시 버블 유지 — placeholder를 partial 메시지로 교체
-            setMessages((prev) => prev.map(m =>
-              m.intent === "streaming_placeholder"
-                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
-                : m
-            ));
-            setStreaming(false);
-            setStreamBuf("");
-          }, 120000);
+          }, 30000);
 
           // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
@@ -2389,19 +2238,13 @@ export default function ChatPage() {
               }
               if (resp.found && resp.message) {
                 if (!frozenContent || resp.message.content.length > frozenContent.length) {
-                  // ★ in-place 업데이트
+                  // A-1: 같은 버블 유지 — 먼저 내용을 streamBuf에 표시 후 전환
                   if (!isStale()) setStreamBuf(resp.message.content);
                   setMessages((prev) => {
-                    const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                    if (hasPlaceholder) {
-                      return prev.map(m => m.intent === "streaming_placeholder"
-                        ? { ...resp.message!, intent: undefined }
-                        : m
-                      );
-                    }
-                    const filtered = prev.filter(m => !m.id.startsWith("ai-partial-") && m.intent !== "streaming_placeholder");
+                    const filtered = prev.filter((m) => !m.id.startsWith("ai-partial-") && m.intent !== "streaming_placeholder");
                     return [...filtered, resp.message!];
                   });
+                  // 다음 프레임에서 스트리밍 버블 제거 (깜빡임 방지)
                   requestAnimationFrame(() => {
                     setStreaming(false);
                     setStreamBuf("");
@@ -2449,21 +2292,15 @@ export default function ChatPage() {
             if (waitingBgRef.current) {
               setWaitingBgResponse(false);
               setBgPartialContent("");
-              // ★ FIX: 버블 유지 — streaming 해제하되 placeholder를 partial 메시지로 교체
-              setMessages((prev) => prev.map(m =>
-                m.intent === "streaming_placeholder"
-                  ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
-                  : m
-              ));
               setStreaming(false);
               setStreamBuf("");
             }
-          }, 120000);
+          }, 30000);
         }
       }
       setToolStatus(null);
-      if (!isStale() && !_isInvisibleRecovery) {
-        // streaming_placeholder 잔여물 정리 (Invisible Recovery 중이면 placeholder 유지 — 폴링이 교체함)
+      if (!isStale()) {
+        // streaming_placeholder 잔여물 정리
         setMessages((prev) => prev.filter((m) => m.intent !== "streaming_placeholder"));
 
         // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
@@ -2485,27 +2322,11 @@ export default function ChatPage() {
                   const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
                   if (filtered.length > 0) {
                     setMessages(prev => {
-                      // ★ in-place 업데이트: placeholder가 있으면 최종 메시지로 교체
-                      const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                      if (hasPlaceholder) {
-                        const _lastAiJc = [...filtered].reverse().find((m: ChatMessage) => m.role === "assistant");
-                        if (_lastAiJc) {
-                          const freshIds = new Set(filtered.map(m => m.id));
-                          const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                          const preserved = prev.filter(m =>
-                            m.intent !== "streaming_placeholder" &&
-                            !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") &&
-                            new Date(m.created_at || 0).getTime() < oldestFreshTime
-                          );
-                          return [...preserved, ...filtered];
-                        }
-                      }
                       const freshIds = new Set(filtered.map(m => m.id));
                       const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
                       const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
                       return [...preserved, ...filtered];
                     });
-                    requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
                   }
                 }
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -2543,22 +2364,13 @@ export default function ChatPage() {
     setToolTurnInfo(null);
     isNearBottomRef.current = false;
     if (buf && activeSession) {
-      // ★ in-place 업데이트: placeholder를 stopped 메시지로 교체
-      setMessages((prev) => {
-        const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-        const stoppedMsg: ChatMessage = {
-          id: hasPlaceholder
-            ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `stopped-${Date.now()}`)
-            : `stopped-${Date.now()}`,
-          session_id: activeSession!.id,
-          role: "assistant",
-          content: buf + "\n\n_(응답 중지됨)_",
-        };
-        if (hasPlaceholder) {
-          return prev.map(m => m.intent === "streaming_placeholder" ? stoppedMsg : m);
-        }
-        return [...prev, stoppedMsg];
-      });
+      const stoppedMsg: ChatMessage = {
+        id: `stopped-${Date.now()}`,
+        session_id: activeSession.id,
+        role: "assistant",
+        content: buf + "\n\n_(응답 중지됨)_",
+      };
+      setMessages((prev) => [...prev, stoppedMsg]);
     }
     // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
     requestAnimationFrame(() => {
@@ -3955,7 +3767,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          {[...messages].sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; }).map((msg, idx) => (
+          {messages.map((msg, idx) => (
             <MessageItem
               key={msg.id || idx}
               msg={msg}
@@ -3972,23 +3784,6 @@ export default function ChatPage() {
               onReplyTo={setReplyToMessage}
               onBranch={setBranchPoint}
               allMessages={messages}
-              isActiveStreaming={
-                msg.intent === "streaming_placeholder" &&
-                streaming &&
-                streamingSessionRef.current === activeSession?.id
-              }
-              streamingContent={
-                msg.intent === "streaming_placeholder" && streaming ? streamBuf : undefined
-              }
-              streamToolStatus={
-                msg.intent === "streaming_placeholder" && streaming ? toolStatus : undefined
-              }
-              streamToolLogs={
-                msg.intent === "streaming_placeholder" && streaming ? toolLogs : undefined
-              }
-              onStopStreaming={
-                msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
-              }
             />
           ))}
 
@@ -4037,6 +3832,91 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={stopBackgroundStreaming}
+                style={{
+                  marginTop: "4px", marginLeft: "4px",
+                  padding: "2px 8px",
+                  fontSize: "11px", fontWeight: 500,
+                  background: "transparent", color: "var(--ct-muted)",
+                  border: "1px solid var(--ct-border)", borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
+              >■ 중지</button>
+            </div>
+          )}
+
+          {/* Streaming indicator */}
+          {streaming && streamingSessionRef.current === activeSession?.id && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "18px",
+                  borderBottomLeftRadius: "4px",
+                  fontSize: "14px",
+                  lineHeight: "1.6",
+                  maxWidth: "80%",
+                  background: "var(--ct-ai)",
+                  color: "var(--ct-text)",
+                  border: "1px solid var(--ct-border)",
+                }}
+              >
+                {(toolLogs.length > 0 || toolStatus) && (
+                  <div style={{
+                    fontSize: "12px", borderRadius: "8px",
+                    background: "rgba(108,99,255,0.06)",
+                    border: "1px solid rgba(108,99,255,0.2)",
+                    padding: "8px 10px",
+                    marginBottom: streamBuf ? "8px" : "0",
+                    maxHeight: "180px", overflowY: "auto",
+                  }}>
+                    {toolLogs.map((log, i) => (
+                      <div key={i} style={{ marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px", color: log.icon === "✅" ? "#4ade80" : "var(--ct-accent)" }}>
+                          <span>{log.icon}</span>
+                          <span style={{ fontWeight: 500 }}>{log.text}</span>
+                        </div>
+                        {log.sub && (
+                          <div style={{ color: "#888", fontSize: "11px", marginLeft: "18px", fontFamily: "monospace", wordBreak: "break-all" }}>
+                            {log.sub}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {toolStatus && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--ct-accent)", marginTop: toolLogs.length > 0 ? "4px" : "0" }}>
+                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--ct-accent)", animation: "ct-bounce 1.2s infinite", display: "inline-block" }} />
+                        <span>{toolStatus}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {streamBuf ? (
+                  <MarkdownBlock text={streamBuf} />
+                ) : !toolStatus && toolLogs.length === 0 ? (
+                  <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
+                    {[0, 1, 2].map((i) => (
+                      <span
+                        key={i}
+                        style={{
+                          width: "7px",
+                          height: "7px",
+                          borderRadius: "50%",
+                          background: "var(--ct-accent)",
+                          display: "inline-block",
+                          animation: "ct-bounce 1.2s infinite",
+                          animationDelay: `${i * 0.2}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {/* ⏹ 중지 버튼 */}
+              <button
+                onClick={stopStreaming}
                 style={{
                   marginTop: "4px", marginLeft: "4px",
                   padding: "2px 8px",
