@@ -236,12 +236,16 @@ const MessageItem = memo(function MessageItem({
               : {
                   background: msg.intent === "streaming_placeholder"
                     ? "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.15))"
+                    : msg.intent === "rate_limited"
+                    ? "linear-gradient(135deg, var(--ct-ai), rgba(245,158,11,0.15))"
                     : msg.intent && ["pipeline_runner","agent_result","system_recovery"].includes(msg.intent)
                     ? `linear-gradient(135deg, var(--ct-ai), ${msg.intent === "pipeline_runner" ? "rgba(245,158,11,0.1)" : msg.intent === "agent_result" ? "rgba(139,92,246,0.1)" : "rgba(239,68,68,0.1)"})`
                     : "var(--ct-ai)",
                   color: "var(--ct-text)",
                   border: msg.intent === "streaming_placeholder"
                     ? "1px solid #3b82f666"
+                    : msg.intent === "rate_limited"
+                    ? "1px solid #f59e0b66"
                     : msg.intent && ["pipeline_runner","agent_result","system_recovery"].includes(msg.intent)
                     ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
@@ -497,7 +501,7 @@ const MessageItem = memo(function MessageItem({
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
-            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && (
+            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
               <button
                 onClick={() => onRegenerate(msg.id)}
                 title="다시 생성"
@@ -1430,7 +1434,7 @@ export default function ChatPage() {
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
             if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
             showCompletionToast("응답이 완료되었습니다");
@@ -1514,7 +1518,7 @@ export default function ChatPage() {
         if (latest.length === 0) return;
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
-          const _latestFinalAi = rawLatest.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+          const _latestFinalAi = rawLatest.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
           const hasNewFinalAi = _latestFinalAi && _latestFinalAi.id !== lastToastedAiIdRef.current;
           // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
           if (hasNewFinalAi) {
@@ -1538,7 +1542,7 @@ export default function ChatPage() {
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
             // rawLatest는 이미 DESC(최신순) — .reverse() 제거하여 최신 user 메시지 기준 판단
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
-            const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+            const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
               if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
               showCompletionToast("응답이 완료되었습니다");
@@ -2263,7 +2267,7 @@ export default function ChatPage() {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${requestSessionId}&limit=5`
             );
-            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (aiMsg) {
               // ★ in-place 업데이트
               setMessages((prev) => {
@@ -2570,7 +2574,7 @@ export default function ChatPage() {
                 }
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder");
+                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
                   if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
                   showCompletionToast("응답이 완료되었습니다");
