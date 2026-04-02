@@ -1273,8 +1273,7 @@ export default function ChatPage() {
         if (ss.just_completed) {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
-          setStreaming(false);
-          setStreamBuf("");
+          // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
           // 끊김 복구 후 대기 메시지 큐 클리어 (interrupt로 이미 전달됨 or 폐기)
           if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
@@ -1283,13 +1282,22 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
+              // ★ FIX: 최종 AI 메시지를 streamBuf에 먼저 표시 (같은 버블에서 전환)
+              const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
+              if (_lastAiJc?.content) setStreamBuf(_lastAiJc.content);
               setMessages(prev => {
                 const freshIds = new Set(filtered.map(m => m.id));
                 const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
                 const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
                 return [...preserved, ...filtered];
               });
+              // ★ FIX: 다음 프레임에서 스트리밍 버블 제거 (깜빡임 방지)
+              requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
+            } else {
+              setStreaming(false); setStreamBuf("");
             }
+          } else {
+            setStreaming(false); setStreamBuf("");
           }
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
@@ -1309,8 +1317,7 @@ export default function ChatPage() {
           if (streamingSessionRef.current) {
             return;
           }
-          setStreaming(false);
-          setStreamBuf("");
+          // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           // 끊김 후 대화 못이어가는 문제 방지 — 대기 큐 클리어
@@ -1320,13 +1327,21 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
             if (filtered.length > 0) {
+              // ★ FIX: 최종 AI 메시지를 streamBuf에 표시 후 전환
+              const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
+              if (_lastAiSse?.content) setStreamBuf(_lastAiSse.content);
               setMessages(prev => {
                 const freshIds = new Set(filtered.map(m => m.id));
                 const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
                 const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
                 return [...preserved, ...filtered];
               });
+              requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
+            } else {
+              setStreaming(false); setStreamBuf("");
             }
+          } else {
+            setStreaming(false); setStreamBuf("");
           }
           return;
         }
@@ -2147,18 +2162,21 @@ export default function ChatPage() {
                     if (!isStale()) setStreamBuf(full);
                     resumed = true;
                   } else if (rev.type === "resume_done") {
-                    // A-1: 같은 버블에서 부드럽게 전환 (새 버블 생성 금지)
+                    // ★ FIX: 같은 버블 유지 — placeholder ID 재사용 (새 버블 방지)
                     gotFinal = true;
                     setToolStatus(null);
                     if (full.trim()) {
-                      // 1) 스트리밍 버블에 최종 텍스트 먼저 표시
                       if (!isStale()) setStreamBuf(full);
-                      // 2) 메시지 배열에 추가
-                      setMessages((prev) => [
-                        ...prev.filter((m) => m.intent !== "streaming_placeholder" && !m.id.startsWith("ai-partial-")),
-                        { id: `ai-${Date.now()}`, session_id: sessionId!, role: "assistant" as const, content: full, created_at: new Date().toISOString() },
-                      ]);
-                      // 3) 다음 프레임에서 스트리밍 버블 제거 (깜빡임 방지)
+                      // ★ FIX: placeholder의 ID를 재사용하여 React가 같은 요소로 인식
+                      setMessages((prev) => {
+                        const _ph = prev.find((m) => m.intent === "streaming_placeholder" || m.id.startsWith("ai-partial-"));
+                        const _reuseId = _ph?.id || `ai-${Date.now()}`;
+                        const _reuseTime = _ph?.created_at || new Date().toISOString();
+                        return [
+                          ...prev.filter((m) => m.intent !== "streaming_placeholder" && !m.id.startsWith("ai-partial-")),
+                          { id: _reuseId, session_id: sessionId!, role: "assistant" as const, content: full, created_at: _reuseTime },
+                        ];
+                      });
                       requestAnimationFrame(() => { setStreamBuf(""); setStreaming(false); });
                     } else {
                       setStreamBuf(""); setStreaming(false);
