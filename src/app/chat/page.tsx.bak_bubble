@@ -754,9 +754,10 @@ export default function ChatPage() {
       setNextCursor(result.next_cursor);
       const filtered = result.messages.map(m => {
         if (m.intent !== "streaming_placeholder") return m;
+        // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
         if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-        return null;
-      }).filter(Boolean) as ChatMessage[];
+        return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
+      }) as ChatMessage[];
       setMessages(prev => {
         const existingIds = new Set(prev.map(m => m.id));
         const unique = filtered.filter(m => !existingIds.has(m.id));
@@ -1089,9 +1090,10 @@ export default function ChatPage() {
           const processed = filterPlaceholder
             ? msgs.map((m) => {
                 if (m.intent !== "streaming_placeholder") return m;
+                // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
                 if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-                return null;
-              }).filter(Boolean) as ChatMessage[]
+                return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
+              })
             : msgs.map((m) =>
                 m.intent === "streaming_placeholder"
                   ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." }
@@ -1247,9 +1249,10 @@ export default function ChatPage() {
           if (msgs.length > 0) {
             setMessages(msgs.map((m) => {
               if (m.intent !== "streaming_placeholder") return m;
+              // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
               if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-              return null;
-            }).filter(Boolean) as ChatMessage[]);
+              return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
+            }) as ChatMessage[]);
           }
         })
         .catch(() => {});
@@ -1313,6 +1316,30 @@ export default function ChatPage() {
 
   // ★ streamBufRef 동기화 — SSE finally에서 streamBuf 값 참조용
   useEffect(() => { streamBufRef.current = streamBuf; }, [streamBuf]);
+
+
+  // PERSIST-FIX: streaming 중 2초마다 streamBuf를 message.content에 동기화
+  // SSE 끊김/streaming 해제 시에도 버블에 텍스트가 남아있게 보장
+  useEffect(() => {
+    if (!streaming) return;
+    const syncTimer = setInterval(() => {
+      const buf = streamBufRef.current;
+      if (!buf) return;
+      setMessages(prev => prev.map(m =>
+        m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
+      ));
+    }, 2000);
+    return () => {
+      clearInterval(syncTimer);
+      // cleanup: streaming 종료 시 마지막 한번 동기화
+      const buf = streamBufRef.current;
+      if (buf) {
+        setMessages(prev => prev.map(m =>
+          m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
+        ));
+      }
+    };
+  }, [streaming]);
 
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
@@ -1482,7 +1509,8 @@ export default function ChatPage() {
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
           ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." } : m)
-          : rawLatest.filter((m) => m.intent !== "streaming_placeholder");
+          // FIX: placeholder 삭제 금지 — streaming 아닐 때도 placeholder는 표시 유지
+          : rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m);
         if (latest.length === 0) return;
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
@@ -2266,6 +2294,12 @@ export default function ChatPage() {
         // SSE가 끊겨도 streaming=true 유지, streamBuf에 기존 텍스트 보존 (버블 사라짐 방지)
         // toolStatus는 설정하지 않음 (무음 재연결)
         const frozenContent = full;  // 끊기 직전까지의 텍스트 캡처
+        // PERSIST-FIX: SSE 끊김 즉시 message content에 캡처 (버블 사라짐 방지)
+        if (frozenContent) {
+          setMessages(prev => prev.map(m =>
+            m.intent === "streaming_placeholder" ? { ...m, content: frozenContent } : m
+          ));
+        }
         // A-2: 복구 중 표시 (사용자에게 끊김 대신 "복구 중" 인식)
         if (!isStale()) setToolStatus("🔄 응답 복구 중...");
         // streaming=true 유지 → AI 버블 그대로 보임
@@ -2453,7 +2487,7 @@ export default function ChatPage() {
       // 폴링이 just_completed 감지 시 streaming을 해제함
       const _isInvisibleRecovery = _invisibleRecoveryActivated || waitingBgRef.current;
       if (streamingSessionRef.current === sessionId) {
-        streamingSessionRef.current = null;  // 항상 해제
+        if (!_isInvisibleRecovery) streamingSessionRef.current = null;  // invisible recovery 시 유지
         if (!_isInvisibleRecovery) {
           setStreaming(false);
           setStreamBuf("");
@@ -2605,8 +2639,11 @@ export default function ChatPage() {
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
-            const filtered = msgs.filter((m) => m.intent !== "streaming_placeholder");
-            // stopped 메시지가 있으면 유지하면서 DB 메시지와 병합
+            const filtered = msgs.map((m) => m.intent === "streaming_placeholder"
+              ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
+              : m
+            );
+            // FIX: placeholder 삭제 금지 — stopped 메시지가 있으면 유지하면서 DB 메시지와 병합
             isNearBottomRef.current = false;
             setMessages((prev) => {
               const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
@@ -2649,7 +2686,11 @@ export default function ChatPage() {
         .then((msgs) => msgs.reverse())
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
-          const filtered = msgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+          const filtered = msgs.map((m: ChatMessage) => m.intent === "streaming_placeholder"
+            ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
+            : m
+          );
+          // FIX: placeholder 삭제 금지
           setMessages((prev) => {
             const stoppedMsgs = prev.filter((m) => m.id.startsWith("stopped-"));
             const dbIds = new Set(filtered.map((m) => m.id));
