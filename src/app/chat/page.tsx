@@ -1400,7 +1400,7 @@ export default function ChatPage() {
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
-            const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+            const filtered = freshMsgs;
             if (filtered.length > 0) {
               // ★ FIX: 최종 AI 메시지를 streamBuf에 먼저 표시 (같은 버블에서 전환)
               const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
@@ -1453,7 +1453,7 @@ export default function ChatPage() {
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
-            const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+            const filtered = freshMsgs;
             if (filtered.length > 0) {
               // ★ FIX: 최종 AI 메시지를 streamBuf에 표시 후 전환
               const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
@@ -1524,7 +1524,7 @@ export default function ChatPage() {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
               if (cancelled) return;
               if (allMsgs) {
-                const filtered = allMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+                const filtered = allMsgs;
                 if (filtered.length > 0) {
                   setMessages(prev => {
                     const freshIds = new Set(filtered.map(m => m.id));
@@ -2542,7 +2542,7 @@ export default function ChatPage() {
                 setWaitingBgResponse(false); setBgPartialContent("");
                 const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
                 if (freshMsgs) {
-                  const filtered = freshMsgs.filter((m: ChatMessage) => m.intent !== "streaming_placeholder");
+                  const filtered = freshMsgs;
                   if (filtered.length > 0) {
                     setMessages(prev => {
                       // ★ in-place 업데이트: placeholder가 있으면 최종 메시지로 교체
@@ -4022,7 +4022,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          {[...messages].sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; }).map((msg, idx) => (
+          {[...messages].filter(m => m.intent !== "ai_review_warning").sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; }).map((msg, idx) => (
             <MessageItem
               key={msg.id || idx}
               msg={msg}
