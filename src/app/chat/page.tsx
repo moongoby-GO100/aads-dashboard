@@ -633,6 +633,7 @@ export default function ChatPage() {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
+  const streamBufRef = useRef("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
   // AADS-190: 세션 비용/턴 + Yellow 경고 + 도구턴 한도
@@ -751,7 +752,11 @@ export default function ChatPage() {
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
       setNextCursor(result.next_cursor);
-      const filtered = result.messages.filter(m => m.intent !== "streaming_placeholder");
+      const filtered = result.messages.map(m => {
+        if (m.intent !== "streaming_placeholder") return m;
+        if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
+        return null;
+      }).filter(Boolean) as ChatMessage[];
       setMessages(prev => {
         const existingIds = new Set(prev.map(m => m.id));
         const unique = filtered.filter(m => !existingIds.has(m.id));
@@ -1082,7 +1087,11 @@ export default function ChatPage() {
           setHasMoreMessages(result.has_more);
           setNextCursor(result.next_cursor);
           const processed = filterPlaceholder
-            ? msgs.filter((m) => m.intent !== "streaming_placeholder")
+            ? msgs.map((m) => {
+                if (m.intent !== "streaming_placeholder") return m;
+                if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
+                return null;
+              }).filter(Boolean) as ChatMessage[]
             : msgs.map((m) =>
                 m.intent === "streaming_placeholder"
                   ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." }
@@ -1236,7 +1245,11 @@ export default function ChatPage() {
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
-            setMessages(msgs.filter((m) => m.intent !== "streaming_placeholder"));
+            setMessages(msgs.map((m) => {
+              if (m.intent !== "streaming_placeholder") return m;
+              if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
+              return null;
+            }).filter(Boolean) as ChatMessage[]);
           }
         })
         .catch(() => {});
@@ -1297,6 +1310,9 @@ export default function ChatPage() {
     }, 200);
     return () => clearTimeout(timer);
   }, [streaming, streamBuf]);
+
+  // ★ streamBufRef 동기화 — SSE finally에서 streamBuf 값 참조용
+  useEffect(() => { streamBufRef.current = streamBuf; }, [streamBuf]);
 
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
@@ -2463,8 +2479,18 @@ export default function ChatPage() {
       }
       setToolStatus(null);
       if (!isStale() && !_isInvisibleRecovery) {
-        // streaming_placeholder 잔여물 정리 (Invisible Recovery 중이면 placeholder 유지 — 폴링이 교체함)
-        setMessages((prev) => prev.filter((m) => m.intent !== "streaming_placeholder"));
+        // streaming_placeholder 잔여물 정리 — 내용 있으면 버블 유지 (사라짐 방지)
+        setMessages((prev) => {
+          const capturedBuf = streamBufRef.current;
+          return prev.map((m) => {
+            if (m.intent !== "streaming_placeholder") return m;
+            const preserved = capturedBuf || m.content || "";
+            if (preserved.trim()) {
+              return { ...m, content: preserved, intent: undefined, model_used: "interrupted" };
+            }
+            return null;
+          }).filter(Boolean) as ChatMessage[];
+        });
 
         // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
         // 백그라운드 완료 메시지를 놓치지 않도록 500ms/2s/5s 3회 원샷 체크
