@@ -3420,6 +3420,15 @@ export default function ChatPage() {
         >
           {[
             {
+              icon: "🔗",
+              label: "새창에서 열기",
+              color: "var(--ct-text)",
+              action: () => {
+                window.open(`${window.location.origin}/chat#${contextMenu.session.id}`, "_blank");
+                setContextMenu(null);
+              },
+            },
+            {
               icon: contextMenu.session.pinned ? "📌" : "📌",
               label: contextMenu.session.pinned ? "고정 해제" : "고정",
               color: "var(--ct-text)",

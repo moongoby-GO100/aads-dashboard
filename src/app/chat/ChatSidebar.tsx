@@ -272,14 +272,17 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                           />
                         </div>
                       ) : (
-                        <button
-                          onClick={() => {
+                        <a
+                          href={`/chat#${s.id}`}
+                          onClick={(e) => {
+                            e.preventDefault();
                             isInitialLoadRef.current = true;
                             setActiveSession(s);
                             if (screenSize !== "desktop") setMobileOverlay(null);
                           }}
                           onContextMenu={(e) => onSessionContextMenu(e, s)}
                           style={{
+                            display: "block",
                             width: "100%",
                             textAlign: "left",
                             padding: "7px 10px",
@@ -292,6 +295,9 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                             color:
                               activeSession?.id === s.id ? "#fff" : "var(--ct-text2)",
                             overflow: "hidden",
+                            textDecoration: "none",
+                            fontFamily: "inherit",
+                            boxSizing: "border-box",
                           }}
                           onMouseEnter={(e) => {
                             if (activeSession?.id !== s.id)
@@ -349,7 +355,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                               </span>
                             )}
                           </div>
-                        </button>
+                        </a>
                       )}
                     </div>
                   );
