@@ -2274,6 +2274,18 @@ export default function ChatPage() {
           }
           return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
         });
+        // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
+        if (sessionId) {
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(sessionId);
+          setToolStatus("🔄 응답 확인 중...");
+          if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+          waitingBgTimeoutRef.current = setTimeout(() => {
+            setWaitingBgResponse(false); setBgPartialContent("");
+            pendingResponseSessions.current.delete(sessionId!);
+            setToolStatus(null);
+          }, 60000);  // 1분 후 자동 해제
+        }
       } else if (!gotFinal && !full) {
         // 도구만 실행되고 텍스트 없이 스트림 종료 — DB에서 응답 복구 시도
         setStreamBuf("");
@@ -4085,20 +4097,21 @@ export default function ChatPage() {
           {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
           {(() => {
             const sorted = [...messages]
-              .filter(m => m.intent !== "ai_review_warning")
+              .filter(m => m.intent !== "ai_review_warning" && m.intent !== "auto_reaction")
               .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
             type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
             const display: DisplayItem[] = [];
             let i = 0;
             while (i < sorted.length) {
               const msg = sorted[i];
-              // 4번: 연속 동일 user 메시지 그룹핑 ([시스템] 포함 메시지는 제외)
+              // 4번: 연속 동일 user 메시지 그룹핑 (원본으로 시작하는 [시스템] 포함 메시지도 압축)
               if (msg.role === "user" && !msg.content?.includes("[시스템]")) {
+                const baseContent = msg.content || "";
                 let j = i + 1;
                 while (j < sorted.length &&
                   sorted[j].role === "user" &&
-                  sorted[j].content === msg.content &&
-                  !sorted[j].content?.includes("[시스템]")) {
+                  (sorted[j].content === baseContent ||
+                   (baseContent.length > 0 && sorted[j].content?.startsWith(baseContent)))) {
                   j++;
                 }
                 if (j > i + 1) {
