@@ -431,6 +431,12 @@ const MessageItem = memo(function MessageItem({
                 );
               })()}
               <MarkdownBlock text={msg.content} />
+              {/* 3번: rate_limited 안내 — 자동 재개 중임을 사용자에게 표시 */}
+              {msg.intent === "rate_limited" && (
+                <div style={{ fontSize: "12px", color: "#f59e0b", marginTop: "8px", opacity: 0.85 }}>
+                  ⏳ API 한도 도달 — 자동으로 이어집니다...
+                </div>
+              )}
             </>
           )}
         </div>
@@ -741,6 +747,8 @@ export default function ChatPage() {
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
+  const rateLimitedPollRef = useRef(false);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
+  const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1105,6 +1113,13 @@ export default function ChatPage() {
               );
           if (processed.length > 0 || msgs.length === 0) {
             setMessages(processed);
+            // 2번: rate_limited 메시지가 있으면 자동 폴링 활성화 (CEO 수동 재전송 불필요)
+            if (processed.some(m => m.intent === "rate_limited") && !waitingBgRef.current) {
+              rateLimitedPollRef.current = true;
+              setWaitingBgResponse(true);
+              if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
+              waitingBgTimeoutRef.current = setTimeout(() => { rateLimitedPollRef.current = false; setWaitingBgResponse(false); setBgPartialContent(""); }, 300000);
+            }
           }
           setMessagesLoading(false);
           return processed;
@@ -1485,7 +1500,8 @@ export default function ChatPage() {
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
-        if (!ss.is_streaming && !ss.just_completed && _waitingBg && !_streaming) {
+        // 단, rate_limited 자동 폴링 중에는 강제 해제 금지 (2번: 서버 재시도 대기 중)
+        if (!ss.is_streaming && !ss.just_completed && _waitingBg && !_streaming && !rateLimitedPollRef.current) {
           setWaitingBgResponse(false); setBgPartialContent("");
           pendingResponseSessions.current.delete(sid);
           if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
@@ -1522,6 +1538,7 @@ export default function ChatPage() {
           const hasNewFinalAi = _latestFinalAi && _latestFinalAi.id !== lastToastedAiIdRef.current;
           // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
           if (hasNewFinalAi) {
+            rateLimitedPollRef.current = false;  // 2번: rate_limited 해소 시 ref 초기화
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false); setBgPartialContent("");
             try {
@@ -4065,42 +4082,111 @@ export default function ChatPage() {
             </div>
           )}
 
-          {[...messages].filter(m => m.intent !== "ai_review_warning").sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; }).map((msg, idx) => (
-            <MessageItem
-              key={msg.id || idx}
-              msg={msg}
-              idx={idx}
-              streaming={streaming}
-              editingMsgId={editingMsgId}
-              editText={editText}
-              setEditingMsgId={setEditingMsgId}
-              setEditText={setEditText}
-              handleDeleteMessage={handleDeleteMessage}
-              handleCopyToInput={handleCopyToInput}
-              handleEditResend={handleEditResend}
-              onRegenerate={handleRegenerate}
-              onReplyTo={setReplyToMessage}
-              onBranch={setBranchPoint}
-              allMessages={messages}
-              isActiveStreaming={
-                msg.intent === "streaming_placeholder" &&
-                streaming &&
-                streamingSessionRef.current === activeSession?.id
+          {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
+          {(() => {
+            const sorted = [...messages]
+              .filter(m => m.intent !== "ai_review_warning")
+              .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
+            type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
+            const display: DisplayItem[] = [];
+            let i = 0;
+            while (i < sorted.length) {
+              const msg = sorted[i];
+              // 4번: 연속 동일 user 메시지 그룹핑 ([시스템] 포함 메시지는 제외)
+              if (msg.role === "user" && !msg.content?.includes("[시스템]")) {
+                let j = i + 1;
+                while (j < sorted.length &&
+                  sorted[j].role === "user" &&
+                  sorted[j].content === msg.content &&
+                  !sorted[j].content?.includes("[시스템]")) {
+                  j++;
+                }
+                if (j > i + 1) {
+                  display.push({ msg, idx: i, hiddenMsgs: sorted.slice(i + 1, j) });
+                  i = j;
+                  continue;
+                }
               }
-              streamingContent={
-                msg.intent === "streaming_placeholder" && streaming ? streamBuf : undefined
-              }
-              streamToolStatus={
-                msg.intent === "streaming_placeholder" && streaming ? toolStatus : undefined
-              }
-              streamToolLogs={
-                msg.intent === "streaming_placeholder" && streaming ? toolLogs : undefined
-              }
-              onStopStreaming={
-                msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
-              }
-            />
-          ))}
+              display.push({ msg, idx: i });
+              i++;
+            }
+            return display.map(({ msg, idx, hiddenMsgs }) => {
+              const isExpanded = expandedDupeGroups.has(msg.id);
+              return (
+                <React.Fragment key={msg.id || idx}>
+                  <MessageItem
+                    msg={msg}
+                    idx={idx}
+                    streaming={streaming}
+                    editingMsgId={editingMsgId}
+                    editText={editText}
+                    setEditingMsgId={setEditingMsgId}
+                    setEditText={setEditText}
+                    handleDeleteMessage={handleDeleteMessage}
+                    handleCopyToInput={handleCopyToInput}
+                    handleEditResend={handleEditResend}
+                    onRegenerate={handleRegenerate}
+                    onReplyTo={setReplyToMessage}
+                    onBranch={setBranchPoint}
+                    allMessages={messages}
+                    isActiveStreaming={
+                      msg.intent === "streaming_placeholder" &&
+                      streaming &&
+                      streamingSessionRef.current === activeSession?.id
+                    }
+                    streamingContent={
+                      msg.intent === "streaming_placeholder" && streaming ? streamBuf : undefined
+                    }
+                    streamToolStatus={
+                      msg.intent === "streaming_placeholder" && streaming ? toolStatus : undefined
+                    }
+                    streamToolLogs={
+                      msg.intent === "streaming_placeholder" && streaming ? toolLogs : undefined
+                    }
+                    onStopStreaming={
+                      msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
+                    }
+                  />
+                  {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
+                      <button
+                        onClick={() => setExpandedDupeGroups(prev => { const next = new Set(prev); next.add(msg.id); return next; })}
+                        style={{ fontSize: "11px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.06)", border: "1px solid var(--ct-border)", borderRadius: "10px", padding: "2px 8px", cursor: "pointer" }}
+                      >같은 메시지 +{hiddenMsgs.length}회 ▾</button>
+                    </div>
+                  )}
+                  {hiddenMsgs && isExpanded && hiddenMsgs.map((hm, hi) => (
+                    <MessageItem
+                      key={hm.id || `hidden-${hi}`}
+                      msg={hm}
+                      idx={idx + hi + 1}
+                      streaming={streaming}
+                      editingMsgId={editingMsgId}
+                      editText={editText}
+                      setEditingMsgId={setEditingMsgId}
+                      setEditText={setEditText}
+                      handleDeleteMessage={handleDeleteMessage}
+                      handleCopyToInput={handleCopyToInput}
+                      handleEditResend={handleEditResend}
+                      onRegenerate={handleRegenerate}
+                      onReplyTo={setReplyToMessage}
+                      onBranch={setBranchPoint}
+                      allMessages={messages}
+                      isActiveStreaming={false}
+                    />
+                  ))}
+                  {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
+                      <button
+                        onClick={() => setExpandedDupeGroups(prev => { const next = new Set(prev); next.delete(msg.id); return next; })}
+                        style={{ fontSize: "11px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.06)", border: "1px solid var(--ct-border)", borderRadius: "10px", padding: "2px 8px", cursor: "pointer" }}
+                      >접기 ▴</button>
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            });
+          })()}
 
           {/* Invisible Recovery: 백그라운드 응답 — streaming=false일 때만 표시 (streaming=true면 스트리밍 버블이 대신 표시) */}
           {waitingBgResponse && !streaming && (
