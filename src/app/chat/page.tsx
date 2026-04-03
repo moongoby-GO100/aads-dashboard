@@ -1192,7 +1192,7 @@ export default function ChatPage() {
           const lastMsg = msgs[msgs.length - 1];
           const msgAge = Date.now() - new Date(lastMsg.created_at || Date.now()).getTime();
           if (msgAge < 10 * 60 * 1000) {
-            setToolStatus("🔄 이전 응답이 중단되었습니다 — 자동 재전송 중...");
+            setToolStatus("🔄 서버 재시작 감지 — 자동으로 이어집니다...");
             setWaitingBgResponse(true);
             pendingResponseSessions.current.add(fetchSid);
             // 서버 백그라운드 auto_resume이 처리 중일 수 있으므로 폴링으로 응답 대기
@@ -2232,19 +2232,9 @@ export default function ChatPage() {
               if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
               yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 3000);
             } else if (ev.type === "error") {
-              // R3: LLM 장애 시 사용자에게 즉시 안내 메시지 표시
-              const errorContent = ev.error || ev.content || "Unknown streaming error";
-              setMessages((prev) => [
-                ...prev.filter(m => m.intent !== "streaming_placeholder"),
-                {
-                  id: `llm-err-${Date.now()}`,
-                  session_id: requestSessionId,
-                  role: "assistant" as const,
-                  content: `⚠️ AI 응답 생성에 실패했습니다.\n\n사유: ${errorContent}\n\n잠시 후 다시 시도해주세요.`,
-                  created_at: new Date().toISOString(),
-                },
-              ]);
-              sseError = new Error(errorContent);
+              // 서버 재시작/LLM 장애 → Invisible Recovery로 처리 (버블 생성 없이 자동 복구)
+              if (!isStale()) setToolStatus("🔄 서버 재시작 감지 — 자동으로 이어집니다...");
+              sseError = new Error("SSE_SERVER_RESTART");
             }
           } catch {
             // ignore malformed SSE lines (JSON parse 실패 등)
@@ -2316,7 +2306,7 @@ export default function ChatPage() {
       let gotFinal = false;
       const err = e as Error;
       const isAbort = err.name === "AbortError";
-      const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed");
+      const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed") || err.message === "SSE_SERVER_RESTART";
       // 세션 전환으로 인한 abort → 이전 응답을 새 세션에 추가하지 않음
       if (sessionSwitchRef.current) {
         sessionSwitchRef.current = false;
@@ -4097,7 +4087,7 @@ export default function ChatPage() {
           {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
           {(() => {
             const sorted = [...messages]
-              .filter(m => m.intent !== "ai_review_warning" && m.intent !== "auto_reaction")
+              .filter(m => m.intent !== "ai_review_warning" && m.intent !== "auto_reaction" && !(m.role === "user" && m.content?.startsWith("[시스템]")))
               .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
             type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
             const display: DisplayItem[] = [];
