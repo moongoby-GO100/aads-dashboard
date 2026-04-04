@@ -39,6 +39,7 @@ export interface ChatMessage {
   reply_to_id?: string;
   branch_id?: string;
   branch_point_id?: string;
+  artifact_id?: string;
   attachmentPreviews?: string[];
   attachments?: Array<{
     type?: string;

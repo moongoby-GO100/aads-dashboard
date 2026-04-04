@@ -130,3 +130,11 @@ body {
 /* Mobile: hide MemoryContextBar details, show only icon */
 @media (max-width: 767px) {
 }
+
+/* ── 모바일 메시지 액션 버튼 최소 터치 영역 (Apple HIG 권장 44px) ── */
+@media (max-width: 768px) {
+  .ct-messages-scroll button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}

@@ -391,7 +391,12 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
           }}
           inputMode="text"
           enterKeyHint="send"
-          onFocus={(e) => (e.target.style.borderColor = "var(--ct-accent)")}
+          onFocus={(e) => {
+            e.target.style.borderColor = "var(--ct-accent)";
+            setTimeout(() => {
+              (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+            }, 300);
+          }}
           onBlur={(e) => {
             e.target.style.borderColor = "var(--ct-border)";
             setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);

@@ -41,6 +41,8 @@ interface MessageItemProps {
   streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
   onStopStreaming?: () => void;
   onViewReport?: () => void;
+  linkedArtifact?: { id: string; title: string; artifact_type: string; content: string };
+  onViewArtifact?: (artifactId: string) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -48,12 +50,17 @@ const MessageItem = memo(function MessageItem({
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
   isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
-  onViewReport,
+  onViewReport, linkedArtifact, onViewArtifact,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
     ? allMessages.find((m) => m.id === msg.reply_to_id)
     : null;
+
+  // P1: 긴 보고서 접이식 상태
+  const [contentCollapsed, setContentCollapsed] = useState(
+    () => msg.role === "assistant" && msg.content.length > 800 && !msg.intent?.startsWith("streaming")
+  );
 
   return (
     <div
@@ -138,7 +145,7 @@ const MessageItem = memo(function MessageItem({
         </div>
       )}
 
-      <div style={{ maxWidth: "80%" }}>
+      <div style={{ maxWidth: "min(80%, calc(100vw - 40px))" }}>
         {/* Reply-to 인용 표시 */}
         {replyTarget && (
           <div style={{
@@ -277,7 +284,7 @@ const MessageItem = memo(function MessageItem({
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
                 {previews.map((url, pi) => (
                   <img key={`p-${pi}`} src={url} alt="첨부 이미지" style={{
-                    maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                    maxWidth: "min(200px, calc(50vw - 12px))", maxHeight: "min(200px, calc(50vw - 12px))", objectFit: "cover",
                     borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
                   }} />
                 ))}
@@ -290,7 +297,7 @@ const MessageItem = memo(function MessageItem({
                   if (!src) return null;
                   return (
                     <img key={`s-${si}`} src={src} alt={att.name || "첨부 이미지"} style={{
-                      maxWidth: "200px", maxHeight: "200px", objectFit: "cover",
+                      maxWidth: "min(200px, calc(50vw - 12px))", maxHeight: "min(200px, calc(50vw - 12px))", objectFit: "cover",
                       borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
                     }} />
                   );
@@ -451,7 +458,91 @@ const MessageItem = memo(function MessageItem({
                   </details>
                 );
               })()}
-              <MarkdownBlock text={msg.content} />
+              {/* P1: 인라인 아티팩트 카드 — 긴 메시지 접이식 */}
+              {msg.role === "assistant" && contentCollapsed && msg.content.length > 800 ? (
+                <div>
+                  {/* 아티팩트 카드 미리보기 */}
+                  <div style={{
+                    background: "linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.02))",
+                    border: "1px solid rgba(108,99,255,0.25)",
+                    borderLeft: "3px solid var(--ct-accent)",
+                    borderRadius: "0 10px 10px 0",
+                    padding: "10px 14px",
+                    marginBottom: "4px",
+                  }}>
+                    {linkedArtifact && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "14px" }}>
+                          {linkedArtifact.artifact_type === "code" ? "💻" : linkedArtifact.artifact_type === "chart" ? "📊" : "📄"}
+                        </span>
+                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--ct-accent)" }}>
+                          {linkedArtifact.title}
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: "13px", color: "var(--ct-text)", lineHeight: "1.6" }}>
+                      <MarkdownBlock text={msg.content.substring(0, 300) + "\n\n..."} />
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                      <button
+                        onClick={() => setContentCollapsed(false)}
+                        style={{
+                          fontSize: "11px", padding: "3px 10px", borderRadius: "6px",
+                          background: "rgba(108,99,255,0.1)", color: "var(--ct-accent)",
+                          border: "1px solid rgba(108,99,255,0.3)", cursor: "pointer",
+                          fontWeight: 500,
+                        }}
+                      >
+                        전체 펼치기 ▾
+                      </button>
+                      {onViewArtifact && linkedArtifact && (
+                        <button
+                          onClick={() => onViewArtifact(linkedArtifact.id)}
+                          style={{
+                            fontSize: "11px", padding: "3px 10px", borderRadius: "6px",
+                            background: "var(--ct-accent)", color: "#fff",
+                            border: "none", cursor: "pointer",
+                            fontWeight: 500,
+                          }}
+                        >
+                          우측 패널에서 보기 →
+                        </button>
+                      )}
+                      {onViewReport && !linkedArtifact && (
+                        <button
+                          onClick={onViewReport}
+                          style={{
+                            fontSize: "11px", padding: "3px 10px", borderRadius: "6px",
+                            background: "var(--ct-accent)", color: "#fff",
+                            border: "none", cursor: "pointer",
+                            fontWeight: 500,
+                          }}
+                        >
+                          우측 패널에서 보기 →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <MarkdownBlock text={msg.content} />
+                  {msg.role === "assistant" && msg.content.length > 800 && !contentCollapsed && (
+                    <div style={{ textAlign: "right", marginTop: "4px" }}>
+                      <button
+                        onClick={() => setContentCollapsed(true)}
+                        style={{
+                          fontSize: "11px", padding: "2px 8px", borderRadius: "6px",
+                          background: "rgba(108,99,255,0.08)", color: "var(--ct-text2)",
+                          border: "1px solid var(--ct-border)", cursor: "pointer",
+                        }}
+                      >
+                        접기 ▴
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
               {/* 3번: rate_limited 안내 — 자동 재개 중임을 사용자에게 표시 */}
               {msg.intent === "rate_limited" && (
                 <div style={{ fontSize: "12px", color: "#f59e0b", marginTop: "8px", opacity: 0.85 }}>
@@ -462,41 +553,7 @@ const MessageItem = memo(function MessageItem({
           )}
         </div>
         )}
-        {/* 보고서 미리보기 카드 — pipeline_runner 메시지 */}
-        {msg.role === "assistant" && msg.intent === "pipeline_runner" && !isActiveStreaming && (
-          <div style={{
-            marginTop: "6px", marginLeft: "4px",
-            background: "rgba(245,158,11,0.08)",
-            border: "1px solid rgba(245,158,11,0.25)",
-            borderLeft: "3px solid #f59e0b",
-            borderRadius: "0 8px 8px 0",
-            padding: "8px 12px",
-          }}>
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b", marginBottom: "4px" }}>
-              📋 보고서 미리보기
-            </div>
-            <p style={{
-              fontSize: "12px", color: "var(--ct-text2)", margin: 0,
-              overflow: "hidden", display: "-webkit-box",
-              WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
-              lineHeight: "1.5",
-            }}>
-              {msg.content.substring(0, 200)}{msg.content.length > 200 ? "..." : ""}
-            </p>
-            {onViewReport && (
-              <button
-                onClick={onViewReport}
-                style={{
-                  marginTop: "6px", fontSize: "11px", color: "#f59e0b",
-                  background: "none", border: "none", cursor: "pointer",
-                  padding: 0, textDecoration: "underline",
-                }}
-              >
-                전체보기 →
-              </button>
-            )}
-          </div>
-        )}
+        {/* P1: 기존 pipeline_runner 카드 — 접이식으로 통합됨 */}
         {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
         {msg.role === "user" && msg.created_at && (
           <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
@@ -714,7 +771,7 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
-  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(true);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
   const [imageGenLoading, setImageGenLoading] = useState(false);
   // 메시지 수정/재지시
@@ -3980,7 +4037,7 @@ export default function ChatPage() {
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "16px",
+            padding: screenSize === "mobile" ? "12px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
             gap: "12px",
@@ -4152,7 +4209,7 @@ export default function ChatPage() {
           {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
           {(() => {
             const sorted = [...messages]
-              .filter(m => m.intent !== "ai_review_warning" && m.intent !== "auto_reaction" && !(m.role === "user" && m.content?.startsWith("[시스템]")))
+              .filter(m => m.intent !== "ai_review_warning")
               .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
             type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
             const display: DisplayItem[] = [];
@@ -4180,6 +4237,21 @@ export default function ChatPage() {
             }
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
+              // 시스템 메시지: 접이식 한 줄 표시
+              const isSystemMsg = msg.intent === "auto_reaction" || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
+              if (isSystemMsg) {
+                return (
+                  <details key={msg.id || idx} style={{ margin: "1px 16px" }}>
+                    <summary style={{ fontSize: "11px", color: "var(--ct-text2)", cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: "6px", padding: "2px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)", userSelect: "none" }}>
+                      <span style={{ opacity: 0.6 }}>⚙️</span>
+                      <span style={{ opacity: 0.7 }}>{msg.intent === "auto_reaction" ? "자동 반응" : "시스템"} · {(msg.content || "").substring(0, 80)}{(msg.content || "").length > 80 ? "…" : ""}</span>
+                    </summary>
+                    <div style={{ padding: "8px 12px", fontSize: "12px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)", borderRadius: "0 0 4px 4px" }}>
+                      <MarkdownBlock text={msg.content || ""} />
+                    </div>
+                  </details>
+                );
+              }
               return (
                 <React.Fragment key={msg.id || idx}>
                   <MessageItem
@@ -4215,6 +4287,13 @@ export default function ChatPage() {
                       msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
                     }
                     onViewReport={msg.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
+                    linkedArtifact={msg.artifact_id ? artifacts.find(a => a.id === msg.artifact_id) : undefined}
+                    onViewArtifact={(artifactId) => {
+                      const idx = filteredArtifacts.findIndex(a => a.id === artifactId);
+                      if (idx >= 0) setSelectedArtifactIdx(idx);
+                      setArtifactMode("full");
+                      setArtifactTab("report");
+                    }}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -4243,6 +4322,13 @@ export default function ChatPage() {
                       allMessages={messages}
                       isActiveStreaming={false}
                       onViewReport={hm.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
+                      linkedArtifact={hm.artifact_id ? artifacts.find(a => a.id === hm.artifact_id) : undefined}
+                      onViewArtifact={(artifactId) => {
+                        const idx = filteredArtifacts.findIndex(a => a.id === artifactId);
+                        if (idx >= 0) setSelectedArtifactIdx(idx);
+                        setArtifactMode("full");
+                        setArtifactTab("report");
+                      }}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
