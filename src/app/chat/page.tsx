@@ -145,7 +145,7 @@ const MessageItem = memo(function MessageItem({
         </div>
       )}
 
-      <div style={{ maxWidth: "min(80%, calc(100vw - 40px))" }}>
+      <div style={{ maxWidth: screenSize === "mobile" ? "98%" : "80%" }}>
         {/* Reply-to 인용 표시 */}
         {replyTarget && (
           <div style={{
@@ -4241,10 +4241,10 @@ export default function ChatPage() {
               const isSystemMsg = msg.intent === "auto_reaction" || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) {
                 return (
-                  <details key={msg.id || idx} style={{ margin: "1px 16px" }}>
+                  <details key={msg.id || idx} open={msg.intent === "auto_reaction"} style={{ margin: "1px 16px" }}>
                     <summary style={{ fontSize: "11px", color: "var(--ct-text2)", cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: "6px", padding: "2px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)", userSelect: "none" }}>
                       <span style={{ opacity: 0.6 }}>⚙️</span>
-                      <span style={{ opacity: 0.7 }}>{msg.intent === "auto_reaction" ? "자동 반응" : "시스템"} · {(msg.content || "").substring(0, 80)}{(msg.content || "").length > 80 ? "…" : ""}</span>
+                      <span style={{ opacity: 0.7 }}>{msg.intent === "auto_reaction" ? "자동 반응" : "시스템"} · {(msg.content || "").replace(/\*\*/g, '').replace(/##/g, '').replace(/\n/g, ' ').replace(/- /g, '').slice(0, 80)}{(msg.content || "").replace(/\*\*/g, '').replace(/##/g, '').replace(/\n/g, ' ').replace(/- /g, '').length > 80 ? "…" : ""}</span>
                     </summary>
                     <div style={{ padding: "8px 12px", fontSize: "12px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)", borderRadius: "0 0 4px 4px" }}>
                       <MarkdownBlock text={msg.content || ""} />
