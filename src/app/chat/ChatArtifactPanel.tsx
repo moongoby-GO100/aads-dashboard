@@ -1,5 +1,5 @@
 "use client";
-import { memo, useRef, useCallback } from "react";
+import { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
@@ -67,6 +67,13 @@ function ArtifactContentArea({ artifactTab, filteredArtifacts, selectedArtifactI
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); goPrev(); }
   }, [goNext, goPrev]);
 
+  // 아티팩트 선택 변경 시 스크롤 맨 위로 (전체보기 버튼 등 외부 변경 포함)
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [selectedArtifactIdx]);
+
   return (
     <div
       ref={scrollRef}
@@ -100,6 +107,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective,
   } = props;
+
+  // 아티팩트 검색/필터 상태
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+
 
   return (
     <>
@@ -224,8 +236,80 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               ))}
             </div>
 
+            {/* 검색/필터 영역 */}
+            {artifactTab !== "tasks" && (
+              <div style={{
+                padding: "6px 10px",
+                borderBottom: "1px solid var(--ct-border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "5px",
+              }}>
+                <input
+                  type="text"
+                  placeholder="제목 검색..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSelectedArtifactIdx(0);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "4px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--ct-border)",
+                    background: "var(--ct-input-bg)",
+                    color: "var(--ct-text)",
+                    fontSize: "12px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                  {[
+                    { key: null, label: "전체" },
+                    { key: "report", label: "보고서" },
+                    { key: "code", label: "코드" },
+                    { key: "table", label: "마크다운" },
+                    { key: "other", label: "기타" },
+                  ].map((f) => (
+                    <button
+                      key={String(f.key)}
+                      onClick={() => { setTypeFilter(f.key); setSelectedArtifactIdx(0); }}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: "10px",
+                        border: "1px solid var(--ct-border)",
+                        background: typeFilter === f.key ? "var(--ct-accent)" : "transparent",
+                        color: typeFilter === f.key ? "#fff" : "var(--ct-text2)",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 아티팩트 리스트 헤더 */}
-            {filteredArtifacts.length > 1 && artifactTab !== "tasks" && (
+            {(() => {
+              // localFiltered에 원본 인덱스 포함
+              const lfWithIdx = filteredArtifacts
+                .map((a, idx) => ({ a, idx }))
+                .filter(({ a }) => {
+                  const ms = !searchQuery || a.title.toLowerCase().includes(searchQuery.toLowerCase());
+                  const mt = !typeFilter || a.artifact_type === typeFilter ||
+                    (typeFilter === "report" && (a.artifact_type === "report" || a.artifact_type === "text")) ||
+                    (typeFilter === "other" && !["report", "text", "code", "table"].includes(a.artifact_type));
+                  return ms && mt;
+                });
+              const localCurPos = lfWithIdx.findIndex(({ idx }) => idx === selectedArtifactIdx);
+              const prevItem = localCurPos > 0 ? lfWithIdx[localCurPos - 1] : null;
+              const nextItem = localCurPos < lfWithIdx.length - 1 ? lfWithIdx[localCurPos + 1] : null;
+              return lfWithIdx.length > 1 && artifactTab !== "tasks" ? (
               <div style={{
                 padding: '8px 12px',
                 borderBottom: '1px solid var(--ct-border)',
@@ -235,7 +319,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 fontSize: '12px',
               }}>
                 <span style={{ color: 'var(--ct-text2)', whiteSpace: 'nowrap' }}>
-                  {filteredArtifacts.length}건
+                  {lfWithIdx.length}건
                 </span>
                 <select
                   value={selectedArtifactIdx}
@@ -252,7 +336,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     maxWidth: '280px',
                   }}
                 >
-                  {filteredArtifacts.map((a, idx) => (
+                  {lfWithIdx.map(({ a, idx }) => (
                     <option key={a.id} value={idx}>
                       {a.title ? a.title.substring(0, 40) : `#${idx + 1}`}
                     </option>
@@ -260,36 +344,37 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 </select>
                 <div style={{ display: 'flex', gap: '2px' }}>
                   <button
-                    onClick={() => setSelectedArtifactIdx(Math.max(0, selectedArtifactIdx - 1))}
-                    disabled={selectedArtifactIdx === 0}
+                    onClick={() => prevItem && setSelectedArtifactIdx(prevItem.idx)}
+                    disabled={!prevItem}
                     style={{
                       padding: '2px 8px',
                       borderRadius: '4px',
                       border: '1px solid var(--ct-border)',
                       background: 'transparent',
                       color: 'var(--ct-text2)',
-                      cursor: selectedArtifactIdx === 0 ? 'not-allowed' : 'pointer',
+                      cursor: !prevItem ? 'not-allowed' : 'pointer',
                       fontSize: '12px',
-                      opacity: selectedArtifactIdx === 0 ? 0.4 : 1,
+                      opacity: !prevItem ? 0.4 : 1,
                     }}
                   >◀</button>
                   <button
-                    onClick={() => setSelectedArtifactIdx(Math.min(filteredArtifacts.length - 1, selectedArtifactIdx + 1))}
-                    disabled={selectedArtifactIdx >= filteredArtifacts.length - 1}
+                    onClick={() => nextItem && setSelectedArtifactIdx(nextItem.idx)}
+                    disabled={!nextItem}
                     style={{
                       padding: '2px 8px',
                       borderRadius: '4px',
                       border: '1px solid var(--ct-border)',
                       background: 'transparent',
                       color: 'var(--ct-text2)',
-                      cursor: selectedArtifactIdx >= filteredArtifacts.length - 1 ? 'not-allowed' : 'pointer',
+                      cursor: !nextItem ? 'not-allowed' : 'pointer',
                       fontSize: '12px',
-                      opacity: selectedArtifactIdx >= filteredArtifacts.length - 1 ? 0.4 : 1,
+                      opacity: !nextItem ? 0.4 : 1,
                     }}
                   >▶</button>
                 </div>
               </div>
-            )}
+              ) : null;
+            })()}
 
             {/* Artifact content — 스크롤/키보드 네비게이션 */}
             <ArtifactContentArea

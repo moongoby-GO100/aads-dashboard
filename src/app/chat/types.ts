@@ -62,6 +62,7 @@ export interface ChatMessage {
   thought_summary?: string;
   bookmarked?: boolean;
   sources?: Array<Record<string, unknown>>;
+  is_system_group?: boolean;
 }
 
 export interface Artifact {

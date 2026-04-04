@@ -40,6 +40,7 @@ interface MessageItemProps {
   streamToolStatus?: string | null;
   streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
   onStopStreaming?: () => void;
+  onViewReport?: () => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -47,6 +48,7 @@ const MessageItem = memo(function MessageItem({
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
   isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
+  onViewReport,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -218,7 +220,16 @@ const MessageItem = memo(function MessageItem({
             fontSize: "14px",
             lineHeight: "1.6",
             ...(msg.role === "user"
-              ? msg.intent === "system_trigger"
+              ? msg.is_system_group
+                ? {
+                    background: "transparent",
+                    color: "var(--ct-text2)",
+                    border: "1px dashed rgba(99,102,241,0.3)",
+                    borderBottomRightRadius: "4px",
+                    fontSize: "12px",
+                    opacity: 0.75,
+                  }
+                : msg.intent === "system_trigger"
                 ? {
                     background: "linear-gradient(135deg, var(--ct-ai), rgba(59,130,246,0.1))",
                     color: "var(--ct-text)",
@@ -288,7 +299,17 @@ const MessageItem = memo(function MessageItem({
             );
           })()}
           {msg.role === "user" ? (
-            msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
+            msg.is_system_group ? (
+              <details style={{ cursor: "pointer" }}>
+                <summary style={{ listStyle: "none", userSelect: "none", outline: "none", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "10px", opacity: 0.5 }}>▶</span>
+                  <span style={{ opacity: 0.7 }}>{msg.content.split("\n")[0]}</span>
+                </summary>
+                <div style={{ marginTop: "6px", paddingLeft: "10px", borderLeft: "2px solid rgba(99,102,241,0.3)" }}>
+                  <MarkdownBlock text={msg.content.split("\n").slice(1).join("\n")} />
+                </div>
+              </details>
+            ) : msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
           ) : isActiveStreaming ? (
             <>
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
@@ -440,6 +461,41 @@ const MessageItem = memo(function MessageItem({
             </>
           )}
         </div>
+        )}
+        {/* 보고서 미리보기 카드 — pipeline_runner 메시지 */}
+        {msg.role === "assistant" && msg.intent === "pipeline_runner" && !isActiveStreaming && (
+          <div style={{
+            marginTop: "6px", marginLeft: "4px",
+            background: "rgba(245,158,11,0.08)",
+            border: "1px solid rgba(245,158,11,0.25)",
+            borderLeft: "3px solid #f59e0b",
+            borderRadius: "0 8px 8px 0",
+            padding: "8px 12px",
+          }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b", marginBottom: "4px" }}>
+              📋 보고서 미리보기
+            </div>
+            <p style={{
+              fontSize: "12px", color: "var(--ct-text2)", margin: 0,
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const,
+              lineHeight: "1.5",
+            }}>
+              {msg.content.substring(0, 200)}{msg.content.length > 200 ? "..." : ""}
+            </p>
+            {onViewReport && (
+              <button
+                onClick={onViewReport}
+                style={{
+                  marginTop: "6px", fontSize: "11px", color: "#f59e0b",
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: 0, textDecoration: "underline",
+                }}
+              >
+                전체보기 →
+              </button>
+            )}
+          </div>
         )}
         {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
         {msg.role === "user" && msg.created_at && (
@@ -625,7 +681,7 @@ export default function ChatPage() {
   // ── Theme / layout ──
   const [theme, setTheme] = useState<Theme>("dark");
   const [leftOpen, setLeftOpen] = useState(true);
-  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("mini");
+  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("report");
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
 
@@ -4158,6 +4214,7 @@ export default function ChatPage() {
                     onStopStreaming={
                       msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
                     }
+                    onViewReport={msg.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -4185,6 +4242,7 @@ export default function ChatPage() {
                       onBranch={setBranchPoint}
                       allMessages={messages}
                       isActiveStreaming={false}
+                      onViewReport={hm.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
