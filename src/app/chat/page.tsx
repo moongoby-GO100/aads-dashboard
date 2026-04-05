@@ -2563,7 +2563,7 @@ export default function ChatPage() {
                 const hcAbort = new AbortController();
                 const hcTimeout = setTimeout(() => hcAbort.abort(), 3000);
                 const hcResp = await fetch(
-                  `${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/ops/health-check`,
+                  `/api/v1/ops/health-check`,
                   { signal: hcAbort.signal }
                 );
                 clearTimeout(hcTimeout);
