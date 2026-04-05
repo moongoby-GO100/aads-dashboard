@@ -1,6 +1,6 @@
 "use client";
 import { memo, useRef, useCallback, useState, useEffect } from "react";
-import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession } from "./types";
+import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
 
@@ -22,6 +22,8 @@ export interface ChatArtifactPanelProps {
   activeSession: ChatSession | null;
   copyArtifact: (content: string) => void;
   toDirective: (a: Artifact) => void;
+  systemMessages?: ChatMessage[];
+  unreadLogCount?: number;
 }
 
 /** 우측 아티팩트 패널 — 보고서/코드/차트/대시보드/작업 탭 */
@@ -104,6 +106,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     screenSize, showArtifactPanel, artifactMode, setArtifactMode,
     mobileOverlay, setMobileOverlay,
     artifacts, artifactTab, setArtifactTab, artifactCounts,
+    systemMessages, unreadLogCount,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective,
   } = props;
@@ -204,6 +207,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                   { key: "dashboard" as ArtifactTab, icon: "🖥️", label: "대시보드" },
                   { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                  { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
                 ]
               ).map((tab) => (
                 <button
@@ -225,19 +229,24 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   }}
                 >
                   {tab.icon} {tab.label}
-                  {tab.key !== "tasks" && artifactCounts[tab.key] > 0 && (
+                  {tab.key !== "tasks" && tab.key !== "log" && artifactCounts[tab.key] > 0 && (
                     <span style={{
                       marginLeft: '3px',
                       fontSize: '10px',
                       opacity: 0.7,
                     }}>({artifactCounts[tab.key]})</span>
                   )}
+                  {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
+                    <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
+                      ({unreadLogCount})
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && (
+            {artifactTab !== "tasks" && artifactTab !== "log" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -385,6 +394,42 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             >
               {artifactTab === "tasks" ? (
                 <ArtifactTaskMonitor sessionId={activeSession?.id} />
+              ) : artifactTab === "log" ? (
+                <div style={{ padding: "4px 0" }}>
+                  {(systemMessages ?? []).length === 0 ? (
+                    <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
+                      운영 로그가 없습니다
+                    </div>
+                  ) : (
+                    [...(systemMessages ?? [])].reverse().map((msg) => {
+                      const isAutoReaction = msg.intent === "auto_reaction";
+                      const icon = isAutoReaction ? "🤖" : "⚙️";
+                      const label = isAutoReaction ? "자동 반응" : "시스템";
+                      const jobMatch = msg.content?.match(/Job[:\s*]+(\S+)/);
+                      const jobId = jobMatch ? jobMatch[1] : null;
+                      return (
+                        <details key={msg.id} style={{ borderBottom: "1px solid var(--ct-border)", margin: "0" }} open={isAutoReaction}>
+                          <summary style={{
+                            fontSize: "11px", color: "var(--ct-text2)", cursor: "pointer",
+                            listStyle: "none", display: "flex", alignItems: "center", gap: "6px",
+                            padding: "6px 8px", userSelect: "none",
+                          }}>
+                            <span>{icon}</span>
+                            <span style={{ flex: 1, opacity: 0.8 }}>
+                              {label}{jobId ? ` · ${jobId}` : ""}
+                              {" · "}{(msg.content || "")
+                                .replace(/\*\*/g, "").replace(/##/g, "").replace(/\n/g, " ")
+                                .replace(/\[시스템\]\s*/g, "").trim().slice(0, 60)}…
+                            </span>
+                          </summary>
+                          <div style={{ padding: "8px 12px", fontSize: "12px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)" }}>
+                            <MarkdownBlock text={msg.content || ""} />
+                          </div>
+                        </details>
+                      );
+                    })
+                  )}
+                </div>
               ) : activeArtifact ? (
                 <div>
                   <div
@@ -547,6 +592,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "chart" as ArtifactTab, icon: "📊" },
                 { key: "dashboard" as ArtifactTab, icon: "🖥️" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },
+                { key: "log" as ArtifactTab, icon: "🔧" },
               ]
             ).map((tab) => (
               <button
@@ -567,7 +613,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               >
                 <span style={{ position: 'relative' }}>
                   {tab.icon}
-                  {tab.key !== "tasks" && artifactCounts[tab.key] > 0 && (
+                  {tab.key !== "tasks" && tab.key !== "log" && artifactCounts[tab.key] > 0 && (
                     <span style={{
                       position: 'absolute',
                       top: '-6px',

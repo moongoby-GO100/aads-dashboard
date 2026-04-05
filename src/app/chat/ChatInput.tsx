@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useCallback, useImperativeHandle, forwardRef, memo, useEffect } from "react";
+import ScreenShare from "./ScreenShare";
 import SlashCommandMenu, {
   SLASH_COMMANDS,
   getFilteredCount,
@@ -29,10 +30,11 @@ interface ChatInputProps {
   onHasInput?: (has: boolean) => void;
   onLocalMessage?: (text: string) => void;
   placeholder?: string;
+  onScreenShare?: (file: File) => void;
 }
 
 const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder }, ref) {
+  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare }, ref) {
     const [localInput, setLocalInput] = useState("");
     const taRef = useRef<HTMLTextAreaElement>(null);
     const hadInputRef = useRef(false);
@@ -296,112 +298,119 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     }, []);
 
     return (
-      <div style={{ position: "relative", flex: 1 }}>
-        {/* 슬래시 명령어 메뉴 */}
-        {showSlash && (
-          <SlashCommandMenu
-            filter={slashFilter}
-            selectedIndex={slashIndex}
-            onSelect={selectSlashCommand}
-            position={{ bottom: screenSize === "mobile" ? 50 : 50, left: 0 }}
-          />
+      <div style={{ display: "flex", flex: 1, alignItems: "flex-end", gap: "4px" }}>
+        {/* 화면 공유 버튼 + 인디케이터 (onScreenShare 있을 때만) */}
+        {onScreenShare && (
+          <ScreenShare onCapture={onScreenShare} />
         )}
 
-        {/* 멘션(@) 드롭다운 메뉴 */}
-        {showMention && filteredMentions.length > 0 && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: screenSize === "mobile" ? 50 : 50,
-              left: 0,
-              minWidth: 220,
-              background: "var(--ct-card, #1e1e2e)",
-              border: "1px solid var(--ct-border, #333)",
-              borderRadius: 10,
-              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-              zIndex: 50,
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--ct-text-secondary, #888)", borderBottom: "1px solid var(--ct-border, #333)" }}>
-              프로젝트 멘션
+        {/* 텍스트 입력 영역 (슬래시/멘션 메뉴 absolute 기준점) */}
+        <div style={{ position: "relative", flex: 1 }}>
+          {/* 슬래시 명령어 메뉴 */}
+          {showSlash && (
+            <SlashCommandMenu
+              filter={slashFilter}
+              selectedIndex={slashIndex}
+              onSelect={selectSlashCommand}
+              position={{ bottom: screenSize === "mobile" ? 50 : 50, left: 0 }}
+            />
+          )}
+
+          {/* 멘션(@) 드롭다운 메뉴 */}
+          {showMention && filteredMentions.length > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: screenSize === "mobile" ? 50 : 50,
+                left: 0,
+                minWidth: 220,
+                background: "var(--ct-card, #1e1e2e)",
+                border: "1px solid var(--ct-border, #333)",
+                borderRadius: 10,
+                boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                zIndex: 50,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--ct-text-secondary, #888)", borderBottom: "1px solid var(--ct-border, #333)" }}>
+                프로젝트 멘션
+              </div>
+              {filteredMentions.map((target, idx) => (
+                <button
+                  key={target.id}
+                  onMouseDown={(e) => { e.preventDefault(); selectMention(target); }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    background: idx === mentionIndex ? "var(--ct-accent, #7c3aed)" : "transparent",
+                    color: idx === mentionIndex ? "#fff" : "var(--ct-text, #e2e8f0)",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{
+                    display: "inline-block",
+                    padding: "1px 6px",
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: idx === mentionIndex ? "rgba(255,255,255,0.2)" : "rgba(99,102,241,0.15)",
+                    color: idx === mentionIndex ? "#fff" : "#818cf8",
+                  }}>
+                    @{target.id}
+                  </span>
+                  <span style={{ color: idx === mentionIndex ? "rgba(255,255,255,0.7)" : "var(--ct-text-secondary, #888)", fontSize: 12 }}>
+                    {target.desc}
+                  </span>
+                </button>
+              ))}
             </div>
-            {filteredMentions.map((target, idx) => (
-              <button
-                key={target.id}
-                onMouseDown={(e) => { e.preventDefault(); selectMention(target); }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  width: "100%",
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  background: idx === mentionIndex ? "var(--ct-accent, #7c3aed)" : "transparent",
-                  color: idx === mentionIndex ? "#fff" : "var(--ct-text, #e2e8f0)",
-                  border: "none",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <span style={{
-                  display: "inline-block",
-                  padding: "1px 6px",
-                  borderRadius: 4,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: idx === mentionIndex ? "rgba(255,255,255,0.2)" : "rgba(99,102,241,0.15)",
-                  color: idx === mentionIndex ? "#fff" : "#818cf8",
-                }}>
-                  @{target.id}
-                </span>
-                <span style={{ color: idx === mentionIndex ? "rgba(255,255,255,0.7)" : "var(--ct-text-secondary, #888)", fontSize: 12 }}>
-                  {target.desc}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
+          )}
 
-        <textarea
-          ref={taRef}
-          value={localInput}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          placeholder={placeholder || "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈, / 명령어, @ 멘션)"}
-          rows={1}
-          style={{
-            width: "100%",
-            flex: 1,
-            padding: screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px",
-            fontSize: screenSize === "mobile" ? "16px" : "14px",
-            resize: "none",
-            overflow: "hidden",
-            background: "var(--ct-input)",
-            color: "var(--ct-text)",
-            border: "1px solid var(--ct-border)",
-            borderRadius: "12px",
-            outline: "none",
-            fontFamily: "inherit",
-            lineHeight: "1.5",
-            minHeight: screenSize === "mobile" ? "44px" : "44px",
-            maxHeight: screenSize === "mobile" ? "140px" : "160px",
-          }}
-          inputMode="text"
-          enterKeyHint="send"
-          onFocus={(e) => {
-            e.target.style.borderColor = "var(--ct-accent)";
-            setTimeout(() => {
-              (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-            }, 300);
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = "var(--ct-border)";
-            setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);
-          }}
-        />
+          <textarea
+            ref={taRef}
+            value={localInput}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            placeholder={placeholder || "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈, / 명령어, @ 멘션)"}
+            rows={1}
+            style={{
+              width: "100%",
+              padding: screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px",
+              fontSize: screenSize === "mobile" ? "16px" : "14px",
+              resize: "none",
+              overflow: "hidden",
+              background: "var(--ct-input)",
+              color: "var(--ct-text)",
+              border: "1px solid var(--ct-border)",
+              borderRadius: "12px",
+              outline: "none",
+              fontFamily: "inherit",
+              lineHeight: "1.5",
+              minHeight: screenSize === "mobile" ? "44px" : "44px",
+              maxHeight: screenSize === "mobile" ? "140px" : "160px",
+            }}
+            inputMode="text"
+            enterKeyHint="send"
+            onFocus={(e) => {
+              e.target.style.borderColor = "var(--ct-accent)";
+              setTimeout(() => {
+                (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+              }, 300);
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--ct-border)";
+              setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);
+            }}
+          />
+        </div>
       </div>
     );
   }
