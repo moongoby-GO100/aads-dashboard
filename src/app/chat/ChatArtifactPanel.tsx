@@ -174,7 +174,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     const fetchJobs = async () => {
       try {
         setJobsLoading(true);
-        const res = await fetch(`/api/pipeline/jobs?session_id=${sessionId}&limit=50`, { headers: authHdrs() });
+        const res = await fetch(`${BASE_URL}/pipeline/jobs?session_id=${sessionId}&limit=50`, { headers: authHdrs() });
         if (!cancelled && res.ok) {
           const data = await res.json();
           setRunnerJobs(data);

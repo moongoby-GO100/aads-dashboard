@@ -771,7 +771,12 @@ export default function ChatPage() {
   // ── Chat state ──
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
-  const [model, setModel] = useState(DEFAULT_MODEL);
+  const [model, setModel] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("aads-chat-model") || DEFAULT_MODEL;
+    }
+    return DEFAULT_MODEL;
+  });
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const streamBufRef = useRef("");
@@ -854,6 +859,7 @@ export default function ChatPage() {
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
   const [screenHiddenMode] = useState(true);
   const screenContextRef = useRef<File | null>(null);
+  const aiCaptureRequestedRef = useRef(false);
   // C-2: Object URL 캐싱 + 메모리 누수 방지
   const pendingPreviewUrls = useMemo(
     () => pendingPreviewFiles.map((f) => f.type.startsWith("image/") ? URL.createObjectURL(f) : null),
@@ -1395,7 +1401,10 @@ export default function ChatPage() {
       .then(setArtifacts)
       .catch(() => setArtifacts([]));
     // Sync model from session
-    if (activeSession.current_model) setModel(activeSession.current_model);
+    if (activeSession.current_model) {
+      setModel(activeSession.current_model);
+      localStorage.setItem("aads-chat-model", activeSession.current_model);
+    }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
     const ct = activeSession.cost_total;
     if (ct && Number(ct) > 0) {
@@ -2278,9 +2287,14 @@ export default function ChatPage() {
               setToolStatus("🔄 응답 재검증 중...");
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
-              full += ev.content;
+              let deltaContent = ev.content;
+              if (deltaContent.includes("[SCREEN_CAPTURE_REQUEST]")) {
+                aiCaptureRequestedRef.current = true;
+                deltaContent = deltaContent.replace(/\[SCREEN_CAPTURE_REQUEST\]/g, "");
+              }
+              full += deltaContent;
               // Phase4: 버퍼에 토큰 추가 → 드레인 타이머가 30ms 간격으로 표시
-              _tokenQueue.push(ev.content);
+              _tokenQueue.push(deltaContent);
               _startDrain();
               if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
@@ -2457,6 +2471,26 @@ export default function ChatPage() {
           if (sseError) throw sseError;
         }
         if (gotFinal) break; // done 이벤트 수신 → while 루프 탈출
+      }
+
+      // AI 트리거 캡처: AI가 [SCREEN_CAPTURE_REQUEST]를 응답에 포함한 경우 자동 캡처 + 재전송
+      if (gotFinal && aiCaptureRequestedRef.current && !isStale()) {
+        aiCaptureRequestedRef.current = false;
+        const captureFile = screenContextRef.current;
+        if (captureFile) {
+          screenContextRef.current = null;
+          setTimeout(async () => {
+            try {
+              const arrBuf = await captureFile.arrayBuffer();
+              const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+              pendingAttachments.current.push({ type: "image", name: captureFile.name, media_type: "image/png", base64: b64 });
+              sendMessage("[AI 요청 화면 캡처]");
+            } catch { /* ignore */ }
+          }, 300);
+        } else {
+          // 연속 캡처 미사용 시 즉시 캡처 요청
+          chatInputRef.current?.captureNow();
+        }
       }
 
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
@@ -4110,7 +4144,10 @@ export default function ChatPage() {
           {/* Model selector */}
           <select
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => {
+              setModel(e.target.value);
+              localStorage.setItem("aads-chat-model", e.target.value);
+            }}
             style={{
               fontSize: "12px",
               padding: "5px 8px",
