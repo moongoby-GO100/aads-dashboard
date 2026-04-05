@@ -44,6 +44,7 @@ interface MessageItemProps {
   linkedArtifact?: { id: string; title: string; artifact_type: string; content: string };
   onViewArtifact?: (artifactId: string) => void;
   onOpenLightbox?: (srcs: string[], idx: number) => void;
+  isLastAssistantMsg?: boolean;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -51,7 +52,7 @@ const MessageItem = memo(function MessageItem({
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
   isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
-  onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox,
+  onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -60,8 +61,15 @@ const MessageItem = memo(function MessageItem({
 
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
-    () => msg.role === "assistant" && msg.content.length > 800 && !msg.intent?.startsWith("streaming")
+    () => msg.role === "assistant" && msg.content.length > 800 && !msg.intent?.startsWith("streaming") && !isLastAssistantMsg
   );
+
+  // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
+  useEffect(() => {
+    if (msg.role === "assistant" && msg.content.length > 800) {
+      setContentCollapsed(!isLastAssistantMsg);
+    }
+  }, [isLastAssistantMsg]);
 
   return (
     <div
@@ -4424,6 +4432,11 @@ export default function ChatPage() {
               display.push({ msg, idx: i });
               i++;
             }
+            const lastAssistantId = display.slice().reverse().find(d => {
+              const m = d.msg;
+              const isSystemMsg = m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
+              return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
+            })?.msg.id;
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 시스템 메시지: 접이식 한 줄 표시
@@ -4473,6 +4486,7 @@ export default function ChatPage() {
                       setArtifactTab("report");
                     }}
                     onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
+                    isLastAssistantMsg={msg.id === lastAssistantId}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -4509,6 +4523,7 @@ export default function ChatPage() {
                         setArtifactTab("report");
                       }}
                       onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
+                      isLastAssistantMsg={false}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
