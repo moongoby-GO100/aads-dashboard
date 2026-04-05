@@ -63,6 +63,43 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "openrouter-mistral-small",  name: "Mistral Small",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-nemotron-free",  name: "Nemotron Free",             provider: "openrouter", cost: "무료" },
   { id: "openrouter-minimax-m2",     name: "MiniMax M2.7",              provider: "openrouter", cost: "변동" },
+  // -- Alibaba/Qwen (DashScope) — 플래그십 --
+  { id: "qwen3-235b",              name: "Qwen3 235B",              provider: "alibaba", cost: "$0.60/$2.40" },
+  { id: "qwen3-235b-instruct",     name: "Qwen3 235B Instruct",     provider: "alibaba", cost: "$0.60/$2.40" },
+  { id: "qwen3-235b-thinking",     name: "Qwen3 235B Thinking",     provider: "alibaba", cost: "$0.60/$2.40" },
+  { id: "qwen3-next-80b",          name: "Qwen3 Next 80B",          provider: "alibaba", cost: "$0.30/$1.20" },
+  { id: "qwen3-max",               name: "Qwen3 Max",               provider: "alibaba", cost: "$0.40/$1.20" },
+  { id: "qwen3-32b",               name: "Qwen3 32B",               provider: "alibaba", cost: "$0.08/$0.32" },
+  { id: "qwen3-30b-a3b",           name: "Qwen3 30B-A3B",           provider: "alibaba", cost: "$0.07/$0.28" },
+  { id: "qwen3-14b",               name: "Qwen3 14B",               provider: "alibaba", cost: "$0.04/$0.16" },
+  { id: "qwen3-8b",                name: "Qwen3 8B",                provider: "alibaba", cost: "$0.02/$0.08" },
+  // -- Alibaba/Qwen — 코더 --
+  { id: "qwen3-coder-480b",        name: "Qwen3 Coder 480B",        provider: "alibaba", cost: "$1.20/$4.80" },
+  { id: "qwen3-coder-plus",        name: "Qwen3 Coder Plus",        provider: "alibaba", cost: "$0.35/$1.40" },
+  { id: "qwen3-coder-flash",       name: "Qwen3 Coder Flash",       provider: "alibaba", cost: "$0.07/$0.28" },
+  { id: "qwen-coder-plus",         name: "Qwen Coder Plus",         provider: "alibaba", cost: "$0.35/$1.40" },
+  // -- Alibaba/Qwen 3.5 --
+  { id: "qwen3.5-plus",            name: "Qwen3.5 Plus",            provider: "alibaba", cost: "$0.40/$1.20" },
+  { id: "qwen3.5-flash",           name: "Qwen3.5 Flash",           provider: "alibaba", cost: "$0.07/$0.28" },
+  // -- Alibaba/Qwen (안정 릴리스) --
+  { id: "qwen-max",                name: "Qwen Max",                provider: "alibaba", cost: "$0.40/$1.20" },
+  { id: "qwen-max-latest",         name: "Qwen Max Latest",         provider: "alibaba", cost: "$0.40/$1.20" },
+  { id: "qwen-plus",               name: "Qwen Plus",               provider: "alibaba", cost: "$0.08/$0.32" },
+  { id: "qwen-plus-latest",        name: "Qwen Plus Latest",        provider: "alibaba", cost: "$0.08/$0.32" },
+  { id: "qwen-turbo",              name: "Qwen Turbo",              provider: "alibaba", cost: "$0.02/$0.06" },
+  { id: "qwen-turbo-latest",       name: "Qwen Turbo Latest",       provider: "alibaba", cost: "$0.02/$0.06" },
+  { id: "qwen-flash",              name: "Qwen Flash",              provider: "alibaba", cost: "$0.01/$0.03" },
+  { id: "qwen2.5-72b-instruct",    name: "Qwen2.5 72B Instruct",    provider: "alibaba", cost: "$0.30/$0.90" },
+  // -- Alibaba/Qwen — 추론 --
+  { id: "qwq-plus",                name: "QwQ Plus",                provider: "alibaba", cost: "$0.60/$2.40" },
+  // -- Alibaba/Qwen — 멀티모달 --
+  { id: "qwen-vl-max",             name: "Qwen VL Max",             provider: "alibaba", cost: "$0.40/$1.20" },
+  { id: "qwen-vl-plus",            name: "Qwen VL Plus",            provider: "alibaba", cost: "$0.08/$0.32" },
+  { id: "qwen3-vl-plus",           name: "Qwen3 VL Plus",           provider: "alibaba", cost: "$0.35/$1.40" },
+  { id: "qwen3-vl-235b",           name: "Qwen3 VL 235B",           provider: "alibaba", cost: "$0.60/$2.40" },
+  { id: "qwen-omni-turbo",         name: "Qwen Omni Turbo",         provider: "alibaba", cost: "$0.02/$0.06" },
+  // -- DashScope DeepSeek (Alibaba 호스팅) --
+  { id: "dashscope-deepseek-v3.2", name: "DeepSeek V3.2 (DashScope)", provider: "alibaba", cost: "$0.28/$0.42" },
 ];
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -91,6 +128,27 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "openrouter-mistral-small",    label: "Mistral Small",     cost: "변동",   description: "OpenRouter · Mistral 경량" },
   { id: "openrouter-nemotron-free",    label: "Nemotron Free",     cost: "무료",   description: "OpenRouter · NVIDIA 무료" },
   { id: "openrouter-minimax-m2",       label: "MiniMax M2.7",      cost: "변동",   description: "OpenRouter · MiniMax 최신" },
+  // Alibaba/Qwen 대표 모델
+  { id: "qwen3-235b",              label: "Qwen3 235B",        cost: "$0.006", description: "Alibaba · 최고 성능" },
+  { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.006", description: "Alibaba · 추론 특화 최대" },
+  { id: "qwen3-next-80b",          label: "Qwen3 Next 80B",    cost: "$0.003", description: "Alibaba · 차세대 80B" },
+  { id: "qwen3-32b",               label: "Qwen3 32B",         cost: "$0.001", description: "Alibaba · 균형 성능" },
+  { id: "qwen3-14b",               label: "Qwen3 14B",         cost: "$0.0004",description: "Alibaba · 경량 고성능" },
+  { id: "qwen3-8b",                label: "Qwen3 8B",          cost: "$0.0002",description: "Alibaba · 초경량" },
+  { id: "qwen3-coder-480b",        label: "Qwen3 Coder 480B",  cost: "$0.012", description: "Alibaba · 코딩 최강" },
+  { id: "qwen3-coder-plus",        label: "Qwen3 Coder+",      cost: "$0.003", description: "Alibaba · 코딩 특화" },
+  { id: "qwen3-coder-flash",       label: "Qwen3 Coder Flash", cost: "$0.0007",description: "Alibaba · 코딩 경량" },
+  { id: "qwen3.5-plus",            label: "Qwen3.5 Plus",      cost: "$0.004", description: "Alibaba · Qwen3.5 균형" },
+  { id: "qwen3.5-flash",           label: "Qwen3.5 Flash",     cost: "$0.0007",description: "Alibaba · Qwen3.5 경량" },
+  { id: "qwen-max",                label: "Qwen Max",          cost: "$0.004", description: "Alibaba · 안정 플래그십" },
+  { id: "qwen-plus",               label: "Qwen Plus",         cost: "$0.001", description: "Alibaba · 안정 균형" },
+  { id: "qwen-turbo",              label: "Qwen Turbo",        cost: "$0.0002",description: "Alibaba · 초저가" },
+  { id: "qwen-flash",              label: "Qwen Flash",        cost: "$0.0001",description: "Alibaba · 최저가" },
+  { id: "qwen2.5-72b-instruct",    label: "Qwen2.5 72B",       cost: "$0.003", description: "Alibaba · Qwen2.5 최대" },
+  { id: "qwq-plus",                label: "QwQ Plus",          cost: "$0.006", description: "Alibaba · 추론 특화" },
+  { id: "qwen3-vl-235b",           label: "Qwen3 VL 235B",     cost: "$0.006", description: "Alibaba · 비전 최강" },
+  { id: "qwen-omni-turbo",         label: "Qwen Omni Turbo",   cost: "$0.0002",description: "Alibaba · 멀티모달 경량" },
+  { id: "dashscope-deepseek-v3.2", label: "DS V3.2 (Ali)",     cost: "$0.003", description: "DashScope · DeepSeek V3.2" },
   { id: "deep-research",               label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
 ];
 
@@ -150,6 +208,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   groq: "Groq (무료)",
   deepseek: "DeepSeek",
   openrouter: "OpenRouter",
+  alibaba: "Alibaba/Qwen",
 };
 
 interface Props {
@@ -161,7 +220,7 @@ export default function ModelSelector({ value, onChange }: Props) {
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   // Group by provider for optgroup
-  const providers = ["auto", "anthropic", "openai", "google", "groq", "deepseek", "openrouter"];
+  const providers = ["auto", "anthropic", "openai", "google", "groq", "deepseek", "openrouter", "alibaba"];
 
   return (
     <div className="flex items-center gap-2 mb-2">
