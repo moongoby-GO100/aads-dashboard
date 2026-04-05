@@ -1408,10 +1408,11 @@ export default function ChatPage() {
     chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWs}`)
       .then(setArtifacts)
       .catch(() => setArtifacts([]));
-    // Sync model from session
-    if (activeSession.current_model) {
-      setModel(activeSession.current_model);
-      localStorage.setItem("aads-chat-model", activeSession.current_model);
+    // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 DEFAULT_MODEL)
+    {
+      const sessionModel = activeSession.current_model || DEFAULT_MODEL;
+      setModel(sessionModel);
+      localStorage.setItem("aads-chat-model", sessionModel);
     }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
     const ct = activeSession.cost_total;
@@ -4166,8 +4167,15 @@ export default function ChatPage() {
           <select
             value={model}
             onChange={(e) => {
-              setModel(e.target.value);
-              localStorage.setItem("aads-chat-model", e.target.value);
+              const newModel = e.target.value;
+              setModel(newModel);
+              localStorage.setItem("aads-chat-model", newModel);
+              if (activeSession) {
+                chatApi(`/chat/sessions/${activeSession.id}`, {
+                  method: "PUT",
+                  body: JSON.stringify({ current_model: newModel }),
+                }).catch(() => {});
+              }
             }}
             style={{
               fontSize: "12px",
