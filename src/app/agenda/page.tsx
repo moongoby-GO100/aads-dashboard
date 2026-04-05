@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
 const STATUS_OPTIONS = ["전체", "논의중", "보류", "결정", "진행중", "완료", "폐기"];
+const PROJECT_OPTIONS = ["전체", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS"];
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   P0: { bg: "#7f1d1d", text: "#fca5a5", label: "P0" },
@@ -70,14 +71,28 @@ export default function AgendaPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("전체");
+  const [projectFilter, setProjectFilter] = useState("전체");
+  const [sessionFilter, setSessionFilter] = useState("전체");
+  const [sessions, setSessions] = useState<string[]>([]);
   const [selected, setSelected] = useState<AgendaItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const fetchAgendas = async (status: string) => {
+  const fetchSessions = async (project: string) => {
+    try {
+      const res = await api.getAgendaSessions(project !== "전체" ? project : undefined);
+      setSessions(Array.isArray(res.sessions) ? res.sessions : []);
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  const fetchAgendas = async (status: string, project: string, session: string) => {
     setLoading(true);
     try {
       const params: Record<string, string | number> = { limit: 50, offset: 0 };
       if (status !== "전체") params.status = status;
+      if (project !== "전체") params.project = project;
+      if (session !== "전체") params.session_id = session;
       const res = await api.getAgendas(params as any);
       setItems(Array.isArray(res.items) ? res.items : []);
       setTotal(typeof res.total === "number" ? res.total : 0);
@@ -87,7 +102,14 @@ export default function AgendaPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAgendas(statusFilter); }, [statusFilter]);
+  useEffect(() => {
+    fetchAgendas(statusFilter, projectFilter, sessionFilter);
+  }, [statusFilter, projectFilter, sessionFilter]);
+
+  useEffect(() => {
+    fetchSessions(projectFilter);
+    setSessionFilter("전체");
+  }, [projectFilter]);
 
   const handleSelect = async (item: AgendaItem) => {
     if (selected?.id === item.id) {
@@ -111,30 +133,69 @@ export default function AgendaPage() {
       <div className="flex-1 p-3 md:p-6 overflow-auto">
 
         {/* 상단 필터 */}
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          {STATUS_OPTIONS.map((s) => (
-            <button
-              key={s}
-              onClick={() => { setStatusFilter(s); setSelected(null); }}
-              className="px-3 py-1.5 text-sm rounded-lg transition-colors"
-              style={statusFilter === s
-                ? { background: "var(--accent)", color: "#fff" }
-                : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-              }
+        <div className="flex flex-col gap-3 mb-5">
+          {/* 드롭다운 필터 행 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={projectFilter}
+              onChange={(e) => { setProjectFilter(e.target.value); setSelected(null); }}
+              className="px-3 py-1.5 text-sm rounded-lg"
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
             >
-              {s}
+              {PROJECT_OPTIONS.map((p) => (
+                <option key={p} value={p}>{p === "전체" ? "전체 프로젝트" : p}</option>
+              ))}
+            </select>
+            <select
+              value={sessionFilter}
+              onChange={(e) => { setSessionFilter(e.target.value); setSelected(null); }}
+              disabled={sessions.length === 0}
+              className="px-3 py-1.5 text-sm rounded-lg"
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                color: sessions.length === 0 ? "var(--text-secondary)" : "var(--text-primary)",
+                outline: "none",
+                opacity: sessions.length === 0 ? 0.5 : 1,
+              }}
+            >
+              <option value="전체">전체 세션</option>
+              {sessions.map((s) => (
+                <option key={s} value={s}>{s.length > 20 ? s.slice(0, 20) + "…" : s}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => { fetchAgendas(statusFilter, projectFilter, sessionFilter); fetchSessions(projectFilter); }}
+              className="ml-auto px-3 py-1.5 text-sm rounded-lg"
+              style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+            >
+              새로고침
             </button>
-          ))}
-          <button
-            onClick={() => fetchAgendas(statusFilter)}
-            className="ml-auto px-3 py-1.5 text-sm rounded-lg"
-            style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
-          >
-            새로고침
-          </button>
-          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            총 {total}건
-          </span>
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              총 {total}건
+            </span>
+          </div>
+          {/* 상태 필터 버튼 행 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {STATUS_OPTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => { setStatusFilter(s); setSelected(null); }}
+                className="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                style={statusFilter === s
+                  ? { background: "var(--accent)", color: "#fff" }
+                  : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
+                }
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
