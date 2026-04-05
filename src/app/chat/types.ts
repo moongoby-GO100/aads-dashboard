@@ -79,7 +79,7 @@ export interface Artifact {
 
 export type Theme = "dark" | "light";
 export type ArtifactMode = "full" | "mini" | "hidden";
-export type ArtifactTab = "report" | "code" | "chart" | "dashboard" | "tasks" | "log";
+export type ArtifactTab = "report" | "code" | "chart" | "agenda" | "tasks" | "log";
 export type ScreenSize = "desktop" | "tablet" | "mobile";
 
 // Theme CSS variables

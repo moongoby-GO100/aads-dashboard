@@ -3,6 +3,35 @@ import { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
+import { BASE_URL, authHdrs } from "./api";
+
+interface AgendaItem {
+  id: string;
+  project: string;
+  title: string;
+  summary: string;
+  status: string;
+  priority: string;
+  decision?: string;
+  tags?: string[];
+  created_at: string;
+}
+
+const AGENDA_STATUS_COLORS: Record<string, string> = {
+  "논의중": "#3b82f6",
+  "결정": "#22c55e",
+  "진행중": "#f97316",
+  "완료": "#6b7280",
+  "보류": "#eab308",
+  "폐기": "#ef4444",
+};
+
+const AGENDA_PRIORITY_COLORS: Record<string, string> = {
+  "P0": "#ef4444",
+  "P1": "#f97316",
+  "P2": "#3b82f6",
+  "P3": "#6b7280",
+};
 
 export interface ChatArtifactPanelProps {
   screenSize: ScreenSize;
@@ -115,6 +144,25 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [tabBarWidth, setTabBarWidth] = useState(420);
+  // 배지 펄스 애니메이션 상태
+  const [pulsedTabs, setPulsedTabs] = useState<Set<string>>(new Set());
+  const prevArtifactCountsRef = useRef<Record<string, number>>({});
+
+  // 아젠다 상태
+  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
+  const [agendaLoading, setAgendaLoading] = useState(false);
+  const [agendaFilter, setAgendaFilter] = useState<string>("전체");
+  const [expandedAgendaId, setExpandedAgendaId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (artifactTab !== "agenda") return;
+    setAgendaLoading(true);
+    fetch(`${BASE_URL}/agenda/`, { headers: authHdrs() })
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((data) => setAgendaItems(data.items ?? []))
+      .catch(() => setAgendaItems([]))
+      .finally(() => setAgendaLoading(false));
+  }, [artifactTab]);
   const tabBarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = tabBarRef.current;
@@ -127,9 +175,33 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   }, []);
   const showTabLabel = tabBarWidth >= 320;
 
+  // artifactCounts 변경 감지 → 증가한 탭에 펄스 트리거
+  useEffect(() => {
+    const prev = prevArtifactCountsRef.current;
+    const newPulsed = new Set<string>();
+    for (const key of Object.keys(artifactCounts)) {
+      if ((artifactCounts[key] ?? 0) > (prev[key] ?? 0)) {
+        newPulsed.add(key);
+      }
+    }
+    if (newPulsed.size > 0) {
+      setPulsedTabs(newPulsed);
+      const t = setTimeout(() => setPulsedTabs(new Set()), 2000);
+      prevArtifactCountsRef.current = { ...artifactCounts };
+      return () => clearTimeout(t);
+    }
+    prevArtifactCountsRef.current = { ...artifactCounts };
+  }, [artifactCounts]);
 
   return (
     <>
+    <style>{`
+      @keyframes badgePulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(1); }
+      }
+    `}</style>
     {(showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden")) && (
       <div
         style={{
@@ -217,14 +289,17 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             >
               {(
                 [
+                  { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                  { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
                   { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                   { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                   { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
-                  { key: "dashboard" as ArtifactTab, icon: "🖥️", label: "대시보드" },
                   { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
-                  { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
                 ]
-              ).map((tab) => (
+              ).filter((tab) => {
+                if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
+                return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
+              }).map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => { setArtifactTab(tab.key); setSelectedArtifactIdx(0); }}
@@ -244,11 +319,13 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   }}
                 >
                   {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
-                  {tab.key !== "tasks" && tab.key !== "log" && artifactCounts[tab.key] > 0 && (
+                  {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
                     <span style={{
                       marginLeft: '3px',
                       fontSize: '10px',
                       opacity: 0.7,
+                      display: 'inline-block',
+                      animation: pulsedTabs.has(tab.key) ? 'badgePulse 0.4s ease 3' : 'none',
                     }}>({artifactCounts[tab.key]})</span>
                   )}
                   {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
@@ -261,7 +338,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && artifactTab !== "log" && (
+            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -333,7 +410,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               const localCurPos = lfWithIdx.findIndex(({ idx }) => idx === selectedArtifactIdx);
               const prevItem = localCurPos > 0 ? lfWithIdx[localCurPos - 1] : null;
               const nextItem = localCurPos < lfWithIdx.length - 1 ? lfWithIdx[localCurPos + 1] : null;
-              return lfWithIdx.length > 1 && artifactTab !== "tasks" ? (
+              return lfWithIdx.length > 1 && artifactTab !== "tasks" && artifactTab !== "agenda" ? (
               <div style={{
                 padding: '8px 12px',
                 borderBottom: '1px solid var(--ct-border)',
@@ -409,6 +486,117 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             >
               {artifactTab === "tasks" ? (
                 <ArtifactTaskMonitor sessionId={activeSession?.id} />
+              ) : artifactTab === "agenda" ? (
+                <div>
+                  {/* 상태 필터 칩 */}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
+                    {["전체", "논의중", "진행중", "결정", "완료"].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setAgendaFilter(s)}
+                        style={{
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          border: "1px solid var(--ct-border)",
+                          background: agendaFilter === s ? "var(--ct-accent)" : "transparent",
+                          color: agendaFilter === s ? "#fff" : "var(--ct-text2)",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  {agendaLoading ? (
+                    <div style={{ color: "var(--ct-text2)", fontSize: "12px", textAlign: "center", paddingTop: "20px" }}>
+                      불러오는 중...
+                    </div>
+                  ) : (() => {
+                    const filtered = agendaItems.filter((item) =>
+                      agendaFilter === "전체" || item.status === agendaFilter
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <div style={{ color: "var(--ct-text2)", fontSize: "12px", textAlign: "center", paddingTop: "20px" }}>
+                          등록된 아젠다가 없습니다
+                        </div>
+                      );
+                    }
+                    return filtered.map((item) => {
+                      const isExpanded = expandedAgendaId === item.id;
+                      const statusColor = AGENDA_STATUS_COLORS[item.status] ?? "#6b7280";
+                      const priorityColor = AGENDA_PRIORITY_COLORS[item.priority] ?? "#6b7280";
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => setExpandedAgendaId(isExpanded ? null : item.id)}
+                          style={{
+                            background: "var(--ct-card)",
+                            border: "1px solid var(--ct-border)",
+                            borderRadius: "8px",
+                            padding: "10px 12px",
+                            marginBottom: "8px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "4px" }}>
+                            <span style={{
+                              fontSize: "10px", fontWeight: 700, color: "#fff",
+                              background: priorityColor, borderRadius: "4px",
+                              padding: "1px 5px", whiteSpace: "nowrap", flexShrink: 0,
+                            }}>{item.priority}</span>
+                            <span style={{
+                              fontSize: "12px", fontWeight: 600, color: "var(--ct-text)",
+                              flex: 1, lineHeight: "1.4",
+                            }}>{item.title}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: isExpanded ? "8px" : "0" }}>
+                            <span style={{
+                              fontSize: "10px", color: "#fff",
+                              background: statusColor, borderRadius: "10px",
+                              padding: "1px 7px",
+                            }}>{item.status}</span>
+                            {item.project && (
+                              <span style={{
+                                fontSize: "10px", color: "var(--ct-text2)",
+                                background: "var(--ct-hover)", borderRadius: "4px",
+                                padding: "1px 6px",
+                              }}>{item.project}</span>
+                            )}
+                          </div>
+                          {!isExpanded && item.summary && (
+                            <div style={{
+                              fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px",
+                              overflow: "hidden", display: "-webkit-box",
+                              WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                              lineHeight: "1.5",
+                            }}>
+                              {item.summary}
+                            </div>
+                          )}
+                          {isExpanded && (
+                            <div style={{ fontSize: "12px", color: "var(--ct-text2)", lineHeight: "1.6" }}>
+                              {item.summary && (
+                                <div style={{ marginBottom: "6px" }}>{item.summary}</div>
+                              )}
+                              {item.decision && (
+                                <div style={{
+                                  background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)",
+                                  borderRadius: "6px", padding: "6px 10px", fontSize: "11px",
+                                }}>
+                                  <span style={{ fontWeight: 600, color: "#22c55e" }}>결정: </span>
+                                  {item.decision}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
                   {(systemMessages ?? []).length === 0 ? (
@@ -602,12 +790,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
           >
             {(
               [
+                { key: "log" as ArtifactTab, icon: "🔧" },
+                { key: "agenda" as ArtifactTab, icon: "📋" },
                 { key: "report" as ArtifactTab, icon: "📄" },
                 { key: "code" as ArtifactTab, icon: "💻" },
                 { key: "chart" as ArtifactTab, icon: "📊" },
-                { key: "dashboard" as ArtifactTab, icon: "🖥️" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },
-                { key: "log" as ArtifactTab, icon: "🔧" },
               ]
             ).map((tab) => (
               <button
@@ -628,7 +816,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               >
                 <span style={{ position: 'relative' }}>
                   {tab.icon}
-                  {tab.key !== "tasks" && tab.key !== "log" && artifactCounts[tab.key] > 0 && (
+                  {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
                     <span style={{
                       position: 'absolute',
                       top: '-6px',

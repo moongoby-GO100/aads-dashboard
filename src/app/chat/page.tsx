@@ -889,6 +889,8 @@ export default function ChatPage() {
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [artifactToast, setArtifactToast] = useState<string | null>(null);
+  const artifactToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
@@ -2284,10 +2286,32 @@ export default function ChatPage() {
               // AADS-190: 세션 비용/턴 업데이트
               if (ev.session_cost) setSessionCost(ev.session_cost);
               if (ev.session_turns) setSessionTurns(ev.session_turns);
-              // UX: 스트리밍 완료 시 아티팩트 자동 갱신 (실시간 반영)
+              // UX: 스트리밍 완료 시 아티팩트 자동 갱신 + 신규 저장 토스트
               if (activeWsRef.current) {
                 chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWsRef.current}`)
-                  .then(setArtifacts)
+                  .then((newArtifacts) => {
+                    setArtifacts((prev) => {
+                      const prevIds = new Set(prev.map((a) => a.id));
+                      const added = newArtifacts.filter((a) => !prevIds.has(a.id));
+                      if (added.length > 0) {
+                        const typeLabels: Record<string, string> = {
+                          report: "📄 보고서가 저장되었습니다",
+                          text: "📄 보고서가 저장되었습니다",
+                          code: "💻 코드가 저장되었습니다",
+                          chart: "📊 차트가 저장되었습니다",
+                          image: "🖼️ 이미지가 저장되었습니다",
+                          file: "📎 파일이 저장되었습니다",
+                          table: "📋 테이블이 저장되었습니다",
+                        };
+                        const firstType = added[0].artifact_type;
+                        const msg = typeLabels[firstType] ?? "📁 아티팩트가 저장되었습니다";
+                        setArtifactToast(msg);
+                        if (artifactToastTimerRef.current) clearTimeout(artifactToastTimerRef.current);
+                        artifactToastTimerRef.current = setTimeout(() => setArtifactToast(null), 3000);
+                      }
+                      return newArtifacts;
+                    });
+                  })
                   .catch(() => {});
               }
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
@@ -3383,7 +3407,7 @@ export default function ChatPage() {
     if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
     if (artifactTab === "code") return a.artifact_type === "code";
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
-    if (artifactTab === "dashboard") return a.artifact_type === "dashboard";
+    if (artifactTab === "agenda") return false;
     return false;
   });
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
@@ -3391,7 +3415,7 @@ export default function ChatPage() {
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
-    dashboard: artifacts.filter((a) => a.artifact_type === "dashboard").length,
+    agenda: 0,
     log: systemMessages.length,
   };
 
@@ -3509,6 +3533,17 @@ export default function ChatPage() {
           animation: "fadeIn 0.3s ease",
         }}>
           {completionToast}
+        </div>
+      )}
+      {/* ── 아티팩트 저장 토스트 (우하단) ── */}
+      {artifactToast && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24,
+          zIndex: 9999, background: "var(--ct-accent)", color: "#fff", padding: "10px 18px",
+          borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          animation: "fadeIn 0.3s ease",
+        }}>
+          {artifactToast}
         </div>
       )}
       {/* ── Image generation modal ── */}
