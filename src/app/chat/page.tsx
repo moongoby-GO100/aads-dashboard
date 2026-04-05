@@ -964,6 +964,7 @@ export default function ChatPage() {
     m.intent === "runner_response" ||
     (m.role === "assistant" && (
       m.content?.includes("[Pipeline Runner]") ||
+      m.content?.includes("[Runner]") ||
       (m.content?.startsWith("Step ") && m.content?.includes("runner-")) ||
       m.content?.includes("pipeline_runner_approve") ||
       m.content?.includes("배포 검증 5단계")
@@ -971,7 +972,7 @@ export default function ChatPage() {
 
   // 시스템 메시지 목록 (로그 탭용)
   const systemMessages = messages.filter(
-    (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+    (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
   );
   // ── 로그 탭 unread 카운트 ──
   const prevSystemMsgCountRef = useRef(0);
@@ -980,7 +981,7 @@ export default function ChatPage() {
   }, [artifactTab]);
   useEffect(() => {
     const current = messages.filter(
-      (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+      (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
     ).length;
     if (current > prevSystemMsgCountRef.current && artifactTab !== "log") {
       setUnreadLogCount(n => n + (current - prevSystemMsgCountRef.current));
@@ -4390,7 +4391,7 @@ export default function ChatPage() {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 시스템 메시지: 접이식 한 줄 표시
               // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
-              const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "runner_response" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
+              const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "runner_response" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
                 <React.Fragment key={msg.id || idx}>

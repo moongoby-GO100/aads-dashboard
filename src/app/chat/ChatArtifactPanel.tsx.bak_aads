@@ -169,12 +169,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [jobsLoading, setJobsLoading] = useState(false);
 
   useEffect(() => {
-    if (!sessionId || artifactTab !== "log") return;
+    if (!sessionId) return;
     let cancelled = false;
     const fetchJobs = async () => {
       try {
         setJobsLoading(true);
-        const res = await fetch(`/api/pipeline/jobs?session_id=${sessionId}&limit=50`, { headers: authHdrs() });
+        const res = await fetch(`/api/pipeline/jobs?session_id=${sessionId}&limit=50`);
         if (!cancelled && res.ok) {
           const data = await res.json();
           setRunnerJobs(data);
@@ -184,9 +184,9 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       }
     };
     fetchJobs();
-    const interval = setInterval(fetchJobs, 15000);
+    const interval = setInterval(fetchJobs, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [sessionId, artifactTab]);
+  }, [sessionId]);
 
   const errorDetailKo = (d: string | null): string => {
     const map: Record<string, string> = {
