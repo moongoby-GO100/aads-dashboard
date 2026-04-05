@@ -26,6 +26,16 @@ export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function updateArtifact(
+  artifactId: string,
+  data: { title?: string; content?: string }
+): Promise<void> {
+  await chatApi(`/chat/artifacts/${artifactId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function uploadChatFile(file: File, sessionId: string): Promise<{
   file_id: string;
   original_name: string;

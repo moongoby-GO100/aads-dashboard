@@ -3,7 +3,7 @@ import { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
-import { BASE_URL, authHdrs } from "./api";
+import { BASE_URL, authHdrs, updateArtifact } from "./api";
 
 interface AgendaItem {
   id: string;
