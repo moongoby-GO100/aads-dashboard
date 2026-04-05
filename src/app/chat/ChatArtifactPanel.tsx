@@ -642,8 +642,15 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   ) : (
                     [...(systemMessages ?? [])].reverse().map((msg, idx) => {
                       const isAutoReaction = msg.intent === "auto_reaction";
-                      const icon = isAutoReaction ? "🤖" : "⚙️";
-                      const label = isAutoReaction ? "자동 반응" : "시스템";
+                      const isRunnerResponse = msg.intent === "runner_response" ||
+                        (msg.role === "assistant" && (
+                          msg.content?.includes("[Pipeline Runner]") ||
+                          (msg.content?.startsWith("Step ") && msg.content?.includes("runner-")) ||
+                          msg.content?.includes("pipeline_runner_approve") ||
+                          msg.content?.includes("배포 검증 5단계")
+                        ));
+                      const icon = isAutoReaction ? "🤖" : isRunnerResponse ? "🔧" : "⚙️";
+                      const label = isAutoReaction ? "자동 반응" : isRunnerResponse ? "Runner" : "시스템";
                       const jobMatch = msg.content?.match(/Job[:\s*]+(\S+)/);
                       const jobId = jobMatch ? jobMatch[1] : null;
                       return (
