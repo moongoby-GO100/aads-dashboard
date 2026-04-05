@@ -831,12 +831,6 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, any>>>([]);
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
-  // ── AADS-212: 화면 공유 상태 ──
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [captureMode, setCaptureMode] = useState<'single' | 'continuous'>('single');
-  const screenStreamRef = useRef<MediaStream | null>(null);
-  const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   // C-2: Object URL 캐싱 + 메모리 누수 방지
   const pendingPreviewUrls = useMemo(
     () => pendingPreviewFiles.map((f) => f.type.startsWith("image/") ? URL.createObjectURL(f) : null),
@@ -3243,76 +3237,6 @@ export default function ChatPage() {
     textareaRef.current?.focus();
   }
 
-  // ── AADS-212: 화면 공유 분석 ──
-  async function captureFrame() {
-    const video = screenVideoRef.current;
-    if (!video || !screenStreamRef.current) return;
-    const canvas = document.createElement("canvas");
-    const MAX_W = 1920, MAX_H = 1080;
-    let w = video.videoWidth || 1920, h = video.videoHeight || 1080;
-    if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
-    if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; }
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) return;
-    const now = new Date();
-    const ts = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
-    const file = new File([blob], `screen_capture_${ts}.png`, { type: "image/png" });
-    await handleFiles([file]);
-  }
-
-  async function startScreenShare(mode: 'single' | 'continuous' = captureMode) {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = stream;
-      setIsScreenSharing(true);
-      // hidden video element for frame capture
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      video.muted = true;
-      video.autoplay = true;
-      video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;";
-      document.body.appendChild(video);
-      screenVideoRef.current = video;
-      await video.play().catch(() => {});
-      // 사용자가 브라우저 "공유 중지" 클릭 시 자동 정리
-      stream.getVideoTracks()[0]?.addEventListener("ended", () => { stopScreenShare(); });
-      if (mode === "continuous") {
-        captureIntervalRef.current = setInterval(() => { captureFrame(); }, 5000);
-      } else {
-        // 단일 캡처: 비디오 메타데이터 로드 후 캡처
-        video.addEventListener("loadedmetadata", () => { captureFrame(); }, { once: true });
-        // fallback: 2초 내 미로드 시
-        setTimeout(() => { if (video.videoWidth > 0) captureFrame(); }, 2000);
-        // fallback: 2초 내 미로드 시
-        setTimeout(() => { if (video.videoWidth > 0) captureFrame(); }, 2000);
-      }
-    } catch {
-      // 사용자가 화면 선택 취소
-    }
-  }
-
-  function stopScreenShare() {
-    if (captureIntervalRef.current) {
-      clearInterval(captureIntervalRef.current);
-      captureIntervalRef.current = null;
-    }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((t) => t.stop());
-      screenStreamRef.current = null;
-    }
-    if (screenVideoRef.current) {
-      screenVideoRef.current.pause();
-      screenVideoRef.current.srcObject = null;
-      screenVideoRef.current.remove();
-      screenVideoRef.current = null;
-    }
-    setIsScreenSharing(false);
-  }
 
   // Ctrl+V 클립보드 붙여넣기 — 위(activeWs 의존) 핸들러가 모든 파일 타입 처리
 
@@ -4609,67 +4533,6 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* AADS-212: 화면 공유 중 인디케이터 */}
-          {isScreenSharing && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              marginBottom: "6px", padding: "6px 12px",
-              background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)",
-              borderRadius: "8px", fontSize: "13px", color: "#ef4444",
-            }}>
-              <span style={{
-                width: "8px", height: "8px", borderRadius: "50%",
-                background: "#ef4444", flexShrink: 0,
-                boxShadow: "0 0 0 0 rgba(239,68,68,0.4)",
-                animation: "ct-pulse-dot 1.5s ease-in-out infinite",
-              }} />
-              <span style={{ flex: 1, fontWeight: 500 }}>🖥️ 화면 공유 중</span>
-              <button
-                onClick={() => { captureFrame(); }}
-                style={{
-                  padding: "2px 10px", fontSize: "11px", fontWeight: 600,
-                  background: "rgba(59,130,246,0.15)", color: "#3b82f6",
-                  border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px",
-                  cursor: "pointer",
-                }}
-                title="지금 화면 캡처"
-              >📸 캡처</button>
-              <button
-                onClick={() => {
-                  const newMode: 'single' | 'continuous' = captureMode === 'single' ? 'continuous' : 'single';
-                  setCaptureMode(newMode);
-                  if (newMode === 'continuous') {
-                    if (!captureIntervalRef.current) {
-                      captureIntervalRef.current = setInterval(() => { captureFrame(); }, 5000);
-                    }
-                  } else {
-                    if (captureIntervalRef.current) {
-                      clearInterval(captureIntervalRef.current);
-                      captureIntervalRef.current = null;
-                    }
-                  }
-                }}
-                style={{
-                  padding: "2px 10px", fontSize: "11px", fontWeight: 600,
-                  background: captureMode === 'continuous' ? "rgba(34,197,94,0.15)" : "var(--ct-hover)",
-                  color: captureMode === 'continuous' ? "#22c55e" : "var(--ct-text2)",
-                  border: `1px solid ${captureMode === 'continuous' ? "rgba(34,197,94,0.35)" : "var(--ct-border)"}`,
-                  borderRadius: "6px", cursor: "pointer",
-                }}
-                title={captureMode === 'continuous' ? "연속 캡처 비활성화 (클릭)" : "5초 연속 캡처 활성화 (클릭)"}
-              >{captureMode === 'continuous' ? "🔴 연속중" : "🔁 연속"}</button>
-              <button
-                onClick={stopScreenShare}
-                style={{
-                  padding: "2px 10px", fontSize: "11px", fontWeight: 600,
-                  background: "rgba(239,68,68,0.12)", color: "#ef4444",
-                  border: "1px solid rgba(239,68,68,0.3)", borderRadius: "6px",
-                  cursor: "pointer",
-                }}
-                title="화면 공유 중지"
-              >✕ 중지</button>
-            </div>
-          )}
 
           {/* 첨부된 파일 목록 (이미지 썸네일 + 텍스트 파일 배지) */}
           {pendingPreviewFiles.length > 0 && (
@@ -4728,7 +4591,6 @@ export default function ChatPage() {
                 { icon: "🔍", label: "검색", prefix: "[검색]" },
                 { icon: "🧪", label: "딥리서치", prefix: "[딥리서치]" },
                 { icon: "📎", label: "파일", action: "file" as const },
-                { icon: "🖥️", label: "화면공유", action: "screenshare" as const },
                 { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
@@ -4739,15 +4601,6 @@ export default function ChatPage() {
                   onClick={() => {
                     if ("action" in chip && chip.action === "file") {
                       fileInputRef.current?.click();
-                      if (screenSize === "mobile") setShowMobileActions(false);
-                      return;
-                    }
-                    if ("action" in chip && chip.action === "screenshare") {
-                      if (isScreenSharing) {
-                        stopScreenShare();
-                      } else {
-                        startScreenShare(captureMode);
-                      }
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
@@ -4770,21 +4623,18 @@ export default function ChatPage() {
                   style={{
                     padding: screenSize === "mobile" ? "10px 14px" : "4px 10px",
                     fontSize: screenSize === "mobile" ? "14px" : "12px",
-                    background: ("action" in chip && chip.action === "screenshare" && isScreenSharing)
-                      ? "rgba(239,68,68,0.12)" : "var(--ct-hover)",
-                    border: ("action" in chip && chip.action === "screenshare" && isScreenSharing)
-                      ? "1px solid rgba(239,68,68,0.4)" : "1px solid var(--ct-border)",
+                    background: "var(--ct-hover)",
+                    border: "1px solid var(--ct-border)",
                     borderRadius: screenSize === "mobile" ? "12px" : "16px",
                     cursor: "pointer",
-                    color: ("action" in chip && chip.action === "screenshare" && isScreenSharing)
-                      ? "#ef4444" : "var(--ct-text)",
+                    color: "var(--ct-text)",
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
                     ...(screenSize === "mobile" ? { justifyContent: "center" } : {}),
                   }}
                 >
-                  {chip.icon} {"action" in chip && chip.action === "screenshare" && isScreenSharing ? "공유중지" : chip.label}
+                  {chip.icon} {chip.label}
                 </button>
               ))}
             </div>
