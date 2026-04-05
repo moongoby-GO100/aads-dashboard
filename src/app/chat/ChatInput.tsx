@@ -31,10 +31,12 @@ interface ChatInputProps {
   onLocalMessage?: (text: string) => void;
   placeholder?: string;
   onScreenShare?: (file: File) => void;
+  onHiddenScreenCapture?: (file: File) => void;
+  screenHiddenMode?: boolean;
 }
 
 const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare }, ref) {
+  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode }, ref) {
     const [localInput, setLocalInput] = useState("");
     const taRef = useRef<HTMLTextAreaElement>(null);
     const hadInputRef = useRef(false);
@@ -301,7 +303,11 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
       <div style={{ display: "flex", flex: 1, alignItems: "flex-end", gap: "4px" }}>
         {/* 화면 공유 버튼 + 인디케이터 (onScreenShare 있을 때만) */}
         {onScreenShare && (
-          <ScreenShare onCapture={onScreenShare} />
+          <ScreenShare
+            onCapture={onScreenShare}
+            onHiddenCapture={onHiddenScreenCapture}
+            hiddenMode={screenHiddenMode ?? true}
+          />
         )}
 
         {/* 텍스트 입력 영역 (슬래시/멘션 메뉴 absolute 기준점) */}

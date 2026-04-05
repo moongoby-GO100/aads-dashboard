@@ -114,6 +114,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   // 아티팩트 검색/필터 상태
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [tabBarWidth, setTabBarWidth] = useState(420);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = tabBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      setTabBarWidth(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const showTabLabel = tabBarWidth >= 320;
 
 
   return (
@@ -194,10 +206,13 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 
             {/* Artifact tabs */}
             <div
+              ref={tabBarRef}
               style={{
                 display: "flex",
                 borderBottom: "1px solid var(--ct-border)",
                 padding: "0 8px",
+                overflowX: "auto",
+                scrollbarWidth: "none",
               }}
             >
               {(
@@ -228,7 +243,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
                   {tab.key !== "tasks" && tab.key !== "log" && artifactCounts[tab.key] > 0 && (
                     <span style={{
                       marginLeft: '3px',
@@ -401,14 +416,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       운영 로그가 없습니다
                     </div>
                   ) : (
-                    [...(systemMessages ?? [])].reverse().map((msg) => {
+                    [...(systemMessages ?? [])].reverse().map((msg, idx) => {
                       const isAutoReaction = msg.intent === "auto_reaction";
                       const icon = isAutoReaction ? "🤖" : "⚙️";
                       const label = isAutoReaction ? "자동 반응" : "시스템";
                       const jobMatch = msg.content?.match(/Job[:\s*]+(\S+)/);
                       const jobId = jobMatch ? jobMatch[1] : null;
                       return (
-                        <details key={msg.id} style={{ borderBottom: "1px solid var(--ct-border)", margin: "0" }} open={isAutoReaction}>
+                        <details key={msg.id} style={{ borderBottom: "1px solid var(--ct-border)", margin: "0" }} open={isAutoReaction && idx === 0}>
                           <summary style={{
                             fontSize: "11px", color: "var(--ct-text2)", cursor: "pointer",
                             listStyle: "none", display: "flex", alignItems: "center", gap: "6px",

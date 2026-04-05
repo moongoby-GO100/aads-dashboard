@@ -3,9 +3,11 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 export interface ScreenShareProps {
   onCapture: (file: File) => void;
+  onHiddenCapture?: (file: File) => void;
+  hiddenMode?: boolean;
 }
 
-export default function ScreenShare({ onCapture }: ScreenShareProps) {
+export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: ScreenShareProps) {
   const [isSharing, setIsSharing] = useState(false);
   const [captureMode, setCaptureMode] = useState<"single" | "continuous">("single");
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,6 +35,32 @@ export default function ScreenShare({ onCapture }: ScreenShareProps) {
     const file = new File([blob], `screen_capture_${ts}.png`, { type: "image/png" });
     onCapture(file);
   }, [onCapture]);
+
+  const captureFrameHidden = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+    const canvas = document.createElement("canvas");
+    const MAX_W = 1920, MAX_H = 1080;
+    let w = video.videoWidth || 1920;
+    let h = video.videoHeight || 1080;
+    if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
+    if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; }
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) return;
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+    const file = new File([blob], `screen_capture_${ts}.png`, { type: "image/png" });
+    if (hiddenMode && onHiddenCapture) {
+      onHiddenCapture(file);
+    } else {
+      onCapture(file);
+    }
+  }, [onCapture, onHiddenCapture, hiddenMode]);
 
   const stopShare = useCallback(() => {
     if (intervalRef.current) {
@@ -67,14 +95,14 @@ export default function ScreenShare({ onCapture }: ScreenShareProps) {
       await video.play().catch(() => {});
       stream.getVideoTracks()[0]?.addEventListener("ended", () => stopShare());
       if (mode === "continuous") {
-        intervalRef.current = setInterval(() => captureFrame(), 5000);
+        intervalRef.current = setInterval(() => captureFrameHidden(), 5000);
       } else {
         setTimeout(() => captureFrame(), 500);
       }
     } catch {
       // 사용자가 화면 선택 취소
     }
-  }, [captureMode, captureFrame, stopShare]);
+  }, [captureMode, captureFrame, captureFrameHidden, stopShare]);
 
   // continuous 모드 토글: 인터벌 교체
   const toggleContinuous = useCallback(() => {
@@ -82,7 +110,7 @@ export default function ScreenShare({ onCapture }: ScreenShareProps) {
     setCaptureMode(newMode);
     if (newMode === "continuous") {
       if (!intervalRef.current) {
-        intervalRef.current = setInterval(() => captureFrame(), 5000);
+        intervalRef.current = setInterval(() => captureFrameHidden(), 5000);
       }
     } else {
       if (intervalRef.current) {
@@ -90,7 +118,7 @@ export default function ScreenShare({ onCapture }: ScreenShareProps) {
         intervalRef.current = null;
       }
     }
-  }, [captureMode, captureFrame]);
+  }, [captureMode, captureFrameHidden]);
 
   // 언마운트 시 정리
   useEffect(() => () => stopShare(), [stopShare]);
@@ -136,7 +164,16 @@ export default function ScreenShare({ onCapture }: ScreenShareProps) {
             width: "8px", height: "8px", borderRadius: "50%",
             background: "#ef4444", flexShrink: 0,
           }} />
-          <span style={{ flex: 1, fontWeight: 500 }}>🖥️ 화면 공유 중</span>
+          <span style={{ flex: 1, fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+            🖥️ 화면 공유 중
+            {hiddenMode && (
+              <span style={{
+                fontSize: "10px", fontWeight: 600, padding: "1px 6px",
+                background: "rgba(139,92,246,0.2)", color: "#a78bfa",
+                border: "1px solid rgba(139,92,246,0.4)", borderRadius: "4px",
+              }}>👁️ 히든</span>
+            )}
+          </span>
           <button
             type="button"
             onClick={() => captureFrame()}

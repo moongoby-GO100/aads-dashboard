@@ -43,6 +43,7 @@ interface MessageItemProps {
   onViewReport?: () => void;
   linkedArtifact?: { id: string; title: string; artifact_type: string; content: string };
   onViewArtifact?: (artifactId: string) => void;
+  onOpenLightbox?: (srcs: string[], idx: number) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -50,7 +51,7 @@ const MessageItem = memo(function MessageItem({
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
   isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
-  onViewReport, linkedArtifact, onViewArtifact,
+  onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
   const replyTarget = msg.reply_to_id && allMessages
@@ -273,35 +274,51 @@ const MessageItem = memo(function MessageItem({
                 }),
           }}
         >
-          {/* 첨부 이미지 표시: 로컬 프리뷰 → 서버 file_url → 레거시 base64 */}
+          {/* 첨부 이미지 표시: 그리드 레이아웃 + 라이트박스 */}
           {msg.role === "user" && (() => {
             const previews = msg.attachmentPreviews || [];
             const serverAtts = (msg.attachments || []).filter(
               (a) => (a.type === "image" || a.mime_type?.startsWith("image/") || a.media_type?.startsWith("image/")) && (a.file_url || a.base64)
             );
-            if (previews.length === 0 && serverAtts.length === 0) return null;
+            const allImgs: string[] = [
+              ...previews,
+              ...serverAtts.map(att => att.file_url
+                ? `${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}${att.file_url}`
+                : att.base64
+                  ? `data:${att.mime_type || att.media_type || att.mime || "image/png"};base64,${att.base64}`
+                  : ""
+              ),
+            ].filter(Boolean) as string[];
+            if (allImgs.length === 0) return null;
+
+            const maxVisible = Math.min(allImgs.length, 4);
+            const hiddenCount = allImgs.length - 4;
+            const cols = allImgs.length === 1 ? 1 : 2;
+            const cellSize = allImgs.length === 1 ? "280px" : "136px";
+
             return (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                {previews.map((url, pi) => (
-                  <img key={`p-${pi}`} src={url} alt="첨부 이미지" style={{
-                    maxWidth: "min(200px, calc(50vw - 12px))", maxHeight: "min(200px, calc(50vw - 12px))", objectFit: "cover",
-                    borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
-                  }} />
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${cols}, ${cellSize})`,
+                gap: "4px",
+                marginBottom: "8px",
+              }}>
+                {allImgs.slice(0, maxVisible).map((url, imgIdx) => (
+                  <div key={imgIdx} style={{ position: "relative", width: cellSize, height: cellSize, cursor: "pointer" }}
+                    onClick={() => onOpenLightbox?.(allImgs, imgIdx)}>
+                    <img src={url} alt="첨부 이미지"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px",
+                        border: "1px solid rgba(255,255,255,0.1)" }} />
+                    {imgIdx === 3 && hiddenCount > 0 && (
+                      <div style={{ position: "absolute", inset: 0,
+                        background: "rgba(0,0,0,0.65)", display: "flex",
+                        alignItems: "center", justifyContent: "center",
+                        color: "#fff", fontSize: "22px", fontWeight: 700, borderRadius: "8px" }}>
+                        +{hiddenCount}
+                      </div>
+                    )}
+                  </div>
                 ))}
-                {serverAtts.map((att, si) => {
-                  const src = att.file_url
-                    ? `${process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"}${att.file_url}`
-                    : att.base64
-                      ? `data:${att.mime_type || att.media_type || att.mime || "image/png"};base64,${att.base64}`
-                      : "";
-                  if (!src) return null;
-                  return (
-                    <img key={`s-${si}`} src={src} alt={att.name || "첨부 이미지"} style={{
-                      maxWidth: "min(200px, calc(50vw - 12px))", maxHeight: "min(200px, calc(50vw - 12px))", objectFit: "cover",
-                      borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)",
-                    }} />
-                  );
-                })}
               </div>
             );
           })()}
@@ -785,6 +802,10 @@ export default function ChatPage() {
   const branchPointRef = useRef(branchPoint);
   useEffect(() => { branchPointRef.current = branchPoint; }, [branchPoint]);
 
+  // 라이트박스
+  const [lightboxSrcs, setLightboxSrcs] = useState<string[]>([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+
   // 배포 버전 체크 (30초 간격)
   const { updateAvailable, doRefresh, setStreaming: setVersionStreaming } = useVersionCheck(30000);
 
@@ -831,6 +852,8 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, any>>>([]);
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
+  const [screenHiddenMode] = useState(true);
+  const screenContextRef = useRef<File | null>(null);
   // C-2: Object URL 캐싱 + 메모리 누수 방지
   const pendingPreviewUrls = useMemo(
     () => pendingPreviewFiles.map((f) => f.type.startsWith("image/") ? URL.createObjectURL(f) : null),
@@ -2088,6 +2111,19 @@ export default function ChatPage() {
     let full = "";
     let _invisibleRecoveryActivated = false;
     try {
+      // 히든 스크린 컨텍스트: 화면 관련 키워드 있을 때 첨부
+      const SCREEN_KEYWORDS = ["화면", "보이지", "버튼", "UI", "여기", "이거", "이것", "클릭", "탭", "창", "팝업", "오른쪽", "왼쪽"];
+      const hasScreenKeyword = SCREEN_KEYWORDS.some((kw) => content.includes(kw));
+      if (screenContextRef.current && hasScreenKeyword) {
+        const screenFile = screenContextRef.current;
+        screenContextRef.current = null;
+        try {
+          const arrBuf = await screenFile.arrayBuffer();
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+          pendingAttachments.current.push({ type: "image", name: screenFile.name, media_type: "image/png", base64: b64, _hidden: true });
+        } catch {}
+      }
+
       const rawFiles = filesToSend;
       const attachments = pendingAttachments.current.length > 0
         ? [...pendingAttachments.current] : [];
@@ -3077,6 +3113,11 @@ export default function ChatPage() {
     }, 100);
   }, []);
 
+  // ── 히든 스크린 컨텍스트 캡처 핸들러 ──
+  const handleHiddenScreenCapture = useCallback((file: File) => {
+    screenContextRef.current = file;
+  }, []);
+
   // ── File attachment (클라이언트 측 inline 변환 — 서버 업로드 불필요) ──
   async function handleFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
@@ -3430,6 +3471,35 @@ export default function ChatPage() {
       onTouchEnd={onSwipeEnd}
     >
       {updateAvailable && <UpdateBanner onRefresh={doRefresh} />}
+      {/* ── 라이트박스 ── */}
+      {lightboxSrcs.length > 0 && (
+        <div onClick={() => setLightboxSrcs([])} style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.92)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <img src={lightboxSrcs[lightboxIdx]} onClick={e => e.stopPropagation()}
+            style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: "8px" }} />
+          {lightboxSrcs.length > 1 && <>
+            <button onClick={e => { e.stopPropagation(); setLightboxIdx(i => (i - 1 + lightboxSrcs.length) % lightboxSrcs.length); }}
+              style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)",
+                background: "rgba(255,255,255,0.15)", border: "none", color: "#fff",
+                fontSize: "24px", padding: "8px 16px", borderRadius: "8px", cursor: "pointer" }}>◀</button>
+            <button onClick={e => { e.stopPropagation(); setLightboxIdx(i => (i + 1) % lightboxSrcs.length); }}
+              style={{ position: "absolute", right: "16px", top: "50%", transform: "translateY(-50%)",
+                background: "rgba(255,255,255,0.15)", border: "none", color: "#fff",
+                fontSize: "24px", padding: "8px 16px", borderRadius: "8px", cursor: "pointer" }}>▶</button>
+            <div style={{ position: "absolute", bottom: "16px", color: "#fff", fontSize: "14px",
+              background: "rgba(0,0,0,0.5)", padding: "4px 12px", borderRadius: "12px" }}>
+              {lightboxIdx + 1} / {lightboxSrcs.length}
+            </div>
+          </>}
+          <button onClick={() => setLightboxSrcs([])} style={{
+            position: "absolute", top: "16px", right: "16px",
+            background: "rgba(255,255,255,0.15)", border: "none", color: "#fff",
+            fontSize: "20px", padding: "6px 12px", borderRadius: "8px", cursor: "pointer" }}>✕</button>
+        </div>
+      )}
       {/* ── 완료 토스트 ── */}
       {completionToast && (
         <div style={{
@@ -4310,6 +4380,7 @@ export default function ChatPage() {
                       setArtifactMode("full");
                       setArtifactTab("report");
                     }}
+                    onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -4345,6 +4416,7 @@ export default function ChatPage() {
                         setArtifactMode("full");
                         setArtifactTab("report");
                       }}
+                      onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
@@ -4719,6 +4791,8 @@ export default function ChatPage() {
                 }}
                 placeholder={screenSize === "mobile" ? "메시지 입력... (↵으로 줄바꿈)" : undefined}
                 onScreenShare={(file) => handleFiles([file])}
+                onHiddenScreenCapture={handleHiddenScreenCapture}
+                screenHiddenMode={screenHiddenMode}
               />
               {/* Mobile: send button inside textarea area */}
               {screenSize === "mobile" && (
