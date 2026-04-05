@@ -39,9 +39,6 @@ body {
 }
 .ct-msg-enter { animation: ct-fade 0.2s ease; }
 /* ct-pulse-dot: defined in page.tsx inline style */
-
-/* ── Mobile optimizations (AADS Mobile Phase A/B/C) ── */
-
 /* C3: Pull-to-refresh 방지 + 스크롤 성능 */
 .ct-messages-scroll {
   overscroll-behavior-y: contain;

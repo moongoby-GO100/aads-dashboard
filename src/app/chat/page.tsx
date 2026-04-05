@@ -3288,6 +3288,8 @@ export default function ChatPage() {
         video.addEventListener("loadedmetadata", () => { captureFrame(); }, { once: true });
         // fallback: 2초 내 미로드 시
         setTimeout(() => { if (video.videoWidth > 0) captureFrame(); }, 2000);
+        // fallback: 2초 내 미로드 시
+        setTimeout(() => { if (video.videoWidth > 0) captureFrame(); }, 2000);
       }
     } catch {
       // 사용자가 화면 선택 취소
