@@ -5009,6 +5009,7 @@ export default function ChatPage() {
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
         activeSession={activeSession} copyArtifact={copyArtifact} toDirective={toDirective}
+        sessionId={activeSession?.id ?? ""}
       />
 
       {/* P2-10: 프롬프트 템플릿 모달 */}

@@ -1,5 +1,5 @@
 "use client";
-import { memo, useRef, useCallback, useState, useEffect } from "react";
+import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
@@ -33,6 +33,21 @@ const AGENDA_PRIORITY_COLORS: Record<string, string> = {
   "P3": "#6b7280",
 };
 
+interface RunnerJob {
+  job_id: string;
+  project: string;
+  instruction: string;
+  status: string;
+  phase: string | null;
+  cycle: number;
+  error_detail: string | null;
+  error_message: string | null;
+  depends_on: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  updated_at: string | null;
+}
+
 export interface ChatArtifactPanelProps {
   screenSize: ScreenSize;
   showArtifactPanel: boolean;
@@ -53,6 +68,7 @@ export interface ChatArtifactPanelProps {
   toDirective: (a: Artifact) => void;
   systemMessages?: ChatMessage[];
   unreadLogCount?: number;
+  sessionId?: string;
 }
 
 /** 우측 아티팩트 패널 — 보고서/코드/차트/대시보드/작업 탭 */
@@ -137,7 +153,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     artifacts, artifactTab, setArtifactTab, artifactCounts,
     systemMessages, unreadLogCount,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
-    activeSession, copyArtifact, toDirective,
+    activeSession, copyArtifact, toDirective, sessionId,
   } = props;
 
   // 아티팩트 검색/필터 상태
@@ -147,6 +163,53 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   // 배지 펄스 애니메이션 상태
   const [pulsedTabs, setPulsedTabs] = useState<Set<string>>(new Set());
   const prevArtifactCountsRef = useRef<Record<string, number>>({});
+
+  // Runner 작업 폴링 상태
+  const [runnerJobs, setRunnerJobs] = useState<RunnerJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    const fetchJobs = async () => {
+      try {
+        setJobsLoading(true);
+        const res = await fetch(`/api/v1/pipeline/jobs?session_id=${sessionId}&limit=50`);
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          setRunnerJobs(data);
+        }
+      } catch (_) {/* ignore */} finally {
+        if (!cancelled) setJobsLoading(false);
+      }
+    };
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [sessionId]);
+
+  const errorDetailKo = (d: string | null): string => {
+    const map: Record<string, string> = {
+      timeout: "시간 초과",
+      claude_code_crash: "Claude 충돌",
+      git_conflict: "Git 충돌",
+      build_fail: "빌드 실패",
+      disk_full: "디스크 부족",
+      rate_limit: "API 제한",
+      process_died: "프로세스 종료",
+    };
+    return d ? (map[d] ?? d) : "";
+  };
+
+  const elapsedStr = (start: string | null, end: string | null): string => {
+    if (!start) return "";
+    const s = new Date(start).getTime();
+    const e = end ? new Date(end).getTime() : Date.now();
+    const sec = Math.floor((e - s) / 1000);
+    if (sec < 60) return `${sec}초`;
+    const min = Math.floor(sec / 60);
+    return `${min}분 ${sec % 60}초`;
+  };
 
   // 인라인 편집 상태
   const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
@@ -635,46 +698,87 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 </div>
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
-                  {(systemMessages ?? []).length === 0 ? (
+                  {jobsLoading && runnerJobs.length === 0 ? (
                     <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
-                      운영 로그가 없습니다
+                      로딩 중...
                     </div>
-                  ) : (
-                    [...(systemMessages ?? [])].reverse().map((msg, idx) => {
-                      const isAutoReaction = msg.intent === "auto_reaction";
-                      const isRunnerResponse = msg.intent === "runner_response" ||
-                        (msg.role === "assistant" && (
-                          msg.content?.includes("[Pipeline Runner]") ||
-                          (msg.content?.startsWith("Step ") && msg.content?.includes("runner-")) ||
-                          msg.content?.includes("pipeline_runner_approve") ||
-                          msg.content?.includes("배포 검증 5단계")
-                        ));
-                      const icon = isAutoReaction ? "🤖" : isRunnerResponse ? "🔧" : "⚙️";
-                      const label = isAutoReaction ? "자동 반응" : isRunnerResponse ? "Runner" : "시스템";
-                      const jobMatch = msg.content?.match(/Job[:\s*]+(\S+)/);
-                      const jobId = jobMatch ? jobMatch[1] : null;
+                  ) : runnerJobs.length === 0 ? (
+                    <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
+                      이 세션의 Runner 작업이 없습니다
+                    </div>
+                  ) : (() => {
+                    const roots = runnerJobs.filter(j => !j.depends_on);
+                    const childMap: Record<string, RunnerJob[]> = {};
+                    runnerJobs.forEach(j => {
+                      if (j.depends_on) {
+                        if (!childMap[j.depends_on]) childMap[j.depends_on] = [];
+                        childMap[j.depends_on].push(j);
+                      }
+                    });
+
+                    const statusIcon = (s: string) => ({
+                      queued: "⏳", running: "🔄", awaiting_approval: "✋", done: "✅", error: "❌"
+                    }[s] ?? "❓");
+
+                    const statusColor = (s: string) => ({
+                      queued: "#888", running: "#3b82f6", awaiting_approval: "#f59e0b", done: "#22c55e", error: "#ef4444"
+                    }[s] ?? "#888");
+
+                    const renderJob = (job: RunnerJob, depth = 0): React.ReactNode => {
+                      const children = childMap[job.job_id] ?? [];
+                      const isRunning = job.status === "running";
                       return (
-                        <details key={msg.id} style={{ borderBottom: "1px solid var(--ct-border)", margin: "0" }} open={isAutoReaction && idx === 0}>
-                          <summary style={{
-                            fontSize: "11px", color: "var(--ct-text2)", cursor: "pointer",
-                            listStyle: "none", display: "flex", alignItems: "center", gap: "6px",
-                            padding: "6px 8px", userSelect: "none",
-                          }}>
-                            <span>{icon}</span>
-                            <span style={{ flex: 1, opacity: 0.8 }}>
-                              {label}{jobId ? ` · ${jobId}` : ""}
-                              {" · "}{(msg.content || "")
-                                .replace(/\*\*/g, "").replace(/##/g, "").replace(/\n/g, " ")
-                                .replace(/\[시스템\]\s*/g, "").trim().slice(0, 60)}…
-                            </span>
-                          </summary>
-                          <div style={{ padding: "8px 12px", fontSize: "12px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)" }}>
-                            <MarkdownBlock text={msg.content || ""} />
-                          </div>
-                        </details>
+                        <div key={job.job_id} style={{ marginLeft: depth * 12 }}>
+                          <details style={{ borderBottom: depth === 0 ? "1px solid var(--ct-border)" : "none" }} open={job.status !== "done"}>
+                            <summary style={{
+                              fontSize: "11px", cursor: "pointer", listStyle: "none",
+                              display: "flex", alignItems: "flex-start", gap: "6px",
+                              padding: `${depth === 0 ? 8 : 4}px 8px`, userSelect: "none",
+                            }}>
+                              <span style={{ color: statusColor(job.status), minWidth: 14 }}>{statusIcon(job.status)}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                                  <span style={{ fontFamily: "monospace", fontSize: "10px", opacity: 0.6 }}>{job.job_id}</span>
+                                  <span style={{ fontSize: "10px", color: statusColor(job.status), fontWeight: 600 }}>{job.status}</span>
+                                  {isRunning && job.started_at && (
+                                    <span style={{ fontSize: "10px", color: "#f59e0b" }}>⏱ {elapsedStr(job.started_at, null)}</span>
+                                  )}
+                                  {job.status === "done" && job.started_at && (
+                                    <span style={{ fontSize: "10px", opacity: 0.5 }}>{elapsedStr(job.started_at, job.updated_at)}</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: "11px", opacity: 0.75, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {job.instruction.replace(/\n/g, " ").slice(0, 80)}
+                                </div>
+                                {job.created_at && (
+                                  <div style={{ fontSize: "10px", opacity: 0.45, marginTop: 1 }}>
+                                    제출 {new Date(job.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                                    {job.started_at && ` · 시작 ${new Date(job.started_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`}
+                                  </div>
+                                )}
+                                {job.status === "error" && (
+                                  <div style={{ fontSize: "10px", color: "#ef4444", marginTop: 2 }}>
+                                    {job.error_detail ? `원인: ${errorDetailKo(job.error_detail)}` : ""}
+                                    {job.error_message ? ` — ${job.error_message.slice(0, 80)}` : ""}
+                                  </div>
+                                )}
+                              </div>
+                            </summary>
+                            <div style={{ padding: "6px 12px 8px 26px", fontSize: "11px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)" }}>
+                              <div style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}>{job.instruction.slice(0, 400)}</div>
+                              {children.length > 0 && (
+                                <div style={{ marginTop: 6, borderLeft: "2px solid var(--ct-border)", paddingLeft: 8 }}>
+                                  {children.map(c => renderJob(c, depth + 1))}
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        </div>
                       );
-                    })
-                  )}
+                    };
+
+                    return roots.map(job => renderJob(job));
+                  })()}
                 </div>
               ) : activeArtifact ? (() => {
                 const edited = localEdits[activeArtifact.id];
