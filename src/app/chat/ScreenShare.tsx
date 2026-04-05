@@ -1,5 +1,9 @@
 "use client";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useImperativeHandle, forwardRef } from "react";
+
+export interface ScreenShareHandle {
+  captureNow: () => void;
+}
 
 export interface ScreenShareProps {
   onCapture: (file: File) => void;
@@ -7,12 +11,24 @@ export interface ScreenShareProps {
   hiddenMode?: boolean;
 }
 
-export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: ScreenShareProps) {
+const ScreenShare = forwardRef<ScreenShareHandle, ScreenShareProps>(function ScreenShare(
+  { onCapture, onHiddenCapture, hiddenMode },
+  ref
+) {
   const [isSharing, setIsSharing] = useState(false);
   const [captureMode, setCaptureMode] = useState<"single" | "continuous">("single");
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // refs를 통해 최신 콜백/상태 유지 — stale closure 방지
+  const isSharingRef = useRef(false);
+  const onHiddenCaptureRef = useRef(onHiddenCapture);
+  const hiddenModeRef = useRef(hiddenMode);
+
+  useEffect(() => { onHiddenCaptureRef.current = onHiddenCapture; }, [onHiddenCapture]);
+  useEffect(() => { hiddenModeRef.current = hiddenMode; }, [hiddenMode]);
+  useEffect(() => { isSharingRef.current = isSharing; }, [isSharing]);
 
   const captureFrame = useCallback(async () => {
     const video = videoRef.current;
@@ -36,9 +52,14 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
     onCapture(file);
   }, [onCapture]);
 
-  const captureFrameHidden = useCallback(async () => {
+  // refs 기반 캡처 — 인터벌에서 호출 시 stale closure 없음
+  const captureFrameHiddenStable = useCallback(async () => {
+    if (!isSharingRef.current) return;
     const video = videoRef.current;
     if (!video || !streamRef.current) return;
+    // 비디오 트랙이 종료된 경우 방어
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track || track.readyState === "ended") return;
     const canvas = document.createElement("canvas");
     const MAX_W = 1920, MAX_H = 1080;
     let w = video.videoWidth || 1920;
@@ -55,12 +76,16 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
     const now = new Date();
     const ts = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
     const file = new File([blob], `screen_capture_${ts}.png`, { type: "image/png" });
-    if (hiddenMode && onHiddenCapture) {
-      onHiddenCapture(file);
+    if (hiddenModeRef.current && onHiddenCaptureRef.current) {
+      onHiddenCaptureRef.current(file);
     } else {
       onCapture(file);
     }
-  }, [onCapture, onHiddenCapture, hiddenMode]);
+  }, [onCapture]);
+
+  // 인터벌에서 항상 최신 함수를 호출하기 위한 ref
+  const captureFrameHiddenRef = useRef(captureFrameHiddenStable);
+  useEffect(() => { captureFrameHiddenRef.current = captureFrameHiddenStable; }, [captureFrameHiddenStable]);
 
   const stopShare = useCallback(() => {
     if (intervalRef.current) {
@@ -85,6 +110,7 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       streamRef.current = stream;
       setIsSharing(true);
+      isSharingRef.current = true;
       const video = document.createElement("video");
       video.srcObject = stream;
       video.muted = true;
@@ -95,22 +121,24 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
       await video.play().catch(() => {});
       stream.getVideoTracks()[0]?.addEventListener("ended", () => stopShare());
       if (mode === "continuous") {
-        intervalRef.current = setInterval(() => captureFrameHidden(), 5000);
+        intervalRef.current = setInterval(() => captureFrameHiddenRef.current(), 5000);
       } else {
         setTimeout(() => captureFrame(), 500);
       }
     } catch {
       // 사용자가 화면 선택 취소
     }
-  }, [captureMode, captureFrame, captureFrameHidden, stopShare]);
+  }, [captureMode, captureFrame, stopShare]);
 
-  // continuous 모드 토글: 인터벌 교체
+  // continuous 모드 토글: 인터벌 교체 + 즉시 첫 캡처
   const toggleContinuous = useCallback(() => {
     const newMode: "single" | "continuous" = captureMode === "single" ? "continuous" : "single";
     setCaptureMode(newMode);
     if (newMode === "continuous") {
       if (!intervalRef.current) {
-        intervalRef.current = setInterval(() => captureFrameHidden(), 5000);
+        // 즉시 첫 캡처 실행 (5초 대기 없이)
+        captureFrameHiddenRef.current();
+        intervalRef.current = setInterval(() => captureFrameHiddenRef.current(), 5000);
       }
     } else {
       if (intervalRef.current) {
@@ -118,7 +146,13 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
         intervalRef.current = null;
       }
     }
-  }, [captureMode, captureFrameHidden]);
+  }, [captureMode]);
+
+  // captureNow: 외부(AI 트리거)에서 즉시 캡처 요청 시 호출
+  // hiddenMode일 때 onHiddenCapture로 전달하여 screenContextRef 업데이트
+  useImperativeHandle(ref, () => ({
+    captureNow: () => { captureFrameHiddenStable(); },
+  }), [captureFrameHiddenStable]);
 
   // 언마운트 시 정리
   useEffect(() => () => stopShare(), [stopShare]);
@@ -166,7 +200,7 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
           }} />
           <span style={{ flex: 1, fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
             🖥️ 화면 공유 중
-            {hiddenMode && (
+            {hiddenModeRef.current && (
               <span style={{
                 fontSize: "10px", fontWeight: 600, padding: "1px 6px",
                 background: "rgba(139,92,246,0.2)", color: "#a78bfa",
@@ -212,4 +246,7 @@ export default function ScreenShare({ onCapture, onHiddenCapture, hiddenMode }: 
       )}
     </>
   );
-}
+});
+
+ScreenShare.displayName = "ScreenShare";
+export default ScreenShare;

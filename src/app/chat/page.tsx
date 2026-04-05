@@ -2486,6 +2486,7 @@ export default function ChatPage() {
         aiCaptureRequestedRef.current = false;
         const captureFile = screenContextRef.current;
         if (captureFile) {
+          // 연속 캡처에서 이미 저장된 파일 사용
           screenContextRef.current = null;
           setTimeout(async () => {
             try {
@@ -2496,8 +2497,20 @@ export default function ChatPage() {
             } catch { /* ignore */ }
           }, 300);
         } else {
-          // 연속 캡처 미사용 시 즉시 캡처 요청
+          // 연속 캡처 미사용 시 즉시 캡처 → screenContextRef 업데이트 대기 → 자동 전송
           chatInputRef.current?.captureNow();
+          setTimeout(async () => {
+            const f = screenContextRef.current;
+            if (f) {
+              screenContextRef.current = null;
+              try {
+                const arrBuf = await f.arrayBuffer();
+                const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+                pendingAttachments.current.push({ type: "image", name: f.name, media_type: "image/png", base64: b64 });
+                sendMessage("[AI 요청 화면 캡처]");
+              } catch { /* ignore */ }
+            }
+          }, 1000);
         }
       }
 

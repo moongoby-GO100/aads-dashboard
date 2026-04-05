@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useCallback, useImperativeHandle, forwardRef, memo, useEffect } from "react";
-import ScreenShare from "./ScreenShare";
+import ScreenShare, { type ScreenShareHandle } from "./ScreenShare";
 import SlashCommandMenu, {
   SLASH_COMMANDS,
   getFilteredCount,
@@ -22,6 +22,7 @@ export interface ChatInputHandle {
   setValue: (v: string) => void;
   clear: () => void;
   focus: () => void;
+  captureNow: () => void;
 }
 
 interface ChatInputProps {
@@ -40,6 +41,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     const [localInput, setLocalInput] = useState("");
     const taRef = useRef<HTMLTextAreaElement>(null);
     const hadInputRef = useRef(false);
+    const screenShareRef = useRef<ScreenShareHandle>(null);
 
     // 슬래시 명령어 상태
     const [showSlash, setShowSlash] = useState(false);
@@ -54,6 +56,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     const mentionStartRef = useRef(-1); // @ 기호 위치
 
     useImperativeHandle(ref, () => ({
+      captureNow: () => { screenShareRef.current?.captureNow(); },
       getValue: () => taRef.current?.value ?? localInput,
       setValue: (v: string) => {
         setLocalInput(v);
@@ -304,6 +307,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
         {/* 화면 공유 버튼 + 인디케이터 (onScreenShare 있을 때만) */}
         {onScreenShare && (
           <ScreenShare
+            ref={screenShareRef}
             onCapture={onScreenShare}
             onHiddenCapture={onHiddenScreenCapture}
             hiddenMode={screenHiddenMode ?? true}
