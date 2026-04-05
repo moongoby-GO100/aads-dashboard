@@ -779,12 +779,7 @@ export default function ChatPage() {
   // ── Chat state ──
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
-  const [model, setModel] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("aads-chat-model") || DEFAULT_MODEL;
-    }
-    return DEFAULT_MODEL;
-  });
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const streamBufRef = useRef("");
@@ -1412,7 +1407,6 @@ export default function ChatPage() {
     {
       const sessionModel = activeSession.current_model || DEFAULT_MODEL;
       setModel(sessionModel);
-      localStorage.setItem("aads-chat-model", sessionModel);
     }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
     const ct = activeSession.cost_total;
@@ -4169,7 +4163,6 @@ export default function ChatPage() {
             onChange={(e) => {
               const newModel = e.target.value;
               setModel(newModel);
-              localStorage.setItem("aads-chat-model", newModel);
               if (activeSession) {
                 chatApi(`/chat/sessions/${activeSession.id}`, {
                   method: "PUT",
