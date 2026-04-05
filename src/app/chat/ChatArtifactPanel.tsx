@@ -148,6 +148,42 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [pulsedTabs, setPulsedTabs] = useState<Set<string>>(new Set());
   const prevArtifactCountsRef = useRef<Record<string, number>>({});
 
+  // 인라인 편집 상태
+  const [editingArtifactId, setEditingArtifactId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [localEdits, setLocalEdits] = useState<Record<string, { title: string; content: string }>>({});
+
+  const startEdit = useCallback((artifact: Artifact) => {
+    const saved = localEdits[artifact.id];
+    setEditTitle(saved?.title ?? artifact.title);
+    setEditContent(saved?.content ?? artifact.content);
+    setEditError(null);
+    setEditingArtifactId(artifact.id);
+  }, [localEdits]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingArtifactId(null);
+    setEditError(null);
+  }, []);
+
+  const saveEdit = useCallback(async () => {
+    if (!editingArtifactId) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updateArtifact(editingArtifactId, { title: editTitle, content: editContent });
+      setLocalEdits(prev => ({ ...prev, [editingArtifactId]: { title: editTitle, content: editContent } }));
+      setEditingArtifactId(null);
+    } catch (e) {
+      setEditError((e as Error).message || "저장 실패");
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editingArtifactId, editTitle, editContent]);
+
   // 아젠다 상태
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
   const [agendaLoading, setAgendaLoading] = useState(false);
@@ -633,84 +669,176 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     })
                   )}
                 </div>
-              ) : activeArtifact ? (
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      fontSize: "13px",
-                      marginBottom: "12px",
-                      color: "var(--ct-text)",
-                    }}
-                  >
-                    {activeArtifact.title}
-                  </div>
-                  {activeArtifact.session_id !== activeSession?.id && (
-                    <span style={{ fontSize: "10px", color: "#888", marginLeft: "4px" }}>
-                      (다른 세션)
-                    </span>
-                  )}
-                  <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
-                    {activeArtifact.artifact_type === "image" ? (
-                      <img
-                        src={activeArtifact.content}
-                        alt={activeArtifact.title}
-                        style={{ maxWidth: "100%", borderRadius: "8px" }}
-                      />
-                    ) : activeArtifact.artifact_type === "file" ? (
-                      <a
-                        href={activeArtifact.content}
-                        target="_blank"
-                        rel="noopener noreferrer"
+              ) : activeArtifact ? (() => {
+                const edited = localEdits[activeArtifact.id];
+                const displayArtifact = edited
+                  ? { ...activeArtifact, title: edited.title, content: edited.content }
+                  : activeArtifact;
+                const isEditing = editingArtifactId === activeArtifact.id;
+
+                if (isEditing) {
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <input
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="제목"
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          padding: "16px",
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-border)",
                           background: "var(--ct-input-bg)",
-                          borderRadius: "8px",
-                          textDecoration: "none",
                           color: "var(--ct-text)",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          outline: "none",
+                          width: "100%",
+                          boxSizing: "border-box",
                         }}
-                      >
-                        {"📎 " + (activeArtifact.title || "파일 다운로드")}
-                      </a>
-                    ) : activeArtifact.artifact_type === "chart" && activeArtifact.metadata?.subtype === "mermaid" ? (
-                      <pre
+                      />
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
                         style={{
-                          background: "var(--ct-code)",
-                          padding: "12px",
-                          borderRadius: "8px",
-                          overflowX: "auto",
-                          fontFamily: "monospace",
-                          fontSize: "12px",
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-border)",
+                          background: "var(--ct-input-bg)",
+                          color: "var(--ct-text)",
+                          fontSize: "13px",
+                          lineHeight: "1.6",
+                          outline: "none",
+                          width: "100%",
+                          boxSizing: "border-box",
+                          minHeight: "200px",
+                          maxHeight: "70vh",
+                          resize: "vertical",
+                          fontFamily: "inherit",
                         }}
-                      >
-                        {activeArtifact.content}
-                      </pre>
-                    ) : activeArtifact.artifact_type === "code" ? (
-                      <pre
-                        style={{
-                          background: "var(--ct-code)",
-                          padding: "12px",
-                          borderRadius: "8px",
-                          overflowX: "auto",
-                          fontFamily: "monospace",
-                          fontSize: "12px",
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {activeArtifact.content}
-                      </pre>
-                    ) : (
-                      <MarkdownBlock text={activeArtifact.content} />
+                      />
+                      {editError && (
+                        <div style={{ fontSize: "11px", color: "#ef4444", padding: "4px 0" }}>
+                          오류: {editError}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={saveEdit}
+                          disabled={editSaving}
+                          style={{
+                            flex: 1,
+                            padding: "7px 8px",
+                            fontSize: "12px",
+                            background: editSaving ? "var(--ct-hover)" : "var(--ct-accent)",
+                            border: "none",
+                            borderRadius: "6px",
+                            cursor: editSaving ? "not-allowed" : "pointer",
+                            color: editSaving ? "var(--ct-text2)" : "#fff",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {editSaving ? "저장 중..." : "💾 저장"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          disabled={editSaving}
+                          style={{
+                            flex: 1,
+                            padding: "7px 8px",
+                            fontSize: "12px",
+                            background: "var(--ct-hover)",
+                            border: "1px solid var(--ct-border)",
+                            borderRadius: "6px",
+                            cursor: editSaving ? "not-allowed" : "pointer",
+                            color: "var(--ct-text2)",
+                          }}
+                        >
+                          ❌ 취소
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        marginBottom: "12px",
+                        color: "var(--ct-text)",
+                      }}
+                    >
+                      {displayArtifact.title}
+                    </div>
+                    {activeArtifact.session_id !== activeSession?.id && (
+                      <span style={{ fontSize: "10px", color: "#888", marginLeft: "4px" }}>
+                        (다른 세션)
+                      </span>
                     )}
+                    <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
+                      {displayArtifact.artifact_type === "image" ? (
+                        <img
+                          src={displayArtifact.content}
+                          alt={displayArtifact.title}
+                          style={{ maxWidth: "100%", borderRadius: "8px" }}
+                        />
+                      ) : displayArtifact.artifact_type === "file" ? (
+                        <a
+                          href={displayArtifact.content}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "16px",
+                            background: "var(--ct-input-bg)",
+                            borderRadius: "8px",
+                            textDecoration: "none",
+                            color: "var(--ct-text)",
+                          }}
+                        >
+                          {"📎 " + (displayArtifact.title || "파일 다운로드")}
+                        </a>
+                      ) : displayArtifact.artifact_type === "chart" && displayArtifact.metadata?.subtype === "mermaid" ? (
+                        <pre
+                          style={{
+                            background: "var(--ct-code)",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            overflowX: "auto",
+                            fontFamily: "monospace",
+                            fontSize: "12px",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {displayArtifact.content}
+                        </pre>
+                      ) : displayArtifact.artifact_type === "code" ? (
+                        <pre
+                          style={{
+                            background: "var(--ct-code)",
+                            padding: "12px",
+                            borderRadius: "8px",
+                            overflowX: "auto",
+                            fontFamily: "monospace",
+                            fontSize: "12px",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {displayArtifact.content}
+                        </pre>
+                      ) : (
+                        <MarkdownBlock text={displayArtifact.content} />
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : (
+                );
+              })() : (
                 <div
                   style={{
                     textAlign: "center",
@@ -744,7 +872,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               >
                 {[
                   { icon: "📋", label: "복사", fn: () => copyArtifact(activeArtifact.content) },
-                  { icon: "✏️", label: "편집", fn: () => {} },
+                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
                   { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
                 ].map((btn) => (
                   <button

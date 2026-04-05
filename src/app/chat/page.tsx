@@ -891,6 +891,8 @@ export default function ChatPage() {
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [artifactToast, setArtifactToast] = useState<string | null>(null);
   const artifactToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const artifactFetchingRef = useRef(false); // 중복 re-fetch 방지
+  const artifactFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
@@ -2287,32 +2289,39 @@ export default function ChatPage() {
               if (ev.session_cost) setSessionCost(ev.session_cost);
               if (ev.session_turns) setSessionTurns(ev.session_turns);
               // UX: 스트리밍 완료 시 아티팩트 자동 갱신 + 신규 저장 토스트
-              if (activeWsRef.current) {
-                chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWsRef.current}`)
-                  .then((newArtifacts) => {
-                    setArtifacts((prev) => {
-                      const prevIds = new Set(prev.map((a) => a.id));
-                      const added = newArtifacts.filter((a) => !prevIds.has(a.id));
-                      if (added.length > 0) {
-                        const typeLabels: Record<string, string> = {
-                          report: "📄 보고서가 저장되었습니다",
-                          text: "📄 보고서가 저장되었습니다",
-                          code: "💻 코드가 저장되었습니다",
-                          chart: "📊 차트가 저장되었습니다",
-                          image: "🖼️ 이미지가 저장되었습니다",
-                          file: "📎 파일이 저장되었습니다",
-                          table: "📋 테이블이 저장되었습니다",
-                        };
-                        const firstType = added[0].artifact_type;
-                        const msg = typeLabels[firstType] ?? "📁 아티팩트가 저장되었습니다";
-                        setArtifactToast(msg);
-                        if (artifactToastTimerRef.current) clearTimeout(artifactToastTimerRef.current);
-                        artifactToastTimerRef.current = setTimeout(() => setArtifactToast(null), 3000);
-                      }
-                      return newArtifacts;
-                    });
-                  })
-                  .catch(() => {});
+              // 500ms 딜레이: 서버 DB 저장 완료 대기 / 중복 호출 방지
+              if (activeWsRef.current && !artifactFetchingRef.current) {
+                artifactFetchingRef.current = true;
+                if (artifactFetchTimerRef.current) clearTimeout(artifactFetchTimerRef.current);
+                const wsIdAtDone = activeWsRef.current;
+                artifactFetchTimerRef.current = setTimeout(() => {
+                  chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${wsIdAtDone}`)
+                    .then((newArtifacts) => {
+                      setArtifacts((prev) => {
+                        const prevIds = new Set(prev.map((a) => a.id));
+                        const added = newArtifacts.filter((a) => !prevIds.has(a.id));
+                        if (added.length > 0) {
+                          const typeLabels: Record<string, string> = {
+                            report: "📄 보고서가 저장되었습니다",
+                            text: "📄 보고서가 저장되었습니다",
+                            code: "💻 코드가 저장되었습니다",
+                            chart: "📊 차트가 저장되었습니다",
+                            image: "🖼️ 이미지가 저장되었습니다",
+                            file: "📎 파일이 저장되었습니다",
+                            table: "📋 테이블이 저장되었습니다",
+                          };
+                          const firstType = added[0].artifact_type;
+                          const msg = typeLabels[firstType] ?? "📁 아티팩트가 저장되었습니다";
+                          setArtifactToast(msg);
+                          if (artifactToastTimerRef.current) clearTimeout(artifactToastTimerRef.current);
+                          artifactToastTimerRef.current = setTimeout(() => setArtifactToast(null), 3000);
+                        }
+                        return newArtifacts;
+                      });
+                    })
+                    .catch(() => {})
+                    .finally(() => { artifactFetchingRef.current = false; });
+                }, 500);
               }
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
               if (full.trim()) {
