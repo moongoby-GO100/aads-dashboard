@@ -180,21 +180,14 @@ export default function AgendaPage() {
               총 {total}건
             </span>
           </div>
-          {/* 상태 필터 버튼 행 */}
+          {/* 상태 필터 */}
           <div className="flex items-center gap-2 flex-wrap">
-            {STATUS_OPTIONS.map((s) => (
-              <button
-                key={s}
-                onClick={() => { setStatusFilter(s); setSelected(null); }}
-                className="px-3 py-1.5 text-sm rounded-lg transition-colors"
-                style={statusFilter === s
-                  ? { background: "var(--accent)", color: "#fff" }
-                  : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                }
-              >
-                {s}
-              </button>
-            ))}
+            <SearchableSelect
+              options={STATUS_OPTIONS.map((s) => ({ value: s, label: s === "전체" ? "전체 상태" : s }))}
+              value={statusFilter}
+              onChange={(v) => { setStatusFilter(v); setSelected(null); }}
+              placeholder="전체 상태"
+            />
           </div>
         </div>
 
