@@ -510,7 +510,7 @@ export function useChatSSE() {
             const msg = err instanceof Error ? err.message : String(err);
             const errorType = isAborted ? "STREAM_TIMEOUT" : "SSE_DISCONNECT";
             // AADS-190: StreamManager에 에러 기록 + 백엔드 보고
-            completeStream(sessionId, "", msg);
+            completeStream(sessionId, displayTextRef.current || "", msg);
             reportError({
               error_type: errorType,
               message: msg,
