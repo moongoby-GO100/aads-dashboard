@@ -83,7 +83,8 @@ const INITIAL_STREAM: StreamState = {
 };
 
 const SSE_INACTIVITY_MS = 150_000; // heartbeat 기준 — 150초간 무응답 시에만 타임아웃
-const MAX_RETRY = 3;
+const MAX_RETRY = 5;
+const MAX_RETRY_DELAY_MS = 30_000; // 최대 단일 대기 30초 캡
 const RENDER_INTERVAL_MS = 30; // 토큰 렌더 루프 간격
 
 export function useChatSSE() {
@@ -492,7 +493,8 @@ export function useChatSSE() {
           }
 
           if (attempt < MAX_RETRY && !isAborted) {
-            const delay = Math.pow(2, attempt) * 1000;
+            const jitter = Math.random() * 500;
+            const delay = Math.min(Math.pow(2, attempt) * 1000 + jitter, MAX_RETRY_DELAY_MS);
             await new Promise((r) => setTimeout(r, delay));
             return doStream();
           }
