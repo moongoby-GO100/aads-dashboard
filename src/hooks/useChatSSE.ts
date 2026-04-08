@@ -339,6 +339,19 @@ export function useChatSSE() {
                     yellowLimitWarning: chunk.content || `쓰기 도구 연속 ${chunk.consecutive_count || 5}회`,
                   }));
 
+                } else if (chunk.type === "stream_reset") {
+                  // Gemini 재시도 등으로 백엔드가 스트림을 리셋할 때
+                  // 누적 텍스트·버퍼를 초기화하여 새 응답을 처음부터 수신
+                  fullText = "";
+                  tokenBufferRef.current = [];
+                  displayTextRef.current = "";
+                  setState((s) => ({
+                    ...s,
+                    streamingText: "",
+                    isResearching: false,
+                    researchProgress: chunk.content ? String(chunk.content) : null,
+                  }));
+
                 } else if (chunk.type === "done") {
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
 

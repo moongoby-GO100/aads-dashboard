@@ -92,7 +92,9 @@ export interface SSEChunk {
     | "yellow_limit"
     | "tool_turn_limit"
     // AADS-192: resume stream
-    | "resume_done";
+    | "resume_done"
+    // Gemini 재시도 등 스트림 초기화
+    | "stream_reset";
   content?: string;
   summary?: string;
   sources?: SourceItem[];
