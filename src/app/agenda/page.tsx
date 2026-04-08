@@ -2,9 +2,15 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
+import SearchableSelect from "@/components/SearchableSelect";
 
 const STATUS_OPTIONS = ["전체", "논의중", "보류", "결정", "진행중", "완료", "폐기"];
 const PROJECT_OPTIONS = ["전체", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS"];
+
+const projectOptions = PROJECT_OPTIONS.map((p) => ({
+  value: p,
+  label: p === "전체" ? "전체 프로젝트" : p,
+}));
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   P0: { bg: "#7f1d1d", text: "#fca5a5", label: "P0" },
@@ -73,14 +79,29 @@ export default function AgendaPage() {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [projectFilter, setProjectFilter] = useState("전체");
   const [sessionFilter, setSessionFilter] = useState("전체");
-  const [sessions, setSessions] = useState<string[]>([]);
+  const [sessions, setSessions] = useState<{ value: string; label: string }[]>([]);
   const [selected, setSelected] = useState<AgendaItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchSessions = async (project: string) => {
     try {
       const res = await api.getAgendaSessions(project !== "전체" ? project : undefined);
-      setSessions(Array.isArray(res.sessions) ? res.sessions : []);
+      const rawSessions: string[] = Array.isArray(res.sessions) ? res.sessions : [];
+      const sessionOptions = await Promise.allSettled(
+        rawSessions.map(async (s) => {
+          try {
+            const detail = await api.getChatSession(s);
+            return { value: s, label: detail?.title || `세션 ${s.slice(0, 8)}…` };
+          } catch {
+            return { value: s, label: `세션 ${s.slice(0, 8)}…` };
+          }
+        })
+      );
+      setSessions(
+        sessionOptions
+          .filter((r) => r.status === "fulfilled")
+          .map((r) => (r as PromiseFulfilledResult<{ value: string; label: string }>).value)
+      );
     } catch {
       setSessions([]);
     }
@@ -136,39 +157,18 @@ export default function AgendaPage() {
         <div className="flex flex-col gap-3 mb-5">
           {/* 드롭다운 필터 행 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <select
+            <SearchableSelect
+              options={projectOptions}
               value={projectFilter}
-              onChange={(e) => { setProjectFilter(e.target.value); setSelected(null); }}
-              className="px-3 py-1.5 text-sm rounded-lg"
-              style={{
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                color: "var(--text-primary)",
-                outline: "none",
-              }}
-            >
-              {PROJECT_OPTIONS.map((p) => (
-                <option key={p} value={p}>{p === "전체" ? "전체 프로젝트" : p}</option>
-              ))}
-            </select>
-            <select
+              onChange={(v) => { setProjectFilter(v); setSelected(null); }}
+            />
+            <SearchableSelect
+              options={[{ value: "전체", label: "전체 세션" }, ...sessions]}
               value={sessionFilter}
-              onChange={(e) => { setSessionFilter(e.target.value); setSelected(null); }}
+              onChange={(v) => { setSessionFilter(v); setSelected(null); }}
+              placeholder="전체 세션"
               disabled={sessions.length === 0}
-              className="px-3 py-1.5 text-sm rounded-lg"
-              style={{
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                color: sessions.length === 0 ? "var(--text-secondary)" : "var(--text-primary)",
-                outline: "none",
-                opacity: sessions.length === 0 ? 0.5 : 1,
-              }}
-            >
-              <option value="전체">전체 세션</option>
-              {sessions.map((s) => (
-                <option key={s} value={s}>{s.length > 20 ? s.slice(0, 20) + "…" : s}</option>
-              ))}
-            </select>
+            />
             <button
               onClick={() => { fetchAgendas(statusFilter, projectFilter, sessionFilter); fetchSessions(projectFilter); }}
               className="ml-auto px-3 py-1.5 text-sm rounded-lg"
