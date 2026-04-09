@@ -391,6 +391,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
                   { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
                   { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                  { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                   { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                   { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                   { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
@@ -437,7 +438,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && (
+            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -503,7 +504,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   const ms = !searchQuery || a.title.toLowerCase().includes(searchQuery.toLowerCase());
                   const mt = !typeFilter || a.artifact_type === typeFilter ||
                     (typeFilter === "report" && (a.artifact_type === "report" || a.artifact_type === "text")) ||
-                    (typeFilter === "other" && !["report", "text", "code", "table"].includes(a.artifact_type));
+                    (typeFilter === "other" && !["report", "text", "code", "table", "full_response"].includes(a.artifact_type));
                   return ms && mt;
                 });
               const localCurPos = lfWithIdx.findIndex(({ idx }) => idx === selectedArtifactIdx);
@@ -1032,6 +1033,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "log" as ArtifactTab, icon: "🔧" },
                 { key: "agenda" as ArtifactTab, icon: "📋" },
                 { key: "report" as ArtifactTab, icon: "📄" },
+                { key: "dialog" as ArtifactTab, icon: "💬" },
                 { key: "code" as ArtifactTab, icon: "💻" },
                 { key: "chart" as ArtifactTab, icon: "📊" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },

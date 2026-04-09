@@ -3475,6 +3475,7 @@ export default function ChatPage() {
   const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
   const filteredArtifacts = artifacts.filter((a) => {
     if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
+    if (artifactTab === "dialog") return a.artifact_type === "full_response";
     if (artifactTab === "code") return a.artifact_type === "code";
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
     if (artifactTab === "agenda") return false;
@@ -3483,6 +3484,7 @@ export default function ChatPage() {
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
   const artifactCounts: Record<string, number> = {
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
+    dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
     agenda: 0,

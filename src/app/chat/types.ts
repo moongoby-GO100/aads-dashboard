@@ -70,7 +70,7 @@ export interface Artifact {
   id: string;
   session_id: string;
   workspace_id?: string;
-  artifact_type: "report" | "code" | "chart" | "dashboard" | "text" | "image" | "file" | "table";
+  artifact_type: "report" | "code" | "chart" | "dashboard" | "text" | "image" | "file" | "table" | "full_response";
   title: string;
   content: string;
   metadata?: Record<string, unknown>;
@@ -79,7 +79,7 @@ export interface Artifact {
 
 export type Theme = "dark" | "light";
 export type ArtifactMode = "full" | "mini" | "hidden";
-export type ArtifactTab = "report" | "code" | "chart" | "agenda" | "tasks" | "log";
+export type ArtifactTab = "report" | "code" | "chart" | "agenda" | "tasks" | "log" | "dialog";
 export type ScreenSize = "desktop" | "tablet" | "mobile";
 
 // Theme CSS variables
