@@ -312,4 +312,9 @@ export const api = {
     const qs = project ? `?project=${encodeURIComponent(project)}` : "";
     return request<any>(`/agenda/sessions${qs}`);
   },
+
+  // Project Docs: 프로젝트별 문서 통합 조회
+  scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
+  getProjectDocContent: (project: string, basePath: string, filePath: string) =>
+    request<any>(`/project-docs/content?project=${encodeURIComponent(project)}&base_path=${encodeURIComponent(basePath)}&file_path=${encodeURIComponent(filePath)}`),
 };
