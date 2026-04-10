@@ -333,8 +333,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             <div
               style={{
                 padding: "12px 14px",
-                display: "flex",
-                  borderBottom: "1px solid var(--ct-border)",
+                borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
@@ -455,8 +454,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
               <div style={{
                 padding: "6px 10px",
-                display: "flex",
-                  borderBottom: "1px solid var(--ct-border)",
+                borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 flexDirection: "column",
                 gap: "5px",
