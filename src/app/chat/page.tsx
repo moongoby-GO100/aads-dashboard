@@ -1445,8 +1445,8 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`)
-        .then((msgs) => msgs.reverse())
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=100`)
+        .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
@@ -3008,8 +3008,8 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=100&sort=desc`)
-        .then((msgs) => msgs.reverse())
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=100`)
+        .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           const filtered = msgs.map((m: ChatMessage) => m.intent === "streaming_placeholder"
