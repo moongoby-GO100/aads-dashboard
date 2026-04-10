@@ -423,7 +423,6 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               <div
                 ref={tabBarRef}
                 className="hide-scrollbar"
-                className="hide-scrollbar"
                 style={{
                   display: "flex",
                   borderBottom: "1px solid var(--ct-border)",
