@@ -376,65 +376,78 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* Artifact tabs */}
-            <div
-              ref={tabBarRef}
-              style={{
-                display: "flex",
-                borderBottom: "1px solid var(--ct-border)",
-                padding: "0 8px",
-                overflowX: "auto",
-                scrollbarWidth: "none",
-              }}
-            >
-              {(
-                [
-                  { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
-                  { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
-                  { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
-                  { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
-                  { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
-                  { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
-                  { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
-                ]
-              ).filter((tab) => {
-                if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
-                return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
-              }).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => { setArtifactTab(tab.key); setSelectedArtifactIdx(0); }}
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                    color:
-                      artifactTab === tab.key ? "var(--ct-accent)" : "var(--ct-text2)",
-                    borderBottom:
-                      artifactTab === tab.key
-                        ? "2px solid var(--ct-accent)"
-                        : "2px solid transparent",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
-                  {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
-                    <span style={{
-                      marginLeft: '3px',
-                      fontSize: '10px',
-                      opacity: 0.7,
-                      display: 'inline-block',
-                      animation: pulsedTabs.has(tab.key) ? 'badgePulse 0.4s ease 3' : 'none',
-                    }}>({artifactCounts[tab.key]})</span>
-                  )}
-                  {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
-                    <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
-                      ({unreadLogCount})
-                    </span>
-                  )}
-                </button>
-              ))}
+            <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--ct-border)" }}>
+              {/* 좌측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: -100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="← 스크롤">◀</button>
+              <div
+                ref={tabBarRef}
+                onWheel={(e) => { e.preventDefault(); tabBarRef.current?.scrollBy({ left: e.deltaY > 0 ? 80 : -80, behavior: "smooth" }); }}
+                className="hide-scrollbar"
+                style={{
+                  display: "flex",
+                  padding: "0 4px",
+                  overflowX: "auto",
+                  flex: 1,
+                }}
+              >
+                {(
+                  [
+                    { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                    { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
+                    { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                    { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
+                    { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
+                    { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
+                    { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                  ]
+                ).filter((tab) => {
+                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
+                  return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
+                }).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => { setArtifactTab(tab.key); setSelectedArtifactIdx(0); }}
+                    style={{
+                      padding: "8px 10px",
+                      fontSize: "11px",
+                      border: "none",
+                      background: "none",
+                      cursor: "pointer",
+                      color:
+                        artifactTab === tab.key ? "var(--ct-accent)" : "var(--ct-text2)",
+                      borderBottom:
+                        artifactTab === tab.key
+                          ? "2px solid var(--ct-accent)"
+                          : "2px solid transparent",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
+                    {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
+                      <span style={{
+                        marginLeft: '3px',
+                        fontSize: '10px',
+                        opacity: 0.7,
+                        display: 'inline-block',
+                        animation: pulsedTabs.has(tab.key) ? 'badgePulse 0.4s ease 3' : 'none',
+                      }}>({artifactCounts[tab.key]})</span>
+                    )}
+                    {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
+                      <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
+                        ({unreadLogCount})
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* 우측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: 100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="→ 스크롤">▶</button>
             </div>
 
             {/* 검색/필터 영역 */}

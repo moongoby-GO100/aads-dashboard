@@ -136,3 +136,12 @@ body {
     min-height: 36px;
   }
 }
+
+/* 탭 바 스크롤바 숨김 (Chrome/Safari/Edge + Firefox) */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
