@@ -352,7 +352,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             <div
               style={{
                 padding: "12px 14px",
-                borderBottom: "1px solid var(--ct-border)",
+                display: "flex",
+                  borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
@@ -424,6 +425,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 ref={tabBarRef}
                 className="hide-scrollbar"
                 style={{
+                  display: "flex",
                   borderBottom: "1px solid var(--ct-border)",
                   padding: canScrollLeft ? "0 28px 0 28px" : canScrollRight ? "0 28px 0 8px" : "0 8px",
                   overflowX: "auto",
@@ -485,7 +487,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
               <div style={{
                 padding: "6px 10px",
-                borderBottom: "1px solid var(--ct-border)",
+                display: "flex",
+                  borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 flexDirection: "column",
                 gap: "5px",
