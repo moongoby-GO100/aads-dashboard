@@ -263,35 +263,16 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       .finally(() => setAgendaLoading(false));
   }, [artifactTab]);
   const tabBarRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const updateScrollState = useCallback(() => {
-    const el = tabBarRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 2);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
-  }, []);
-
   useEffect(() => {
     const el = tabBarRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       setTabBarWidth(entries[0].contentRect.width);
-      updateScrollState();
     });
     ro.observe(el);
-    el.addEventListener("scroll", updateScrollState, { passive: true });
-    updateScrollState();
-    return () => { ro.disconnect(); el.removeEventListener("scroll", updateScrollState); };
-  }, [updateScrollState]);
-  const showTabLabel = tabBarWidth >= 320;
-
-  const scrollTabs = useCallback((dir: "left" | "right") => {
-    const el = tabBarRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir === "left" ? -120 : 120, behavior: "smooth" });
+    return () => ro.disconnect();
   }, []);
+  const showTabLabel = tabBarWidth >= 320;
 
   // artifactCounts 변경 감지 → 증가한 탭에 펄스 트리거
   useEffect(() => {
@@ -352,8 +333,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             <div
               style={{
                 padding: "12px 14px",
-                display: "flex",
-                  borderBottom: "1px solid var(--ct-border)",
+                borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
@@ -395,40 +375,22 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               </button>
             </div>
 
-            {/* Artifact tabs — scrollable with arrows */}
-            <div style={{ position: "relative" }}>
-              {canScrollLeft && (
-                <button
-                  onClick={() => scrollTabs("left")}
-                  aria-label="탭 왼쪽 스크롤"
-                  style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0, zIndex: 2,
-                    width: 24, border: "none", cursor: "pointer",
-                    background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 60%, transparent)",
-                    color: "var(--ct-text2)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >◀</button>
-              )}
-              {canScrollRight && (
-                <button
-                  onClick={() => scrollTabs("right")}
-                  aria-label="탭 오른쪽 스크롤"
-                  style={{
-                    position: "absolute", right: 0, top: 0, bottom: 0, zIndex: 2,
-                    width: 24, border: "none", cursor: "pointer",
-                    background: "linear-gradient(to left, var(--ct-bg, #1a1a2e) 60%, transparent)",
-                    color: "var(--ct-text2)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >▶</button>
-              )}
+            {/* Artifact tabs */}
+            <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--ct-border)" }}>
+              {/* 좌측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: -100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="← 스크롤">◀</button>
               <div
                 ref={tabBarRef}
                 className="hide-scrollbar"
+                onWheel={(e) => { e.preventDefault(); tabBarRef.current?.scrollBy({ left: e.deltaY > 0 ? 80 : -80, behavior: "smooth" }); }}
                 style={{
                   display: "flex",
-                  borderBottom: "1px solid var(--ct-border)",
-                  padding: canScrollLeft ? "0 28px 0 28px" : canScrollRight ? "0 28px 0 8px" : "0 8px",
+                  padding: "0 4px",
                   overflowX: "auto",
+                  flex: 1,
                 }}
               >
                 {(
@@ -481,14 +443,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   </button>
                 ))}
               </div>
+              {/* 우측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: 100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to left, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="→ 스크롤">▶</button>
             </div>
 
             {/* 검색/필터 영역 */}
             {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
               <div style={{
                 padding: "6px 10px",
-                display: "flex",
-                  borderBottom: "1px solid var(--ct-border)",
+                borderBottom: "1px solid var(--ct-border)",
                 display: "flex",
                 flexDirection: "column",
                 gap: "5px",
