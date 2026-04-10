@@ -380,16 +380,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               {/* 좌측 화살표 */}
               <button
                 onClick={() => tabBarRef.current?.scrollBy({ left: -100, behavior: "smooth" })}
-                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
-              title="← 스크롤">◀</button>
+                style={{ flexShrink: 0, width: 22, border: "none", background: "transparent", color: "var(--ct-text2)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
+              >‹</button>
               <div
                 ref={tabBarRef}
-                onWheel={(e) => { e.preventDefault(); tabBarRef.current?.scrollBy({ left: e.deltaY > 0 ? 80 : -80, behavior: "smooth" }); }}
-                
                 style={{
                   display: "flex",
                   padding: "0 4px",
-                  overflowX: "auto", scrollbarWidth: "thin",
+                  overflowX: "auto",
                   flex: 1,
                 }}
               >
@@ -446,8 +444,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               {/* 우측 화살표 */}
               <button
                 onClick={() => tabBarRef.current?.scrollBy({ left: 100, behavior: "smooth" })}
-                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to left, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
-              title="→ 스크롤">▶</button>
+                style={{ flexShrink: 0, width: 22, border: "none", background: "transparent", color: "var(--ct-text2)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
+              >›</button>
             </div>
 
             {/* 검색/필터 영역 */}
@@ -933,7 +931,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                             background: "var(--ct-code)",
                             padding: "12px",
                             borderRadius: "8px",
-                            overflowX: "auto", scrollbarWidth: "thin",
+                            overflowX: "auto",
                             fontFamily: "monospace",
                             fontSize: "12px",
                             whiteSpace: "pre-wrap",
@@ -948,7 +946,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                             background: "var(--ct-code)",
                             padding: "12px",
                             borderRadius: "8px",
-                            overflowX: "auto", scrollbarWidth: "thin",
+                            overflowX: "auto",
                             fontFamily: "monospace",
                             fontSize: "12px",
                             whiteSpace: "pre-wrap",
