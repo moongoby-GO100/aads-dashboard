@@ -101,6 +101,15 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "qwen-omni-turbo",         name: "Qwen Omni Turbo",         provider: "alibaba", cost: "$0.02/$0.06" },
   // -- DashScope DeepSeek (Alibaba 호스팅) --
   { id: "dashscope-deepseek-v3.2", name: "DeepSeek V3.2 (DashScope)", provider: "alibaba", cost: "$0.28/$0.42" },
+  // -- Kimi (Moonshot AI) --
+  { id: "kimi-k2.5",              name: "Kimi K2.5",              provider: "kimi",    cost: "$0.60/$3" },
+  { id: "kimi-k2",                name: "Kimi K2",                provider: "kimi",    cost: "$0.50/$2" },
+  { id: "kimi-latest",            name: "Kimi Latest",            provider: "kimi",    cost: "변동" },
+  { id: "kimi-128k",              name: "Moonshot V1 128K",       provider: "kimi",    cost: "변동" },
+  { id: "kimi-8k",                name: "Moonshot V1 8K",         provider: "kimi",    cost: "변동" },
+  // -- MiniMax --
+  { id: "minimax-m2.7",           name: "MiniMax M2.7",           provider: "minimax", cost: "변동" },
+  { id: "minimax-m2.5",           name: "MiniMax M2.5",           provider: "minimax", cost: "변동" },
 ];
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -152,6 +161,10 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "qwen3-vl-235b",           label: "Qwen3 VL 235B",     cost: "$0.006", description: "Alibaba · 비전 최강" },
   { id: "qwen-omni-turbo",         label: "Qwen Omni Turbo",   cost: "$0.0002",description: "Alibaba · 멀티모달 경량" },
   { id: "dashscope-deepseek-v3.2", label: "DS V3.2 (Ali)",     cost: "$0.28/$0.42", description: "DashScope · DeepSeek V3.2" },
+  { id: "kimi-k2.5",               label: "Kimi K2.5",        cost: "$0.60/$3", description: "Moonshot AI · 멀티모달 최신" },
+  { id: "kimi-k2",                 label: "Kimi K2",          cost: "$0.50/$2", description: "Moonshot AI · 코딩 강자" },
+  { id: "minimax-m2.7",            label: "MiniMax M2.7",     cost: "변동",       description: "MiniMax · 에이전트 최신" },
+  { id: "minimax-m2.5",            label: "MiniMax M2.5",     cost: "변동",       description: "MiniMax · 코딩/도구 특화" },
   { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
 ];
 
@@ -212,6 +225,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   deepseek: "DeepSeek",
   openrouter: "OpenRouter",
   alibaba: "Alibaba/Qwen",
+  kimi: "Kimi (Moonshot)",
+  minimax: "MiniMax",
 };
 
 interface Props {
@@ -223,7 +238,7 @@ export default function ModelSelector({ value, onChange }: Props) {
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   // Group by provider for optgroup
-  const providers = ["auto", "deepseek", "anthropic", "openai", "google", "groq", "openrouter", "alibaba"];
+  const providers = ["auto", "deepseek", "anthropic", "openai", "google", "groq", "openrouter", "alibaba", "kimi", "minimax"];
 
   return (
     <div className="flex items-center gap-2 mb-2">
