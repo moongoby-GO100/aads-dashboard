@@ -45,7 +45,6 @@ interface RunnerJob {
   depends_on: string | null;
   worker_model?: string;
   actual_model?: string;
-  created_at: string | null;
   started_at: string | null;
   updated_at: string | null;
 }
@@ -766,7 +765,6 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   )}
                                   {job.actual_model && <span style={{ fontSize: "9px", background: "rgba(34,197,94,0.2)", color: "#4ade80", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>🤖 {job.actual_model}</span>}
                                   {job.status === "done" && job.started_at && (
-                                    <span style={{ fontSize: "10px", opacity: 0.5 }}>{elapsedStr(job.started_at, job.updated_at)}</span>
                                   )}
                                 </div>
                                 <div style={{ fontSize: "11px", opacity: 0.75, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
