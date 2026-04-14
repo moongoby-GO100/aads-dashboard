@@ -322,4 +322,17 @@ export const api = {
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
   getProjectDocContent: (project: string, basePath: string, filePath: string) =>
     request<any>(`/project-docs/content?project=${encodeURIComponent(project)}&base_path=${encodeURIComponent(basePath)}&file_path=${encodeURIComponent(filePath)}`),
+
+  // Admin: Prompt Management
+  getPromptSections: () => request<any>("/admin/prompts/sections"),
+  getPromptIntentGroups: () => request<any>("/admin/prompts/intent-groups"),
+  previewPrompt: (ws: string, intent: string) =>
+    request<any>("/admin/prompts/preview", { method: "POST", body: JSON.stringify({ workspace_key: ws, intent }) }),
+  getWorkspacePrompts: () => request<any>("/admin/prompts/workspaces"),
+  updateWorkspacePrompt: (id: string, system_prompt: string) =>
+    request<any>(`/admin/prompts/workspace/${id}`, { method: "PUT", body: JSON.stringify({ system_prompt }) }),
+  getPromptVersions: (section?: string) =>
+    request<any>(`/admin/prompts/versions${section ? "?section=" + encodeURIComponent(section) : ""}`),
+  getPromptVersion: (id: number) => request<any>(`/admin/prompts/versions/${id}`),
+  getTokenProfile: () => request<any>("/admin/prompts/token-profile"),
 };

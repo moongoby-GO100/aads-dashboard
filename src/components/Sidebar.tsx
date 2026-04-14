@@ -25,6 +25,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📊" },
   { href: "/kakaobot", label: "KakaoBot", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
+    { href: "/admin/prompts", label: "Prompts", icon: "📝" },
   { href: "/server-status", label: "Server Status", icon: "🖥️" },
 ];
 
