@@ -13,13 +13,14 @@ const QUICK_LINKS = [
   { label: "API Health", url: "https://aads.newtalk.kr/api/v1/health", desc: "서버 헬스체크" },
 ];
 
-const SIZE_ORDER = ["XS", "S", "M", "L", "XL"];
+const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "AI_REVIEW"];
 const SIZE_LABELS: Record<string, string> = {
   XS: "XS (초소형)",
   S: "S (소형)",
   M: "M (중형)",
   L: "L (대형)",
   XL: "XL (초대형)",
+  AI_REVIEW: "AI Review (코드 리뷰)",
 };
 
 
@@ -30,7 +31,7 @@ const AVAILABLE_MODELS = [
   { group: "MiniMax (월정액)", models: ["litellm:minimax-m2.7", "litellm:minimax-m2.5"] },
   { group: "Groq (무료)", models: ["litellm:groq-llama-70b", "litellm:groq-qwen3-32b", "litellm:groq-kimi-k2", "litellm:groq-llama4-scout"] },
   { group: "Gemini", models: ["litellm:gemini-2.5-flash", "litellm:gemini-2.5-pro", "litellm:gemini-3-pro-preview"] },
-  { group: "Qwen", models: ["litellm:qwen3-coder-plus", "litellm:qwen3-235b", "litellm:qwen3-max", "litellm:qwen3-coder-flash"] },
+  { group: "Qwen", models: ["qwen-turbo", "litellm:qwen3-coder-plus", "litellm:qwen3-235b", "litellm:qwen3-max", "litellm:qwen3-coder-flash"] },
   { group: "DeepSeek", models: ["litellm:deepseek-chat", "litellm:deepseek-reasoner"] },
   { group: "Kimi", models: ["litellm:kimi-k2", "litellm:kimi-k2.5"] },
   { group: "OpenRouter", models: ["litellm:openrouter-grok-4-fast", "litellm:openrouter-deepseek-v3"] },
@@ -112,10 +113,11 @@ function RunnerModelConfig() {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {configs.map((cfg, si) => (
         <div key={cfg.size} className="rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+            <h3 className="text-sm font-bold" style={{ color: cfg.size === "AI_REVIEW" ? "var(--accent)" : "var(--text-primary)" }}>
               {SIZE_LABELS[cfg.size] || cfg.size}
             </h3>
             {cfg.updated_at && (
@@ -130,7 +132,7 @@ function RunnerModelConfig() {
                 <span className="text-xs font-bold w-5 text-center" style={{ color: mi === 0 ? "var(--success)" : "var(--text-secondary)" }}>
                   {mi + 1}
                 </span>
-                <span className="flex-1 text-sm font-mono" style={{ color: "var(--text-primary)" }}>{model}</span>
+                <span className="flex-1 text-sm font-mono truncate" style={{ color: "var(--text-primary)" }}>{model}</span>
                 <button onClick={() => moveModel(si, mi, -1)} disabled={mi === 0}
                   className="px-1.5 py-0.5 rounded text-xs disabled:opacity-30" style={{ background: "var(--bg-hover)" }}>▲</button>
                 <button onClick={() => moveModel(si, mi, 1)} disabled={mi === cfg.models.length - 1}
@@ -161,6 +163,7 @@ function RunnerModelConfig() {
           </div>
         </div>
       ))}
+      </div>
       <div className="flex items-center gap-3 pt-2">
         <button onClick={save} disabled={saving}
           className="px-5 py-2 rounded-lg text-sm font-bold"
@@ -239,7 +242,7 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>버전 정보</h2>
           <div className="space-y-2 text-sm">
             {[
-              ["Dashboard", "v0.5.2 (Runner Model Config)"],
+              ["Dashboard", "v0.5.3 (Runner Model + AI Review Config)"],
               ["HANDOVER", "v5.22 (T-038 Watchdog)"],
               ["서버", "68 (aads.newtalk.kr)"],
               ["API Base", "https://aads.newtalk.kr/api/v1"],
