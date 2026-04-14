@@ -22,6 +22,20 @@ const SIZE_LABELS: Record<string, string> = {
   XL: "XL (초대형)",
 };
 
+
+
+const AVAILABLE_MODELS = [
+  { group: "Claude (월정액)", models: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] },
+  { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex"] },
+  { group: "MiniMax (월정액)", models: ["litellm:minimax-m2.7", "litellm:minimax-m2.5"] },
+  { group: "Groq (무료)", models: ["litellm:groq-llama-70b", "litellm:groq-qwen3-32b", "litellm:groq-kimi-k2", "litellm:groq-llama4-scout"] },
+  { group: "Gemini", models: ["litellm:gemini-2.5-flash", "litellm:gemini-2.5-pro", "litellm:gemini-3-pro-preview"] },
+  { group: "Qwen", models: ["litellm:qwen3-coder-plus", "litellm:qwen3-235b", "litellm:qwen3-max", "litellm:qwen3-coder-flash"] },
+  { group: "DeepSeek", models: ["litellm:deepseek-chat", "litellm:deepseek-reasoner"] },
+  { group: "Kimi", models: ["litellm:kimi-k2", "litellm:kimi-k2.5"] },
+  { group: "OpenRouter", models: ["litellm:openrouter-grok-4-fast", "litellm:openrouter-deepseek-v3"] },
+];
+
 interface ModelConfig {
   size: string;
   models: string[];
@@ -127,14 +141,21 @@ function RunnerModelConfig() {
             ))}
           </div>
           <div className="flex gap-2 mt-2">
-            <input
+            <select
               value={newModel[cfg.size] || ""}
               onChange={(e) => setNewModel((p) => ({ ...p, [cfg.size]: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && addModel(si)}
-              placeholder="모델 추가 (예: codex:gpt-5.4)"
               className="flex-1 rounded px-3 py-1.5 text-sm font-mono"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-            />
+            >
+              <option value="">모델 선택...</option>
+              {AVAILABLE_MODELS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.models.filter((m) => !cfg.models.includes(m)).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
             <button onClick={() => addModel(si)} className="px-3 py-1.5 rounded text-xs font-bold"
               style={{ background: "var(--accent)", color: "#fff" }}>추가</button>
           </div>
