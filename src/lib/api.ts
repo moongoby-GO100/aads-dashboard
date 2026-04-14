@@ -313,6 +313,11 @@ export const api = {
     return request<any>(`/agenda/sessions${qs}`);
   },
 
+  // Runner Model Config: 러너 모델 우선순위 설정 (AADS-241)
+  getRunnerModels: () => request<any>("/settings/runner-models"),
+  updateRunnerModels: (configs: Array<{ size: string; models: string[] }>) =>
+    request<any>("/settings/runner-models", { method: "PUT", body: JSON.stringify({ configs }) }),
+
   // Project Docs: 프로젝트별 문서 통합 조회
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
   getProjectDocContent: (project: string, basePath: string, filePath: string) =>
