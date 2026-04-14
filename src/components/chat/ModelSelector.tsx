@@ -34,6 +34,10 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "o1",                        name: "o1",                        provider: "openai",   cost: "$15/$60" },
   { id: "o1-mini",                   name: "o1-mini",                   provider: "openai",   cost: "$3/$12" },
   { id: "o3-mini",                   name: "o3-mini",                   provider: "openai",   cost: "$1.10/$4.40" },
+  // -- Codex CLI (ChatGPT Plus OAuth) --
+  { id: "gpt-5.4",                   name: "GPT-5.4 (Codex)",           provider: "codex",    cost: "$2.50/$15" },
+  { id: "gpt-5.4-mini",              name: "GPT-5.4 Mini (Codex)",      provider: "codex",    cost: "$0.75/$4.50" },
+  { id: "gpt-5.3-codex",             name: "GPT-5.3 Codex",             provider: "codex",    cost: "$1.75/$14" },
   // -- Google Gemini 3.1 --
   { id: "gemini-3.1-pro-preview",    name: "Gemini 3.1 Pro Preview",    provider: "google",   cost: "$2/$12" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash-Lite Preview", provider: "google", cost: "$0.02/$0.10" },
@@ -160,6 +164,10 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "minimax-m2.7",            label: "MiniMax M2.7",     cost: "변동",       description: "MiniMax · 에이전트 최신" },
   { id: "minimax-m2.5",            label: "MiniMax M2.5",     cost: "변동",       description: "MiniMax · 코딩/도구 특화" },
   { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
+  // Codex CLI (ChatGPT Plus OAuth)
+  { id: "gpt-5.4",                 label: "GPT-5.4 (Codex)",  cost: "$2.50/$15",    description: "Codex CLI · GPT-5.4 플래그십" },
+  { id: "gpt-5.4-mini",            label: "GPT-5.4 Mini",     cost: "$0.75/$4.50",  description: "Codex CLI · GPT-5.4 경량" },
+  { id: "gpt-5.3-codex",           label: "GPT-5.3 Codex",    cost: "$1.75/$14",    description: "Codex CLI · 코딩 특화" },
 ];
 
 export const DEFAULT_CHAT_MODEL = "claude-sonnet-4-6";
@@ -214,6 +222,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   auto: "자동",
   anthropic: "Anthropic",
   openai: "OpenAI",
+  codex: "Codex CLI (GPT)",
   google: "Google",
   groq: "Groq (무료)",
   deepseek: "DeepSeek",
@@ -232,7 +241,7 @@ export default function ModelSelector({ value, onChange }: Props) {
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   // Group by provider for optgroup
-  const providers = ["auto", "deepseek", "anthropic", "openai", "google", "groq", "openrouter", "alibaba", "kimi", "minimax"];
+  const providers = ["auto", "deepseek", "anthropic", "openai", "codex", "google", "groq", "openrouter", "alibaba", "kimi", "minimax"];
 
   return (
     <div className="flex items-center gap-2 mb-2">
