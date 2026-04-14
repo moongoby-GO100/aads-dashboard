@@ -34,6 +34,7 @@ interface LifecycleItem {
   duration_seconds: number | null;
   wait_seconds: number | null;
   status: string;
+  actual_model?: string;
   stalled?: boolean;
 }
 
@@ -485,14 +486,14 @@ export default function OpsPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Task ID", "프로젝트", "제목", "생성", "시작", "완료", "소요시간", "대기시간", "상태"].map((h) => (
+                  {["Task ID", "프로젝트", "제목", "실행모델", "생성", "시작", "완료", "소요시간", "대기시간", "상태"].map((h) => (
                     <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredLifecycle.length === 0 ? (
-                  <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "var(--text-secondary)" }}>데이터 없음</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "var(--text-secondary)" }}>데이터 없음</td></tr>
                 ) : filteredLifecycle.map((item) => (
                   <tr
                     key={item.task_id}
@@ -507,6 +508,19 @@ export default function OpsPage() {
                     </td>
                     <td style={{ padding: "6px 8px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{item.project || "-"}</td>
                     <td style={{ padding: "6px 8px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</td>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                      {item.actual_model ? (
+                        <span style={{
+                          fontSize: 10,
+                          background: item.actual_model.startsWith("litellm:") ? "rgba(34,197,94,0.15)" : "rgba(59,130,246,0.15)",
+                          color: item.actual_model.startsWith("litellm:") ? "#4ade80" : "#60a5fa",
+                          borderRadius: 4,
+                          padding: "2px 6px",
+                        }}>
+                          {item.actual_model}
+                        </span>
+                      ) : <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>-</span>}
+                    </td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>{toKST(item.created_at)}</td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>{toKST(item.started_at)}</td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>{toKST(item.completed_at)}</td>
