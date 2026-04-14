@@ -414,6 +414,10 @@ export function useChatSSE() {
                     isBuffering: false,
                     isResearching: false,
                     error: errMsg,
+                    modelUsed: chunk.model || chunk.model_used || s.modelUsed,
+                    inputTokens: chunk.input_tokens || s.inputTokens,
+                    outputTokens: chunk.output_tokens || s.outputTokens,
+                    costUsd: chunk.cost_usd || chunk.cost || s.costUsd,
                   }));
                   return;
                 }

@@ -51,7 +51,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "groq-qwen3-32b",            name: "Qwen3 32B",                 provider: "groq",     cost: "무료" },
   { id: "groq-kimi-k2",              name: "Kimi K2",                   provider: "groq",     cost: "무료" },
   { id: "groq-llama4-scout",         name: "Llama 4 Scout",             provider: "groq",     cost: "무료" },
-  { id: "groq-llama4-maverick",      name: "Llama 4 Maverick",          provider: "groq",     cost: "무료" },
   { id: "groq-llama-70b",            name: "Llama 3.3 70B",             provider: "groq",     cost: "무료" },
   { id: "groq-gpt-oss-120b",         name: "GPT-OSS 120B",              provider: "groq",     cost: "무료" },
   { id: "groq-compound",             name: "Groq Compound",             provider: "groq",     cost: "무료" },
@@ -59,11 +58,9 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "deepseek-chat",             name: "DeepSeek V3",               provider: "deepseek",   cost: "$0.28/$0.42" },
   { id: "deepseek-reasoner",         name: "DeepSeek R1",               provider: "deepseek",   cost: "$0.55/$2.19" },
   // -- OpenRouter --
-  { id: "openrouter-grok-4-fast",    name: "Grok 4.1 Fast",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-deepseek-v3",    name: "DeepSeek V3.2",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-mistral-small",  name: "Mistral Small",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-nemotron-free",  name: "Nemotron Free",             provider: "openrouter", cost: "무료" },
-  { id: "openrouter-minimax-m2",     name: "MiniMax M2.7",              provider: "openrouter", cost: "변동" },
   // -- Alibaba/Qwen (DashScope) — 플래그십 --
   { id: "qwen3-235b",              name: "Qwen3 235B",              provider: "alibaba", cost: "$0.60/$2.40" },
   { id: "qwen3-235b-instruct",     name: "Qwen3 235B Instruct",     provider: "alibaba", cost: "$0.60/$2.40" },
@@ -134,13 +131,10 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "gemini-2.5-flash",        label: "Flash 2.5",         cost: "$0.15/$0.60", description: "빠름 · 저비용" },
   { id: "groq-qwen3-32b",          label: "Qwen3 32B",         cost: "무료",   description: "Groq 초고속 · 무료" },
   { id: "groq-kimi-k2",            label: "Kimi K2",           cost: "무료",   description: "수학/금융 최강 · 무료" },
-  { id: "groq-llama4-maverick",    label: "Llama 4 Maverick",  cost: "무료",   description: "Groq · Llama 4 Maverick" },
   { id: "deepseek-chat",           label: "DeepSeek V3",       cost: "$0.28/$0.42", description: "초저가 범용" },
-  { id: "openrouter-grok-4-fast",      label: "Grok 4.1 Fast",     cost: "변동",   description: "OpenRouter · Grok 최신" },
   { id: "openrouter-deepseek-v3",      label: "DeepSeek V3.2",     cost: "변동",   description: "OpenRouter · DeepSeek 최신" },
   { id: "openrouter-mistral-small",    label: "Mistral Small",     cost: "변동",   description: "OpenRouter · Mistral 경량" },
   { id: "openrouter-nemotron-free",    label: "Nemotron Free",     cost: "무료",   description: "OpenRouter · NVIDIA 무료" },
-  { id: "openrouter-minimax-m2",       label: "MiniMax M2.7",      cost: "변동",   description: "OpenRouter · MiniMax 최신" },
   // Alibaba/Qwen 대표 모델
   { id: "qwen3-235b",              label: "Qwen3 235B",        cost: "$0.60/$2.40", description: "Alibaba · 최고 성능" },
   { id: "qwen3-next-80b",          label: "Qwen3 Next 80B",    cost: "$0.003", description: "Alibaba · 차세대 80B" },
