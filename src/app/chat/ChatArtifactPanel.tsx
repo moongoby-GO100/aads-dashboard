@@ -43,8 +43,10 @@ interface RunnerJob {
   error_detail: string | null;
   error_message: string | null;
   depends_on: string | null;
+  model?: string;
   worker_model?: string;
   actual_model?: string;
+  size?: string;
   created_at: string | null;
   started_at: string | null;
   updated_at: string | null;
@@ -764,7 +766,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                       {job.worker_model}
                                     </span>
                                   )}
-                                  {job.actual_model && <span style={{ fontSize: "9px", background: "rgba(34,197,94,0.2)", color: "#4ade80", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>🤖 {job.actual_model}</span>}
+                                  {job.actual_model && job.actual_model !== job.worker_model && <span style={{ fontSize: "9px", background: "rgba(34,197,94,0.2)", color: "#4ade80", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>🤖 {job.actual_model}</span>}
+                                  {!job.worker_model && !job.actual_model && job.model && <span style={{ fontSize: "9px", background: "rgba(156,163,175,0.2)", color: "#9ca3af", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>📍 {job.model}</span>}
                                 </div>
                                 <div style={{ fontSize: "11px", opacity: 0.75, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {job.instruction.replace(/\n/g, " ").slice(0, 80)}

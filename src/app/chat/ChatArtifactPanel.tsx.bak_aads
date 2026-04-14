@@ -43,6 +43,8 @@ interface RunnerJob {
   error_detail: string | null;
   error_message: string | null;
   depends_on: string | null;
+  worker_model?: string;
+  actual_model?: string;
   created_at: string | null;
   started_at: string | null;
   updated_at: string | null;
@@ -169,12 +171,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [jobsLoading, setJobsLoading] = useState(false);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || artifactTab !== "log") return;
     let cancelled = false;
     const fetchJobs = async () => {
       try {
         setJobsLoading(true);
-        const res = await fetch(`/api/pipeline/jobs?session_id=${sessionId}&limit=50`);
+        const res = await fetch(`${BASE_URL}/pipeline/jobs?session_id=${sessionId}&limit=50`, { headers: authHdrs() });
         if (!cancelled && res.ok) {
           const data = await res.json();
           setRunnerJobs(data);
@@ -184,9 +186,9 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       }
     };
     fetchJobs();
-    const interval = setInterval(fetchJobs, 30000);
+    const interval = setInterval(fetchJobs, 15000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [sessionId]);
+  }, [sessionId, artifactTab]);
 
   const errorDetailKo = (d: string | null): string => {
     const map: Record<string, string> = {
@@ -376,68 +378,82 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* Artifact tabs */}
-            <div
-              ref={tabBarRef}
-              style={{
-                display: "flex",
-                borderBottom: "1px solid var(--ct-border)",
-                padding: "0 8px",
-                overflowX: "auto",
-                scrollbarWidth: "none",
-              }}
-            >
-              {(
-                [
-                  { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
-                  { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
-                  { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
-                  { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
-                  { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
-                  { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
-                ]
-              ).filter((tab) => {
-                if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
-                return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
-              }).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => { setArtifactTab(tab.key); setSelectedArtifactIdx(0); }}
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                    color:
-                      artifactTab === tab.key ? "var(--ct-accent)" : "var(--ct-text2)",
-                    borderBottom:
-                      artifactTab === tab.key
-                        ? "2px solid var(--ct-accent)"
-                        : "2px solid transparent",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
-                  {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
-                    <span style={{
-                      marginLeft: '3px',
-                      fontSize: '10px',
-                      opacity: 0.7,
-                      display: 'inline-block',
-                      animation: pulsedTabs.has(tab.key) ? 'badgePulse 0.4s ease 3' : 'none',
-                    }}>({artifactCounts[tab.key]})</span>
-                  )}
-                  {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
-                    <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
-                      ({unreadLogCount})
-                    </span>
-                  )}
-                </button>
-              ))}
+            <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--ct-border)" }}>
+              {/* 좌측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: -100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to right, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="← 스크롤">◀</button>
+              <div
+                ref={tabBarRef}
+                className="hide-scrollbar"
+                onWheel={(e) => { e.preventDefault(); tabBarRef.current?.scrollBy({ left: e.deltaY > 0 ? 80 : -80, behavior: "smooth" }); }}
+                style={{
+                  display: "flex",
+                  padding: "0 4px",
+                  overflowX: "auto",
+                  flex: 1,
+                }}
+              >
+                {(
+                  [
+                    { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                    { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
+                    { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                    { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
+                    { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
+                    { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
+                    { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                  ]
+                ).filter((tab) => {
+                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
+                  return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
+                }).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => { setArtifactTab(tab.key); setSelectedArtifactIdx(0); }}
+                    style={{
+                      padding: "8px 10px",
+                      fontSize: "11px",
+                      border: "none",
+                      background: "none",
+                      cursor: "pointer",
+                      color:
+                        artifactTab === tab.key ? "var(--ct-accent)" : "var(--ct-text2)",
+                      borderBottom:
+                        artifactTab === tab.key
+                          ? "2px solid var(--ct-accent)"
+                          : "2px solid transparent",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {tab.icon}{showTabLabel ? ` ${tab.label}` : ""}
+                    {tab.key !== "tasks" && tab.key !== "log" && tab.key !== "agenda" && artifactCounts[tab.key] > 0 && (
+                      <span style={{
+                        marginLeft: '3px',
+                        fontSize: '10px',
+                        opacity: 0.7,
+                        display: 'inline-block',
+                        animation: pulsedTabs.has(tab.key) ? 'badgePulse 0.4s ease 3' : 'none',
+                      }}>({artifactCounts[tab.key]})</span>
+                    )}
+                    {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
+                      <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
+                        ({unreadLogCount})
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* 우측 화살표 */}
+              <button
+                onClick={() => tabBarRef.current?.scrollBy({ left: 100, behavior: "smooth" })}
+                style={{ flexShrink: 0, width: 28, border: "none", background: "linear-gradient(to left, var(--ct-bg, #1a1a2e) 70%, transparent)", color: "var(--ct-accent)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.8 }}
+              title="→ 스크롤">▶</button>
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && (
+            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -503,7 +519,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   const ms = !searchQuery || a.title.toLowerCase().includes(searchQuery.toLowerCase());
                   const mt = !typeFilter || a.artifact_type === typeFilter ||
                     (typeFilter === "report" && (a.artifact_type === "report" || a.artifact_type === "text")) ||
-                    (typeFilter === "other" && !["report", "text", "code", "table"].includes(a.artifact_type));
+                    (typeFilter === "other" && !["report", "text", "code", "table", "full_response"].includes(a.artifact_type));
                   return ms && mt;
                 });
               const localCurPos = lfWithIdx.findIndex(({ idx }) => idx === selectedArtifactIdx);
@@ -729,7 +745,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       const isRunning = job.status === "running";
                       return (
                         <div key={job.job_id} style={{ marginLeft: depth * 12 }}>
-                          <details style={{ borderBottom: depth === 0 ? "1px solid var(--ct-border)" : "none" }} open={job.status !== "done"}>
+                          <details style={{ borderBottom: depth === 0 ? "1px solid var(--ct-border)" : "none" }}>
                             <summary style={{
                               fontSize: "11px", cursor: "pointer", listStyle: "none",
                               display: "flex", alignItems: "flex-start", gap: "6px",
@@ -743,9 +759,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   {isRunning && job.started_at && (
                                     <span style={{ fontSize: "10px", color: "#f59e0b" }}>⏱ {elapsedStr(job.started_at, null)}</span>
                                   )}
-                                  {job.status === "done" && job.started_at && (
-                                    <span style={{ fontSize: "10px", opacity: 0.5 }}>{elapsedStr(job.started_at, job.updated_at)}</span>
+                                  {job.worker_model && (
+                                    <span style={{ fontSize: "9px", background: "rgba(99,102,241,0.2)", color: "#818cf8", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>
+                                      {job.worker_model}
+                                    </span>
                                   )}
+                                  {job.actual_model && <span style={{ fontSize: "9px", background: "rgba(34,197,94,0.2)", color: "#4ade80", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>🤖 {job.actual_model}</span>}
                                 </div>
                                 <div style={{ fontSize: "11px", opacity: 0.75, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {job.instruction.replace(/\n/g, " ").slice(0, 80)}
@@ -765,7 +784,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                               </div>
                             </summary>
                             <div style={{ padding: "6px 12px 8px 26px", fontSize: "11px", color: "var(--ct-text2)", background: "rgba(255,255,255,0.02)" }}>
-                              <div style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}>{job.instruction.slice(0, 400)}</div>
+                              <div style={{ whiteSpace: "pre-wrap", opacity: 0.8, maxHeight: "200px", overflowY: "auto", fontFamily: "monospace", fontSize: "10px", lineHeight: 1.5 }}>{job.instruction}</div>
                               {children.length > 0 && (
                                 <div style={{ marginTop: 6, borderLeft: "2px solid var(--ct-border)", paddingLeft: 8 }}>
                                   {children.map(c => renderJob(c, depth + 1))}
@@ -919,7 +938,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                             background: "var(--ct-code)",
                             padding: "12px",
                             borderRadius: "8px",
-                            overflowX: "auto",
+                            overflowX: "auto", scrollbarWidth: "thin",
                             fontFamily: "monospace",
                             fontSize: "12px",
                             whiteSpace: "pre-wrap",
@@ -934,7 +953,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                             background: "var(--ct-code)",
                             padding: "12px",
                             borderRadius: "8px",
-                            overflowX: "auto",
+                            overflowX: "auto", scrollbarWidth: "thin",
                             fontFamily: "monospace",
                             fontSize: "12px",
                             whiteSpace: "pre-wrap",
@@ -1032,6 +1051,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "log" as ArtifactTab, icon: "🔧" },
                 { key: "agenda" as ArtifactTab, icon: "📋" },
                 { key: "report" as ArtifactTab, icon: "📄" },
+                { key: "dialog" as ArtifactTab, icon: "💬" },
                 { key: "code" as ArtifactTab, icon: "💻" },
                 { key: "chart" as ArtifactTab, icon: "📊" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },
