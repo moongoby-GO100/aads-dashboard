@@ -761,13 +761,27 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   {isRunning && job.started_at && (
                                     <span style={{ fontSize: "10px", color: "#f59e0b" }}>⏱ {elapsedStr(job.started_at, null)}</span>
                                   )}
-                                  {job.worker_model && (
-                                    <span style={{ fontSize: "9px", background: "rgba(99,102,241,0.2)", color: "#818cf8", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>
-                                      {job.worker_model}
-                                    </span>
-                                  )}
-                                  {job.actual_model && job.actual_model !== job.worker_model && <span style={{ fontSize: "9px", background: "rgba(34,197,94,0.2)", color: "#4ade80", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>🤖 {job.actual_model}</span>}
-                                  {!job.worker_model && !job.actual_model && job.model && <span style={{ fontSize: "9px", background: "rgba(156,163,175,0.2)", color: "#9ca3af", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>📍 {job.model}</span>}
+                                  {(() => {
+                                    const displayModel = job.actual_model || job.worker_model || job.model;
+                                    if (!displayModel) return null;
+                                    const m = displayModel.toLowerCase();
+                                    const isClaude = m.includes("claude") || m.includes("anthropic");
+                                    const isLitellm = m.includes("kimi") || m.includes("qwen") || m.includes("minimax") || m.includes("deepseek") || m.includes("gemini");
+                                    const bg = isClaude ? "rgba(99,102,241,0.2)" : isLitellm ? "rgba(16,185,129,0.2)" : "rgba(156,163,175,0.2)";
+                                    const fg = isClaude ? "#818cf8" : isLitellm ? "#34d399" : "#9ca3af";
+                                    return (
+                                      <>
+                                        <span style={{ fontSize: "9px", background: bg, color: fg, borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap" }}>
+                                          {displayModel}
+                                        </span>
+                                        {job.size && (
+                                          <span style={{ fontSize: "9px", background: "rgba(107,114,128,0.15)", color: "#9ca3af", borderRadius: "3px", padding: "1px 4px", whiteSpace: "nowrap", fontWeight: 600 }}>
+                                            {job.size}
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                                 <div style={{ fontSize: "11px", opacity: 0.75, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {job.instruction.replace(/\n/g, " ").slice(0, 80)}
