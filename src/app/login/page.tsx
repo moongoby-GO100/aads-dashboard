@@ -18,7 +18,6 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
     setLoading(true);
     try {
       const token = await login(email, password);
-      document.cookie = `aads_token=${token}; path=/; max-age=${24 * 3600}; SameSite=Lax`;
       const redirect = searchParams.get("redirect") || "/";
       router.push(redirect);
     } catch (err) {
