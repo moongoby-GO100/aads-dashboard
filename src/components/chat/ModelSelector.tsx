@@ -11,7 +11,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   // -- 자동 라우팅 --
   { id: "mixture",                   name: "자동 라우팅 (혼합)",         provider: "auto",     cost: "자동" },
   // -- Anthropic Claude --
-  { id: "claude-opus-4-6",           name: "Claude Opus 4.6",           provider: "anthropic", cost: "$5/$25" },
+  { id: "claude-opus-4-7",           name: "Claude Opus 4.7",           provider: "anthropic", cost: "$5/$25" },
   { id: "claude-sonnet-4-6",         name: "Claude Sonnet 4.6",         provider: "anthropic", cost: "$3/$15" },
   { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5",          provider: "anthropic", cost: "$0.80/$4" },
   { id: "claude-opus-4-5",           name: "Claude Opus 4.5",           provider: "anthropic", cost: "$5/$25" },
@@ -131,7 +131,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$1/$4", description: "속도 1위 · 최신 Gemini" },
   { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.60/$2.40", description: "한국어 1위 · Alibaba 최고" },
   { id: "claude-sonnet-4-6",       label: "Sonnet 4.6",        cost: "$3/$15",  description: "안정성 1위 · 도구 활용" },
-  { id: "claude-opus-4-6",         label: "Opus 4.6",          cost: "$5/$25",  description: "최고 성능 · 복잡 작업" },
+  { id: "claude-opus-4-7",         label: "Opus 4.7",          cost: "$5/$25",  description: "최고 성능 · 복잡 작업" },
   { id: "gemini-2.5-flash",        label: "Flash 2.5",         cost: "$0.15/$0.60", description: "빠름 · 저비용" },
   { id: "groq-qwen3-32b",          label: "Qwen3 32B",         cost: "무료",   description: "Groq 초고속 · 무료" },
   { id: "groq-kimi-k2",            label: "Kimi K2",           cost: "무료",   description: "수학/금융 최강 · 무료" },
