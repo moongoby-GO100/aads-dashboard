@@ -3480,7 +3480,6 @@ export default function ChatPage() {
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
     if (artifactTab === "agenda") return false;
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
-    return false;
   });
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
   const artifactCounts: Record<string, number> = {
@@ -3492,7 +3491,6 @@ export default function ChatPage() {
     log: systemMessages.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
   };
-
   // C1: swipe gesture handlers
   function onSwipeStart(e: React.TouchEvent) {
     if (screenSize === "desktop") return;
