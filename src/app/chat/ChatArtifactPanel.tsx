@@ -221,6 +221,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [editContent, setEditContent] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [showHtmlCode, setShowHtmlCode] = useState(false);
   const [localEdits, setLocalEdits] = useState<Record<string, { title: string; content: string }>>({});
 
   const startEdit = useCallback((artifact: Artifact) => {
@@ -404,6 +405,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                     { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
+                    { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
@@ -816,6 +818,85 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     return roots.map(job => renderJob(job));
                   })()}
                 </div>
+              ) : artifactTab === "html_preview" ? (
+                activeArtifact ? (
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    {/* 상단 툴바 */}
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 12px", borderBottom: "1px solid var(--ct-border)",
+                      background: "var(--ct-card)", borderRadius: "8px 8px 0 0",
+                    }}>
+                      <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {activeArtifact.title || "HTML 미리보기"}
+                      </span>
+                      <button
+                        onClick={() => setShowHtmlCode(!showHtmlCode)}
+                        style={{
+                          padding: "4px 10px", fontSize: "11px", borderRadius: "6px",
+                          border: "1px solid var(--ct-border)", cursor: "pointer",
+                          background: showHtmlCode ? "var(--ct-accent)" : "var(--ct-hover)",
+                          color: showHtmlCode ? "#fff" : "var(--ct-text2)",
+                        }}
+                      >
+                        {showHtmlCode ? "미리보기" : "코드 보기"}
+                      </button>
+                      <button
+                        onClick={() => copyArtifact(activeArtifact.content)}
+                        style={{
+                          padding: "4px 10px", fontSize: "11px", borderRadius: "6px",
+                          border: "1px solid var(--ct-border)", cursor: "pointer",
+                          background: "var(--ct-hover)", color: "var(--ct-text2)",
+                        }}
+                      >
+                        📋 복사
+                      </button>
+                      <button
+                        onClick={() => {
+                          const w = window.open("", "_blank");
+                          if (w) { w.document.write(activeArtifact.content); w.document.close(); }
+                        }}
+                        style={{
+                          padding: "4px 10px", fontSize: "11px", borderRadius: "6px",
+                          border: "1px solid var(--ct-border)", cursor: "pointer",
+                          background: "var(--ct-hover)", color: "var(--ct-text2)",
+                        }}
+                      >
+                        🔗 새 창
+                      </button>
+                    </div>
+                    {/* 콘텐츠 영역 */}
+                    {showHtmlCode ? (
+                      <pre style={{
+                        flex: 1, background: "var(--ct-code)", padding: "12px",
+                        borderRadius: "0 0 8px 8px", overflowX: "auto", overflowY: "auto",
+                        fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap",
+                        wordBreak: "break-word", scrollbarWidth: "thin",
+                      }}>
+                        {activeArtifact.content}
+                      </pre>
+                    ) : (
+                      <iframe
+                        srcDoc={activeArtifact.content}
+                        sandbox="allow-scripts"
+                        style={{
+                          flex: 1, width: "100%", border: "none",
+                          borderRadius: "0 0 8px 8px", background: "#ffffff",
+                          minHeight: "400px",
+                        }}
+                        title={activeArtifact.title || "HTML Preview"}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: "center", paddingTop: "40px", color: "var(--ct-text2)" }}>
+                    <div style={{ fontSize: "32px", marginBottom: "8px" }}>🖼️</div>
+                    <div style={{ fontSize: "12px" }}>HTML 미리보기가 없습니다</div>
+                    <div style={{ fontSize: "11px", marginTop: "6px", opacity: 0.7, lineHeight: 1.5 }}>
+                      AI에게 HTML 생성을 요청해 보세요
+                    </div>
+                  </div>
+                )
               ) : activeArtifact ? (() => {
                 const edited = localEdits[activeArtifact.id];
                 const displayArtifact = edited
@@ -1070,6 +1151,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "report" as ArtifactTab, icon: "📄" },
                 { key: "dialog" as ArtifactTab, icon: "💬" },
                 { key: "code" as ArtifactTab, icon: "💻" },
+                { key: "html_preview" as ArtifactTab, icon: "🖼️" },
                 { key: "chart" as ArtifactTab, icon: "📊" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },
               ]

@@ -2,22 +2,19 @@
 /**
  * AADS-172-C: useArtifactPanel
  * 아티팩트 패널 3단계(Full/Mini/Hidden) 상태 관리 훅
- * - Full(420px) / Mini(48px) / Hidden(0px)
- * - ◀ 버튼: Full↔Mini 토글
- * - Ctrl+]: 3단계 순환
- * - Mini 아이콘 클릭: 해당 탭으로 Full 확장
- * - AI 응답 아티팩트 감지: 자동 Full 확장
+ * AADS-PREVIEW-FE: html_preview 타입 + preview 탭 추가
  */
 import { useState, useEffect, useCallback } from "react";
 
 export type PanelState = "full" | "mini" | "hidden";
-export type TabId = "report" | "code" | "chart" | "dashboard" | "drive" | "tasks";
+export type TabId = "report" | "code" | "chart" | "dashboard" | "drive" | "tasks" | "preview";
 
 export interface ArtifactContent {
-  type: "report" | "code" | "chart";
+  type: "report" | "code" | "chart" | "html_preview";
   content: string;
   language?: string;
   title?: string;
+  html?: string;
 }
 
 export interface ArtifactPanelHook {
@@ -35,10 +32,14 @@ export interface ArtifactPanelHook {
 
 /**
  * AI 응답 텍스트에서 아티팩트 유형 감지
- * 긴 코드 블록 → "code", 헤더+긴 텍스트 → "report", 차트 JSON → "chart"
+ * HTML 50자+ → "html_preview", 긴 코드 블록 → "code", 헤더+긴 텍스트 → "report"
  */
-export function detectArtifactType(content: string): "report" | "code" | "chart" | null {
+export function detectArtifactType(content: string): "report" | "code" | "chart" | "html_preview" | null {
   if (!content || content.length < 300) return null;
+
+  // HTML 코드 블록이 50자 이상이면 html_preview (code보다 우선)
+  const htmlMatch = content.match(/```(?:html|htm)\n([\s\S]+?)```/i);
+  if (htmlMatch && htmlMatch[1].trim().length >= 50) return "html_preview";
 
   // 코드 블록이 200자 이상이면 code artifact
   const codeMatch = content.match(/```(\w*)\n([\s\S]+?)```/);
@@ -49,7 +50,7 @@ export function detectArtifactType(content: string): "report" | "code" | "chart"
     return "report";
   }
 
-  // 차트 데이터 패턴 (JSON 배열 + labels/data)
+  // 차트 데이터 패턴
   if (content.includes('"labels"') && content.includes('"data"')) return "chart";
 
   return null;
@@ -66,12 +67,10 @@ export function useArtifactPanel(): ArtifactPanelHook {
   const [activeTab, setActiveTab] = useState<TabId>("report");
   const [artifact, setArtifact] = useState<ArtifactContent | null>(null);
 
-  // Full↔Mini 토글 (◀ 버튼)
   const toggleCollapse = useCallback(() => {
     setPanelState((prev) => (prev === "full" ? "mini" : "full"));
   }, []);
 
-  // 3단계 순환: hidden→full→mini→hidden (Ctrl+])
   const cyclePanel = useCallback(() => {
     setPanelState((prev) => {
       if (prev === "hidden") return "full";
@@ -80,17 +79,18 @@ export function useArtifactPanel(): ArtifactPanelHook {
     });
   }, []);
 
-  // Mini 아이콘 클릭 → 해당 탭으로 Full 확장
   const openTab = useCallback((tab: TabId) => {
     setActiveTab(tab);
     setPanelState("full");
   }, []);
 
-  // AI 응답 아티팩트 감지 → 자동 Full 확장
   const showArtifact = useCallback((item: ArtifactContent) => {
     setArtifact(item);
     const tab: TabId =
-      item.type === "code" ? "code" : item.type === "chart" ? "chart" : "report";
+      item.type === "html_preview" ? "preview" :
+      item.type === "code" ? "code" :
+      item.type === "chart" ? "chart" :
+      "report";
     setActiveTab(tab);
     setPanelState("full");
   }, []);
@@ -99,7 +99,6 @@ export function useArtifactPanel(): ArtifactPanelHook {
     setPanelState("hidden");
   }, []);
 
-  // Ctrl+] 단축키 바인딩
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "]") {

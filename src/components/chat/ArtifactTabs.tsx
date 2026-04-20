@@ -2,12 +2,14 @@
 /**
  * AADS-172-C: ArtifactTabs
  * 아티팩트 패널 탭 네비게이션 (Full: 수평, Mini: 수직 아이콘)
+ * AADS-PREVIEW-FE: preview 탭 추가
  */
 import type { PanelState, TabId } from "@/hooks/useArtifactPanel";
 
 export const TABS: Array<{ id: TabId; icon: string; label: string }> = [
   { id: "report",    icon: "📄", label: "보고서" },
   { id: "code",      icon: "💻", label: "코드" },
+  { id: "preview",   icon: "👁️", label: "미리보기" },
   { id: "chart",     icon: "📊", label: "차트" },
   { id: "dashboard", icon: "🖥️", label: "대시보드" },
   { id: "drive",     icon: "📁", label: "AI Drive" },
@@ -23,7 +25,6 @@ interface Props {
 export default function ArtifactTabs({ activeTab, panelState, onSelect }: Props) {
   if (panelState === "hidden") return null;
 
-  // Mini 모드: 수직 아이콘만
   if (panelState === "mini") {
     return (
       <div className="flex flex-col items-center gap-1 py-2">
@@ -55,7 +56,6 @@ export default function ArtifactTabs({ activeTab, panelState, onSelect }: Props)
     );
   }
 
-  // Full 모드: 수평 탭
   return (
     <div
       className="flex flex-shrink-0 overflow-x-auto"

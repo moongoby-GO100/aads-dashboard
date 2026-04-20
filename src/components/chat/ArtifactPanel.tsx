@@ -2,10 +2,7 @@
 /**
  * AADS-172-C: ArtifactPanel
  * 아티팩트 패널 3단계 전환 컨테이너
- * - Full (420px): 탭 + 컨텐츠 + 액션 버튼 전체 표시
- * - Mini (48px): 세로 아이콘만 표시
- * - Hidden (0px): 완전 숨김
- * - 300ms ease-in-out 슬라이드 애니메이션
+ * AADS-PREVIEW-FE: HTML Preview 탭 추가
  */
 import type { PanelState, TabId, ArtifactContent } from "@/hooks/useArtifactPanel";
 import ArtifactTabs from "./ArtifactTabs";
@@ -15,6 +12,7 @@ import ArtifactChart from "./ArtifactChart";
 import ArtifactDashboard from "./ArtifactDashboard";
 import AIDrive from "./AIDrive";
 import ArtifactTaskMonitor from "./ArtifactTaskMonitor";
+import ArtifactHtmlPreview from "./ArtifactHtmlPreview";
 
 const PANEL_WIDTH: Record<PanelState, string> = {
   full:   "420px",
@@ -61,13 +59,11 @@ export default function ArtifactPanel({
         position: "relative",
       }}
     >
-      {/* Mini 모드 */}
       {isMini && (
         <div
           className="flex flex-col items-center"
           style={{ width: 48, overflow: "hidden" }}
         >
-          {/* ▶ 확장 버튼 */}
           <button
             onClick={onToggleCollapse}
             title="패널 확장"
@@ -93,10 +89,8 @@ export default function ArtifactPanel({
         </div>
       )}
 
-      {/* Full 모드 */}
       {isFull && (
         <div className="flex flex-col h-full" style={{ width: 420 }}>
-          {/* 패널 헤더 */}
           <div
             className="flex items-center justify-between px-3 py-2 flex-shrink-0"
             style={{ borderBottom: "1px solid var(--ct-border)" }}
@@ -113,7 +107,6 @@ export default function ArtifactPanel({
               <span className="text-xs" style={{ color: "var(--ct-text-muted)" }}>
                 Ctrl+]
               </span>
-              {/* ◀ 축소 버튼 */}
               <button
                 onClick={onToggleCollapse}
                 title="패널 축소"
@@ -133,14 +126,12 @@ export default function ArtifactPanel({
             </div>
           </div>
 
-          {/* 탭 네비게이션 */}
           <ArtifactTabs
             activeTab={activeTab}
             panelState="full"
             onSelect={onTabSelect}
           />
 
-          {/* 탭 컨텐츠 */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {activeTab === "report" && (
               <ArtifactReport
@@ -161,6 +152,12 @@ export default function ArtifactPanel({
             {activeTab === "dashboard" && <ArtifactDashboard />}
             {activeTab === "drive" && <AIDrive workspaceId={workspaceId} />}
             {activeTab === "tasks" && <ArtifactTaskMonitor sessionId={sessionId} />}
+            {activeTab === "preview" && (
+              <ArtifactHtmlPreview
+                artifact={artifact}
+                workspaceId={workspaceId}
+              />
+            )}
           </div>
         </div>
       )}
