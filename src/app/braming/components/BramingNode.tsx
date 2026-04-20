@@ -51,7 +51,7 @@ function BramingNodeComponent({ data, selected }: NodeProps) {
       >
         {data.label as string}
       </div>
-      {data.agentRole && (
+      {String(data.agentRole || "") && (
         <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>
           {data.agentRole as string}
         </div>
