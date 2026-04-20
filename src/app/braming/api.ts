@@ -69,7 +69,7 @@ export async function createSession(topic: string): Promise<{ session: BramingSe
   return req("/sessions", { method: "POST", body: JSON.stringify({ topic }) });
 }
 
-export async function listSessions(limit = 20): Promise<{ sessions: BramingSession[] }> {
+export async function listSessions(limit = 20): Promise<{ items?: BramingSession[]; sessions?: BramingSession[] }> {
   return req(`/sessions?limit=${limit}`);
 }
 
