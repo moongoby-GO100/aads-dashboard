@@ -408,6 +408,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                  ]
                 ).filter((tab) => {
                   if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
@@ -1072,6 +1073,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     paddingTop: "40px",
                     color: "var(--ct-text2)",
                   }}
+                >
                   <div style={{ fontSize: "32px", marginBottom: "8px" }}>📄</div>
                   <div style={{ fontSize: "12px" }}>아티팩트가 없습니다</div>
                   <div
