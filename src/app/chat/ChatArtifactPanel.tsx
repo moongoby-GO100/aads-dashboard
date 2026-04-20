@@ -409,6 +409,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
+                  ]
                 ).filter((tab) => {
                   if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
@@ -1072,6 +1073,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     textAlign: "center",
                     paddingTop: "40px",
                     color: "var(--ct-text2)",
+                >
                   }}
                 >
                   <div style={{ fontSize: "32px", marginBottom: "8px" }}>📄</div>
