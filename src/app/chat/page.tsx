@@ -3480,6 +3480,7 @@ export default function ChatPage() {
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
     if (artifactTab === "agenda") return false;
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
+    if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
     return false;
   });
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
@@ -3490,6 +3491,7 @@ export default function ChatPage() {
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
     agenda: 0,
     log: systemMessages.length,
+    html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
   };
 
