@@ -2337,9 +2337,13 @@ export default function ChatPage() {
                             image: "🖼️ 이미지가 저장되었습니다",
                             file: "📎 파일이 저장되었습니다",
                             table: "📋 테이블이 저장되었습니다",
+                            html_preview: "🖼️ HTML 미리보기가 저장되었습니다",
                           };
                           const firstType = added[0].artifact_type;
                           const msg = typeLabels[firstType] ?? "📁 아티팩트가 저장되었습니다";
+                          if (firstType === "html_preview") {
+                            setArtifactTab("html_preview");
+                          }
                           setArtifactToast(msg);
                           if (artifactToastTimerRef.current) clearTimeout(artifactToastTimerRef.current);
                           artifactToastTimerRef.current = setTimeout(() => setArtifactToast(null), 3000);
