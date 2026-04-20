@@ -16,7 +16,7 @@ export default function SessionSidebar({ activeSessionId, onSelect, onNewSession
   useEffect(() => {
     setLoading(true);
     listSessions(30)
-      .then((r) => setSessions((r.items || r.sessions || [])))
+      .then((r) => setSessions(r.sessions || []))
       .catch(() => setSessions([]))
       .finally(() => setLoading(false));
   }, [refreshKey]);
