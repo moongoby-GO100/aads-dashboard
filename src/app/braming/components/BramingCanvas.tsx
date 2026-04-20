@@ -1,5 +1,5 @@
 "use client";
-import { useCallback } from "react";
+import React, { useCallback } from "react";
 import {
   ReactFlow,
   Background,
@@ -9,7 +9,6 @@ import {
   useEdgesState,
   type Node,
   type Edge,
-  type OnNodeClick,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -38,7 +37,7 @@ export default function BramingCanvas({ nodes: initialNodes, edges: initialEdges
     setEdges(initialEdges);
   }
 
-  const handleNodeClick: OnNodeClick = useCallback((_event, node) => {
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     onNodeClick(node.id, node.data as Record<string, unknown>);
   }, [onNodeClick]);
 
