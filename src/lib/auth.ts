@@ -5,15 +5,6 @@ const API_BASE = typeof window !== "undefined"
 export const TOKEN_KEY = "aads_token";
 const COOKIE_MAX_AGE = 24 * 3600;
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const parts = document.cookie.split(";").map((p) => p.trim());
-  for (const p of parts) {
-    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
-  }
-  return null;
-}
-
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
@@ -82,5 +73,5 @@ export async function register(email: string, password: string, name: string): P
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY) || getCookie(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY);
 }
