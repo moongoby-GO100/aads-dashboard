@@ -5,9 +5,18 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const parts = document.cookie.split(";").map((p) => p.trim());
+  for (const p of parts) {
+    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
+  }
+  return null;
+}
+
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("aads_token");
+  const token = localStorage.getItem("aads_token") || getCookie("aads_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
