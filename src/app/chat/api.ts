@@ -12,6 +12,23 @@ export function authHdrs(): Record<string, string> {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
+// AADS-AUTH-401: 401 처리 (중복 리다이렉트 방지)
+let _chatRedirecting401 = false;
+function handleChat401(): void {
+  if (typeof window === "undefined") return;
+  if (_chatRedirecting401) return;
+  _chatRedirecting401 = true;
+  try {
+    localStorage.removeItem("aads_token");
+    document.cookie = "aads_token=; path=/; max-age=0";
+  } catch {}
+  const cur = window.location.pathname + window.location.search;
+  if (!cur.startsWith("/login")) {
+    const next = encodeURIComponent(cur);
+    window.location.href = `/login?next=${next}&reason=session_expired`;
+  }
+}
+
 export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...opts,
@@ -21,6 +38,10 @@ export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
       ...((opts?.headers as Record<string, string>) || {}),
     },
   });
+  if (res.status === 401) {
+    handleChat401();
+    throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+  }
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;

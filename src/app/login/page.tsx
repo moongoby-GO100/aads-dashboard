@@ -12,13 +12,21 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // AADS-AUTH-401: 세션 만료로 리다이렉트된 경우 안내 배너
+  useEffect(() => {
+    const reason = searchParams.get("reason");
+    if (reason === "session_expired") {
+      setError("세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+  }, [searchParams]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       const token = await login(email, password);
-      const redirect = searchParams.get("redirect") || "/";
+      const redirect = searchParams.get("redirect") || searchParams.get("next") || "/";
       router.push(redirect);
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인 실패");

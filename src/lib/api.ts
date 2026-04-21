@@ -25,6 +25,23 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// AADS-AUTH-401: 401 응답 시 토큰 정리 + 로그인 페이지 리다이렉트 (중복 실행 방지)
+let _redirecting401 = false;
+function handle401Redirect(): void {
+  if (typeof window === "undefined") return;
+  if (_redirecting401) return;
+  _redirecting401 = true;
+  try {
+    localStorage.removeItem("aads_token");
+    document.cookie = "aads_token=; path=/; max-age=0";
+  } catch {}
+  const cur = window.location.pathname + window.location.search;
+  if (!cur.startsWith("/login")) {
+    const next = encodeURIComponent(cur);
+    window.location.href = `/login?next=${next}&reason=session_expired`;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -34,6 +51,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
+  if (res.status === 401) {
+    handle401Redirect();
+    throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+  }
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
