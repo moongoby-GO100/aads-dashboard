@@ -3,7 +3,7 @@ const API_BASE = typeof window !== "undefined"
   : (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1");
 
 export const TOKEN_KEY = "aads_token";
-const COOKIE_MAX_AGE = 24 * 3600;
+const COOKIE_MAX_AGE = 24 * 7 * 3600; // 7일로 변경
 
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
