@@ -356,4 +356,12 @@ export const api = {
     request<any>(`/admin/prompts/versions${section ? "?section=" + encodeURIComponent(section) : ""}`),
   getPromptVersion: (id: number) => request<any>(`/admin/prompts/versions/${id}`),
   getTokenProfile: () => request<any>("/admin/prompts/token-profile"),
+
+  // LLM API 키 관리 (AADS-188)
+  getLlmKeys: () => request<any[]>("/llm-keys"),
+  createLlmKey: (data: { provider: string; key_name: string; value: string; label?: string; priority?: number; notes?: string }) =>
+    request<any>("/llm-keys", { method: "POST", body: JSON.stringify(data) }),
+  updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
+    request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
 };
