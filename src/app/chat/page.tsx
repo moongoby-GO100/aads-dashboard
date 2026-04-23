@@ -793,7 +793,15 @@ export default function ChatPage() {
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   // API 키 상태 표시
-  const [apiKeyInfo, setApiKeyInfo] = useState<{litellm?: string; type?: string; label?: string; cliLabel?: string} | null>(null);
+  const [apiKeyInfo, setApiKeyInfo] = useState<{
+    litellm?: string;
+    type?: string;
+    label?: string;
+    cliLabel?: string;
+    keyName?: string;
+    slot?: string;
+    keys?: Array<{ label?: string; key_name?: string; slot?: string }>;
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
@@ -1041,7 +1049,15 @@ export default function ChatPage() {
           const keyData = await keyRes.json();
           const primary = keyData?.keys?.[0];
           if (primary) {
-            setApiKeyInfo({ type: "oauth", label: primary.label, cliLabel: primary.label, litellm: primary.prefix });
+            setApiKeyInfo({
+              type: "oauth",
+              label: primary.label,
+              cliLabel: primary.label,
+              litellm: primary.prefix,
+              keyName: primary.key_name,
+              slot: primary.slot,
+              keys: keyData?.keys || [],
+            });
             return;
           }
         }
@@ -1051,7 +1067,16 @@ export default function ChatPage() {
           const data = await res.json();
           const lt = data?.anthropic?.litellm;
           const cli = data?.anthropic?.cli;
-          if (lt) setApiKeyInfo({ litellm: lt.prefix, type: lt.type, label: lt.label, cliLabel: cli?.label });
+          if (lt || cli) {
+            setApiKeyInfo({
+              litellm: lt?.prefix,
+              type: lt?.type || cli?.type,
+              label: cli?.label || lt?.label,
+              cliLabel: cli?.label,
+              slot: cli?.account,
+              keys: data?.anthropic?.db_keys || [],
+            });
+          }
         }
       } catch {}
     };
@@ -4956,28 +4981,37 @@ export default function ChatPage() {
                     if (token) headers["Authorization"] = `Bearer ${token}`;
                     // 현재 순서 조회
                     const cur = await fetch(`${BASE}/settings/auth-keys`, { headers }).then(r => r.json());
-                    const currentPrimary = cur?.keys?.[0]?.label || "Naver";
-                    const next = currentPrimary === "Naver" ? "gmail" : "naver";
+                    const keys = cur?.keys || [];
+                    const currentPrimary = keys?.[0];
+                    const nextKey = keys?.find((k: any) => k?.key_name && k.key_name !== currentPrimary?.key_name) || keys?.[1];
+                    if (!nextKey?.key_name) return;
                     // 순서 변경
                     const res = await fetch(`${BASE}/settings/auth-keys`, {
-                      method: "POST", headers, body: JSON.stringify({ primary: next }),
+                      method: "POST", headers, body: JSON.stringify({ primary: nextKey.key_name }),
                     }).then(r => r.json());
-                    const newLabel = res?.keys?.[0]?.label || next;
-                    setApiKeyInfo((prev: any) => ({ ...prev, label: newLabel, cliLabel: newLabel }));
+                    const newPrimary = res?.keys?.[0];
+                    setApiKeyInfo((prev: any) => ({
+                      ...prev,
+                      label: newPrimary?.label || nextKey?.label,
+                      cliLabel: newPrimary?.label || nextKey?.label,
+                      keyName: newPrimary?.key_name || nextKey?.key_name,
+                      slot: newPrimary?.slot || nextKey?.slot,
+                      keys: res?.keys || keys,
+                    }));
                   } catch { /* ignore */ }
                 }}
-                title={`현재: ${apiKeyInfo?.label || "?"} 우선 (클릭하여 전환)`}
+                title={`현재 1순위: ${apiKeyInfo?.label || "?"} (클릭하여 다음 계정으로 전환)`}
                 style={{
                   fontSize: "10px", whiteSpace: "nowrap",
                   padding: "2px 8px", borderRadius: "8px",
-                  background: (apiKeyInfo?.label || "").includes("Naver") ? "#22c55e18" : "#3b82f618",
-                  color: (apiKeyInfo?.label || "").includes("Naver") ? "#22c55e" : "#3b82f6",
-                  border: `1px solid ${(apiKeyInfo?.label || "").includes("Naver") ? "#22c55e40" : "#3b82f640"}`,
+                  background: apiKeyInfo?.slot === "1" ? "#3b82f618" : "#22c55e18",
+                  color: apiKeyInfo?.slot === "1" ? "#3b82f6" : "#22c55e",
+                  border: `1px solid ${apiKeyInfo?.slot === "1" ? "#3b82f640" : "#22c55e40"}`,
                   cursor: "pointer",
                   transition: "all 0.2s",
                 }}
               >
-                {(apiKeyInfo?.label || "").includes("Naver") ? "🟢" : "🔵"} {apiKeyInfo?.label || "?"}{apiKeyInfo?.cliLabel && apiKeyInfo.cliLabel !== apiKeyInfo.label ? ` / CLI:${apiKeyInfo.cliLabel}` : ""}
+                {apiKeyInfo?.slot === "1" ? "🔵" : "🟢"} {apiKeyInfo?.label || "?"}{apiKeyInfo?.slot ? ` (slot ${apiKeyInfo.slot})` : ""}{apiKeyInfo?.cliLabel && apiKeyInfo.cliLabel !== apiKeyInfo.label ? ` / CLI:${apiKeyInfo.cliLabel}` : ""}
               </button>
               {/* AADS-190: 세션 비용/턴 표시 */}
               {sessionCost && (
