@@ -12,6 +12,7 @@ import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
+import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
@@ -43,6 +44,59 @@ type ApiKeyInfoState = {
   relayTokenAvailable?: boolean;
   keys?: AuthKeyStatus[];
 };
+
+type LlmRegistryModel = {
+  provider: string;
+  model_id: string;
+  display_name?: string;
+  input_cost?: string | number | null;
+  output_cost?: string | number | null;
+  is_active?: boolean;
+};
+
+type SelectableModelOption = {
+  id: string;
+  name: string;
+  provider: string;
+  cost: string;
+  isActive: boolean;
+};
+
+const STATIC_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
+
+const MODEL_ID_TO_SELECTOR_ID: Record<string, string> = {
+  auto: "mixture",
+  mixture: "mixture",
+  "claude-sonnet": "claude-sonnet-4-6",
+  "claude-opus": "claude-opus-4-7",
+  "claude-opus-46": "claude-opus-4-6",
+  "claude-haiku": "claude-haiku-4-5-20251001",
+};
+
+function normalizeModelIdForSelector(modelId?: string | null): string {
+  const trimmed = (modelId || "").trim();
+  return MODEL_ID_TO_SELECTOR_ID[trimmed] ?? trimmed;
+}
+
+function formatCostLabel(inputCost?: string | number | null, outputCost?: string | number | null): string {
+  const input = Number(inputCost);
+  const output = Number(outputCost);
+  if (!Number.isFinite(input) || !Number.isFinite(output)) return "변동";
+  if (input === 0 && output === 0) return "무료";
+  return `$${input}/$${output}`;
+}
+
+function buildSelectableModelOption(row: LlmRegistryModel): SelectableModelOption {
+  const optionId = normalizeModelIdForSelector(row.model_id);
+  const staticOption = STATIC_MODEL_OPTION_MAP.get(optionId);
+  return {
+    id: optionId,
+    name: staticOption?.name || row.display_name || optionId,
+    provider: staticOption?.provider || row.provider,
+    cost: staticOption?.cost || formatCostLabel(row.input_cost, row.output_cost),
+    isActive: true,
+  };
+}
 
 // ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
 interface MessageItemProps {
@@ -805,6 +859,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [runtimeModels, setRuntimeModels] = useState<LlmRegistryModel[] | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const streamBufRef = useRef("");
@@ -876,6 +931,52 @@ export default function ChatPage() {
   // ── AADS-188D: diff_preview 승인 패널 ──
   const diffApproval = useDiffApproval();
 
+  const selectableModels = useMemo<SelectableModelOption[]>(() => {
+    const autoOption = {
+      ...(STATIC_MODEL_OPTION_MAP.get("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
+      isActive: true,
+    };
+
+    if (runtimeModels === null) {
+      const currentModelId = normalizeModelIdForSelector(model || DEFAULT_MODEL);
+      const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
+      return currentModelId && currentModelId !== "mixture"
+        ? [
+            autoOption,
+            currentOption
+              ? { ...currentOption, isActive: true }
+              : { id: currentModelId, name: currentModelId, provider: "legacy", cost: "변동", isActive: true },
+          ]
+        : [autoOption];
+    }
+
+    const activeOptions = runtimeModels.map(buildSelectableModelOption);
+    const activeOptionIds = new Set(activeOptions.map((option) => option.id));
+    const orderedStaticOptions = MODEL_OPTIONS
+      .filter((option) => option.id !== "mixture" && activeOptionIds.has(option.id))
+      .map((option) => ({ ...option, isActive: true }));
+    const runtimeOnlyOptions = activeOptions
+      .filter((option) => !STATIC_MODEL_OPTION_MAP.has(option.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const options: SelectableModelOption[] = [autoOption, ...orderedStaticOptions, ...runtimeOnlyOptions];
+    const currentModelId = normalizeModelIdForSelector(model);
+    if (currentModelId && currentModelId !== "mixture" && !options.some((option) => option.id === currentModelId)) {
+      const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
+      options.push(
+        currentOption
+          ? { ...currentOption, name: `${currentOption.name} (비활성)`, isActive: false }
+          : { id: currentModelId, name: `${currentModelId} (비활성)`, provider: "legacy", cost: "변동", isActive: false }
+      );
+    }
+    return options;
+  }, [model, runtimeModels]);
+
+  const activeSelectableModelIds = useMemo(
+    () => new Set(selectableModels.filter((option) => option.isActive).map((option) => option.id)),
+    [selectableModels]
+  );
+
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -908,6 +1009,39 @@ export default function ChatPage() {
   const isFirstMountRef = useRef(true);
   // 스트리밍 중인 세션 ID 추적 — 세션 전환 시 다른 세션 내용 깜빡임 방지
   const streamingSessionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true")
+      .then((res) => {
+        if (cancelled) return;
+        setRuntimeModels(Array.isArray(res.models) ? res.models : []);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!activeSession || runtimeModels === null) return;
+    const currentModelId = normalizeModelIdForSelector(model);
+    if (!currentModelId || currentModelId === "mixture" || activeSelectableModelIds.has(currentModelId)) return;
+    const fallbackModel = activeSelectableModelIds.has(DEFAULT_MODEL) ? DEFAULT_MODEL : "mixture";
+    if (!fallbackModel || fallbackModel === currentModelId) return;
+
+    setModel(fallbackModel);
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === activeSession.id ? { ...session, current_model: fallbackModel } : session
+      )
+    );
+    setActiveSession((prev) =>
+      prev && prev.id === activeSession.id ? { ...prev, current_model: fallbackModel } : prev
+    );
+    chatApi(`/chat/sessions/${activeSession.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ current_model: fallbackModel }),
+    }).catch(() => {});
+  }, [activeSelectableModelIds, activeSession, model, runtimeModels]);
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
@@ -1429,7 +1563,7 @@ export default function ChatPage() {
       .catch(() => setArtifacts([]));
     // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 DEFAULT_MODEL)
     {
-      const sessionModel = activeSession.current_model || DEFAULT_MODEL;
+      const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_MODEL);
       setModel(sessionModel);
     }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
@@ -4212,9 +4346,9 @@ export default function ChatPage() {
               outline: "none",
             }}
           >
-            {MODEL_OPTIONS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.cost}/M)
+            {selectableModels.map((m) => (
+              <option key={m.id} value={m.id} disabled={!m.isActive}>
+                {m.name} ({["자동", "무료", "변동"].includes(m.cost) ? m.cost : `${m.cost}/M`})
               </option>
             ))}
           </select>
@@ -4880,6 +5014,9 @@ export default function ChatPage() {
               </button>
             </div>
           )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px" }}>
+            <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
+          </div>
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
           <div style={{ display: "flex", gap: screenSize === "mobile" ? "6px" : "8px", alignItems: "flex-end" }}>
             {/* Mobile "+" toggle button */}
