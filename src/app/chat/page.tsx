@@ -19,6 +19,31 @@ import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, Art
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
 
+type AuthKeyStatus = {
+  label?: string;
+  key_name?: string;
+  slot?: string;
+  priority?: number;
+  rate_limited_until?: string | null;
+  is_rate_limited?: boolean;
+  last_used_at?: string | null;
+  last_verified_at?: string | null;
+  notes?: string;
+  is_current?: boolean;
+};
+
+type ApiKeyInfoState = {
+  litellm?: string;
+  type?: string;
+  label?: string;
+  cliLabel?: string;
+  keyName?: string;
+  slot?: string;
+  relayStatus?: string;
+  relayTokenAvailable?: boolean;
+  keys?: AuthKeyStatus[];
+};
+
 // ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
 interface MessageItemProps {
   msg: ChatMessage;
@@ -793,15 +818,8 @@ export default function ChatPage() {
   const msgQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   // API 키 상태 표시
-  const [apiKeyInfo, setApiKeyInfo] = useState<{
-    litellm?: string;
-    type?: string;
-    label?: string;
-    cliLabel?: string;
-    keyName?: string;
-    slot?: string;
-    keys?: Array<{ label?: string; key_name?: string; slot?: string }>;
-  } | null>(null);
+  const [apiKeyInfo, setApiKeyInfo] = useState<ApiKeyInfoState | null>(null);
+  const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
@@ -1036,54 +1054,35 @@ export default function ChatPage() {
   }, []);
 
   // ── API 키 상태 조회 (5분 간격) ──
+  const fetchKeyStatus = useCallback(async () => {
+    try {
+      const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+      const res = await fetch(`${BASE}/health/api-keys`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const lt = data?.anthropic?.litellm;
+      const cli = data?.anthropic?.cli;
+      if (lt || cli) {
+        setApiKeyInfo({
+          litellm: lt?.prefix,
+          type: lt?.type || cli?.type,
+          label: cli?.label || lt?.label,
+          cliLabel: cli?.label,
+          keyName: data?.anthropic?.db_keys?.find((key: AuthKeyStatus) => key?.is_current)?.key_name,
+          slot: cli?.account,
+          relayStatus: cli?.status,
+          relayTokenAvailable: cli?.token_available,
+          keys: data?.anthropic?.db_keys || [],
+        });
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    const fetchKeyStatus = async () => {
-      try {
-        const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
-        const token = localStorage.getItem("aads_token");
-        const headers: any = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        // Agent SDK 키 순서 API 우선
-        const keyRes = await fetch(`${BASE}/settings/auth-keys`, { headers });
-        if (keyRes.ok) {
-          const keyData = await keyRes.json();
-          const primary = keyData?.keys?.[0];
-          if (primary) {
-            setApiKeyInfo({
-              type: "oauth",
-              label: primary.label,
-              cliLabel: primary.label,
-              litellm: primary.prefix,
-              keyName: primary.key_name,
-              slot: primary.slot,
-              keys: keyData?.keys || [],
-            });
-            return;
-          }
-        }
-        // 폴백: 기존 health API
-        const res = await fetch(`${BASE}/health/api-keys`);
-        if (res.ok) {
-          const data = await res.json();
-          const lt = data?.anthropic?.litellm;
-          const cli = data?.anthropic?.cli;
-          if (lt || cli) {
-            setApiKeyInfo({
-              litellm: lt?.prefix,
-              type: lt?.type || cli?.type,
-              label: cli?.label || lt?.label,
-              cliLabel: cli?.label,
-              slot: cli?.account,
-              keys: data?.anthropic?.db_keys || [],
-            });
-          }
-        }
-      } catch {}
-    };
     fetchKeyStatus();
     const iv = setInterval(fetchKeyStatus, 300_000);
     return () => clearInterval(iv);
-  }, []);
+  }, [fetchKeyStatus]);
 
   // ── 버전 체크: 스트리밍 상태 동기화 ──
   useEffect(() => {
@@ -4977,27 +4976,19 @@ export default function ChatPage() {
                   try {
                     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
                     const token = localStorage.getItem("aads_token");
-                    const headers: any = { "Content-Type": "application/json" };
+                    const headers: Record<string, string> = { "Content-Type": "application/json" };
                     if (token) headers["Authorization"] = `Bearer ${token}`;
                     // 현재 순서 조회
                     const cur = await fetch(`${BASE}/settings/auth-keys`, { headers }).then(r => r.json());
                     const keys = cur?.keys || [];
                     const currentPrimary = keys?.[0];
-                    const nextKey = keys?.find((k: any) => k?.key_name && k.key_name !== currentPrimary?.key_name) || keys?.[1];
+                    const nextKey = keys?.find((k: AuthKeyStatus) => k?.key_name && k.key_name !== currentPrimary?.key_name) || keys?.[1];
                     if (!nextKey?.key_name) return;
                     // 순서 변경
-                    const res = await fetch(`${BASE}/settings/auth-keys`, {
+                    await fetch(`${BASE}/settings/auth-keys`, {
                       method: "POST", headers, body: JSON.stringify({ primary: nextKey.key_name }),
-                    }).then(r => r.json());
-                    const newPrimary = res?.keys?.[0];
-                    setApiKeyInfo((prev: any) => ({
-                      ...prev,
-                      label: newPrimary?.label || nextKey?.label,
-                      cliLabel: newPrimary?.label || nextKey?.label,
-                      keyName: newPrimary?.key_name || nextKey?.key_name,
-                      slot: newPrimary?.slot || nextKey?.slot,
-                      keys: res?.keys || keys,
-                    }));
+                    });
+                    await fetchKeyStatus();
                   } catch { /* ignore */ }
                 }}
                 title={`현재 1순위: ${apiKeyInfo?.label || "?"} (클릭하여 다음 계정으로 전환)`}
@@ -5013,6 +5004,102 @@ export default function ChatPage() {
               >
                 {apiKeyInfo?.slot === "1" ? "🔵" : "🟢"} {apiKeyInfo?.label || "?"}{apiKeyInfo?.slot ? ` (slot ${apiKeyInfo.slot})` : ""}{apiKeyInfo?.cliLabel && apiKeyInfo.cliLabel !== apiKeyInfo.label ? ` / CLI:${apiKeyInfo.cliLabel}` : ""}
               </button>
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowAuthPanel((prev) => !prev)}
+                  title="Claude 계정 상태"
+                  style={{
+                    fontSize: "10px",
+                    whiteSpace: "nowrap",
+                    padding: "2px 8px",
+                    borderRadius: "8px",
+                    background: "var(--ct-hover)",
+                    color: "var(--ct-text2)",
+                    border: "1px solid var(--ct-border)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Claude 상태
+                </button>
+                {showAuthPanel && (
+                  <div style={{
+                    position: "absolute",
+                    right: 0,
+                    bottom: "calc(100% + 8px)",
+                    width: "360px",
+                    maxWidth: "min(360px, 92vw)",
+                    background: "var(--ct-panel)",
+                    border: "1px solid var(--ct-border)",
+                    borderRadius: "14px",
+                    boxShadow: "0 20px 40px rgba(0,0,0,0.28)",
+                    padding: "12px",
+                    zIndex: 30,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--ct-text)" }}>Claude 계정 상태판</div>
+                        <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "2px" }}>
+                          Relay {apiKeyInfo?.relayStatus || "unknown"} / 현재 slot {apiKeyInfo?.slot || "?"} / token {apiKeyInfo?.relayTokenAvailable ? "ready" : "missing"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => void fetchKeyStatus()}
+                        style={{
+                          fontSize: "11px",
+                          padding: "4px 8px",
+                          borderRadius: "8px",
+                          background: "var(--ct-hover)",
+                          color: "var(--ct-text2)",
+                          border: "1px solid var(--ct-border)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        새로고침
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {(apiKeyInfo?.keys || []).map((key) => (
+                        <div
+                          key={`${key.key_name || key.label || "unknown"}-${key.slot || "?"}`}
+                          style={{
+                            border: `1px solid ${key.is_current ? "#22c55e55" : "var(--ct-border)"}`,
+                            background: key.is_current ? "#22c55e12" : "var(--ct-bg2)",
+                            borderRadius: "12px",
+                            padding: "10px",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                            <div style={{ color: "var(--ct-text)", fontSize: "12px", fontWeight: 700 }}>
+                              {key.label || key.key_name || "Unknown"}
+                            </div>
+                            <div style={{ color: key.is_rate_limited ? "#f59e0b" : "#22c55e", fontSize: "11px", fontWeight: 600 }}>
+                              {key.is_current ? "ACTIVE" : `P${key.priority || "?"}`} {key.slot ? `/ slot ${key.slot}` : ""}
+                            </div>
+                          </div>
+                          <div style={{ marginTop: "4px", color: "var(--ct-text2)", fontSize: "11px" }}>
+                            {key.key_name || "-"}
+                          </div>
+                          <div style={{ marginTop: "6px", color: "var(--ct-text2)", fontSize: "11px", lineHeight: 1.5 }}>
+                            {key.is_rate_limited
+                              ? `Rate limit until ${key.rate_limited_until ? new Date(key.rate_limited_until).toLocaleString("ko-KR") : "-"}` 
+                              : "Rate limit 없음"}
+                            <br />
+                            Last verified: {key.last_verified_at ? new Date(key.last_verified_at).toLocaleString("ko-KR") : "-"}
+                            <br />
+                            Last used: {key.last_used_at ? new Date(key.last_used_at).toLocaleString("ko-KR") : "-"}
+                            {key.notes ? (
+                              <>
+                                <br />
+                                Notes: {key.notes}
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* AADS-190: 세션 비용/턴 표시 */}
               {sessionCost && (
                 <span style={{
