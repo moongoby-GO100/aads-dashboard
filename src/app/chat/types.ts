@@ -13,6 +13,7 @@ export interface ChatSession {
   workspace_id: string;
   title: string;
   current_model: string;
+  current_execution_id?: string | null;
   created_at: string;
   updated_at: string;
   pinned: boolean;
@@ -24,6 +25,7 @@ export interface ChatSession {
 export interface ChatMessage {
   id: string;
   session_id: string;
+  execution_id?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
   model_used?: string;
@@ -64,6 +66,23 @@ export interface ChatMessage {
   bookmarked?: boolean;
   sources?: Array<Record<string, unknown>>;
   is_system_group?: boolean;
+}
+
+export interface ChatExecution {
+  id: string;
+  session_id: string;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
+  requested_model?: string | null;
+  actual_model?: string | null;
+  status: string;
+  retry_count: number;
+  last_event_id?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Artifact {

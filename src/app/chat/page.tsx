@@ -1180,6 +1180,8 @@ export default function ChatPage() {
   const rateLimitedPollRef = useRef(false);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
+  const currentExecutionIdRef = useRef<string | null>(null);
+  const executionAttachAbortRef = useRef<AbortController | null>(null);
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [artifactToast, setArtifactToast] = useState<string | null>(null);
@@ -1217,6 +1219,101 @@ export default function ChatPage() {
       setNextCursor(null);
     }
   }, [activeSession?.id, messages.length, nextCursor]);
+
+  const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string) => {
+    if (!attachSessionId || !executionId) return;
+    if (
+      executionAttachAbortRef.current &&
+      currentExecutionIdRef.current === executionId &&
+      activeSessionRef.current === attachSessionId
+    ) {
+      return;
+    }
+    executionAttachAbortRef.current?.abort();
+    const controller = new AbortController();
+    executionAttachAbortRef.current = controller;
+    currentExecutionIdRef.current = executionId;
+    streamingSessionRef.current = attachSessionId;
+    setStreaming(true);
+    setWaitingBgResponse(true);
+    setMessages((prev) => {
+      const hasPlaceholder = prev.some((m) => m.intent === "streaming_placeholder");
+      if (hasPlaceholder) {
+        return prev.map((m) =>
+          m.intent === "streaming_placeholder" ? { ...m, execution_id: executionId } : m,
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `ai-execution-${executionId}`,
+          session_id: attachSessionId,
+          execution_id: executionId,
+          role: "assistant",
+          content: bgPartialContent || "",
+          intent: "streaming_placeholder",
+          created_at: new Date().toISOString(),
+        },
+      ];
+    });
+
+    try {
+      const resp = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`,
+        { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: controller.signal },
+      );
+      if (!resp.ok || !resp.body) throw new Error("execution attach failed");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let full = streamBufRef.current || bgPartialContent || "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || activeSessionRef.current !== attachSessionId) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("id:")) {
+            lastEventIdRef.current = line.slice(3).trim();
+            continue;
+          }
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6).trim());
+            if (ev.type === "delta" && typeof ev.content === "string") {
+              full += ev.content;
+              setStreamBuf(full);
+            } else if (ev.type === "heartbeat") {
+              if (ev.tool_count && ev.last_tool) {
+                setToolStatus(`🔧 ${ev.last_tool} 실행 중... (도구 ${ev.tool_count}회)`);
+              }
+            } else if (ev.type === "resume_done" || ev.type === "done") {
+              const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc`).then((msgs) => msgs.reverse());
+              if (activeSessionRef.current !== attachSessionId) return;
+              setMessages(fresh);
+              setStreaming(false);
+              setWaitingBgResponse(false);
+              setStreamBuf("");
+              setToolStatus(null);
+              return;
+            }
+          } catch {
+            // ignore malformed chunks
+          }
+        }
+      }
+    } catch {
+      // attach 실패 시 polling fallback 유지
+    } finally {
+      if (executionAttachAbortRef.current === controller) {
+        executionAttachAbortRef.current = null;
+      }
+    }
+  }, [bgPartialContent]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -1514,6 +1611,7 @@ export default function ChatPage() {
       sessionSwitchRef.current = true;
       streamingSessionRef.current = null;
       abortCtrl.current?.abort();
+      executionAttachAbortRef.current?.abort();
       setStreaming(false);
       setStreamBuf("");
       setToolStatus(null);
@@ -1536,6 +1634,8 @@ export default function ChatPage() {
     setCompletionToast(null);
     setWaitingBgResponse(false); setBgPartialContent("");
     setStreamBuf("");
+    lastEventIdRef.current = "";
+    currentExecutionIdRef.current = activeSession?.current_execution_id || null;
     setSelectedArtifactIdx(0);
     if (!activeSession) {
       setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null);
@@ -1597,10 +1697,12 @@ export default function ChatPage() {
           return [] as ChatMessage[];
         });
 
-    chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string }>(
+    chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string; partial_content?: string; execution_id?: string | null; last_event_id?: string | null }>(
       `/chat/sessions/${fetchSid}/streaming-status`
     ).then(async (status) => {
       if (cancelled) return;
+      currentExecutionIdRef.current = status.execution_id || activeSession.current_execution_id || null;
+      if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
       if (status.is_streaming) {
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(fetchSid);
@@ -1611,6 +1713,9 @@ export default function ChatPage() {
         }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
         await loadMessages(false);
+        if (status.execution_id) {
+          attachExecutionReplay(fetchSid, status.execution_id);
+        }
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
         pendingResponseSessions.current.delete(fetchSid);
@@ -1862,12 +1967,14 @@ export default function ChatPage() {
       tickCount++;
       if (!_waitingBg && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
-      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string } | null = null;
+      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null } | null = null;
       try {
-        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string }>(
+        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null }>(
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
+        if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
+        if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
         if (ss.partial_content) {
           setBgPartialContent(ss.partial_content);
           // Invisible Recovery: streaming=true + waitingBg=true → partial_content를 streamBuf에 주입 (타이핑 효과)
@@ -1981,6 +2088,9 @@ export default function ChatPage() {
             setWaitingBgResponse(false); setBgPartialContent("");
             pendingResponseSessions.current.delete(sid);
           }, 180000);
+          if (ss.execution_id) {
+            attachExecutionReplay(sid, ss.execution_id);
+          }
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
       // PERF: streaming-status에서 last_message_id 캡처 — 변경 없으면 messages fetch skip
@@ -2357,6 +2467,8 @@ export default function ChatPage() {
     setStreamBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
+    currentExecutionIdRef.current = null;
+    lastEventIdRef.current = "";
     // 스트리밍 placeholder ID 생성 (messages 추가는 userMsg 생성 후 단일 호출로 순서 보장)
     const streamingPlaceholderId = `ai-streaming-${Date.now()}`;
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
@@ -2550,6 +2662,12 @@ export default function ChatPage() {
             // 절대 타임아웃(300s)이 무한 연장 방지 안전망 역할
             if (ev.type === "stream_start") {
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
+              if (ev.execution_id) {
+                currentExecutionIdRef.current = ev.execution_id;
+                setMessages((prev) => prev.map((m) =>
+                  m.intent === "streaming_placeholder" ? { ...m, execution_id: ev.execution_id } : m,
+                ));
+              }
               resetSseTimeout();
               // 즉시 typing placeholder — 첫 delta 수신 전 빈 버블 방지
               if (!isStale()) setStreamBuf("분석 중...");
@@ -2647,6 +2765,7 @@ export default function ChatPage() {
                       ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
                       : `ai-${Date.now()}`,
                     session_id: requestSessionId!,
+                    execution_id: currentExecutionIdRef.current || undefined,
                     role: "assistant" as const,
                     content: full,
                     model_used: ev.model || undefined,
@@ -2806,6 +2925,7 @@ export default function ChatPage() {
               ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
               : `ai-${Date.now()}`,
             session_id: requestSessionId!,
+            execution_id: currentExecutionIdRef.current || undefined,
             role: "assistant" as const,
             content: full,
           };
@@ -2909,7 +3029,9 @@ export default function ChatPage() {
             let resumeResp: Response;
             try {
               resumeResp = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
+                currentExecutionIdRef.current
+                  ? `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`
+                  : `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
                 { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
               );
             } catch (resumeFetchErr) {
@@ -3146,9 +3268,11 @@ export default function ChatPage() {
             await new Promise((r) => setTimeout(r, delay));
             if (activeSessionRef.current !== _sid) return;
             try {
-              const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean }>(
+              const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; execution_id?: string | null; last_event_id?: string | null }>(
                 `/chat/sessions/${_sid}/streaming-status`
               );
+              if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
+              if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");

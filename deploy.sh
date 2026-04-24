@@ -109,6 +109,12 @@ fi
 log "현재 활성 슬롯: $ACTIVE_SLOT"
 log "배포 대상 슬롯: $TARGET_SLOT"
 
+# Step 0.5: 대상 슬롯 잔여 컨테이너 정리
+if docker ps -a --format '{{.Names}}' | rg -x "$TARGET_CONTAINER" >/dev/null 2>&1; then
+    log "Step 0.5: 대상 슬롯 잔여 컨테이너 정리 (${TARGET_CONTAINER})"
+    docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+fi
+
 # Step 1: 비활성 슬롯 빌드 + 기동
 log "Step 1: ${TARGET_SLOT} 슬롯 빌드 및 기동"
 docker compose "${COMPOSE_ARGS[@]}" up -d --build --no-deps "$TARGET_SERVICE"
