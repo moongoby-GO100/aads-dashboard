@@ -46,6 +46,10 @@ interface OpsHealthInfra {
   ["aads-dashboard"]?: string;
   db_pool?: DbPoolStats;
   stale_placeholders?: number;
+  active_streams_executing?: number;
+  active_streams_visible?: number;
+  recovery_pending_streams?: number;
+  recent_placeholders?: number;
   disk_pct?: number;
   disk_free_gb?: number;
   memory_pct?: number;
@@ -181,7 +185,19 @@ export default function DatabaseOverviewPanel({ graphReady }: Props) {
               </span>
             </div>
             <div className="flex justify-between gap-3">
-              <span style={{ color: "var(--text-secondary)" }}>Placeholder 잔존</span>
+              <span style={{ color: "var(--text-secondary)" }}>채팅 스트림</span>
+              <span className="font-mono" style={{ color: "var(--text-primary)" }}>
+                {health?.infra?.active_streams_executing ?? "—"} 실행 / {health?.infra?.active_streams_visible ?? "—"} 표시 / {health?.infra?.recovery_pending_streams ?? "—"} 복구대기
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span style={{ color: "var(--text-secondary)" }}>최근 Placeholder</span>
+              <span className="font-mono" style={{ color: Number(health?.infra?.recent_placeholders || 0) > 0 ? "var(--warning)" : "var(--success)" }}>
+                {health?.infra?.recent_placeholders ?? "—"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span style={{ color: "var(--text-secondary)" }}>총 Placeholder 잔존</span>
               <span className="font-mono" style={{ color: Number(health?.infra?.stale_placeholders || 0) > 0 ? "var(--warning)" : "var(--success)" }}>
                 {health?.infra?.stale_placeholders ?? "—"}
               </span>

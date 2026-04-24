@@ -214,6 +214,8 @@ export const api = {
   getOpsInfraCheck: () => request<any>("/ops/infra-check"),
   getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
   getOpsFullHealth: () => request<any>("/ops/full-health"),
+  getModelParity: () => request<any>("/admin/model-parity"),
+  getModelParityIntentMap: () => request<any>("/admin/model-parity/intent-map"),
 
   // AADS-169: Claude Bot Status + Process Control
   getClaudeProcesses: (limit = 5) => request<any>(`/ops/claude-processes?limit=${limit}`),
@@ -359,8 +361,6 @@ export const api = {
   getTokenProfile: () => request<any>("/admin/prompts/token-profile"),
   getGovernance: () => request<any>("/admin/governance"),
   getGovernanceLayers: () => request<any>("/admin/governance/layers"),
-  getModelParity: () => request<any>("/admin/model-parity"),
-  getModelParityIntentMap: () => request<any>("/admin/model-parity/intent-map"),
   getAdminTasks: (params?: { status?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
@@ -381,14 +381,14 @@ export const api = {
   getLlmModels: (params?: { provider?: string; active_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.provider) q.set("provider", params.provider);
-    if (params?.active_only) q.set("active_only", "true");
+    if (typeof params?.active_only === "boolean") q.set("active_only", String(params.active_only));
     return request<any>(`/llm-models${q.size ? `?${q.toString()}` : ""}`);
   },
   getLlmModelSummary: () => request<any>("/llm-models/providers/summary"),
   getLlmProviderTimeline: (provider: string, limit = 20) =>
     request<any>(`/llm-models/providers/${encodeURIComponent(provider)}/timeline?limit=${limit}`),
+  syncLlmModelRegistry: () => request<any>("/llm-models/sync", { method: "POST" }),
   getChatModelPreferences: () => request<any>("/llm-models/chat-preferences"),
   updateChatModelPreferences: (preferences: Array<{ model_id: string; display_order: number; is_hidden: boolean; is_favorite: boolean; is_pinned: boolean }>) =>
-    request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify({ preferences }) }),
-  syncLlmModelRegistry: () => request<any>("/llm-models/sync", { method: "POST" }),
+    request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify(preferences) }),
 };
