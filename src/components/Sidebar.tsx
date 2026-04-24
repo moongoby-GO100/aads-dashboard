@@ -26,7 +26,8 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📊" },
   { href: "/kakaobot", label: "KakaoBot", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
-    { href: "/admin/prompts", label: "Prompts", icon: "📝" },
+  { href: "/admin/prompts", label: "Prompts", icon: "📝" },
+  { href: "/admin/tasks", label: "Task Board", icon: "🗂️" },
   { href: "/server-status", label: "Server Status", icon: "🖥️" },
 ];
 
@@ -46,7 +47,6 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Hamburger button - mobile only */}
       <button
         className="fixed top-3 left-3 z-50 md:hidden text-white rounded p-2 leading-none"
         style={{ background: "var(--bg-card)" }}
@@ -56,7 +56,6 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
         ☰
       </button>
 
-      {/* Overlay - mobile only */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
@@ -64,7 +63,6 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
         />
       )}
 
-      {/* Sidebar panel */}
       <aside
         className={`
           fixed top-0 left-0 h-full z-50 w-56 flex flex-col
@@ -79,7 +77,6 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
             <h1 className="text-lg font-bold" style={{ color: "var(--accent)" }}>AADS</h1>
             <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Autonomous AI Dev System</p>
           </div>
-          {/* X button - mobile only */}
           <button
             className="md:hidden text-lg leading-none"
             style={{ color: "var(--text-secondary)" }}

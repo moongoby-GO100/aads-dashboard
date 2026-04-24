@@ -160,6 +160,7 @@ export const api = {
   getOpsHealthCheck: () => request<any>("/ops/health-check"),
   getOpsDirectiveLifecycle: (limit = 20) => request<any>(`/ops/directive-lifecycle?limit=${limit}`),
   getOpsCostSummary: () => request<any>("/ops/cost/summary"),
+  getOpsAccountUsage: () => request<any>("/ops/account-usage"),
   getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
   getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
 
@@ -356,8 +357,17 @@ export const api = {
     request<any>(`/admin/prompts/versions${section ? "?section=" + encodeURIComponent(section) : ""}`),
   getPromptVersion: (id: number) => request<any>(`/admin/prompts/versions/${id}`),
   getTokenProfile: () => request<any>("/admin/prompts/token-profile"),
-  getModelParity: () => request<any>("/admin/model-parity"),
-  getModelParityIntentMap: () => request<any>("/admin/model-parity/intent-map"),
+  getGovernance: () => request<any>("/admin/governance"),
+  getGovernanceLayers: () => request<any>("/admin/governance/layers"),
+  getAdminTasks: (params?: { status?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    return request<any>(`/admin/tasks${q.size ? `?${q.toString()}` : ""}`);
+  },
+  getAdminTask: (jobId: string) => request<any>(`/admin/tasks/${encodeURIComponent(jobId)}`),
+  getAdminTaskStats: () => request<any>("/admin/tasks/stats"),
 
   // LLM API 키 관리 (AADS-188)
   getLlmKeys: () => request<any[]>("/llm-keys"),
@@ -366,17 +376,4 @@ export const api = {
   updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
     request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
-  getLlmModels: (params?: { provider?: string; active_only?: boolean }) => {
-    const q = new URLSearchParams();
-    if (params?.provider) q.set("provider", params.provider);
-    if (params?.active_only) q.set("active_only", "true");
-    return request<any>(`/llm-models${q.size ? `?${q.toString()}` : ""}`);
-  },
-  getLlmModelSummary: () => request<any>("/llm-models/providers/summary"),
-  getLlmProviderTimeline: (provider: string, limit = 20) =>
-    request<any>(`/llm-models/providers/${encodeURIComponent(provider)}/timeline?limit=${limit}`),
-  getChatModelPreferences: () => request<any>("/llm-models/chat-preferences"),
-  updateChatModelPreferences: (preferences: Array<{ model_id: string; display_order: number; is_hidden: boolean; is_favorite: boolean; is_pinned: boolean }>) =>
-    request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify({ preferences }) }),
-  syncLlmModelRegistry: () => request<any>("/llm-models/sync", { method: "POST" }),
 };
