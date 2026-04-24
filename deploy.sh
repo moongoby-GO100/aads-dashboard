@@ -88,6 +88,8 @@ PY
 
 cd "$COMPOSE_DIR"
 
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+
 # Step 0: 현재 활성 슬롯 판별
 ACTIVE_SLOT=$(current_active_slot)
 if [ "$ACTIVE_SLOT" = "blue" ]; then
@@ -95,14 +97,13 @@ if [ "$ACTIVE_SLOT" = "blue" ]; then
     TARGET_SERVICE="$GREEN_SERVICE"
     TARGET_CONTAINER="$GREEN_CONTAINER"
     TARGET_HEALTH="$HEALTH_GREEN"
-    TARGET_PROFILE=(--profile green)
+    COMPOSE_ARGS+=(--profile green)
     PREV_CONTAINER="$BLUE_CONTAINER"
 else
     TARGET_SLOT="blue"
     TARGET_SERVICE="$BLUE_SERVICE"
     TARGET_CONTAINER="$BLUE_CONTAINER"
     TARGET_HEALTH="$HEALTH_BLUE"
-    TARGET_PROFILE=()
     PREV_CONTAINER="$GREEN_CONTAINER"
 fi
 log "현재 활성 슬롯: $ACTIVE_SLOT"
@@ -110,7 +111,7 @@ log "배포 대상 슬롯: $TARGET_SLOT"
 
 # Step 1: 비활성 슬롯 빌드 + 기동
 log "Step 1: ${TARGET_SLOT} 슬롯 빌드 및 기동"
-docker compose -f "$COMPOSE_FILE" "${TARGET_PROFILE[@]}" up -d --build --no-deps "$TARGET_SERVICE"
+docker compose "${COMPOSE_ARGS[@]}" up -d --build --no-deps "$TARGET_SERVICE"
 log "OK: ${TARGET_SLOT} 슬롯 기동 완료"
 
 # Step 2: 내부 헬스체크

@@ -39,6 +39,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "gpt-5.4",                   name: "GPT-5.4 (Codex)",           provider: "codex",    cost: "$2.50/$15" },
   { id: "gpt-5.4-mini",              name: "GPT-5.4 Mini (Codex)",      provider: "codex",    cost: "$0.75/$4.50" },
   { id: "gpt-5.3-codex",             name: "GPT-5.3 Codex",             provider: "codex",    cost: "$1.75/$14" },
+  { id: "gpt-5.3-codex-spark",       name: "GPT-5.3 Codex Spark",       provider: "codex",    cost: "변동" },
+  { id: "gpt-5.2",                   name: "GPT-5.2 (Codex)",           provider: "codex",    cost: "변동" },
   // -- Google Gemini 3.1 --
   { id: "gemini-3.1-pro-preview",    name: "Gemini 3.1 Pro Preview",    provider: "google",   cost: "$2/$12" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash-Lite Preview", provider: "google", cost: "$0.02/$0.10" },
@@ -170,6 +172,8 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "gpt-5.4",                 label: "GPT-5.4 (Codex)",  cost: "$2.50/$15",    description: "Codex CLI · GPT-5.4 플래그십" },
   { id: "gpt-5.4-mini",            label: "GPT-5.4 Mini",     cost: "$0.75/$4.50",  description: "Codex CLI · GPT-5.4 경량" },
   { id: "gpt-5.3-codex",           label: "GPT-5.3 Codex",    cost: "$1.75/$14",    description: "Codex CLI · 코딩 특화" },
+  { id: "gpt-5.3-codex-spark",     label: "GPT-5.3 Spark",    cost: "변동",         description: "Codex CLI · 초고속 경량" },
+  { id: "gpt-5.2",                 label: "GPT-5.2",          cost: "변동",         description: "Codex CLI · 이전 세대 안정형" },
 ];
 
 export const DEFAULT_CHAT_MODEL = "claude-sonnet-4-6";

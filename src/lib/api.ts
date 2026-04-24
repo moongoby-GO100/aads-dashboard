@@ -364,4 +364,17 @@ export const api = {
   updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
     request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
+  getLlmModels: (params?: { provider?: string; active_only?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.provider) q.set("provider", params.provider);
+    if (params?.active_only) q.set("active_only", "true");
+    return request<any>(`/llm-models${q.size ? `?${q.toString()}` : ""}`);
+  },
+  getLlmModelSummary: () => request<any>("/llm-models/providers/summary"),
+  getLlmProviderTimeline: (provider: string, limit = 20) =>
+    request<any>(`/llm-models/providers/${encodeURIComponent(provider)}/timeline?limit=${limit}`),
+  getChatModelPreferences: () => request<any>("/llm-models/chat-preferences"),
+  updateChatModelPreferences: (preferences: Array<{ model_id: string; display_order: number; is_hidden: boolean; is_favorite: boolean; is_pinned: boolean }>) =>
+    request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify({ preferences }) }),
+  syncLlmModelRegistry: () => request<any>("/llm-models/sync", { method: "POST" }),
 };

@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { BASE_URL, authHdrs, chatApi } from "@/app/chat/api";
+import { chatApi } from "@/app/chat/api";
+import TerminalPane from "@/components/chat/terminal";
 
 type WorkspaceChangeItem = {
   session_id: string;
@@ -46,43 +47,6 @@ type WorkspaceFinalizeResponse = {
   pending_groups: number;
 };
 
-type TerminalSession = {
-  session_id: string;
-  title: string;
-  shell: string;
-  cwd: string;
-  status: "running" | "exited";
-  backend_mode: "pty" | "pipe";
-  pid?: number | null;
-  returncode?: number | null;
-  cols: number;
-  rows: number;
-  created_at: string;
-  updated_at: string;
-  closed_at?: string | null;
-  last_seq: number;
-  output_bytes: number;
-  recent_commands: string[];
-};
-
-type TerminalStreamEvent = {
-  session_id: string;
-  seq: number;
-  type: string;
-  timestamp: string;
-  data?: string;
-  message?: string;
-  code?: string;
-  status?: string;
-  returncode?: number;
-  cwd?: string;
-  shell?: string;
-  backend_mode?: "pty" | "pipe";
-  pid?: number;
-  cols?: number;
-  rows?: number;
-};
-
 function formatDate(value?: string | null): string {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -115,39 +79,6 @@ function statusTone(status: string): { color: string; bg: string; border: string
   }
 }
 
-function appendTrimmed(prev: string, chunk: string, maxChars = 120000): string {
-  const next = `${prev}${chunk}`;
-  if (next.length <= maxChars) return next;
-  return next.slice(next.length - maxChars);
-}
-
-function parseSseChunk(buffer: string): { remaining: string; events: TerminalStreamEvent[] } {
-  const events: TerminalStreamEvent[] = [];
-  let working = buffer.replace(/\r\n/g, "\n");
-  while (true) {
-    const boundary = working.indexOf("\n\n");
-    if (boundary < 0) break;
-    const rawBlock = working.slice(0, boundary);
-    working = working.slice(boundary + 2);
-    const trimmed = rawBlock.trim();
-    if (!trimmed || trimmed.startsWith(":")) continue;
-
-    const lines = rawBlock.split("\n");
-    const dataLines: string[] = [];
-    for (const line of lines) {
-      if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
-    }
-    if (!dataLines.length) continue;
-    try {
-      const parsed = JSON.parse(dataLines.join("\n")) as TerminalStreamEvent;
-      events.push(parsed);
-    } catch {
-      continue;
-    }
-  }
-  return { remaining: working, events };
-}
-
 export default function ChatOpsDock({
   activeSessionId,
   screenSize,
@@ -165,33 +96,12 @@ export default function ChatOpsDock({
   const [finalizeLoading, setFinalizeLoading] = useState(false);
   const [finalizeSummary, setFinalizeSummary] = useState<string | null>(null);
 
-  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
-  const [terminalLoading, setTerminalLoading] = useState(false);
-  const [terminalError, setTerminalError] = useState<string | null>(null);
-  const [terminalNotice, setTerminalNotice] = useState<string | null>(null);
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
-  const [terminalCommand, setTerminalCommand] = useState("");
-  const [terminalCwd, setTerminalCwd] = useState("/root/aads");
-  const [terminalMeta, setTerminalMeta] = useState<TerminalSession | null>(null);
-  const [terminalOutput, setTerminalOutput] = useState("");
-  const [terminalBusy, setTerminalBusy] = useState(false);
-
-  const streamAbortRef = useRef<AbortController | null>(null);
-  const terminalOutputRef = useRef("");
-  const terminalSeqRef = useRef(-1);
-  const terminalOutputElRef = useRef<HTMLPreElement | null>(null);
-
   const workspaceSummary = useMemo(() => {
     return workspaceChanges.reduce<Record<string, number>>((acc, item) => {
       acc[item.status] = (acc[item.status] || 0) + 1;
       return acc;
     }, {});
   }, [workspaceChanges]);
-
-  const selectedTerminal = useMemo(
-    () => terminalSessions.find((session) => session.session_id === selectedTerminalId) || terminalMeta,
-    [selectedTerminalId, terminalSessions, terminalMeta],
-  );
 
   const workspacePanelStyle: React.CSSProperties = isMobile
     ? {
@@ -207,22 +117,6 @@ export default function ChatOpsDock({
         bottom: "calc(100% + 8px)",
         width: "min(460px, 88vw)",
         maxHeight: "68vh",
-      };
-
-  const terminalPanelStyle: React.CSSProperties = isMobile
-    ? {
-        position: "fixed",
-        left: "12px",
-        right: "12px",
-        bottom: "96px",
-        maxHeight: "72vh",
-      }
-    : {
-        position: "absolute",
-        left: 0,
-        bottom: "calc(100% + 8px)",
-        width: "min(540px, 92vw)",
-        maxHeight: "72vh",
       };
 
   const loadWorkspaceChanges = useCallback(async (silent = false) => {
@@ -266,193 +160,6 @@ export default function ChatOpsDock({
     }
   }, [activeSessionId, loadWorkspaceChanges]);
 
-  const refreshTerminalSessions = useCallback(async (preferredSessionId?: string | null) => {
-    setTerminalLoading(true);
-    try {
-      const sessions = await chatApi<TerminalSession[]>("/terminal/sessions");
-      setTerminalSessions(sessions);
-      setTerminalError(null);
-      const nextSelectedId =
-        preferredSessionId ||
-        (sessions.some((item) => item.session_id === selectedTerminalId) ? selectedTerminalId : null) ||
-        sessions.find((item) => item.status === "running")?.session_id ||
-        sessions[0]?.session_id ||
-        null;
-      setSelectedTerminalId(nextSelectedId);
-      setTerminalMeta(sessions.find((item) => item.session_id === nextSelectedId) || null);
-    } catch (error) {
-      setTerminalError(error instanceof Error ? error.message : "terminal 세션 조회 실패");
-    } finally {
-      setTerminalLoading(false);
-    }
-  }, [selectedTerminalId]);
-
-  const appendTerminalOutput = useCallback((chunk: string) => {
-    terminalOutputRef.current = appendTrimmed(terminalOutputRef.current, chunk);
-    setTerminalOutput(terminalOutputRef.current);
-  }, []);
-
-  const handleTerminalEvent = useCallback((event: TerminalStreamEvent) => {
-    terminalSeqRef.current = Math.max(terminalSeqRef.current, event.seq ?? -1);
-    if (event.type === "output" && event.data) {
-      appendTerminalOutput(event.data);
-      return;
-    }
-    if (event.type === "warning") {
-      const message = event.message || event.code || "warning";
-      setTerminalNotice(message);
-      appendTerminalOutput(`\n[warning] ${message}\n`);
-      return;
-    }
-    if (event.type === "status") {
-      setTerminalMeta((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          status: (event.status as "running" | "exited" | undefined) || prev.status,
-          backend_mode: event.backend_mode || prev.backend_mode,
-          cwd: event.cwd || prev.cwd,
-          shell: event.shell || prev.shell,
-          pid: event.pid ?? prev.pid,
-          cols: event.cols ?? prev.cols,
-          rows: event.rows ?? prev.rows,
-        };
-      });
-      return;
-    }
-    if (event.type === "exit") {
-      appendTerminalOutput(`\n[exit] returncode=${event.returncode ?? "-"}\n`);
-      setTerminalMeta((prev) => (prev ? { ...prev, status: "exited", returncode: event.returncode ?? prev.returncode } : prev));
-      void refreshTerminalSessions(selectedTerminalId);
-    }
-  }, [appendTerminalOutput, refreshTerminalSessions, selectedTerminalId]);
-
-  const startTerminalStream = useCallback(async (sessionId: string) => {
-    streamAbortRef.current?.abort();
-    const controller = new AbortController();
-    streamAbortRef.current = controller;
-    setTerminalError(null);
-    setTerminalNotice(null);
-
-    try {
-      const suffix = terminalSeqRef.current >= 0 ? `?since_seq=${terminalSeqRef.current}` : "";
-      const response = await fetch(`${BASE_URL}/terminal/sessions/${sessionId}/stream${suffix}`, {
-        headers: {
-          ...authHdrs(),
-        },
-        signal: controller.signal,
-      });
-      if (response.status === 401) throw new Error("세션이 만료되었습니다. 다시 로그인해주세요.");
-      if (!response.ok || !response.body) throw new Error(`terminal stream 실패: ${response.status}`);
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parsed = parseSseChunk(buffer);
-        buffer = parsed.remaining;
-        for (const event of parsed.events) {
-          if (event.session_id === sessionId) handleTerminalEvent(event);
-        }
-      }
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      setTerminalError(error instanceof Error ? error.message : "terminal stream 연결 실패");
-    } finally {
-      if (streamAbortRef.current === controller) {
-        streamAbortRef.current = null;
-      }
-    }
-  }, [handleTerminalEvent]);
-
-  const createTerminalSession = useCallback(async (): Promise<TerminalSession | null> => {
-    setTerminalBusy(true);
-    try {
-      const session = await chatApi<TerminalSession>("/terminal/sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          cwd: terminalCwd || "/root",
-          shell: "/bin/bash",
-          title: activeSessionId ? `chat-${activeSessionId.slice(0, 8)}` : "chat-terminal",
-          cols: 120,
-          rows: 32,
-        }),
-      });
-      setSelectedTerminalId(session.session_id);
-      setTerminalMeta(session);
-      setTerminalNotice(null);
-      setTerminalOutput("");
-      terminalOutputRef.current = "";
-      terminalSeqRef.current = -1;
-      await refreshTerminalSessions(session.session_id);
-      return session;
-    } catch (error) {
-      setTerminalError(error instanceof Error ? error.message : "terminal 세션 생성 실패");
-      return null;
-    } finally {
-      setTerminalBusy(false);
-    }
-  }, [activeSessionId, refreshTerminalSessions, terminalCwd]);
-
-  const executeTerminalCommand = useCallback(async () => {
-    if (!terminalCommand.trim()) return;
-    let sessionId = selectedTerminalId;
-    if (!sessionId) {
-      const created = await createTerminalSession();
-      sessionId = created?.session_id || null;
-    }
-    if (!sessionId) return;
-    setTerminalBusy(true);
-    try {
-      await chatApi(`/terminal/sessions/${sessionId}/execute`, {
-        method: "POST",
-        body: JSON.stringify({ command: terminalCommand.trim() }),
-      });
-      setTerminalCommand("");
-    } catch (error) {
-      setTerminalError(error instanceof Error ? error.message : "명령 실행 실패");
-    } finally {
-      setTerminalBusy(false);
-    }
-  }, [createTerminalSession, selectedTerminalId, terminalCommand]);
-
-  const sendTerminalSignal = useCallback(async (data: string) => {
-    if (!selectedTerminalId) return;
-    setTerminalBusy(true);
-    try {
-      await chatApi(`/terminal/sessions/${selectedTerminalId}/input`, {
-        method: "POST",
-        body: JSON.stringify({ data }),
-      });
-    } catch (error) {
-      setTerminalError(error instanceof Error ? error.message : "terminal 입력 전송 실패");
-    } finally {
-      setTerminalBusy(false);
-    }
-  }, [selectedTerminalId]);
-
-  const closeTerminalSession = useCallback(async () => {
-    if (!selectedTerminalId) return;
-    setTerminalBusy(true);
-    try {
-      await chatApi(`/terminal/sessions/${selectedTerminalId}/close`, {
-        method: "POST",
-      });
-      streamAbortRef.current?.abort();
-      await refreshTerminalSessions(null);
-      setSelectedTerminalId(null);
-      setTerminalMeta(null);
-    } catch (error) {
-      setTerminalError(error instanceof Error ? error.message : "terminal 종료 실패");
-    } finally {
-      setTerminalBusy(false);
-    }
-  }, [refreshTerminalSessions, selectedTerminalId]);
-
   useEffect(() => {
     if (!showWorkspacePanel) return;
     void loadWorkspaceChanges();
@@ -461,31 +168,6 @@ export default function ChatOpsDock({
     }, 15000);
     return () => window.clearInterval(interval);
   }, [loadWorkspaceChanges, showWorkspacePanel]);
-
-  useEffect(() => {
-    if (!showTerminalPanel) return;
-    void refreshTerminalSessions();
-    const interval = window.setInterval(() => {
-      void refreshTerminalSessions(selectedTerminalId);
-    }, 30000);
-    return () => window.clearInterval(interval);
-  }, [refreshTerminalSessions, selectedTerminalId, showTerminalPanel]);
-
-  useEffect(() => {
-    if (!showTerminalPanel || !selectedTerminalId) return;
-    setTerminalOutput("");
-    terminalOutputRef.current = "";
-    terminalSeqRef.current = -1;
-    void startTerminalStream(selectedTerminalId);
-    return () => {
-      streamAbortRef.current?.abort();
-    };
-  }, [selectedTerminalId, showTerminalPanel, startTerminalStream]);
-
-  useEffect(() => {
-    if (!terminalOutputElRef.current) return;
-    terminalOutputElRef.current.scrollTop = terminalOutputElRef.current.scrollHeight;
-  }, [terminalOutput]);
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -688,18 +370,32 @@ export default function ChatOpsDock({
             whiteSpace: "nowrap",
             padding: "4px 10px",
             borderRadius: "10px",
-            background: selectedTerminal?.backend_mode === "pty" ? "rgba(34,197,94,0.14)" : "var(--ct-hover)",
-            color: selectedTerminal?.backend_mode === "pty" ? "#22c55e" : "var(--ct-text2)",
-            border: `1px solid ${selectedTerminal?.backend_mode === "pty" ? "rgba(34,197,94,0.35)" : "var(--ct-border)"}`,
+            background: "rgba(34,197,94,0.14)",
+            color: "#22c55e",
+            border: "1px solid rgba(34,197,94,0.35)",
             cursor: "pointer",
           }}
         >
-          Terminal{selectedTerminal ? ` ${selectedTerminal.backend_mode.toUpperCase()}` : ""}
+          Terminal
         </button>
         {showTerminalPanel && (
           <div
             style={{
-              ...terminalPanelStyle,
+              ...(isMobile
+                ? {
+                    position: "fixed",
+                    left: "12px",
+                    right: "12px",
+                    bottom: "96px",
+                    maxHeight: "72vh",
+                  }
+                : {
+                    position: "absolute",
+                    left: 0,
+                    bottom: "calc(100% + 8px)",
+                    width: "min(640px, 94vw)",
+                    maxHeight: "76vh",
+                  }),
               zIndex: 40,
               overflow: "hidden",
               background: "var(--ct-panel)",
@@ -709,276 +405,11 @@ export default function ChatOpsDock({
               padding: "12px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", gap: "8px" }}>
-              <div>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--ct-text)" }}>Chat Terminal</div>
-                <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "2px" }}>
-                  {selectedTerminal
-                    ? `${selectedTerminal.cwd} / ${selectedTerminal.backend_mode.toUpperCase()} / ${selectedTerminal.status}`
-                    : "세션 선택 또는 생성"}
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                <button
-                  onClick={() => void refreshTerminalSessions(selectedTerminalId)}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: "8px",
-                    background: "var(--ct-hover)",
-                    border: "1px solid var(--ct-border)",
-                    color: "var(--ct-text2)",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                  }}
-                >
-                  새로고침
-                </button>
-                <button
-                  onClick={() => void createTerminalSession()}
-                  disabled={terminalBusy}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: "8px",
-                    background: "var(--ct-accent)",
-                    border: "none",
-                    color: "#fff",
-                    cursor: terminalBusy ? "not-allowed" : "pointer",
-                    opacity: terminalBusy ? 0.6 : 1,
-                    fontSize: "11px",
-                    fontWeight: 600,
-                  }}
-                >
-                  새 세션
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
-              <input
-                value={terminalCwd}
-                onChange={(event) => setTerminalCwd(event.target.value)}
-                placeholder="/root/aads"
-                style={{
-                  flex: 1,
-                  minWidth: "180px",
-                  padding: "8px 10px",
-                  borderRadius: "10px",
-                  border: "1px solid var(--ct-border)",
-                  background: "var(--ct-bg2)",
-                  color: "var(--ct-text)",
-                  fontSize: "12px",
-                }}
-              />
-              {selectedTerminal && (
-                <button
-                  onClick={() => void closeTerminalSession()}
-                  disabled={terminalBusy}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "10px",
-                    border: "1px solid rgba(239,68,68,0.28)",
-                    background: "rgba(239,68,68,0.12)",
-                    color: "#ef4444",
-                    cursor: terminalBusy ? "not-allowed" : "pointer",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                  }}
-                >
-                  종료
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
-              {terminalSessions.map((session) => {
-                const active = session.session_id === selectedTerminalId;
-                return (
-                  <button
-                    key={session.session_id}
-                    onClick={() => {
-                      setSelectedTerminalId(session.session_id);
-                      setTerminalMeta(session);
-                      setTerminalNotice(null);
-                      setTerminalError(null);
-                    }}
-                    style={{
-                      padding: "5px 8px",
-                      borderRadius: "999px",
-                      border: `1px solid ${active ? "rgba(99,102,241,0.35)" : "var(--ct-border)"}`,
-                      background: active ? "rgba(99,102,241,0.14)" : "var(--ct-hover)",
-                      color: active ? "var(--ct-text)" : "var(--ct-text2)",
-                      cursor: "pointer",
-                      fontSize: "11px",
-                      maxWidth: "100%",
-                    }}
-                    title={`${session.cwd} / ${session.shell}`}
-                  >
-                    {session.title} · {session.backend_mode.toUpperCase()} · {session.status}
-                  </button>
-                );
-              })}
-              {!terminalLoading && terminalSessions.length === 0 && (
-                <span style={{ fontSize: "11px", color: "var(--ct-text2)" }}>세션 없음</span>
-              )}
-            </div>
-
-            {terminalNotice && (
-              <div style={{
-                marginBottom: "8px",
-                padding: "8px 10px",
-                borderRadius: "10px",
-                background: "rgba(245,158,11,0.10)",
-                border: "1px solid rgba(245,158,11,0.22)",
-                color: "#f59e0b",
-                fontSize: "11px",
-              }}>
-                {terminalNotice}
-              </div>
-            )}
-            {terminalError && (
-              <div style={{
-                marginBottom: "8px",
-                padding: "8px 10px",
-                borderRadius: "10px",
-                background: "rgba(239,68,68,0.10)",
-                border: "1px solid rgba(239,68,68,0.22)",
-                color: "#ef4444",
-                fontSize: "11px",
-                wordBreak: "break-word",
-              }}>
-                {terminalError}
-              </div>
-            )}
-
-            <pre
-              ref={terminalOutputElRef}
-              style={{
-                margin: 0,
-                height: isMobile ? "240px" : "280px",
-                overflowY: "auto",
-                borderRadius: "12px",
-                border: "1px solid var(--ct-border)",
-                background: "#09111f",
-                color: "#dbeafe",
-                padding: "12px",
-                fontSize: "12px",
-                lineHeight: 1.5,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-              }}
-            >
-              {terminalOutput || "$ terminal output will appear here\n"}
-            </pre>
-
-            <div style={{ display: "flex", gap: "6px", marginTop: "10px", flexWrap: "wrap" }}>
-              <input
-                value={terminalCommand}
-                onChange={(event) => setTerminalCommand(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void executeTerminalCommand();
-                  }
-                }}
-                placeholder="명령 입력 후 Enter"
-                style={{
-                  flex: 1,
-                  minWidth: "220px",
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid var(--ct-border)",
-                  background: "var(--ct-bg2)",
-                  color: "var(--ct-text)",
-                  fontSize: "12px",
-                }}
-              />
-              <button
-                onClick={() => void executeTerminalCommand()}
-                disabled={terminalBusy || !terminalCommand.trim()}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "var(--ct-accent)",
-                  color: "#fff",
-                  cursor: terminalBusy || !terminalCommand.trim() ? "not-allowed" : "pointer",
-                  opacity: terminalBusy || !terminalCommand.trim() ? 0.5 : 1,
-                  fontSize: "11px",
-                  fontWeight: 600,
-                }}
-              >
-                실행
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
-              <button
-                onClick={() => void sendTerminalSignal("\u0003")}
-                disabled={!selectedTerminalId || terminalBusy}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: "9px",
-                  border: "1px solid rgba(239,68,68,0.22)",
-                  background: "rgba(239,68,68,0.12)",
-                  color: "#ef4444",
-                  cursor: !selectedTerminalId || terminalBusy ? "not-allowed" : "pointer",
-                  fontSize: "11px",
-                  opacity: !selectedTerminalId || terminalBusy ? 0.5 : 1,
-                }}
-              >
-                Ctrl+C
-              </button>
-              <button
-                onClick={() => {
-                  terminalOutputRef.current = "";
-                  setTerminalOutput("");
-                }}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: "9px",
-                  border: "1px solid var(--ct-border)",
-                  background: "var(--ct-hover)",
-                  color: "var(--ct-text2)",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                }}
-              >
-                출력 지우기
-              </button>
-              {selectedTerminal && (
-                <span style={{ alignSelf: "center", fontSize: "11px", color: "var(--ct-text2)" }}>
-                  PID {selectedTerminal.pid || "-"} · last {formatDate(selectedTerminal.updated_at)}
-                </span>
-              )}
-            </div>
-
-            {selectedTerminal?.recent_commands?.length ? (
-              <div style={{ marginTop: "10px" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--ct-text)", marginBottom: "6px" }}>최근 명령</div>
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {selectedTerminal.recent_commands.slice(-6).reverse().map((command, index) => (
-                    <button
-                      key={`${command}-${index}`}
-                      onClick={() => setTerminalCommand(command)}
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: "999px",
-                        border: "1px solid var(--ct-border)",
-                        background: "var(--ct-hover)",
-                        color: "var(--ct-text2)",
-                        cursor: "pointer",
-                        fontSize: "11px",
-                        maxWidth: "100%",
-                      }}
-                      title={command}
-                    >
-                      {command}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            <TerminalPane
+              activeSessionId={activeSessionId}
+              screenSize={screenSize}
+              panelOpen={showTerminalPanel}
+            />
           </div>
         )}
       </div>

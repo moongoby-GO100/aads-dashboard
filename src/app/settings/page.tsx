@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
+import DatabaseOverviewPanel from "@/components/settings/DatabaseOverviewPanel";
+import LlmRegistryWorkspacePanel from "@/components/settings/LlmRegistryWorkspacePanel";
 import { api } from "@/lib/api";
 import type { HealthResponse } from "@/types";
 
@@ -27,7 +29,7 @@ const SIZE_LABELS: Record<string, string> = {
 
 const AVAILABLE_MODELS = [
   { group: "Claude (월정액)", models: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] },
-  { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex"] },
+  { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex", "codex:gpt-5.3-codex-spark", "codex:gpt-5.2"] },
   { group: "MiniMax (월정액)", models: ["litellm:minimax-m2.7", "litellm:minimax-m2.5"] },
   { group: "Groq (무료)", models: ["litellm:groq-llama-70b", "litellm:groq-qwen3-32b", "litellm:groq-kimi-k2", "litellm:groq-llama4-scout"] },
   { group: "Gemini", models: ["litellm:gemini-2.5-flash", "litellm:gemini-2.5-pro", "litellm:gemini-3-flash-preview", "litellm:gemini-3-pro-preview", "litellm:gemini-3.1-flash-lite-preview", "litellm:gemini-3.1-pro-preview"] },
@@ -57,6 +59,32 @@ interface LlmKey {
   notes: string;
 }
 
+interface LlmModelProviderSummary {
+  provider: string;
+  display_name: string;
+  status: string;
+  active_key_count: number;
+  available_key_count: number;
+  rate_limited_key_count: number;
+  verified_key_count: number;
+  active_model_count: number;
+  template_model_count: number;
+  linked_key_name: string | null;
+  requires_admin_review: boolean;
+}
+
+interface LlmModelSummaryResponse {
+  providers: LlmModelProviderSummary[];
+  total: number;
+  active_provider_count: number;
+  rate_limited_provider_count: number;
+  review_required_providers: string[];
+  last_sync_at: string | null;
+  last_sync_reason: string | null;
+  last_sync_actor: string | null;
+  normalized_providers: Record<string, number>;
+}
+
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "#d4a017",
   gemini: "#4285f4",
@@ -64,6 +92,18 @@ const PROVIDER_COLORS: Record<string, string> = {
   groq: "#ff6b6b",
   openai: "#10a37f",
 };
+
+const REGISTRY_STATUS_COLORS: Record<string, string> = {
+  active: "var(--success)",
+  rate_limited: "var(--warning)",
+  inactive: "var(--text-secondary)",
+  review_required: "var(--danger)",
+};
+
+function toKst(ts: string | null | undefined): string {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+}
 
 function LlmKeyManager() {
   const [keys, setKeys] = useState<LlmKey[]>([]);
@@ -194,6 +234,151 @@ function LlmKeyManager() {
           + 새 LLM API 키 추가
         </button>
       )}
+    </div>
+  );
+}
+
+function LlmModelRegistryPanel() {
+  const [summary, setSummary] = useState<LlmModelSummaryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    (api as any).getLlmModelSummary()
+      .then((res: LlmModelSummaryResponse) => {
+        setSummary(res);
+        setMsg("");
+      })
+      .catch(() => setMsg("레지스트리 상태 로드 실패"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const flash = (text: string) => {
+    setMsg(text);
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const res = await (api as any).syncLlmModelRegistry();
+      setSummary(res);
+      flash("모델 레지스트리 동기화 완료");
+      load();
+    } catch {
+      flash("모델 레지스트리 동기화 실패");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (loading) return <p className="text-sm p-4" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>;
+
+  const providers = summary?.providers || [];
+  const normalizedEntries = Object.entries(summary?.normalized_providers || {});
+
+  return (
+    <div className="space-y-4">
+      {msg && (
+        <p
+          className="text-sm px-3 py-2 rounded"
+          style={{
+            background: msg.includes("실패") ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
+            color: msg.includes("실패") ? "var(--danger)" : "var(--success)",
+          }}
+        >
+          {msg}
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>활성 Provider</p>
+          <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>{summary?.active_provider_count ?? 0}</p>
+        </div>
+        <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>Rate-Limited</p>
+          <p className="text-lg font-bold" style={{ color: "var(--warning)" }}>{summary?.rate_limited_provider_count ?? 0}</p>
+        </div>
+        <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>검토 필요</p>
+          <p className="text-lg font-bold" style={{ color: "var(--danger)" }}>{summary?.review_required_providers?.length ?? 0}</p>
+        </div>
+        <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>마지막 동기화</p>
+          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{toKst(summary?.last_sync_at)}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={syncNow}
+          disabled={syncing}
+          className="px-4 py-2 rounded-lg text-sm font-bold"
+          style={{ background: "var(--accent)", color: "#fff", opacity: syncing ? 0.6 : 1 }}
+        >
+          {syncing ? "동기화 중..." : "레지스트리 수동 동기화"}
+        </button>
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+          reason={summary?.last_sync_reason || "—"} / actor={summary?.last_sync_actor || "—"}
+        </span>
+      </div>
+
+      {normalizedEntries.length > 0 && (
+        <div className="rounded-lg p-3" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid var(--border)" }}>
+          <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>최근 provider 정규화</p>
+          <div className="flex flex-wrap gap-2">
+            {normalizedEntries.map(([rule, count]) => (
+              <span key={rule} className="px-2 py-1 rounded text-xs font-mono" style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}>
+                {rule} x{count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {providers.map((provider) => (
+          <div key={provider.provider} className="rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{provider.display_name}</p>
+                <p className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>{provider.provider}</p>
+              </div>
+              <span className="px-2 py-1 rounded text-xs font-bold" style={{ background: "var(--bg-primary)", color: REGISTRY_STATUS_COLORS[provider.status] || "var(--text-primary)" }}>
+                {provider.status}
+              </span>
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span style={{ color: "var(--text-secondary)" }}>Active Models</span>
+                <span style={{ color: "var(--text-primary)" }}>{provider.active_model_count} / {provider.template_model_count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: "var(--text-secondary)" }}>Keys</span>
+                <span style={{ color: "var(--text-primary)" }}>{provider.available_key_count} usable / {provider.active_key_count} active</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: "var(--text-secondary)" }}>Rate-Limited</span>
+                <span style={{ color: "var(--text-primary)" }}>{provider.rate_limited_key_count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: "var(--text-secondary)" }}>Linked Key</span>
+                <span className="font-mono" style={{ color: "var(--text-primary)" }}>{provider.linked_key_name || "—"}</span>
+              </div>
+            </div>
+            {provider.requires_admin_review && (
+              <p className="text-xs mt-3 font-semibold" style={{ color: "var(--danger)" }}>
+                관리자 검토 필요: 템플릿이 없는 provider입니다.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -359,13 +544,20 @@ export default function SettingsPage() {
           </p>
           <RunnerModelConfig />
         </section>
-        {/* LLM API 키 관리 (AADS-188) */}
         <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM API 키 관리</h2>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM 키 및 모델 레지스트리</h2>
           <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            Provider별 API 키 조회/수정/활성화 관리. 키 값은 마스킹 표시됩니다.
+            등록된 API 키 기준 실행 가능 모델 집합, 최근 동기화 상태, 채팅창 노출 순서를 한 화면에서 관리합니다.
           </p>
-          <LlmKeyManager />
+          <LlmRegistryWorkspacePanel />
+        </section>
+
+        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>DB 연결 상태</h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+            내부 PostgreSQL, Graph DB, DB Pool, 원격 프로젝트 DB 접근 상태를 확인합니다.
+          </p>
+          <DatabaseOverviewPanel graphReady={health?.graph_ready} />
         </section>
 
 

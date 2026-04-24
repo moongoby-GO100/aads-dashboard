@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "xterm/css/xterm.css";
 
 :root {
   --bg-primary: #0f172a;
@@ -145,4 +146,3 @@ body {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
-

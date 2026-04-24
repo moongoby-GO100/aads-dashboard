@@ -54,12 +54,23 @@ type LlmRegistryModel = {
   is_active?: boolean;
 };
 
+type ChatModelPreference = {
+  model_id: string;
+  display_order: number;
+  is_hidden: boolean;
+  is_favorite: boolean;
+  is_pinned: boolean;
+};
+
 type SelectableModelOption = {
   id: string;
   name: string;
   provider: string;
   cost: string;
   isActive: boolean;
+  isPinned?: boolean;
+  isFavorite?: boolean;
+  isHidden?: boolean;
 };
 
 const STATIC_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
@@ -96,6 +107,33 @@ function buildSelectableModelOption(row: LlmRegistryModel): SelectableModelOptio
     cost: staticOption?.cost || formatCostLabel(row.input_cost, row.output_cost),
     isActive: true,
   };
+}
+
+function buildNormalizedPreferenceMap(
+  preferences: ChatModelPreference[],
+): Map<string, ChatModelPreference> {
+  const normalized = new Map<string, ChatModelPreference>();
+  for (const item of preferences) {
+    normalized.set(item.model_id, item);
+    normalized.set(normalizeModelIdForSelector(item.model_id), item);
+  }
+  return normalized;
+}
+
+function compareSelectableModels(
+  a: SelectableModelOption,
+  b: SelectableModelOption,
+  preferenceMap: Map<string, ChatModelPreference>,
+): number {
+  const aPref = preferenceMap.get(a.id);
+  const bPref = preferenceMap.get(b.id);
+  if (!!aPref?.is_pinned !== !!bPref?.is_pinned) return aPref?.is_pinned ? -1 : 1;
+  if (!!aPref?.is_favorite !== !!bPref?.is_favorite) return aPref?.is_favorite ? -1 : 1;
+  const aOrder = aPref?.display_order ?? 1000;
+  const bOrder = bPref?.display_order ?? 1000;
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+  return a.name.localeCompare(b.name);
 }
 
 // ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
@@ -860,6 +898,7 @@ export default function ChatPage() {
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [runtimeModels, setRuntimeModels] = useState<LlmRegistryModel[] | null>(null);
+  const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const streamBufRef = useRef("");
@@ -932,9 +971,13 @@ export default function ChatPage() {
   const diffApproval = useDiffApproval();
 
   const selectableModels = useMemo<SelectableModelOption[]>(() => {
+    const preferenceMap = buildNormalizedPreferenceMap(modelPreferences);
     const autoOption = {
       ...(STATIC_MODEL_OPTION_MAP.get("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
       isActive: true,
+      isPinned: preferenceMap.get("mixture")?.is_pinned ?? false,
+      isFavorite: preferenceMap.get("mixture")?.is_favorite ?? false,
+      isHidden: preferenceMap.get("mixture")?.is_hidden ?? false,
     };
 
     if (runtimeModels === null) {
@@ -944,33 +987,74 @@ export default function ChatPage() {
         ? [
             autoOption,
             currentOption
-              ? { ...currentOption, isActive: true }
-              : { id: currentModelId, name: currentModelId, provider: "legacy", cost: "변동", isActive: true },
+              ? {
+                  ...currentOption,
+                  isActive: true,
+                  isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
+                  isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
+                  isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+                }
+              : {
+                  id: currentModelId,
+                  name: currentModelId,
+                  provider: "legacy",
+                  cost: "변동",
+                  isActive: true,
+                  isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
+                  isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
+                  isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+                },
           ]
         : [autoOption];
     }
 
-    const activeOptions = runtimeModels.map(buildSelectableModelOption);
-    const activeOptionIds = new Set(activeOptions.map((option) => option.id));
-    const orderedStaticOptions = MODEL_OPTIONS
-      .filter((option) => option.id !== "mixture" && activeOptionIds.has(option.id))
-      .map((option) => ({ ...option, isActive: true }));
-    const runtimeOnlyOptions = activeOptions
-      .filter((option) => !STATIC_MODEL_OPTION_MAP.has(option.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const options: SelectableModelOption[] = [autoOption, ...orderedStaticOptions, ...runtimeOnlyOptions];
     const currentModelId = normalizeModelIdForSelector(model);
+    const activeOptions = runtimeModels.map((row) => {
+      const option = buildSelectableModelOption(row);
+      const preference = preferenceMap.get(option.id);
+      return {
+        ...option,
+        isPinned: preference?.is_pinned ?? false,
+        isFavorite: preference?.is_favorite ?? false,
+        isHidden: preference?.is_hidden ?? false,
+      };
+    });
+    const activeOptionsMap = new Map(activeOptions.map((option) => [option.id, option]));
+    const orderedOptions = Array.from(activeOptionsMap.values())
+      .filter((option) => !option.isHidden || option.id === currentModelId)
+      .sort((a, b) => compareSelectableModels(a, b, preferenceMap))
+      .map((option) => ({
+        ...option,
+        name: `${option.isPinned ? "📌 " : option.isFavorite ? "★ " : ""}${option.name}`,
+      }));
+
+    const options: SelectableModelOption[] = [autoOption, ...orderedOptions];
     if (currentModelId && currentModelId !== "mixture" && !options.some((option) => option.id === currentModelId)) {
       const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
       options.push(
         currentOption
-          ? { ...currentOption, name: `${currentOption.name} (비활성)`, isActive: false }
-          : { id: currentModelId, name: `${currentModelId} (비활성)`, provider: "legacy", cost: "변동", isActive: false }
+          ? {
+              ...currentOption,
+              name: `${currentOption.name} (비활성)`,
+              isActive: false,
+              isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
+              isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
+              isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+            }
+          : {
+              id: currentModelId,
+              name: `${currentModelId} (비활성)`,
+              provider: "legacy",
+              cost: "변동",
+              isActive: false,
+              isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
+              isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
+              isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+            }
       );
     }
     return options;
-  }, [model, runtimeModels]);
+  }, [model, modelPreferences, runtimeModels]);
 
   const activeSelectableModelIds = useMemo(
     () => new Set(selectableModels.filter((option) => option.isActive).map((option) => option.id)),
@@ -1010,16 +1094,56 @@ export default function ChatPage() {
   // 스트리밍 중인 세션 ID 추적 — 세션 전환 시 다른 세션 내용 깜빡임 방지
   const streamingSessionRef = useRef<string | null>(null);
 
+  const refreshChatModelCatalog = useCallback(async () => {
+    const [modelsRes, preferencesRes] = await Promise.allSettled([
+      chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true"),
+      chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
+    ]);
+    if (modelsRes.status === "fulfilled") {
+      setRuntimeModels(Array.isArray(modelsRes.value.models) ? modelsRes.value.models : []);
+    }
+    if (preferencesRes.status === "fulfilled") {
+      setModelPreferences(Array.isArray(preferencesRes.value.preferences) ? preferencesRes.value.preferences : []);
+    } else {
+      setModelPreferences([]);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true")
-      .then((res) => {
-        if (cancelled) return;
-        setRuntimeModels(Array.isArray(res.models) ? res.models : []);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+    const load = async () => {
+      const [modelsRes, preferencesRes] = await Promise.allSettled([
+        chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true"),
+        chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
+      ]);
+      if (cancelled) return;
+      if (modelsRes.status === "fulfilled") {
+        setRuntimeModels(Array.isArray(modelsRes.value.models) ? modelsRes.value.models : []);
+      }
+      if (preferencesRes.status === "fulfilled") {
+        setModelPreferences(Array.isArray(preferencesRes.value.preferences) ? preferencesRes.value.preferences : []);
+      } else {
+        setModelPreferences([]);
+      }
+    };
+    void load();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshChatModelCatalog();
+      }
+    };
+    const handleFocus = () => {
+      void refreshChatModelCatalog();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshChatModelCatalog]);
 
   useEffect(() => {
     if (!activeSession || runtimeModels === null) return;
