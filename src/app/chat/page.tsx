@@ -154,6 +154,7 @@ interface MessageItemProps {
   allMessages?: ChatMessage[];
   isActiveStreaming?: boolean;
   streamingContent?: string;
+  streamingThinking?: string;
   streamToolStatus?: string | null;
   streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
   onStopStreaming?: () => void;
@@ -168,7 +169,7 @@ const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, allMessages,
-  isActiveStreaming, streamingContent, streamToolStatus, streamToolLogs, onStopStreaming,
+  isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
@@ -491,6 +492,39 @@ const MessageItem = memo(function MessageItem({
                   )}
                 </div>
               )}
+              {streamingThinking ? (
+                <details open style={{
+                  fontSize: "12px",
+                  borderRadius: "8px",
+                  background: "rgba(255,200,100,0.05)",
+                  border: "1px solid rgba(255,200,100,0.2)",
+                  padding: "6px 10px",
+                  marginBottom: "8px",
+                }}>
+                  <summary style={{ cursor: "pointer", color: "#f4b557", fontWeight: 500, userSelect: "none" }}>
+                    💭 사고 과정 (실시간)
+                  </summary>
+                  <div style={{
+                    marginTop: "6px",
+                    color: "var(--ct-text2)",
+                    fontFamily: "ui-monospace, monospace",
+                    fontSize: "11.5px",
+                    whiteSpace: "pre-wrap" as const,
+                    wordBreak: "break-word" as const,
+                    maxHeight: "240px",
+                    overflowY: "auto" as const,
+                    lineHeight: 1.5,
+                  }}>
+                    {streamingThinking}
+                    <span style={{
+                      display: "inline-block", width: "2px", height: "12px",
+                      background: "#f4b557", marginLeft: "2px",
+                      animation: "ct-blink 1s step-end infinite",
+                      verticalAlign: "text-bottom",
+                    }} />
+                  </div>
+                </details>
+              ) : null}
               {streamingContent ? (
                 <>
                   <MarkdownBlock text={streamingContent} />
@@ -870,6 +904,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.tools_called === next.msg.tools_called &&
   prev.isActiveStreaming === next.isActiveStreaming &&
   prev.streamingContent === next.streamingContent &&
+  prev.streamingThinking === next.streamingThinking &&
   prev.streamToolStatus === next.streamToolStatus &&
   prev.streamToolLogs === next.streamToolLogs
 );
@@ -2822,9 +2857,11 @@ export default function ChatPage() {
                 });
                 setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
               }
-            } else if (ev.type === "thinking" && ev.content) {
+            } else if (ev.type === "thinking" && (ev.thinking || ev.content)) {
+              // P1-FIX: backend yields {type:'thinking', thinking:'...'} — old code only saw ev.content
               setToolStatus("💭 사고 중...");
-              if (!isStale()) setThinkingBuf(prev => prev + (ev.content || ""));
+              const thinkText = String(ev.thinking || ev.content || "");
+              if (!isStale() && thinkText) setThinkingBuf(prev => prev + thinkText);
             } else if (ev.type === "sdk_session") {
               setToolStatus("🤖 Agent SDK 연결됨");
             } else if (ev.type === "sdk_complete") {
@@ -4897,6 +4934,9 @@ export default function ChatPage() {
                     }
                     streamingContent={
                       msg.intent === "streaming_placeholder" && streaming ? streamBuf : undefined
+                    }
+                    streamingThinking={
+                      msg.intent === "streaming_placeholder" && streaming ? thinkingBuf : undefined
                     }
                     streamToolStatus={
                       msg.intent === "streaming_placeholder" && streaming ? toolStatus : undefined
