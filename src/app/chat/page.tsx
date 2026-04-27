@@ -2356,7 +2356,7 @@ export default function ChatPage() {
   };
 
   // ── Send message (SSE streaming) ──
-  const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number, _existingMsgId?: string) {
+  const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number, _existingMsgId?: string, _existingIdempotencyKey?: string) {
     const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
@@ -2554,7 +2554,7 @@ export default function ChatPage() {
       let fetchHeaders: Record<string, string> = { ...authHdrs() };
       let fetchUrl = `${BASE_URL}/chat/messages/send`;
       // Stage 3: idempotency key — 502 재시도 시 동일 메시지 중복 저장 방지
-      const _idempotencyKey = crypto.randomUUID();
+      const _idempotencyKey = _existingIdempotencyKey || crypto.randomUUID();
 
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
@@ -2599,7 +2599,7 @@ export default function ChatPage() {
           setToolStatus(`🔄 서버 재시작 감지 — ${Math.round(delay/1000)}초 후 자동 재전송 (${attempt}/3)...`);
           await new Promise((r) => setTimeout(r, delay));
           setToolStatus(null);
-          return sendMessage(content, undefined, attempt, userMsg.id);
+          return sendMessage(content, undefined, attempt, userMsg.id, _idempotencyKey);
         }
         const _errMap: Record<number, string> = {
           502: "서버가 재시작 중입니다.",
