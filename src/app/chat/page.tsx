@@ -901,6 +901,7 @@ export default function ChatPage() {
   const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
+  const [thinkingBuf, setThinkingBuf] = useState("");
   const streamBufRef = useRef("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
@@ -2465,6 +2466,7 @@ export default function ChatPage() {
     setBranchPoint(null);
     setStreaming(true);
     setStreamBuf("");
+    setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
     currentExecutionIdRef.current = null;
@@ -2708,6 +2710,7 @@ export default function ChatPage() {
               gotFinal = true;
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setStreamBuf("");
+              setThinkingBuf("");
               setStreaming(false);
               setToolStatus(null);
               setToolLogs([]);
@@ -2821,8 +2824,7 @@ export default function ChatPage() {
               }
             } else if (ev.type === "thinking" && ev.content) {
               setToolStatus("💭 사고 중...");
-              // thinking 텍스트가 있으면 streamBuf에 즉시 표시 — delta가 오면 자동 교체됨
-              if (!isStale() && !full) setStreamBuf(ev.content || "분석 중...");
+              if (!isStale()) setThinkingBuf(prev => prev + (ev.content || ""));
             } else if (ev.type === "sdk_session") {
               setToolStatus("🤖 Agent SDK 연결됨");
             } else if (ev.type === "sdk_complete") {
@@ -3506,6 +3508,7 @@ export default function ChatPage() {
     setRegeneratingId(msgId);
     setStreaming(true);
     setStreamBuf("");
+    setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
 
@@ -3559,6 +3562,7 @@ export default function ChatPage() {
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               setStreamBuf("");
+              setThinkingBuf("");
               setStreaming(false);
               setToolStatus(null);
               setToolLogs([]);
