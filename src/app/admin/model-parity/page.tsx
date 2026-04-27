@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
 type Tab = "models" | "routing" | "daily";
 
-interface ModelParitySummary {
+interface SummaryData {
   window_days: number;
   window_start: string;
   window_end: string;
@@ -18,17 +18,7 @@ interface ModelParitySummary {
   total_input_tokens: number;
   total_output_tokens: number;
   total_tokens: number;
-}
-
-interface ModelStat {
-  model: string;
-  calls: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  avg_tokens_per_call: number;
-  distinct_intents: number;
-  configured_intents: number;
+  total_estimated_cost_usd?: number | null;
 }
 
 interface RoutingModelBucket {
@@ -40,7 +30,7 @@ interface RoutingModelBucket {
   intents: string[];
 }
 
-interface RoutingRouteBucket {
+interface RoutingBucket {
   model: string;
   tools: boolean;
   group: string;
@@ -50,72 +40,97 @@ interface RoutingRouteBucket {
   intents: string[];
 }
 
-interface RoutingSummary {
-  source: string;
-  total_intents: number;
-  tool_enabled_intents: number;
-  thinking_enabled_intents: number;
-  gemini_direct_intents: number;
-  by_model: RoutingModelBucket[];
-  by_route: RoutingRouteBucket[];
-}
-
-interface DailyModelStat {
+interface ModelMetric {
   model: string;
   calls: number;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  avg_tokens_per_call: number;
+  distinct_intents: number;
+  configured_intents: number;
+  estimated_cost_usd?: number | null;
 }
 
-interface DailyStat {
+interface DailyMetric {
   date: string;
   calls: number;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  models: DailyModelStat[];
+  estimated_cost_usd?: number | null;
+  models: Array<{
+    model: string;
+    calls: number;
+    total_tokens: number;
+    estimated_cost_usd?: number | null;
+  }>;
 }
 
-interface ModelParityData {
-  summary: ModelParitySummary;
-  routing: RoutingSummary;
-  models: ModelStat[];
-  daily: DailyStat[];
+interface ModelParityResponse {
+  summary: SummaryData;
+  routing: {
+    source: string;
+    total_intents: number;
+    tool_enabled_intents: number;
+    thinking_enabled_intents: number;
+    gemini_direct_intents: number;
+    by_model: RoutingModelBucket[];
+    by_route: RoutingBucket[];
+  };
+  models: ModelMetric[];
+  daily: DailyMetric[];
 }
 
-interface IntentMapEntry {
+interface IntentMapItem {
   model: string;
-  tools: boolean;
-  group: string;
-  thinking: boolean;
-  gemini_direct: string;
-  naver_type?: string;
+  tools?: boolean;
+  group?: string;
+  thinking?: boolean;
+  gemini_direct?: string;
 }
 
 interface IntentMapResponse {
   source: string;
   count: number;
-  intent_map: Record<string, IntentMapEntry>;
+  intent_map: Record<string, IntentMapItem>;
 }
 
-function formatNumber(value: number | undefined): string {
+function formatNumber(value?: number): string {
   return new Intl.NumberFormat("ko-KR").format(value || 0);
 }
 
-function formatDateLabel(value: string): string {
-  const parsed = new Date(`${value}T00:00:00+09:00`);
+function formatDateTime(value?: string): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
+  return parsed.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function boolLabel(value: boolean | undefined): string {
-  return value ? "yes" : "no";
+function formatCurrency(value?: number | null): string {
+  if (value == null) return "-";
+  return new Intl.NumberFormat("ko-KR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function barWidth(value: number, total: number): string {
+  if (!total) return "0%";
+  return `${Math.max(6, Math.round((value / total) * 100))}%`;
 }
 
 export default function ModelParityPage() {
   const [tab, setTab] = useState<Tab>("models");
-  const [data, setData] = useState<ModelParityData | null>(null);
+  const [data, setData] = useState<ModelParityResponse | null>(null);
   const [intentMap, setIntentMap] = useState<IntentMapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -124,12 +139,12 @@ export default function ModelParityPage() {
     setLoading(true);
     setError("");
     try {
-      const [parityRes, intentMapRes] = await Promise.all([
+      const [parityRes, intentRes] = await Promise.all([
         api.getModelParity(),
         api.getModelParityIntentMap(),
       ]);
-      setData(parityRes as ModelParityData);
-      setIntentMap(intentMapRes as IntentMapResponse);
+      setData(parityRes as ModelParityResponse);
+      setIntentMap(intentRes as IntentMapResponse);
     } catch (err) {
       console.error("model parity load failed", err);
       setError(err instanceof Error ? err.message : "모델 패리티 데이터를 불러오지 못했습니다.");
@@ -142,313 +157,399 @@ export default function ModelParityPage() {
     loadData();
   }, [loadData]);
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: "models", label: "모델 현황", icon: "📊" },
-    { key: "routing", label: "인텐트 라우팅", icon: "🧭" },
-    { key: "daily", label: "일별 추이", icon: "📈" },
-  ];
+  const topCallCount = useMemo(() => {
+    return Math.max(...(data?.models.map((item) => item.calls) || [0]));
+  }, [data]);
+
+  const topDailyCalls = useMemo(() => {
+    return Math.max(...(data?.daily.map((item) => item.calls) || [0]));
+  }, [data]);
+
+  const hasEstimatedCost = useMemo(() => {
+    if (!data) return false;
+    if (data.summary.total_estimated_cost_usd != null) return true;
+    return data.models.some((item) => item.estimated_cost_usd != null);
+  }, [data]);
+
+  const totalEstimatedCost = useMemo(() => {
+    if (!data) return null;
+    if (data.summary.total_estimated_cost_usd != null) {
+      return data.summary.total_estimated_cost_usd;
+    }
+    const modelsWithCost = data.models.filter((item) => item.estimated_cost_usd != null);
+    if (modelsWithCost.length === 0) return null;
+    return modelsWithCost.reduce((sum, item) => sum + Number(item.estimated_cost_usd || 0), 0);
+  }, [data]);
 
   const cardStyle = {
     background: "var(--bg-card)",
     border: "1px solid var(--border)",
-    borderRadius: "8px",
+    borderRadius: "10px",
     padding: "16px",
   };
 
-  const btnStyle = (active?: boolean) => ({
-    padding: "8px 16px",
-    borderRadius: "6px",
-    border: "none",
-    cursor: "pointer" as const,
-    fontWeight: active ? 600 : 400,
-    background: active ? "var(--accent)" : "var(--bg-hover)",
-    color: active ? "#fff" : "var(--text-primary)",
-  });
-
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-        <Header title="모델 패리티" />
-        <div className="flex-1 p-3 md:p-6 overflow-auto">
-          <div style={{ ...cardStyle, color: "var(--text-secondary)", textAlign: "center" }}>로딩 중...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data || !intentMap) {
-    return (
-      <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-        <Header title="모델 패리티" />
-        <div className="flex-1 p-3 md:p-6 overflow-auto">
-          <div style={{ ...cardStyle, color: "var(--danger)" }}>
-            {error || "모델 패리티 데이터를 표시할 수 없습니다."}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const summaryCards = [
-    { label: "Tracked Models", value: data.summary.tracked_models, tone: "var(--accent)" },
-    { label: "Routed Intents", value: data.summary.tracked_intents, tone: "var(--success)" },
-    { label: "Calls (7d)", value: data.summary.total_calls, tone: "var(--warning)" },
-    { label: "Total Tokens", value: data.summary.total_tokens, tone: "var(--text-primary)" },
-    { label: "Thinking", value: data.routing.thinking_enabled_intents, tone: "var(--accent)" },
-    { label: "Gemini Direct", value: data.routing.gemini_direct_intents, tone: "var(--success)" },
+  const tabs: Array<{ key: Tab; label: string }> = [
+    { key: "models", label: "모델 현황" },
+    { key: "routing", label: "인텐트 라우팅" },
+    { key: "daily", label: "일별 추이" },
   ];
 
-  const intentMapEntries = Object.entries(intentMap.intent_map || {});
+  const summaryCards = data ? [
+    { label: "Tracked Models", value: formatNumber(data.summary.tracked_models) },
+    { label: "Tracked Intents", value: formatNumber(data.summary.tracked_intents) },
+    { label: "Tracked Messages", value: formatNumber(data.summary.tracked_messages) },
+    { label: "Total Calls", value: formatNumber(data.summary.total_calls) },
+    { label: "Total Tokens", value: formatNumber(data.summary.total_tokens) },
+    { label: "Est. Cost", value: hasEstimatedCost ? formatCurrency(totalEstimatedCost) : "-" },
+  ] : [];
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="모델 패리티" />
+      <Header title="Model Parity" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {tabs.map((item) => (
-            <button key={item.key} onClick={() => setTab(item.key)} style={btnStyle(tab === item.key)}>
-              {item.icon} {item.label}
-            </button>
-          ))}
-        </div>
-
-        {error ? (
-          <div style={{ ...cardStyle, color: "var(--danger)", marginBottom: "16px" }}>{error}</div>
-        ) : null}
-
-        {tab === "models" && (
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-              {summaryCards.map((item) => (
-                <div key={item.label} style={{ ...cardStyle, padding: "14px" }}>
-                  <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "4px" }}>
-                    {item.label}
-                  </div>
-                  <div style={{ color: item.tone, fontWeight: 700, fontSize: "26px" }}>
-                    {formatNumber(item.value)}
-                  </div>
+        <div className="grid gap-4">
+          <section
+            className="rounded-2xl p-4 md:p-5"
+            style={{
+              background: "linear-gradient(135deg, rgba(14,165,233,0.18), rgba(15,23,42,0.96))",
+              border: "1px solid rgba(148,163,184,0.16)",
+              boxShadow: "0 18px 48px rgba(2,132,199,0.18)",
+            }}
+          >
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.24em]" style={{ color: "rgba(226,232,240,0.72)" }}>
+                  Model Parity
                 </div>
-              ))}
+                <h1 className="mt-2 text-2xl md:text-3xl font-bold" style={{ color: "var(--text-primary)" }}>
+                  모델 라우팅과 실제 사용량 비교
+                </h1>
+                <p className="mt-2 text-sm max-w-3xl" style={{ color: "rgba(226,232,240,0.72)" }}>
+                  최근 {data?.summary.window_days || 7}일 기준 `chat_messages` 사용량과 `INTENT_MAP` 라우팅 설정을 한 화면에서 비교합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadData}
+                className="self-start px-3 py-2 rounded-lg text-sm font-semibold"
+                style={{
+                  background: "rgba(15,23,42,0.44)",
+                  color: "var(--text-primary)",
+                  border: "1px solid rgba(148,163,184,0.18)",
+                }}
+              >
+                새로고침
+              </button>
             </div>
 
-            <div style={cardStyle}>
-              <div className="flex items-start justify-between gap-3 flex-wrap" style={{ marginBottom: "12px" }}>
-                <div>
-                  <h3 style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 600, marginBottom: "6px" }}>
-                    최근 {data.summary.window_days}일 모델 호출 현황
-                  </h3>
-                  <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
-                    source: {data.routing.source}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: "999px",
-                    background: "var(--bg-hover)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border)",
-                    fontSize: "12px",
-                  }}
-                >
-                  messages: {formatNumber(data.summary.tracked_messages)}
-                </div>
+            {data ? (
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <span style={{ color: "rgba(226,232,240,0.72)" }}>
+                  기간: {formatDateTime(data.summary.window_start)} ~ {formatDateTime(data.summary.window_end)}
+                </span>
+                <span style={{ color: "rgba(226,232,240,0.44)" }}>•</span>
+                <span style={{ color: "rgba(226,232,240,0.72)" }}>
+                  routing source: {data.routing.source}
+                </span>
+                {intentMap?.source ? (
+                  <>
+                    <span style={{ color: "rgba(226,232,240,0.44)" }}>•</span>
+                    <span style={{ color: "rgba(226,232,240,0.72)" }}>
+                      intent map: {intentMap.source}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+
+          <div className="flex gap-2 flex-wrap">
+            {tabs.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setTab(item.key)}
+                className="px-3 py-2 rounded-lg text-sm font-semibold"
+                style={{
+                  background: tab === item.key ? "var(--accent)" : "var(--bg-card)",
+                  color: tab === item.key ? "#fff" : "var(--text-primary)",
+                  border: tab === item.key ? "1px solid var(--accent)" : "1px solid var(--border)",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {error ? (
+            <div style={{ ...cardStyle, color: "var(--danger)" }}>{error}</div>
+          ) : null}
+
+          {loading ? (
+            <div style={{ ...cardStyle, color: "var(--text-secondary)", textAlign: "center" }}>
+              모델 패리티 데이터를 불러오는 중...
+            </div>
+          ) : !data ? (
+            <div style={{ ...cardStyle, color: "var(--text-secondary)", textAlign: "center" }}>
+              표시할 데이터가 없습니다.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                  {summaryCards.map((item) => (
+                    <div key={item.label} style={{ ...cardStyle, padding: "14px" }}>
+                      <div style={{ color: "var(--text-secondary)", fontSize: "11px", marginBottom: "4px" }}>
+                        {item.label}
+                      </div>
+                      <div style={{ color: "var(--text-primary)", fontSize: "24px", fontWeight: 700 }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
               </div>
 
-              {data.models.length > 0 ? (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                        {["모델", "호출", "입력", "출력", "총합", "평균/호출", "설정 인텐트", "실사용 인텐트"].map((header) => (
-                          <th
-                            key={header}
-                            style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-secondary)", fontSize: "12px" }}
+              {tab === "models" ? (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+                  <section style={cardStyle}>
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700 }}>
+                        실제 모델 사용량 / 비용
+                      </div>
+                      <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                        calls / tokens / cost
+                      </div>
+                    </div>
+                    <div className="grid gap-3">
+                      {data.models.length === 0 ? (
+                        <div style={{ color: "var(--text-secondary)", textAlign: "center", padding: "20px 0" }}>
+                          최근 사용량 데이터가 없습니다.
+                        </div>
+                      ) : data.models.map((item) => (
+                        <div
+                          key={item.model}
+                          className="rounded-xl p-3"
+                          style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div style={{ color: "var(--text-primary)", fontWeight: 700 }}>{item.model}</div>
+                              <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginTop: "2px" }}>
+                                configured intents {formatNumber(item.configured_intents)} / observed intents {formatNumber(item.distinct_intents)}
+                              </div>
+                            </div>
+                            <div style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "18px" }}>
+                              {formatNumber(item.calls)}
+                            </div>
+                          </div>
+                          <div
+                            className="mt-3 h-2 rounded-full"
+                            style={{ background: "rgba(148,163,184,0.16)", overflow: "hidden" }}
                           >
-                            {header}
-                          </th>
+                            <div
+                              style={{
+                                width: barWidth(item.calls, topCallCount),
+                                height: "100%",
+                                background: "linear-gradient(90deg, #0ea5e9, #38bdf8)",
+                              }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                            {[
+                              ["Input", formatNumber(item.input_tokens)],
+                              ["Output", formatNumber(item.output_tokens)],
+                              ["Total", formatNumber(item.total_tokens)],
+                              ["Cost", formatCurrency(item.estimated_cost_usd)],
+                              ["Avg/Call", formatNumber(item.avg_tokens_per_call)],
+                            ].map(([label, value]) => (
+                              <div key={String(label)} style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px" }}>
+                                <div style={{ color: "var(--text-secondary)", fontSize: "11px" }}>{label}</div>
+                                <div style={{ color: "var(--text-primary)", fontSize: "13px", marginTop: "2px" }}>{value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section style={cardStyle}>
+                    <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700, marginBottom: "14px" }}>
+                      설정 라우팅 요약
+                    </div>
+                    <div className="grid gap-3">
+                      {[
+                        ["Intent Total", data.routing.total_intents],
+                        ["Tools Enabled", data.routing.tool_enabled_intents],
+                        ["Thinking Enabled", data.routing.thinking_enabled_intents],
+                        ["Gemini Direct", data.routing.gemini_direct_intents],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px" }}>
+                          <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{label}</div>
+                          <div style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "22px", marginTop: "4px" }}>
+                            {formatNumber(Number(value))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4">
+                      <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 700, marginBottom: "10px" }}>
+                        configured by model
+                      </div>
+                      <div className="grid gap-2">
+                        {data.routing.by_model.map((item) => (
+                          <div key={item.model} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "8px", padding: "10px 12px" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{item.model}</span>
+                              <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                                {formatNumber(item.count)} intents
+                              </span>
+                            </div>
+                          </div>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.models.map((model) => (
-                        <tr key={model.model} style={{ borderBottom: "1px solid var(--border)" }}>
-                          <td style={{ padding: "10px 8px", color: "var(--text-primary)", fontWeight: 600 }}>{model.model}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--accent)", fontWeight: 600 }}>{formatNumber(model.calls)}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{formatNumber(model.input_tokens)}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{formatNumber(model.output_tokens)}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--text-primary)" }}>{formatNumber(model.total_tokens)}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{formatNumber(model.avg_tokens_per_call)}</td>
-                          <td style={{ padding: "10px 8px", color: "var(--success)", fontWeight: 600 }}>
-                            {formatNumber(model.configured_intents)}
-                          </td>
-                          <td style={{ padding: "10px 8px", color: "var(--warning)", fontWeight: 600 }}>
-                            {formatNumber(model.distinct_intents)}
-                          </td>
-                        </tr>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {tab === "routing" ? (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                  <section style={cardStyle}>
+                    <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700, marginBottom: "14px" }}>
+                      라우팅 버킷
+                    </div>
+                    <div className="grid gap-3">
+                      {data.routing.by_route.map((item, idx) => (
+                        <div key={`${item.model}-${item.group}-${idx}`} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px" }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div style={{ color: "var(--text-primary)", fontWeight: 700 }}>
+                                {item.model}
+                              </div>
+                              <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginTop: "2px" }}>
+                                group {item.group || "-"} · tools {item.tools ? "on" : "off"} · thinking {item.thinking ? "on" : "off"}
+                              </div>
+                              {item.gemini_direct ? (
+                                <div style={{ color: "var(--accent)", fontSize: "12px", marginTop: "4px" }}>
+                                  gemini_direct: {item.gemini_direct}
+                                </div>
+                              ) : null}
+                            </div>
+                            <span
+                              className="px-2 py-1 rounded-full text-xs font-semibold"
+                              style={{ background: "rgba(14,165,233,0.12)", color: "#38bdf8", border: "1px solid rgba(14,165,233,0.24)" }}
+                            >
+                              {formatNumber(item.count)} intents
+                            </span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.intents.map((intent) => (
+                              <span
+                                key={intent}
+                                style={{
+                                  padding: "5px 9px",
+                                  borderRadius: "999px",
+                                  background: "var(--bg-card)",
+                                  border: "1px solid var(--border)",
+                                  color: "var(--text-secondary)",
+                                  fontSize: "11px",
+                                }}
+                              >
+                                {intent}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                  최근 7일 기준 집계 가능한 모델 호출 로그가 없습니다.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                    </div>
+                  </section>
 
-        {tab === "routing" && (
-          <div className="grid gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              {data.routing.by_model.map((bucket) => (
-                <div key={bucket.model} style={{ ...cardStyle, padding: "14px" }}>
-                  <div style={{ color: "var(--text-primary)", fontWeight: 600, marginBottom: "4px" }}>{bucket.model}</div>
-                  <div style={{ color: "var(--accent)", fontWeight: 700, fontSize: "24px", marginBottom: "8px" }}>
-                    {formatNumber(bucket.count)}
-                  </div>
-                  <div style={{ color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.7 }}>
-                    tools {formatNumber(bucket.tool_enabled)} / thinking {formatNumber(bucket.thinking_enabled)} / direct{" "}
-                    {formatNumber(bucket.gemini_direct_enabled)}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={cardStyle}>
-              <h3 style={{ color: "var(--text-primary)", marginBottom: "12px", fontSize: "16px", fontWeight: 600 }}>
-                라우팅 버킷
-              </h3>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["모델", "tools", "group", "thinking", "gemini_direct", "인텐트 수", "인텐트 목록"].map((header) => (
-                        <th
-                          key={header}
-                          style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-secondary)", fontSize: "12px" }}
-                        >
-                          {header}
-                        </th>
+                  <section style={cardStyle}>
+                    <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700, marginBottom: "14px" }}>
+                      intent map 샘플
+                    </div>
+                    <div className="grid gap-2 max-h-[72vh] overflow-auto pr-1">
+                      {Object.entries(intentMap?.intent_map || {}).map(([intent, config]) => (
+                        <div key={intent} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px" }}>
+                          <div style={{ color: "var(--text-primary)", fontWeight: 700 }}>{intent}</div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                            <div style={{ color: "var(--text-secondary)" }}>model</div>
+                            <div style={{ color: "var(--text-primary)" }}>{config.model || "-"}</div>
+                            <div style={{ color: "var(--text-secondary)" }}>group</div>
+                            <div style={{ color: "var(--text-primary)" }}>{config.group || "-"}</div>
+                            <div style={{ color: "var(--text-secondary)" }}>tools</div>
+                            <div style={{ color: "var(--text-primary)" }}>{config.tools ? "true" : "false"}</div>
+                            <div style={{ color: "var(--text-secondary)" }}>thinking</div>
+                            <div style={{ color: "var(--text-primary)" }}>{config.thinking ? "true" : "false"}</div>
+                          </div>
+                        </div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.routing.by_route.map((bucket, index) => (
-                      <tr key={`${bucket.model}-${bucket.group}-${bucket.gemini_direct}-${index}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 8px", color: "var(--text-primary)", fontWeight: 600 }}>{bucket.model}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{boolLabel(bucket.tools)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{bucket.group || "-"}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{boolLabel(bucket.thinking)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{bucket.gemini_direct || "-"}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--accent)", fontWeight: 600 }}>{formatNumber(bucket.count)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.6 }}>
-                          {bucket.intents.join(", ")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div style={cardStyle}>
-              <div className="flex items-start justify-between gap-3 flex-wrap" style={{ marginBottom: "12px" }}>
-                <h3 style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 600 }}>INTENT_MAP 덤프</h3>
-                <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
-                  {intentMap.source} / {formatNumber(intentMap.count)} intents
+                    </div>
+                  </section>
                 </div>
-              </div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["intent", "model", "tools", "group", "thinking", "gemini_direct"].map((header) => (
-                        <th
-                          key={header}
-                          style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-secondary)", fontSize: "12px" }}
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {intentMapEntries.map(([intent, cfg]) => (
-                      <tr key={intent} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 8px", color: "var(--text-primary)", fontWeight: 600 }}>{intent}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--accent)" }}>{cfg.model}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{boolLabel(cfg.tools)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{cfg.group || "-"}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{boolLabel(cfg.thinking)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{cfg.gemini_direct || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+              ) : null}
 
-        {tab === "daily" && (
-          <div className="grid gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              {data.daily.map((day) => (
-                <div key={day.date} style={{ ...cardStyle, padding: "14px" }}>
-                  <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "4px" }}>
-                    {formatDateLabel(day.date)}
+              {tab === "daily" ? (
+                <section style={cardStyle}>
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700 }}>
+                      일별 추이
+                    </div>
+                    <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                      최근 {data.summary.window_days}일
+                    </div>
                   </div>
-                  <div style={{ color: "var(--accent)", fontWeight: 700, fontSize: "24px", marginBottom: "6px" }}>
-                    {formatNumber(day.calls)}
-                  </div>
-                  <div style={{ color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.7 }}>
-                    input {formatNumber(day.input_tokens)} / output {formatNumber(day.output_tokens)}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={cardStyle}>
-              <h3 style={{ color: "var(--text-primary)", marginBottom: "12px", fontSize: "16px", fontWeight: 600 }}>
-                일별 모델 추이
-              </h3>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["일자", "호출", "입력", "출력", "총합", "모델 분포"].map((header) => (
-                        <th
-                          key={header}
-                          style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-secondary)", fontSize: "12px" }}
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+                  <div className="grid gap-3">
                     {data.daily.map((day) => (
-                      <tr key={day.date} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 8px", color: "var(--text-primary)", fontWeight: 600 }}>{day.date}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--accent)", fontWeight: 600 }}>{formatNumber(day.calls)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{formatNumber(day.input_tokens)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>{formatNumber(day.output_tokens)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-primary)" }}>{formatNumber(day.total_tokens)}</td>
-                        <td style={{ padding: "10px 8px", color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.6 }}>
-                          {day.models.length > 0
-                            ? day.models.map((model) => `${model.model} (${formatNumber(model.calls)})`).join(", ")
-                            : "기록 없음"}
-                        </td>
-                      </tr>
+                      <div key={day.date} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px" }}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div style={{ color: "var(--text-primary)", fontWeight: 700 }}>{day.date}</div>
+                            <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginTop: "2px" }}>
+                              calls {formatNumber(day.calls)} · total tokens {formatNumber(day.total_tokens)}
+                              {day.estimated_cost_usd != null ? ` · cost ${formatCurrency(day.estimated_cost_usd)}` : ""}
+                            </div>
+                          </div>
+                          <div style={{ color: "var(--text-primary)", fontWeight: 700 }}>
+                            {formatNumber(day.calls)}
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 rounded-full" style={{ background: "rgba(148,163,184,0.16)", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: barWidth(day.calls, topDailyCalls),
+                              height: "100%",
+                              background: "linear-gradient(90deg, #22c55e, #38bdf8)",
+                            }}
+                          />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {day.models.length === 0 ? (
+                            <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>모델 사용 없음</span>
+                          ) : day.models.map((item) => (
+                            <span
+                              key={`${day.date}-${item.model}`}
+                              style={{
+                                padding: "5px 9px",
+                                borderRadius: "999px",
+                                background: "var(--bg-card)",
+                                border: "1px solid var(--border)",
+                                color: "var(--text-secondary)",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {item.model} · {formatNumber(item.calls)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+                  </div>
+                </section>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

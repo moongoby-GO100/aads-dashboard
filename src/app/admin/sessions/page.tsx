@@ -1,142 +1,228 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Header from "@/components/Header";
-import { api } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-const cardStyle = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "10px",
-  padding: "16px",
-};
+import Header from "@/components/Header";
+import { api, type AdminSessionItem } from "@/lib/api";
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return parsed.toLocaleString("ko-KR", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-export default function SessionsPage() {
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
+function normalizeSession(item: unknown): AdminSessionItem {
+  const row = (item || {}) as Record<string, unknown>;
+  const sessionId = String(row.session_id || row.id || row.chat_session_id || "").trim();
+  return {
+    ...row,
+    session_id: sessionId || "-",
+    workspace: String(row.workspace || row.workspace_name || row.project || "-").trim() || "-",
+    created_at: (row.created_at || row.started_at || row.updated_at || null) as string | null,
+    message_count: toNumber(row.message_count || row.total_messages || row.turns),
+  };
+}
+
+function extractSessions(payload: unknown): AdminSessionItem[] {
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeSession(item));
+  }
+
+  if (!payload || typeof payload !== "object") return [];
+
+  const data = payload as Record<string, unknown>;
+  const candidates = [data.sessions, data.items, data.data];
+  for (const item of candidates) {
+    if (Array.isArray(item)) {
+      return item.map((entry) => normalizeSession(entry));
+    }
+  }
+
+  return [];
+}
+
+export default function AdminSessionsPage() {
+  const [sessions, setSessions] = useState<AdminSessionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+
+  const loadSessions = useCallback(async (silent = false) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const res = await api.getChatSessions();
-      const list = Array.isArray(res) ? res : res?.sessions || [];
-      setSessions(list.slice(0, 50));
+      const response = await api.getAdminSessions();
+      setSessions(extractSessions(response));
       setError("");
+      setLastRefreshedAt(new Date());
     } catch (err) {
+      console.error("admin sessions load failed", err);
       setError(err instanceof Error ? err.message : "세션 목록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
-  const loadDetail = useCallback(async (sessionId: string) => {
-    try {
-      const [session, messages] = await Promise.all([
-        api.getChatSession(sessionId),
-        api.getChatMessages(sessionId, 100),
-      ]);
-      setSelected({ ...session, messages: Array.isArray(messages) ? messages : messages?.messages || [] });
-    } catch (err) {
-      console.error("session detail load failed", err);
-    }
-  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadSessions(true);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadSessions]);
+
+  const stats = useMemo(() => {
+    const totalSessions = sessions.length;
+    const totalMessages = sessions.reduce((sum, session) => sum + toNumber(session.message_count), 0);
+    return { totalSessions, totalMessages };
+  }, [sessions]);
+
+  const cardStyle = {
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
+    borderRadius: "10px",
+    padding: "16px",
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="Session Replay" />
+      <Header title="Sessions" />
       <div className="flex-1 p-3 md:p-6 overflow-auto">
         <div className="grid gap-4">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <div style={{ color: "var(--text-primary)", fontSize: "22px", fontWeight: 700 }}>세션 리플레이</div>
+              <div style={{ color: "var(--text-primary)", fontSize: "22px", fontWeight: 700 }}>
+                세션 모니터링
+              </div>
               <div style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
-                에이전트 작업 세션의 메시지·도구 호출 타임라인을 확인합니다.
+                Admin 세션 목록과 메시지 수를 확인합니다.
               </div>
             </div>
-            <button onClick={() => { load(); setSelected(null); }} style={{ padding: "8px 14px", borderRadius: "8px", border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
-              새로고침
-            </button>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "999px",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                  fontSize: "12px",
+                }}
+              >
+                {refreshing
+                  ? "새로고침 중..."
+                  : `최근 갱신 ${lastRefreshedAt ? formatDateTime(lastRefreshedAt.toISOString()) : "-"}`}
+              </div>
+              <button
+                type="button"
+                onClick={() => loadSessions(true)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                새로고침
+              </button>
+            </div>
           </div>
 
-          {error && <div style={{ ...cardStyle, color: "var(--danger)" }}>{error}</div>}
-          {loading && <div style={{ ...cardStyle, color: "var(--text-secondary)", textAlign: "center" }}>로딩 중...</div>}
-
-          {!loading && !selected && (
-            <div style={cardStyle}>
-              <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700, marginBottom: "12px" }}>최근 세션 ({sessions.length}건)</div>
-              <div className="grid gap-2">
-                {sessions.length === 0 && <div style={{ color: "var(--text-secondary)", textAlign: "center", padding: "24px" }}>세션이 없습니다.</div>}
-                {sessions.map((s: any) => (
-                  <button
-                    key={s.session_id || s.id}
-                    type="button"
-                    onClick={() => loadDetail(s.session_id || s.id)}
-                    style={{ background: "rgba(15,23,42,0.28)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px", textAlign: "left", cursor: "pointer", width: "100%" }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div style={{ color: "var(--accent)", fontSize: "12px", fontWeight: 700 }}>{s.session_id || s.id}</div>
-                      <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>{formatDateTime(s.updated_at || s.created_at)}</span>
-                    </div>
-                    <div style={{ color: "var(--text-primary)", fontSize: "13px", marginTop: "6px" }}>{s.title || s.workspace_id || "(제목 없음)"}</div>
-                    <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: "8px" }}>
-                      {s.current_model && <span style={{ padding: "2px 8px", borderRadius: "6px", background: "rgba(59,130,246,0.12)", color: "#93c5fd", fontSize: "11px" }}>{s.current_model}</span>}
-                      {s.message_count != null && <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>{s.message_count}건</span>}
-                    </div>
-                  </button>
-                ))}
+          <div className="grid grid-cols-2 gap-3">
+            <div style={{ ...cardStyle, padding: "14px" }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "4px" }}>Sessions</div>
+              <div style={{ color: "var(--text-primary)", fontSize: "26px", fontWeight: 700 }}>
+                {loading ? "..." : stats.totalSessions}
               </div>
             </div>
-          )}
-
-          {selected && (
-            <div className="grid gap-4">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setSelected(null)} style={{ padding: "6px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-primary)", cursor: "pointer" }}>← 목록</button>
-                <div>
-                  <div style={{ color: "var(--accent)", fontSize: "12px", fontWeight: 700 }}>{selected.session_id || selected.id}</div>
-                  <div style={{ color: "var(--text-primary)", fontSize: "16px", fontWeight: 700 }}>{selected.title || "(제목 없음)"}</div>
-                </div>
-              </div>
-
-              <div style={cardStyle}>
-                <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 700, marginBottom: "12px" }}>메시지 타임라인 ({selected.messages?.length || 0}건)</div>
-                <div className="grid gap-3">
-                  {(selected.messages || []).map((msg: any, i: number) => (
-                    <div key={msg.id || i} style={{ borderLeft: `3px solid ${msg.role === "user" ? "#3b82f6" : msg.role === "assistant" ? "#22c55e" : "#64748b"}`, paddingLeft: "12px", paddingBottom: "8px" }}>
-                      <div className="flex items-center gap-2" style={{ marginBottom: "4px" }}>
-                        <span style={{ color: msg.role === "user" ? "#60a5fa" : msg.role === "assistant" ? "#4ade80" : "#94a3b8", fontSize: "12px", fontWeight: 700 }}>
-                          {msg.role || "system"}
-                        </span>
-                        <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>{formatDateTime(msg.created_at)}</span>
-                        {msg.model && <span style={{ padding: "1px 6px", borderRadius: "4px", background: "var(--bg-hover)", color: "var(--text-secondary)", fontSize: "10px" }}>{msg.model}</span>}
-                      </div>
-                      <div style={{ color: "var(--text-primary)", fontSize: "13px", lineHeight: "1.6", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "200px", overflow: "auto" }}>
-                        {typeof msg.content === "string" ? msg.content.slice(0, 2000) : JSON.stringify(msg.content).slice(0, 2000)}
-                      </div>
-                      {msg.tool_calls && (
-                        <div style={{ marginTop: "6px", padding: "6px 8px", borderRadius: "6px", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", fontSize: "11px", color: "#c4b5fd" }}>
-                          🔧 {Array.isArray(msg.tool_calls) ? msg.tool_calls.map((t: any) => t.name || t.function?.name).join(", ") : "tool call"}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+            <div style={{ ...cardStyle, padding: "14px" }}>
+              <div style={{ color: "var(--text-secondary)", fontSize: "12px", marginBottom: "4px" }}>Messages</div>
+              <div style={{ color: "var(--accent)", fontSize: "26px", fontWeight: 700 }}>
+                {loading ? "..." : stats.totalMessages}
               </div>
             </div>
-          )}
+          </div>
+
+          {error ? <div style={{ ...cardStyle, color: "var(--danger)" }}>{error}</div> : null}
+
+          <section style={cardStyle}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                    <th style={thStyle}>Session ID</th>
+                    <th style={thStyle}>Workspace</th>
+                    <th style={thStyle}>Created At</th>
+                    <th style={thStyle}>Message Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "var(--text-secondary)" }}>
+                        {loading ? "로딩 중..." : "표시할 세션이 없습니다."}
+                      </td>
+                    </tr>
+                  ) : (
+                    sessions.map((session, index) => (
+                      <tr key={`${session.session_id}-${index}`} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ ...tdStyle, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                          {session.session_id}
+                        </td>
+                        <td style={tdStyle}>{session.workspace || "-"}</td>
+                        <td style={tdStyle}>{formatDateTime(session.created_at)}</td>
+                        <td style={tdStyle}>{toNumber(session.message_count)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
+
+const thStyle = {
+  textAlign: "left" as const,
+  padding: "10px 8px",
+  fontSize: "12px",
+  fontWeight: 600,
+};
+
+const tdStyle = {
+  padding: "10px 8px",
+  color: "var(--text-primary)",
+  fontSize: "13px",
+  verticalAlign: "top" as const,
+};

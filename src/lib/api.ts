@@ -385,4 +385,27 @@ export const api = {
   updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
     request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
+
+  // LLM Models Registry
+  getLlmModels: (params?: { provider?: string; active_only?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.provider) q.set("provider", params.provider);
+    if (params?.active_only) q.set("active_only", "true");
+    const qs = q.toString();
+    return request<any>(`/llm-models${qs ? "?" + qs : ""}`);
+  },
+  getLlmProviderTimeline: (provider: string, limit = 20) =>
+    request<any>(`/llm-models/providers/${encodeURIComponent(provider)}/timeline?limit=${limit}`),
+
+  // Prompt Assets (5-Layer System)
+  getPromptAssets: (layer?: number) =>
+    request<any>(layer ? `/admin/prompt-assets?layer=${layer}` : "/admin/prompt-assets"),
+  createPromptAsset: (data: Record<string, unknown>) =>
+    request<any>("/admin/prompt-assets", { method: "POST", body: JSON.stringify(data) }),
+  updatePromptAsset: (slug: string, data: Record<string, unknown>) =>
+    request<any>(`/admin/prompt-assets/${encodeURIComponent(slug)}`, { method: "PUT", body: JSON.stringify(data) }),
+  deletePromptAsset: (slug: string) =>
+    request<any>(`/admin/prompt-assets/${encodeURIComponent(slug)}`, { method: "DELETE" }),
+  previewPromptCompile: (data: { workspace: string; intent: string; model: string; role: string }) =>
+    request<any>("/admin/prompt-assets/preview", { method: "POST", body: JSON.stringify({ workspace_key: data.workspace, intent: data.intent, base_system_prompt: "" }) }),
 };
