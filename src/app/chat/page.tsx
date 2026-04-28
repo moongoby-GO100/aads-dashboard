@@ -1320,13 +1320,66 @@ export default function ChatPage() {
           if (!line.startsWith("data: ")) continue;
           try {
             const ev = JSON.parse(line.slice(6).trim());
-            if (ev.type === "delta" && typeof ev.content === "string") {
+            // [PATCH-B] attachExecutionReplay full SSE 핸들러 — sendMessage와 동등
+            if (ev.type === "stream_start") {
+              if (ev.execution_id) {
+                currentExecutionIdRef.current = ev.execution_id;
+              }
+              if (!full && !streamBufRef.current) setStreamBuf("분석 중...");
+            } else if (ev.type === "stream_reset") {
+              full = "";
+              setStreamBuf("");
+              setToolStatus("🔄 응답 재검증 중...");
+            } else if (ev.type === "delta" && typeof ev.content === "string") {
               full += ev.content;
               setStreamBuf(full);
+              if (toolStatusRef.current) setToolStatus(null);
             } else if (ev.type === "heartbeat") {
               if (ev.tool_count && ev.last_tool) {
                 setToolStatus(`🔧 ${ev.last_tool} 실행 중... (도구 ${ev.tool_count}회)`);
               }
+            } else if (ev.type === "tool_use" && ev.tool_name) {
+              const toolIcons: Record<string, string> = {
+                read_remote_file: "📄", read_github_file: "📄", list_remote_dir: "📁",
+                write_remote_file: "✏️", patch_remote_file: "✏️",
+                run_remote_command: "⚡", query_database: "🗄️", query_project_database: "🗄️",
+                web_search: "🔍", web_search_brave: "🔍", jina_read: "🌐",
+                crawl4ai_fetch: "🌐", deep_crawl: "🌐", deep_research: "🔬",
+                health_check: "💊", get_all_service_status: "📊",
+                pipeline_runner_submit: "🚀", delegate_to_agent: "🤖",
+                save_note: "📝", recall_notes: "🧠",
+              };
+              const icon = toolIcons[ev.tool_name] || "🔧";
+              const inp = ev.tool_input || {};
+              const paramText = inp.path || inp.query || inp.url || inp.command
+                || inp.file_path || inp.task || inp.project
+                || (Object.values(inp).filter((v: unknown) => typeof v === "string")[0] as string)
+                || "";
+              const sub = paramText ? String(paramText).slice(0, 80) : undefined;
+              setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }]);
+              setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
+            } else if (ev.type === "tool_result" && ev.tool_name) {
+              const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
+              setToolLogs(prev => {
+                const updated = [...prev];
+                const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(ev.tool_name));
+                if (lastIdx >= 0) {
+                  const realIdx = updated.length - 1 - lastIdx;
+                  updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
+                }
+                return updated;
+              });
+              setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
+            } else if (ev.type === "thinking" && (ev.thinking || ev.content)) {
+              setToolStatus("💭 사고 중...");
+              const thinkText = String(ev.thinking || ev.content || "");
+              if (thinkText) setThinkingBuf(prev => prev + thinkText);
+            } else if (ev.type === "yellow_limit") {
+              setYellowWarning(ev.content || `쓰기 도구 연속 ${ev.consecutive_count || 5}회 호출`);
+            } else if (ev.type === "model_info" || ev.type === "sdk_session" || ev.type === "sdk_complete") {
+              // 무해 — 표시 없음
+            } else if (ev.type === "error") {
+              setToolStatus("🔄 서버 재시작 감지 — 자동으로 이어집니다...");
             } else if (ev.type === "resume_done" || ev.type === "done") {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc`).then((msgs) => msgs.reverse());
               if (activeSessionRef.current !== attachSessionId) return;
@@ -1334,7 +1387,9 @@ export default function ChatPage() {
               setStreaming(false);
               setWaitingBgResponse(false);
               setStreamBuf("");
+              setThinkingBuf("");
               setToolStatus(null);
+              setToolLogs([]);
               return;
             }
           } catch {
@@ -1742,6 +1797,14 @@ export default function ChatPage() {
       if (status.is_streaming) {
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(fetchSid);
+        // [PATCH-A] partial_content/tool_count/last_tool 즉시 화면 표시 (재진입 빈 버블 방지)
+        if (status.partial_content) {
+          setBgPartialContent(status.partial_content);
+          setStreamBuf(status.partial_content);
+        }
+        if (status.tool_count && status.last_tool) {
+          setToolStatus(`🔧 ${status.last_tool} 실행 중... (도구 ${status.tool_count}회)`);
+        }
         if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
         waitingBgTimeoutRef.current = setTimeout(() => {
           setWaitingBgResponse(false); setBgPartialContent("");
