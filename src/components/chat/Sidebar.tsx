@@ -18,6 +18,12 @@ interface Session {
   created_at: string;
   message_count: number;
   workspace_id: string;
+  role_key?: string | null;
+}
+
+interface RoleOption {
+  value: string;
+  label: string;
 }
 
 const WORKSPACE_ICONS: Record<string, string> = {
@@ -28,6 +34,57 @@ const WORKSPACE_ICONS: Record<string, string> = {
   GO100: "🎯",
   NTV2: "📺",
   NAS: "💾",
+};
+
+const COMMON_ROLE_OPTIONS: RoleOption[] = [
+  { value: "CTO", label: "CTO" },
+  { value: "PM", label: "PM" },
+  { value: "Developer", label: "개발" },
+  { value: "QA", label: "QA" },
+  { value: "Ops", label: "Ops" },
+  { value: "PromptEngineer", label: "프롬프트" },
+];
+
+const PROJECT_ROLE_OPTIONS: Record<string, RoleOption[]> = {
+  AADS: [
+    { value: "PromptContextHarnessEngineer", label: "하네스" },
+    { value: "DataEngineer", label: "데이터" },
+    { value: "SecurityEngineer", label: "보안" },
+    { value: "SREDevOps", label: "SRE" },
+    { value: "AIMLEngineer", label: "AI·ML" },
+    { value: "JudgeEvaluator", label: "평가" },
+  ],
+  GO100: [
+    { value: "QuantAnalyst", label: "퀀트" },
+    { value: "RiskManager", label: "리스크" },
+    { value: "DataEngineer", label: "데이터" },
+    { value: "ResearchAnalyst", label: "리서치" },
+    { value: "ComplianceOfficer", label: "컴플" },
+  ],
+  NTV2: [
+    { value: "UXProductDesigner", label: "UX" },
+    { value: "GrowthMarketer", label: "성장" },
+    { value: "SecurityEngineer", label: "보안" },
+    { value: "SREDevOps", label: "SRE" },
+    { value: "DataEngineer", label: "데이터" },
+  ],
+};
+
+const getWorkspaceKey = (workspace?: Workspace) => {
+  const name = (workspace?.name || "").toUpperCase();
+  if (name.includes("GO100")) return "GO100";
+  if (name.includes("NTV2") || name.includes("NT")) return "NTV2";
+  if (name.includes("AADS")) return "AADS";
+  return "";
+};
+
+const getRoleOptions = (workspace?: Workspace) => {
+  const projectKey = getWorkspaceKey(workspace);
+  const merged = [...COMMON_ROLE_OPTIONS, ...(PROJECT_ROLE_OPTIONS[projectKey] || [])];
+  return merged.filter(
+    (option, index, list) =>
+      list.findIndex((item) => item.value === option.value) === index
+  );
 };
 
 interface ChatSidebarProps {
@@ -49,6 +106,8 @@ export default function ChatSidebar({
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [savingRoleSessionId, setSavingRoleSessionId] = useState<string | null>(null);
+  const [roleErrorSessionId, setRoleErrorSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getChatWorkspaces().then((data) => {
@@ -106,6 +165,31 @@ export default function ChatSidebar({
       return d.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric" });
     } catch {
       return "";
+    }
+  };
+
+  const selectedWorkspaceItem = workspaces.find((ws) => ws.id === selectedWorkspace);
+  const roleOptions = getRoleOptions(selectedWorkspaceItem);
+
+  const updateSessionRole = async (sessionId: string, roleKey: string) => {
+    setSavingRoleSessionId(sessionId);
+    setRoleErrorSessionId(null);
+    try {
+      const updated = await api.updateChatSession(sessionId, { role_key: roleKey });
+      setSessions((prev) =>
+        prev.map((session) => {
+          const currentId = session.session_id ?? session.id ?? "";
+          if (currentId !== sessionId) return session;
+          return {
+            ...session,
+            role_key: updated?.role_key ?? roleKey,
+          };
+        })
+      );
+    } catch {
+      setRoleErrorSessionId(sessionId);
+    } finally {
+      setSavingRoleSessionId(null);
     }
   };
 
@@ -198,28 +282,38 @@ export default function ChatSidebar({
                 대화 없음
               </div>
             ) : (
-              sessions.map((s) => (
-                <button
-                  key={s.session_id ?? s.id ?? ""}
-                  onClick={() => onSelectSession(s.session_id ?? s.id ?? "", s.workspace_id)}
-                  className="w-full text-left px-3 py-2 rounded-lg transition-colors"
+              sessions.map((s) => {
+                const sessionId = s.session_id ?? s.id ?? "";
+                const isActive = activeSessionId === sessionId;
+                const roleKey = (s.role_key || "").trim();
+                const isSavingRole = savingRoleSessionId === sessionId;
+
+                return (
+                <div
+                  key={sessionId}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectSession(sessionId, s.workspace_id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectSession(sessionId, s.workspace_id);
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg transition-colors cursor-pointer"
                   style={{
-                    background:
-                      activeSessionId === (s.session_id ?? s.id)
-                        ? "var(--ct-hover)"
-                        : "transparent",
-                    borderLeft:
-                      activeSessionId === (s.session_id ?? s.id)
-                        ? "2px solid var(--ct-accent)"
-                        : "2px solid transparent",
+                    background: isActive ? "var(--ct-hover)" : "transparent",
+                    borderLeft: isActive
+                      ? "2px solid var(--ct-accent)"
+                      : "2px solid transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (activeSessionId !== s.session_id)
+                    if (!isActive)
                       (e.currentTarget as HTMLElement).style.background =
                         "var(--ct-hover)";
                   }}
                   onMouseLeave={(e) => {
-                    if (activeSessionId !== s.session_id)
+                    if (!isActive)
                       (e.currentTarget as HTMLElement).style.background =
                         "transparent";
                   }}
@@ -243,8 +337,40 @@ export default function ChatSidebar({
                       <span className="text-xs">{s.message_count}개</span>
                     )}
                   </div>
-                </button>
-              ))
+                  <div className="mt-1 flex items-center gap-1">
+                    <select
+                      value={roleKey}
+                      disabled={isSavingRole}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateSessionRole(sessionId, e.target.value);
+                      }}
+                      className="min-w-0 max-w-full rounded border px-1.5 py-0.5 text-[11px] outline-none"
+                      style={{
+                        borderColor: roleKey ? "var(--ct-accent)" : "var(--ct-border)",
+                        background: roleKey ? "var(--ct-hover)" : "transparent",
+                        color: roleKey ? "var(--ct-text)" : "var(--ct-text-muted)",
+                      }}
+                      title={roleKey ? "세션 역할 변경" : "세션 역할 지정"}
+                    >
+                      <option value="">{isSavingRole ? "저장 중..." : "역할 지정"}</option>
+                      {roleOptions.map((role) => (
+                        <option key={role.value} value={role.value}>
+                          {role.label}
+                        </option>
+                      ))}
+                    </select>
+                    {roleErrorSessionId === sessionId && (
+                      <span className="text-[10px]" style={{ color: "#ef4444" }}>
+                        실패
+                      </span>
+                    )}
+                  </div>
+                </div>
+                );
+              })
             )}
           </div>
         </div>
