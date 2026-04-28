@@ -36,6 +36,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "o1-mini",                   name: "o1-mini",                   provider: "openai",   cost: "$3/$12" },
   { id: "o3-mini",                   name: "o3-mini",                   provider: "openai",   cost: "$1.10/$4.40" },
   // -- Codex CLI (ChatGPT Plus OAuth) --
+  { id: "gpt-5.5",                   name: "GPT-5.5 (Codex)",           provider: "codex",    cost: "변동" },
   { id: "gpt-5.4",                   name: "GPT-5.4 (Codex)",           provider: "codex",    cost: "$2.50/$15" },
   { id: "gpt-5.4-mini",              name: "GPT-5.4 Mini (Codex)",      provider: "codex",    cost: "$0.75/$4.50" },
   { id: "gpt-5.3-codex",             name: "GPT-5.3 Codex",             provider: "codex",    cost: "$1.75/$14" },
@@ -169,6 +170,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "minimax-m2.5",            label: "MiniMax M2.5",     cost: "변동",       description: "MiniMax · 코딩/도구 특화" },
   { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
   // Codex CLI (ChatGPT Plus OAuth)
+  { id: "gpt-5.5",                 label: "GPT-5.5",          cost: "변동",         description: "Codex CLI · 최신 플래그십" },
   { id: "gpt-5.4",                 label: "GPT-5.4 (Codex)",  cost: "$2.50/$15",    description: "Codex CLI · GPT-5.4 플래그십" },
   { id: "gpt-5.4-mini",            label: "GPT-5.4 Mini",     cost: "$0.75/$4.50",  description: "Codex CLI · GPT-5.4 경량" },
   { id: "gpt-5.3-codex",           label: "GPT-5.3 Codex",    cost: "$1.75/$14",    description: "Codex CLI · 코딩 특화" },

@@ -55,6 +55,8 @@ type LlmRegistryModel = {
 };
 
 type ChatModelPreference = {
+  preference_key?: string;
+  provider?: string;
   model_id: string;
   display_order: number;
   is_hidden: boolean;
@@ -64,6 +66,8 @@ type ChatModelPreference = {
 
 type SelectableModelOption = {
   id: string;
+  modelId: string;
+  preferenceKey: string;
   name: string;
   provider: string;
   cost: string;
@@ -97,14 +101,31 @@ function formatCostLabel(inputCost?: string | number | null, outputCost?: string
   return `$${input}/$${output}`;
 }
 
-function buildSelectableModelOption(row: LlmRegistryModel): SelectableModelOption {
-  const optionId = normalizeModelIdForSelector(row.model_id);
+function buildChatPreferenceKey(provider: string | undefined, modelId: string): string {
+  const normalizedModel = (modelId || "").trim();
+  if (!normalizedModel || normalizedModel === "mixture" || normalizedModel === "auto") return "mixture";
+  const normalizedProvider = (provider || "legacy").trim().toLowerCase();
+  return `${normalizedProvider}:${normalizedModel}`;
+}
+
+function preferenceKeyForSelectorId(optionId: string, provider?: string): string {
+  if (!optionId || optionId === "mixture" || optionId === "auto") return "mixture";
+  if (optionId.includes(":")) return optionId;
+  return buildChatPreferenceKey(provider, optionId);
+}
+
+function buildSelectableModelOption(row: LlmRegistryModel, duplicateModelIds: Set<string>): SelectableModelOption {
+  const modelId = normalizeModelIdForSelector(row.model_id);
+  const optionId = duplicateModelIds.has(row.model_id) ? `${row.provider}:${modelId}` : modelId;
   const staticOption = STATIC_MODEL_OPTION_MAP.get(optionId);
+  const fallbackStaticOption = STATIC_MODEL_OPTION_MAP.get(modelId);
   return {
     id: optionId,
-    name: staticOption?.name || row.display_name || optionId,
-    provider: staticOption?.provider || row.provider,
-    cost: staticOption?.cost || formatCostLabel(row.input_cost, row.output_cost),
+    modelId,
+    preferenceKey: buildChatPreferenceKey(row.provider, row.model_id),
+    name: staticOption?.name || fallbackStaticOption?.name || row.display_name || optionId,
+    provider: staticOption?.provider || fallbackStaticOption?.provider || row.provider,
+    cost: staticOption?.cost || fallbackStaticOption?.cost || formatCostLabel(row.input_cost, row.output_cost),
     isActive: true,
   };
 }
@@ -114,8 +135,12 @@ function buildNormalizedPreferenceMap(
 ): Map<string, ChatModelPreference> {
   const normalized = new Map<string, ChatModelPreference>();
   for (const item of preferences) {
-    normalized.set(item.model_id, item);
-    normalized.set(normalizeModelIdForSelector(item.model_id), item);
+    const preferenceKey = item.preference_key || buildChatPreferenceKey(item.provider, item.model_id);
+    normalized.set(preferenceKey, item);
+    if (!item.preference_key) {
+      normalized.set(item.model_id, item);
+      normalized.set(normalizeModelIdForSelector(item.model_id), item);
+    }
   }
   return normalized;
 }
@@ -125,8 +150,8 @@ function compareSelectableModels(
   b: SelectableModelOption,
   preferenceMap: Map<string, ChatModelPreference>,
 ): number {
-  const aPref = preferenceMap.get(a.id);
-  const bPref = preferenceMap.get(b.id);
+  const aPref = preferenceMap.get(a.preferenceKey) || preferenceMap.get(a.id);
+  const bPref = preferenceMap.get(b.preferenceKey) || preferenceMap.get(b.id);
   if (!!aPref?.is_pinned !== !!bPref?.is_pinned) return aPref?.is_pinned ? -1 : 1;
   if (!!aPref?.is_favorite !== !!bPref?.is_favorite) return aPref?.is_favorite ? -1 : 1;
   const aOrder = aPref?.display_order ?? 1000;
@@ -1008,8 +1033,19 @@ export default function ChatPage() {
 
   const selectableModels = useMemo<SelectableModelOption[]>(() => {
     const preferenceMap = buildNormalizedPreferenceMap(modelPreferences);
+    const modelIdCounts = (runtimeModels || []).reduce((acc, row) => {
+      acc.set(row.model_id, (acc.get(row.model_id) || 0) + 1);
+      return acc;
+    }, new Map<string, number>());
+    const duplicateModelIds = new Set(
+      Array.from(modelIdCounts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([modelId]) => modelId),
+    );
     const autoOption = {
       ...(STATIC_MODEL_OPTION_MAP.get("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
+      modelId: "mixture",
+      preferenceKey: "mixture",
       isActive: true,
       isPinned: preferenceMap.get("mixture")?.is_pinned ?? false,
       isFavorite: preferenceMap.get("mixture")?.is_favorite ?? false,
@@ -1019,26 +1055,31 @@ export default function ChatPage() {
     if (runtimeModels === null) {
       const currentModelId = normalizeModelIdForSelector(model || DEFAULT_MODEL);
       const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider);
       return currentModelId && currentModelId !== "mixture"
         ? [
             autoOption,
             currentOption
               ? {
                   ...currentOption,
+                  modelId: currentModelId,
+                  preferenceKey: currentPreferenceKey,
                   isActive: true,
-                  isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
-                  isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
-                  isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+                  isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
+                  isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
+                  isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
                 }
               : {
                   id: currentModelId,
+                  modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
+                  preferenceKey: currentPreferenceKey,
                   name: currentModelId,
                   provider: "legacy",
                   cost: "변동",
                   isActive: true,
-                  isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
-                  isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
-                  isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+                  isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
+                  isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
+                  isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
                 },
           ]
         : [autoOption];
@@ -1046,8 +1087,8 @@ export default function ChatPage() {
 
     const currentModelId = normalizeModelIdForSelector(model);
     const activeOptions = runtimeModels.map((row) => {
-      const option = buildSelectableModelOption(row);
-      const preference = preferenceMap.get(option.id);
+      const option = buildSelectableModelOption(row, duplicateModelIds);
+      const preference = preferenceMap.get(option.preferenceKey) || (!duplicateModelIds.has(row.model_id) ? preferenceMap.get(option.modelId) : undefined);
       return {
         ...option,
         isPinned: preference?.is_pinned ?? false,
@@ -1067,25 +1108,30 @@ export default function ChatPage() {
     const options: SelectableModelOption[] = [autoOption, ...orderedOptions];
     if (currentModelId && currentModelId !== "mixture" && !options.some((option) => option.id === currentModelId)) {
       const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider);
       options.push(
         currentOption
           ? {
               ...currentOption,
+              modelId: currentModelId,
+              preferenceKey: currentPreferenceKey,
               name: `${currentOption.name} (비활성)`,
               isActive: false,
-              isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
-              isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
-              isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+              isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
+              isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
+              isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
             }
           : {
               id: currentModelId,
+              modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
+              preferenceKey: currentPreferenceKey,
               name: `${currentModelId} (비활성)`,
               provider: "legacy",
               cost: "변동",
               isActive: false,
-              isPinned: preferenceMap.get(currentModelId)?.is_pinned ?? false,
-              isFavorite: preferenceMap.get(currentModelId)?.is_favorite ?? false,
-              isHidden: preferenceMap.get(currentModelId)?.is_hidden ?? false,
+              isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
+              isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
+              isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
             }
       );
     }
@@ -1093,9 +1139,25 @@ export default function ChatPage() {
   }, [model, modelPreferences, runtimeModels]);
 
   const activeSelectableModelIds = useMemo(
-    () => new Set(selectableModels.filter((option) => option.isActive).map((option) => option.id)),
+    () => {
+      const ids = new Set<string>();
+      selectableModels.filter((option) => option.isActive).forEach((option) => {
+        ids.add(option.id);
+        ids.add(option.modelId);
+      });
+      return ids;
+    },
     [selectableModels]
   );
+
+  const selectedModelValue = useMemo(() => {
+    const normalized = normalizeModelIdForSelector(model);
+    if (selectableModels.some((option) => option.id === normalized)) return normalized;
+    const matching = selectableModels.filter((option) => option.modelId === normalized && option.isActive);
+    if (matching.length === 1) return matching[0].id;
+    const codexMatch = matching.find((option) => option.provider === "codex");
+    return codexMatch?.id || matching[0]?.id || normalized;
+  }, [model, selectableModels]);
 
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1812,8 +1874,11 @@ export default function ChatPage() {
         }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
         await loadMessages(false);
-        if (status.execution_id) {
-          attachExecutionReplay(fetchSid, status.execution_id);
+        // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
+        // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
+        const _exec_id_for_attach = status.execution_id || activeSession?.current_execution_id || null;
+        if (_exec_id_for_attach) {
+          attachExecutionReplay(fetchSid, _exec_id_for_attach);
         }
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
@@ -4675,7 +4740,7 @@ export default function ChatPage() {
 
           {/* Model selector */}
           <select
-            value={model}
+            value={selectedModelValue}
             onChange={(e) => {
               const newModel = e.target.value;
               setModel(newModel);

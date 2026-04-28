@@ -68,6 +68,8 @@ interface ProviderTimelineItem {
 }
 
 interface ChatModelPreference {
+  preference_key?: string;
+  provider?: string;
   model_id: string;
   display_order: number;
   is_hidden: boolean;
@@ -78,6 +80,7 @@ interface ChatModelPreference {
 }
 
 interface ChatModelConfigRow extends ChatModelPreference {
+  preference_key: string;
   display_name: string;
   provider: string;
   cost_label: string;
@@ -130,11 +133,30 @@ function compareChatModelRows(a: ChatModelConfigRow, b: ChatModelConfigRow): num
   return a.display_name.localeCompare(b.display_name);
 }
 
+function buildChatPreferenceKey(provider: string | undefined, modelId: string): string {
+  const normalizedModel = (modelId || "").trim();
+  if (!normalizedModel || normalizedModel === "mixture" || normalizedModel === "auto") return "mixture";
+  const normalizedProvider = (provider || "legacy").trim().toLowerCase();
+  return `${normalizedProvider}:${normalizedModel}`;
+}
+
+function buildChatPreferenceMap(preferences: ChatModelPreference[]): Map<string, ChatModelPreference> {
+  const preferenceMap = new Map<string, ChatModelPreference>();
+  for (const item of preferences) {
+    const key = item.preference_key || buildChatPreferenceKey(item.provider, item.model_id);
+    preferenceMap.set(key, item);
+    if (!item.preference_key && item.model_id) {
+      preferenceMap.set(item.model_id, item);
+    }
+  }
+  return preferenceMap;
+}
+
 function normalizeChatModelRows(rows: ChatModelConfigRow[]): ChatModelConfigRow[] {
   const sorted = [...rows].sort(compareChatModelRows);
   return sorted.map((row, index) => ({
     ...row,
-    display_order: row.model_id === "mixture" ? 0 : (index + 1) * 10,
+    display_order: row.preference_key === "mixture" ? 0 : (index + 1) * 10,
   }));
 }
 
@@ -170,21 +192,30 @@ function buildChatModelConfigs(
   models: LlmRegistryModel[],
   preferences: ChatModelPreference[],
 ): ChatModelConfigRow[] {
-  const preferenceMap = new Map(preferences.map((item) => [item.model_id, item]));
+  const preferenceMap = buildChatPreferenceMap(preferences);
+  const modelIdCounts = models.reduce((acc, model) => {
+    acc.set(model.model_id, (acc.get(model.model_id) || 0) + 1);
+    return acc;
+  }, new Map<string, number>());
+  const mixturePref = preferenceMap.get("mixture");
   const baseRows: ChatModelConfigRow[] = [
     {
+      preference_key: "mixture",
       model_id: "mixture",
       display_name: "자동 라우팅 (혼합)",
       provider: "auto",
       cost_label: "자동",
-      display_order: preferenceMap.get("mixture")?.display_order ?? 0,
-      is_hidden: preferenceMap.get("mixture")?.is_hidden ?? false,
-      is_favorite: preferenceMap.get("mixture")?.is_favorite ?? false,
-      is_pinned: preferenceMap.get("mixture")?.is_pinned ?? true,
+      display_order: mixturePref?.display_order ?? 0,
+      is_hidden: mixturePref?.is_hidden ?? false,
+      is_favorite: mixturePref?.is_favorite ?? false,
+      is_pinned: mixturePref?.is_pinned ?? true,
     },
     ...models.map((model, index) => {
-      const pref = preferenceMap.get(model.model_id);
+      const preferenceKey = buildChatPreferenceKey(model.provider, model.model_id);
+      const legacyPref = modelIdCounts.get(model.model_id) === 1 ? preferenceMap.get(model.model_id) : undefined;
+      const pref = preferenceMap.get(preferenceKey) || legacyPref;
       return {
+        preference_key: preferenceKey,
         model_id: model.model_id,
         display_name: model.display_name || model.model_id,
         provider: model.provider,
@@ -397,21 +428,21 @@ export default function LlmRegistryWorkspacePanel() {
   const moveChatModel = useCallback((index: number, dir: -1 | 1) => {
     setChatModelConfigs((prev) => {
       const next = [...prev];
-      if (next[index]?.model_id === "mixture") return prev;
+      if (next[index]?.preference_key === "mixture") return prev;
       const target = index + dir;
       if (target <= 0 || target >= next.length) return prev;
       [next[index], next[target]] = [next[target], next[index]];
       return next.map((item, idx) => ({
         ...item,
-        display_order: item.model_id === "mixture" ? 0 : (idx + 1) * 10,
+        display_order: item.preference_key === "mixture" ? 0 : (idx + 1) * 10,
       }));
     });
   }, []);
 
-  const toggleChatModelFlag = useCallback((modelId: string, field: "is_hidden" | "is_favorite" | "is_pinned") => {
+  const toggleChatModelFlag = useCallback((preferenceKey: string, field: "is_hidden" | "is_favorite" | "is_pinned") => {
     setChatModelConfigs((prev) => {
       const next = prev.map((item) =>
-        item.model_id === modelId ? { ...item, [field]: !item[field] } : item
+        item.preference_key === preferenceKey ? { ...item, [field]: !item[field] } : item
       );
       return normalizeChatModelRows(next);
     });
@@ -421,8 +452,10 @@ export default function LlmRegistryWorkspacePanel() {
     setSavingPrefs(true);
     try {
       const payload = chatModelConfigs.map((item, index) => ({
+        preference_key: item.preference_key,
+        provider: item.provider,
         model_id: item.model_id,
-        display_order: item.model_id === "mixture" ? 0 : (index + 1) * 10,
+        display_order: item.preference_key === "mixture" ? 0 : (index + 1) * 10,
         is_hidden: item.is_hidden,
         is_favorite: item.is_favorite,
         is_pinned: item.is_pinned,
@@ -698,9 +731,9 @@ export default function LlmRegistryWorkspacePanel() {
 
         <div className="space-y-2">
           {chatModelConfigs.map((item, index) => (
-            <div key={item.model_id} className="rounded-lg px-3 py-3 flex items-center gap-3 flex-wrap" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-              <span className="text-xs font-bold w-6 text-center" style={{ color: item.model_id === "mixture" ? "var(--accent)" : "var(--text-secondary)" }}>
-                {item.model_id === "mixture" ? "A" : index}
+            <div key={item.preference_key} className="rounded-lg px-3 py-3 flex items-center gap-3 flex-wrap" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+              <span className="text-xs font-bold w-6 text-center" style={{ color: item.preference_key === "mixture" ? "var(--accent)" : "var(--text-secondary)" }}>
+                {item.preference_key === "mixture" ? "A" : index}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -710,6 +743,7 @@ export default function LlmRegistryWorkspacePanel() {
                   <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
                     {item.provider}
                   </span>
+                  <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>{item.preference_key}</span>
                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{item.cost_label}</span>
                   {item.is_hidden && (
                     <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(239,68,68,0.12)", color: "var(--danger)" }}>
@@ -721,7 +755,7 @@ export default function LlmRegistryWorkspacePanel() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => moveChatModel(index, -1)}
-                  disabled={item.model_id === "mixture" || index <= 1}
+                  disabled={item.preference_key === "mixture" || index <= 1}
                   className="px-2 py-1 rounded text-xs disabled:opacity-30"
                   style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
                 >
@@ -729,28 +763,28 @@ export default function LlmRegistryWorkspacePanel() {
                 </button>
                 <button
                   onClick={() => moveChatModel(index, 1)}
-                  disabled={item.model_id === "mixture" || index === chatModelConfigs.length - 1}
+                  disabled={item.preference_key === "mixture" || index === chatModelConfigs.length - 1}
                   className="px-2 py-1 rounded text-xs disabled:opacity-30"
                   style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
                 >
                   ▼
                 </button>
                 <button
-                  onClick={() => toggleChatModelFlag(item.model_id, "is_pinned")}
+                  onClick={() => toggleChatModelFlag(item.preference_key, "is_pinned")}
                   className="px-2 py-1 rounded text-xs"
                   style={{ background: item.is_pinned ? "rgba(14,165,233,0.16)" : "var(--bg-primary)", color: item.is_pinned ? "#0ea5e9" : "var(--text-primary)" }}
                 >
                   상단 고정
                 </button>
                 <button
-                  onClick={() => toggleChatModelFlag(item.model_id, "is_favorite")}
+                  onClick={() => toggleChatModelFlag(item.preference_key, "is_favorite")}
                   className="px-2 py-1 rounded text-xs"
                   style={{ background: item.is_favorite ? "rgba(245,158,11,0.16)" : "var(--bg-primary)", color: item.is_favorite ? "#f59e0b" : "var(--text-primary)" }}
                 >
                   즐겨찾기
                 </button>
                 <button
-                  onClick={() => toggleChatModelFlag(item.model_id, "is_hidden")}
+                  onClick={() => toggleChatModelFlag(item.preference_key, "is_hidden")}
                   className="px-2 py-1 rounded text-xs"
                   style={{ background: item.is_hidden ? "rgba(239,68,68,0.16)" : "var(--bg-primary)", color: item.is_hidden ? "var(--danger)" : "var(--text-primary)" }}
                 >

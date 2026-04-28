@@ -396,6 +396,21 @@ export const api = {
   },
   getLlmProviderTimeline: (provider: string, limit = 20) =>
     request<any>(`/llm-models/providers/${encodeURIComponent(provider)}/timeline?limit=${limit}`),
+  getLlmModelSummary: () => request<any>("/llm-models/providers/summary"),
+  getLlmModelDiscoveryRuns: (limit = 20) => request<any>(`/llm-models/discovery-runs?limit=${limit}`),
+  syncLlmModelRegistry: () => request<any>("/llm-models/sync", { method: "POST" }),
+  getChatModelPreferences: () => request<any>("/llm-models/chat-preferences"),
+  updateChatModelPreferences: (
+    items: Array<{
+      preference_key?: string;
+      provider?: string;
+      model_id: string;
+      display_order: number;
+      is_hidden: boolean;
+      is_favorite: boolean;
+      is_pinned: boolean;
+    }>,
+  ) => request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify(items) }),
 
   // Prompt Assets (5-Layer System)
   getPromptAssets: (layer?: number) =>
