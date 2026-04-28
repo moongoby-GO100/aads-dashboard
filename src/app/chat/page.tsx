@@ -231,17 +231,20 @@ const MessageItem = memo(function MessageItem({
     ? allMessages.find((m) => m.id === msg.reply_to_id)
     : null;
 
+  const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
+
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
-    () => msg.role === "assistant" && msg.content.length > 800 && !msg.intent?.startsWith("streaming") && !isLastAssistantMsg
+    () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
   );
+  const effectiveContentCollapsed = isStreamingPlaceholder ? false : contentCollapsed;
 
   // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
   useEffect(() => {
-    if (msg.role === "assistant" && msg.content.length > 800) {
+    if (!isStreamingPlaceholder && msg.role === "assistant" && msg.content.length > 800) {
       setContentCollapsed(!isLastAssistantMsg);
     }
-  }, [isLastAssistantMsg]);
+  }, [isLastAssistantMsg, isStreamingPlaceholder, msg.role, msg.content.length]);
 
   return (
     <div
@@ -689,7 +692,7 @@ const MessageItem = memo(function MessageItem({
                 );
               })()}
               {/* P1: 인라인 아티팩트 카드 — 긴 메시지 접이식 */}
-              {msg.role === "assistant" && contentCollapsed && msg.content.length > 800 ? (
+              {msg.role === "assistant" && effectiveContentCollapsed && msg.content.length > 800 ? (
                 <div>
                   {/* 아티팩트 카드 미리보기 */}
                   <div style={{
@@ -757,7 +760,7 @@ const MessageItem = memo(function MessageItem({
               ) : (
                 <>
                   <MarkdownBlock text={msg.content} />
-                  {msg.role === "assistant" && msg.content.length > 800 && !contentCollapsed && (
+                  {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
                       <button
                         onClick={() => setContentCollapsed(true)}
@@ -1913,10 +1916,7 @@ export default function ChatPage() {
           setToolStatus(`🔧 ${status.last_tool} 실행 중... (도구 ${status.tool_count}회)`);
         }
         if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
-        waitingBgTimeoutRef.current = setTimeout(() => {
-          setWaitingBgResponse(false); setBgPartialContent("");
-          pendingResponseSessions.current.delete(fetchSid);
-        }, 180000); // P1-FIX: 60s→180s (장시간 도구 실행 대응)
+        waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
         await loadMessages(false);
         // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
@@ -2300,10 +2300,7 @@ export default function ChatPage() {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
-          waitingBgTimeoutRef.current = setTimeout(() => {
-            setWaitingBgResponse(false); setBgPartialContent("");
-            pendingResponseSessions.current.delete(sid);
-          }, 180000);
+          waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
           const _exec_id_for_attach = ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null);
           if (_exec_id_for_attach) {
             const shouldReplayFromStart = !ss.partial_content;
