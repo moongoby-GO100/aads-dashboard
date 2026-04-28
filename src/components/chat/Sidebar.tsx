@@ -108,6 +108,7 @@ export default function ChatSidebar({
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [savingRoleSessionId, setSavingRoleSessionId] = useState<string | null>(null);
   const [roleErrorSessionId, setRoleErrorSessionId] = useState<string | null>(null);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>(COMMON_ROLE_OPTIONS);
 
   useEffect(() => {
     api.getChatWorkspaces().then((data) => {
@@ -169,7 +170,42 @@ export default function ChatSidebar({
   };
 
   const selectedWorkspaceItem = workspaces.find((ws) => ws.id === selectedWorkspace);
-  const roleOptions = getRoleOptions(selectedWorkspaceItem);
+
+  useEffect(() => {
+    if (!selectedWorkspace) {
+      setRoleOptions(COMMON_ROLE_OPTIONS);
+      return;
+    }
+
+    const fallbackOptions = getRoleOptions(selectedWorkspaceItem);
+    let cancelled = false;
+    setRoleOptions(fallbackOptions);
+
+    api.getChatWorkspaceRoles(selectedWorkspace)
+      .then((data) => {
+        const dbRoles = (data?.roles || [])
+          .map((role: { value?: string; role?: string; label?: string; display_name_ko?: string }) => {
+            const value = String(role.value || role.role || "").trim();
+            const ko = String(role.display_name_ko || "").trim();
+            const label = String(role.label || (ko ? `${value} / ${ko}` : value)).trim();
+            return value ? { value, label } : null;
+          })
+          .filter(Boolean) as RoleOption[];
+
+        if (!cancelled && dbRoles.length > 0) {
+          setRoleOptions(dbRoles);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoleOptions(fallbackOptions);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWorkspace, selectedWorkspaceItem]);
 
   const updateSessionRole = async (sessionId: string, roleKey: string) => {
     setSavingRoleSessionId(sessionId);

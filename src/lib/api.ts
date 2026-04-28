@@ -1,6 +1,8 @@
 // T-072: Flat API response types
 export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
 export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
+export interface ChatWorkspaceRoleOption { value: string; role?: string; label: string; display_name_ko?: string | null; project_scope?: string[]; }
+export interface ChatWorkspaceRolesResponse { roles: ChatWorkspaceRoleOption[]; total: number; }
 
 import type {
   HealthResponse,
@@ -230,6 +232,8 @@ export const api = {
 
   // AADS-170: Chat-First System API
   getChatWorkspaces: () => request<any>("/chat/workspaces"),
+  getChatWorkspaceRoles: (workspaceId: string) =>
+    request<ChatWorkspaceRolesResponse>(`/chat/workspaces/${encodeURIComponent(workspaceId)}/roles`),
   createChatWorkspace: (data: { name: string; description?: string; icon?: string; color?: string; settings?: Record<string, unknown> }) =>
     request<any>("/chat/workspaces", { method: "POST", body: JSON.stringify(data) }),
   updateChatWorkspace: (id: string, data: Record<string, unknown>) =>
