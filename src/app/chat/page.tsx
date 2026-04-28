@@ -2319,7 +2319,9 @@ export default function ChatPage() {
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
-        const rawLatest = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal`);
+        const rawLatest = await chatApi<ChatMessage[]>(
+          `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal${_waitingBg ? "&include_streaming=true" : ""}`
+        );
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
         const latest = _waitingBg
