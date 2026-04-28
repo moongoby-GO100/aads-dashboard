@@ -88,6 +88,17 @@ const MODEL_ID_TO_SELECTOR_ID: Record<string, string> = {
   "claude-haiku": "claude-haiku-4-5-20251001",
 };
 
+const ROLE_OPTIONS = [
+  { id: "CEO", label: "CEO" },
+  { id: "CTO", label: "CTO" },
+  { id: "PM", label: "PM" },
+  { id: "Developer", label: "Dev" },
+  { id: "QA", label: "QA" },
+  { id: "Ops", label: "Ops" },
+  { id: "PromptEngineer", label: "Prompt" },
+  { id: "Analyst", label: "Analyst" },
+];
+
 function normalizeModelIdForSelector(modelId?: string | null): string {
   const trimmed = (modelId || "").trim();
   return MODEL_ID_TO_SELECTOR_ID[trimmed] ?? trimmed;
@@ -957,6 +968,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const [roleKey, setRoleKey] = useState("CEO");
   const [runtimeModels, setRuntimeModels] = useState<LlmRegistryModel[] | null>(null);
   const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -1483,6 +1495,7 @@ export default function ChatPage() {
   // ── H-3: sendMessage useCallback 안정화용 ref ──
   const activeSessionObjRef = useRef(activeSession);
   const modelRef = useRef(model);
+  const roleKeyRef = useRef(roleKey);
   const activeWsRef = useRef(activeWs);
   const pendingPreviewFilesRef = useRef(pendingPreviewFiles);
   const replyToMessageRef = useRef(replyToMessage);
@@ -1493,6 +1506,7 @@ export default function ChatPage() {
   const queueCountRef = useRef(queueCount);
   useEffect(() => { activeSessionObjRef.current = activeSession; }, [activeSession]);
   useEffect(() => { modelRef.current = model; }, [model]);
+  useEffect(() => { roleKeyRef.current = roleKey; }, [roleKey]);
   useEffect(() => { activeWsRef.current = activeWs; }, [activeWs]);
   useEffect(() => { pendingPreviewFilesRef.current = pendingPreviewFiles; }, [pendingPreviewFiles]);
   useEffect(() => { replyToMessageRef.current = replyToMessage; }, [replyToMessage]);
@@ -1959,6 +1973,10 @@ export default function ChatPage() {
       const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_MODEL);
       setModel(sessionModel);
     }
+    {
+      const sessionRole = activeSession.role_key || "CEO";
+      setRoleKey(sessionRole);
+    }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
     const ct = activeSession.cost_total;
     if (ct && Number(ct) > 0) {
@@ -2398,7 +2416,12 @@ export default function ChatPage() {
     try {
       const s = await chatApi<ChatSession>("/chat/sessions", {
         method: "POST",
-        body: JSON.stringify({ workspace_id: wsId, title: "새 대화", current_model: modelRef.current }),
+        body: JSON.stringify({
+          workspace_id: wsId,
+          title: "새 대화",
+          current_model: modelRef.current,
+          role_key: roleKeyRef.current,
+        }),
       });
       setSessions((prev) => [s, ...prev]);
       isInitialLoadRef.current = true;
@@ -4737,6 +4760,47 @@ export default function ChatPage() {
                 : "세션 없음"}
             </div>
           </div>
+
+          {/* Role selector */}
+          <select
+            value={roleKey}
+            disabled={!activeSession}
+            onChange={(e) => {
+              const newRole = e.target.value;
+              setRoleKey(newRole);
+              if (activeSession) {
+                setSessions((prev) =>
+                  prev.map((s) => (s.id === activeSession.id ? { ...s, role_key: newRole } : s))
+                );
+                setActiveSession((prev) =>
+                  prev && prev.id === activeSession.id ? { ...prev, role_key: newRole } : prev
+                );
+                chatApi(`/chat/sessions/${activeSession.id}`, {
+                  method: "PUT",
+                  body: JSON.stringify({ role_key: newRole }),
+                }).catch(() => {});
+              }
+            }}
+            title="세션 역할"
+            style={{
+              fontSize: "12px",
+              padding: "5px 8px",
+              background: "var(--ct-card)",
+              color: "var(--ct-text)",
+              border: "1px solid var(--ct-border)",
+              borderRadius: "6px",
+              cursor: activeSession ? "pointer" : "not-allowed",
+              maxWidth: "120px",
+              outline: "none",
+              opacity: activeSession ? 1 : 0.6,
+            }}
+          >
+            {ROLE_OPTIONS.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.label}
+              </option>
+            ))}
+          </select>
 
           {/* Model selector */}
           <select

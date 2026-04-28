@@ -13,6 +13,7 @@ export interface ChatSession {
   workspace_id: string;
   title: string;
   current_model: string;
+  role_key?: string | null;
   current_execution_id?: string | null;
   created_at: string;
   updated_at: string;
