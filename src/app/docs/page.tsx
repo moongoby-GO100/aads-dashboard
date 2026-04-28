@@ -24,16 +24,29 @@ interface ProjectDocs {
   host: string;
   total: number;
   files: DocFile[];
+  delta?: ScanDelta;
 }
 
 interface ScanResult {
   total: number;
   projects: ProjectDocs[];
   scanned_at: number;
+  cache_hit?: boolean;
+  cache_mode?: string;
+  cache_age_sec?: number;
+  delta?: ScanDelta;
+}
+
+interface ScanDelta {
+  new: number;
+  updated: number;
+  removed: number;
+  unchanged: number;
 }
 
 const MIN_LIST_WIDTH = 320;
 const MAX_LIST_WIDTH_RATIO = 0.7;
+const DOCS_CACHE_KEY = "aads.docs.scanResult.v1";
 
 const PROJECT_COLORS: Record<string, string> = {
   AADS: "bg-blue-900 text-blue-200",
@@ -99,6 +112,13 @@ function formatDate(ts: number): string {
   return `${mm}-${dd} ${hh}:${mi}`;
 }
 
+function formatDelta(delta?: ScanDelta): string {
+  if (!delta) return "";
+  const changed = (delta.new || 0) + (delta.updated || 0) + (delta.removed || 0);
+  if (!changed) return "변경 없음";
+  return `신규 ${delta.new || 0} · 수정 ${delta.updated || 0} · 삭제 ${delta.removed || 0}`;
+}
+
 function buildFullPath(file: DocFile): string {
   if (file.full_path) return file.full_path;
   const base = file.base_path.replace(/\/+$/, "");
@@ -142,6 +162,7 @@ function renderMarkdown(text: string): string {
 
 export default function DocsPage() {
   const layoutRef = useRef<HTMLDivElement | null>(null);
+  const dataRef = useRef<ScanResult | null>(null);
   const [data, setData] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,11 +178,15 @@ export default function DocsPage() {
   const [isDesktop, setIsDesktop] = useState(false);
 
   const fetchDocs = useCallback(async (force = false) => {
-    setLoading(true);
+    setLoading(!dataRef.current);
     setError(null);
     try {
       const r = await api.scanProjectDocs(force);
       setData(r);
+      dataRef.current = r;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(r));
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "스캔 실패");
     } finally {
@@ -170,6 +195,19 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const cached = window.localStorage.getItem(DOCS_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as ScanResult;
+        if (parsed?.projects?.length) {
+          dataRef.current = parsed;
+          setData(parsed);
+          setLoading(false);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(DOCS_CACHE_KEY);
+    }
     fetchDocs();
   }, [fetchDocs]);
 
@@ -432,8 +470,11 @@ export default function DocsPage() {
 
             {data && (
               <div className="px-3 py-2 text-xs flex justify-between" style={{ borderTop: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                <span>{allFiles.length}개 문서</span>
-                <span>스캔: {new Date((data.scanned_at || 0) * 1000).toLocaleTimeString("ko-KR")}</span>
+                <span>{allFiles.length}개 문서 · {formatDelta(data.delta)}</span>
+                <span>
+                  {data.cache_hit ? "캐시" : data.cache_mode === "incremental" ? "증분" : "스캔"}:{" "}
+                  {new Date((data.scanned_at || 0) * 1000).toLocaleTimeString("ko-KR")}
+                </span>
               </div>
             )}
           </div>
