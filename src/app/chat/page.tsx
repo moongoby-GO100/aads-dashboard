@@ -1353,7 +1353,7 @@ export default function ChatPage() {
     }
   }, [activeSession?.id, messages.length, nextCursor]);
 
-  const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string) => {
+  const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string, replayFromStart = false) => {
     if (!attachSessionId || !executionId) return;
     if (
       executionAttachAbortRef.current &&
@@ -1391,8 +1391,9 @@ export default function ChatPage() {
     });
 
     try {
+      const replayLastEventId = replayFromStart ? "0" : (lastEventIdRef.current || "0");
       const resp = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`,
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(replayLastEventId)}`,
         { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: controller.signal },
       );
       if (!resp.ok || !resp.body) throw new Error("execution attach failed");
@@ -1915,7 +1916,9 @@ export default function ChatPage() {
         // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
         const _exec_id_for_attach = status.execution_id || activeSession?.current_execution_id || null;
         if (_exec_id_for_attach) {
-          attachExecutionReplay(fetchSid, _exec_id_for_attach);
+          const shouldReplayFromStart = !status.partial_content;
+          if (shouldReplayFromStart) lastEventIdRef.current = "0";
+          attachExecutionReplay(fetchSid, _exec_id_for_attach, shouldReplayFromStart);
         }
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
@@ -2294,8 +2297,11 @@ export default function ChatPage() {
             setWaitingBgResponse(false); setBgPartialContent("");
             pendingResponseSessions.current.delete(sid);
           }, 180000);
-          if (ss.execution_id) {
-            attachExecutionReplay(sid, ss.execution_id);
+          const _exec_id_for_attach = ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null);
+          if (_exec_id_for_attach) {
+            const shouldReplayFromStart = !ss.partial_content;
+            if (shouldReplayFromStart) lastEventIdRef.current = "0";
+            attachExecutionReplay(sid, _exec_id_for_attach, shouldReplayFromStart);
           }
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
