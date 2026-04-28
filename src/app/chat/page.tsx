@@ -1784,7 +1784,9 @@ export default function ChatPage() {
     }
     // 먼저 이전 세션ID 저장 (ref 업데이트 전에 읽어야 함)
     const prevSid = activeSessionRef.current;
-    activeSessionRef.current = activeSession?.id || null;
+    const nextSid = activeSession?.id || null;
+    const isSessionIdChange = prevSid !== nextSid;
+    activeSessionRef.current = nextSid;
     // 세션 ID를 localStorage에 저장 (페이지 새로고침 시 복원용)
     if (activeSession?.id && activeWs) {
       localStorage.setItem(`aads-chat-activeSession-${activeWs}`, activeSession.id);
@@ -1795,8 +1797,9 @@ export default function ChatPage() {
         }
       }
     }
-    // 세션 전환 시 진행 중인 스트리밍 중단 (이전 응답이 새 세션에 혼입 방지)
-    if (streaming) {
+    // 세션 ID가 실제로 바뀔 때만 진행 중인 스트리밍 중단
+    // activeSession 객체의 current_execution_id/model/role 갱신만으로 버블이 사라지는 것을 방지
+    if (streaming && isSessionIdChange) {
       // 생성 중이던 세션 기록 — 돌아올 때 빠른 폴링으로 응답 감지
       if (prevSid) pendingResponseSessions.current.add(prevSid);
       sessionSwitchRef.current = true;
@@ -1811,21 +1814,25 @@ export default function ChatPage() {
       msgQueueRef.current = [];
       setQueueCount(0);
     }
-    // 세션 전환 시 edit state 초기화
-    setEditingMsgId(null);
-    setEditText("");
-    // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
-    setMessages([]);
-    setNextCursor(null);
-    setMessagesLoading(true);
-    if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
-    // A-3: 세션 전환 시 모든 타이머 정리
-    if (completionToastTimerRef.current) { clearTimeout(completionToastTimerRef.current); completionToastTimerRef.current = null; }
-    if (yellowWarningTimerRef.current) { clearTimeout(yellowWarningTimerRef.current); yellowWarningTimerRef.current = null; }
-    setCompletionToast(null);
-    setWaitingBgResponse(false); setBgPartialContent("");
-    setStreamBuf("");
-    lastEventIdRef.current = "";
+    if (isSessionIdChange) {
+      // 세션 전환 시 edit state 초기화
+      setEditingMsgId(null);
+      setEditText("");
+      // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
+      setMessages([]);
+      setNextCursor(null);
+      setMessagesLoading(true);
+      if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
+      // A-3: 세션 전환 시 모든 타이머 정리
+      if (completionToastTimerRef.current) { clearTimeout(completionToastTimerRef.current); completionToastTimerRef.current = null; }
+      if (yellowWarningTimerRef.current) { clearTimeout(yellowWarningTimerRef.current); yellowWarningTimerRef.current = null; }
+      setCompletionToast(null);
+      setWaitingBgResponse(false); setBgPartialContent("");
+      setStreamBuf("");
+      lastEventIdRef.current = "";
+    } else {
+      setMessagesLoading(true);
+    }
     currentExecutionIdRef.current = activeSession?.current_execution_id || null;
     setSelectedArtifactIdx(0);
     if (!activeSession) {
@@ -1846,7 +1853,7 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=100`
+        `/chat/messages?session_id=${fetchSid}&limit=100${filterPlaceholder ? "" : "&include_streaming=true"}`
       )
         .then((result) => {
           const msgs = result.messages;
