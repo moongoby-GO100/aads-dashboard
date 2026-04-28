@@ -88,7 +88,7 @@ const MODEL_ID_TO_SELECTOR_ID: Record<string, string> = {
   "claude-haiku": "claude-haiku-4-5-20251001",
 };
 
-const ROLE_OPTIONS = [
+const DEFAULT_ROLE_OPTIONS = [
   { id: "CEO", label: "CEO" },
   { id: "CTO", label: "CTO" },
   { id: "PM", label: "PM" },
@@ -99,22 +99,9 @@ const ROLE_OPTIONS = [
   { id: "Analyst", label: "Analyst" },
 ];
 
-const ROLE_LABELS = new Map(ROLE_OPTIONS.map((role) => [role.id, role.label]));
-const ROLE_IDS = ROLE_OPTIONS.map((role) => role.id);
-
 function getWorkspaceSettings(workspace?: Workspace | null): Record<string, unknown> {
   const settings = workspace?.settings;
   return settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
-}
-
-function getWorkspaceDefaultRole(workspace?: Workspace | null): string {
-  const configured = String(getWorkspaceSettings(workspace).default_role_key || "").trim();
-  return ROLE_LABELS.has(configured) ? configured : "CEO";
-}
-
-function getRoleLabel(roleKey?: string | null): string {
-  if (!roleKey) return "Role";
-  return ROLE_LABELS.get(roleKey) || roleKey;
 }
 
 function normalizeModelIdForSelector(modelId?: string | null): string {
@@ -1026,6 +1013,9 @@ export default function ChatPage() {
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [roleKey, setRoleKey] = useState("CEO");
+  const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
+  const roleLabels = useMemo(() => new Map(roleOptions.map((role) => [role.id, role.label])), [roleOptions]);
+  const roleIds = useMemo(() => roleOptions.map((role) => role.id), [roleOptions]);
   const [runtimeModels, setRuntimeModels] = useState<LlmRegistryModel[] | null>(null);
   const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -1078,6 +1068,16 @@ export default function ChatPage() {
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const [selectedArtifactIdx, setSelectedArtifactIdx] = useState(0);
+
+  const getWorkspaceDefaultRole = useCallback((workspace?: Workspace | null) => {
+    const configured = String(getWorkspaceSettings(workspace).default_role_key || "").trim();
+    return roleLabels.has(configured) ? configured : "CEO";
+  }, [roleLabels]);
+
+  const getRoleLabel = useCallback((nextRoleKey?: string | null) => {
+    if (!nextRoleKey) return "Role";
+    return roleLabels.get(nextRoleKey) || nextRoleKey;
+  }, [roleLabels]);
 
   // ── 프로젝트 추가 모달 ──
   const [showAddProject, setShowAddProject] = useState(false);
@@ -1756,6 +1756,41 @@ export default function ChatPage() {
         yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
       });
   }, []);
+
+  useEffect(() => {
+    if (!activeWs) {
+      setRoleOptions(DEFAULT_ROLE_OPTIONS);
+      return;
+    }
+
+    let cancelled = false;
+    const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+
+    fetch(`${BASE}/chat/workspaces/${activeWs}/roles`, {
+      headers: authHdrs(),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { roles?: Array<{ value?: string; role?: string; label?: string }> } | null) => {
+        if (cancelled) return;
+        const nextRoleOptions = (data?.roles || [])
+          .map((role) => {
+            const id = String(role.value || role.role || "").trim();
+            const label = String(role.label || id).trim();
+            return id ? { id, label } : null;
+          })
+          .filter(Boolean) as Array<{ id: string; label: string }>;
+        setRoleOptions(nextRoleOptions.length > 0 ? nextRoleOptions : DEFAULT_ROLE_OPTIONS);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoleOptions(DEFAULT_ROLE_OPTIONS);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWs]);
 
   // ── Load sessions on workspace change (restore last session from localStorage) ──
   useEffect(() => {
@@ -2527,7 +2562,7 @@ export default function ChatPage() {
           settings: {
             project_key: code,
             default_role_key: newProjectDefaultRole,
-            allowed_roles: ROLE_IDS,
+            allowed_roles: roleIds,
             role_routing_enabled: true,
           },
         }),
@@ -4174,9 +4209,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (!activeWs || activeSession) return;
     const savedRole = localStorage.getItem(`aads-chat-role-${activeWs}`);
-    const nextRole = savedRole && ROLE_LABELS.has(savedRole) ? savedRole : getWorkspaceDefaultRole(activeWsObj);
+    const nextRole = savedRole && roleLabels.has(savedRole) ? savedRole : getWorkspaceDefaultRole(activeWsObj);
     setRoleKey(nextRole);
-  }, [activeWs, activeSession, activeWsObj]);
+  }, [activeWs, activeSession, activeWsObj, getWorkspaceDefaultRole, roleLabels]);
 
   const artifactCounts: Record<string, number> = {
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
@@ -4191,7 +4226,7 @@ export default function ChatPage() {
   function openCreateSessionModal() {
     const defaultRole = getWorkspaceDefaultRole(activeWsObj);
     const lastRoleKey = activeWs ? localStorage.getItem(`aads-chat-role-${activeWs}`) : null;
-    const initialRole = lastRoleKey && ROLE_LABELS.has(lastRoleKey) ? lastRoleKey : defaultRole;
+    const initialRole = lastRoleKey && roleLabels.has(lastRoleKey) ? lastRoleKey : defaultRole;
     setNewSessionTitle("");
     setNewSessionRoleKey(initialRole);
     setNewSessionModel(selectedModelValue || modelRef.current || DEFAULT_MODEL);
@@ -4710,7 +4745,7 @@ export default function ChatPage() {
                     outline: "none", boxSizing: "border-box",
                   }}
                 >
-                  {ROLE_OPTIONS.map((role) => (
+                  {roleOptions.map((role) => (
                     <option key={role.id} value={role.id}>{role.label}</option>
                   ))}
                 </select>
@@ -4866,7 +4901,7 @@ export default function ChatPage() {
                     outline: "none", boxSizing: "border-box",
                   }}
                 >
-                  {ROLE_OPTIONS.map((role) => (
+                  {roleOptions.map((role) => (
                     <option key={role.id} value={role.id}>{role.label}</option>
                   ))}
                 </select>
@@ -5062,7 +5097,7 @@ export default function ChatPage() {
               opacity: activeSession ? 1 : 0.6,
             }}
           >
-            {ROLE_OPTIONS.map((role) => (
+            {roleOptions.map((role) => (
               <option key={role.id} value={role.id}>
                 {role.label}
               </option>
