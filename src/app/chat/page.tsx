@@ -232,6 +232,9 @@ const MessageItem = memo(function MessageItem({
     : null;
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
+  const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
+    ? String(msg.thinking_summary || msg.thought_summary || "").trim()
+    : "";
 
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
@@ -682,7 +685,9 @@ const MessageItem = memo(function MessageItem({
                           {ev.type === 'thinking' && (
                             <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
                               <span>💭</span>
-                              <span style={{opacity: 0.7, fontSize: '11px'}}>{typeof ev.content === 'string' ? ev.content.slice(0, 100) : ''}</span>
+                              <span style={{opacity: 0.7, fontSize: '11px'}}>
+                                {String(ev.thinking || ev.content || '').slice(0, 100)}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -691,6 +696,37 @@ const MessageItem = memo(function MessageItem({
                   </details>
                 );
               })()}
+              {finalThinkingSummary && (
+                <details style={{marginBottom: '8px'}}>
+                  <summary style={{
+                    cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
+                    borderRadius: '8px', background: 'rgba(255,200,100,0.06)',
+                    border: '1px solid rgba(255,200,100,0.22)',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    listStyle: 'none', userSelect: 'none' as const,
+                    color: '#f4b557',
+                  }}>
+                    <span style={{fontSize: '10px', opacity: 0.65}}>▶</span>
+                    <span style={{fontWeight: 500}}>사고 과정</span>
+                    <span style={{opacity: 0.6, fontSize: '11px'}}>— 요약 {finalThinkingSummary.length.toLocaleString()}자</span>
+                  </summary>
+                  <div style={{
+                    padding: '8px 10px', marginTop: '4px',
+                    borderRadius: '8px', background: 'rgba(255,200,100,0.05)',
+                    border: '1px solid rgba(255,200,100,0.18)',
+                    color: 'var(--ct-text2)',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontSize: '11.5px',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap' as const,
+                    wordBreak: 'break-word' as const,
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                  }}>
+                    {finalThinkingSummary}
+                  </div>
+                </details>
+              )}
               {/* P1: 인라인 아티팩트 카드 — 긴 메시지 접이식 */}
               {msg.role === "assistant" && effectiveContentCollapsed && msg.content.length > 800 ? (
                 <div>

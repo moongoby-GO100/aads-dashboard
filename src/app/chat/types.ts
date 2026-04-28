@@ -62,8 +62,10 @@ export interface ChatMessage {
     tool_use_id?: string;
     tool_input?: any;
     content?: string;
+    thinking?: string;
   }>;
   confidence_label?: "db_realtime" | "ai_inference" | "mixed";
+  thinking_summary?: string;
   thought_summary?: string;
   bookmarked?: boolean;
   sources?: Array<Record<string, unknown>>;
