@@ -1,6 +1,22 @@
 "use client";
-import { memo, RefObject } from "react";
+import { memo, RefObject, type CSSProperties } from "react";
 import type { Workspace, ChatSession, Theme, ScreenSize } from "./types";
+
+const ROLE_LABELS: Record<string, string> = {
+  CEO: "CEO",
+  CTO: "CTO",
+  PM: "PM",
+  Developer: "Dev",
+  QA: "QA",
+  Ops: "Ops",
+  PromptEngineer: "Prompt",
+  Analyst: "Analyst",
+};
+
+function getWorkspaceDefaultRole(workspace?: Workspace): string {
+  const value = String(workspace?.settings?.default_role_key || "");
+  return ROLE_LABELS[value] ? value : "CEO";
+}
 
 export interface ChatSidebarProps {
   screenSize: ScreenSize;
@@ -24,6 +40,7 @@ export interface ChatSidebarProps {
   search: string;
   setSearch: (v: string) => void;
   createSession: () => void;
+  deleteSession: (id: string) => void;
   setShowAddProject: (v: boolean) => void;
   theme: Theme;
   toggleTheme: () => void;
@@ -41,11 +58,12 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
     filteredSessions, renaming, setRenaming, commitRename,
     activeSession, setActiveSession, isInitialLoadRef,
     onSessionContextMenu, search, setSearch,
-    createSession, setShowAddProject, theme, toggleTheme,
+    createSession, deleteSession, setShowAddProject, theme, toggleTheme,
     tagFilter, setTagFilter, allTags,
   } = props;
 
   const showLeftSidebar = screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
+  const defaultRoleKey = getWorkspaceDefaultRole(activeWsObj);
 
   return (
     <div
@@ -243,6 +261,21 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                 {activeWs === ws.id && (() => {
                   const pinned = filteredSessions.filter((s) => s.pinned);
                   const unpinned = filteredSessions.filter((s) => !s.pinned);
+                  const sessionRoleLabel = (s: ChatSession) => ROLE_LABELS[s.role_key || defaultRoleKey] || s.role_key || defaultRoleKey;
+                  const actionStyle = (isActive: boolean): CSSProperties => ({
+                    width: "22px",
+                    height: "22px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "none",
+                    borderRadius: "5px",
+                    background: isActive ? "rgba(255,255,255,0.18)" : "var(--ct-hover)",
+                    color: isActive ? "#fff" : "var(--ct-text2)",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    flexShrink: 0,
+                  });
                   const renderSession = (s: ChatSession) => (
                     <div key={s.id} style={{ marginBottom: "1px" }}>
                       {renaming?.id === s.id ? (
@@ -272,90 +305,151 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                           />
                         </div>
                       ) : (
-                        <a
-                          href={`/chat#${s.id}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            isInitialLoadRef.current = true;
-                            setActiveSession(s);
-                            if (screenSize !== "desktop") setMobileOverlay(null);
-                          }}
+                        <div
                           onContextMenu={(e) => onSessionContextMenu(e, s)}
                           style={{
-                            display: "block",
-                            width: "100%",
-                            textAlign: "left",
-                            padding: "7px 10px",
-                            fontSize: "12px",
-                            background:
-                              activeSession?.id === s.id ? "var(--ct-accent)" : "none",
-                            border: "none",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            color:
-                              activeSession?.id === s.id ? "#fff" : "var(--ct-text2)",
-                            overflow: "hidden",
-                            textDecoration: "none",
-                            fontFamily: "inherit",
-                            boxSizing: "border-box",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (activeSession?.id !== s.id)
-                              e.currentTarget.style.background = "var(--ct-hover)";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (activeSession?.id !== s.id)
-                              e.currentTarget.style.background = "none";
+                            display: "flex",
+                            alignItems: "stretch",
+                            gap: "4px",
+                            padding: "2px 4px",
+                            borderRadius: "7px",
+                            background: activeSession?.id === s.id ? "var(--ct-accent)" : "transparent",
                           }}
                         >
-                          <div
+                          <a
+                            href={`/chat#${s.id}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              isInitialLoadRef.current = true;
+                              setActiveSession(s);
+                              if (screenSize !== "desktop") setMobileOverlay(null);
+                            }}
                             style={{
+                              display: "block",
+                              flex: 1,
+                              minWidth: 0,
+                              textAlign: "left",
+                              padding: "5px 6px",
+                              fontSize: "12px",
+                              border: "none",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              color: activeSession?.id === s.id ? "#fff" : "var(--ct-text2)",
                               overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
+                              textDecoration: "none",
+                              fontFamily: "inherit",
+                              boxSizing: "border-box",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (activeSession?.id !== s.id) e.currentTarget.style.background = "var(--ct-hover)";
+                            }}
+                            onMouseLeave={(e) => {
+                              if (activeSession?.id !== s.id) e.currentTarget.style.background = "transparent";
                             }}
                           >
-                            {s.pinned && <span style={{ fontSize: "10px", flexShrink: 0 }}>📌</span>}
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {s.title || "새 대화"}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              opacity: 0.65,
-                              marginTop: "2px",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <span>{s.message_count ?? 0}개 메시지</span>
-                            {(s.tags || []).length > 0 && (
-                              <span style={{ display: "inline-flex", gap: "2px", marginLeft: "2px" }}>
-                                {s.tags.slice(0, 2).map((t) => (
-                                  <span
-                                    key={t}
-                                    style={{
-                                      padding: "0 4px",
-                                      borderRadius: "6px",
-                                      background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
-                                      fontSize: "9px",
-                                    }}
-                                  >
-                                    {t}
-                                  </span>
-                                ))}
-                                {s.tags.length > 2 && (
-                                  <span style={{ fontSize: "9px" }}>+{s.tags.length - 2}</span>
-                                )}
+                            <div
+                              style={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              {s.pinned && <span style={{ fontSize: "10px", flexShrink: 0 }}>📌</span>}
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {s.title || "새 대화"}
                               </span>
-                            )}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                opacity: 0.72,
+                                marginTop: "2px",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <span>{s.message_count ?? 0}개 메시지</span>
+                              <span
+                                style={{
+                                  padding: "0 4px",
+                                  borderRadius: "5px",
+                                  background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
+                                  fontSize: "9px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {sessionRoleLabel(s)}
+                              </span>
+                              {(s.tags || []).length > 0 && (
+                                <span style={{ display: "inline-flex", gap: "2px", marginLeft: "2px" }}>
+                                  {s.tags.slice(0, 2).map((t) => (
+                                    <span
+                                      key={t}
+                                      style={{
+                                        padding: "0 4px",
+                                        borderRadius: "6px",
+                                        background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
+                                        fontSize: "9px",
+                                      }}
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                  {s.tags.length > 2 && (
+                                    <span style={{ fontSize: "9px" }}>+{s.tags.length - 2}</span>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </a>
+                          <div style={{ display: "flex", alignItems: "center", gap: "2px", paddingRight: "2px" }}>
+                            <button
+                              title="새창에서 열기"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`${window.location.origin}/chat#${s.id}`, "_blank");
+                              }}
+                              style={actionStyle(activeSession?.id === s.id)}
+                            >
+                              ↗
+                            </button>
+                            <button
+                              title="이름 수정"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRenaming({ id: s.id, value: s.title });
+                              }}
+                              style={actionStyle(activeSession?.id === s.id)}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              title="삭제"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSession(s.id);
+                              }}
+                              style={actionStyle(activeSession?.id === s.id)}
+                            >
+                              ×
+                            </button>
+                            <button
+                              title="더보기"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSessionContextMenu(e, s);
+                              }}
+                              style={actionStyle(activeSession?.id === s.id)}
+                            >
+                              ⋯
+                            </button>
                           </div>
-                        </a>
+                        </div>
                       )}
                     </div>
                   );

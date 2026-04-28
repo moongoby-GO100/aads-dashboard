@@ -99,6 +99,24 @@ const ROLE_OPTIONS = [
   { id: "Analyst", label: "Analyst" },
 ];
 
+const ROLE_LABELS = new Map(ROLE_OPTIONS.map((role) => [role.id, role.label]));
+const ROLE_IDS = ROLE_OPTIONS.map((role) => role.id);
+
+function getWorkspaceSettings(workspace?: Workspace | null): Record<string, unknown> {
+  const settings = workspace?.settings;
+  return settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+}
+
+function getWorkspaceDefaultRole(workspace?: Workspace | null): string {
+  const configured = String(getWorkspaceSettings(workspace).default_role_key || "").trim();
+  return ROLE_LABELS.has(configured) ? configured : "CEO";
+}
+
+function getRoleLabel(roleKey?: string | null): string {
+  if (!roleKey) return "Role";
+  return ROLE_LABELS.get(roleKey) || roleKey;
+}
+
 function normalizeModelIdForSelector(modelId?: string | null): string {
   const trimmed = (modelId || "").trim();
   return MODEL_ID_TO_SELECTOR_ID[trimmed] ?? trimmed;
@@ -1027,6 +1045,11 @@ export default function ChatPage() {
   const [newProjectCode, setNewProjectCode] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectIcon, setNewProjectIcon] = useState("📁");
+  const [newProjectDefaultRole, setNewProjectDefaultRole] = useState("CEO");
+  const [showCreateSession, setShowCreateSession] = useState(false);
+  const [newSessionTitle, setNewSessionTitle] = useState("");
+  const [newSessionRoleKey, setNewSessionRoleKey] = useState("CEO");
+  const [newSessionModel, setNewSessionModel] = useState(DEFAULT_MODEL);
 
   // ── Prompt Templates (P2-10) ──
   const [showTemplates, setShowTemplates] = useState(false);
@@ -1974,8 +1997,9 @@ export default function ChatPage() {
       setModel(sessionModel);
     }
     {
-      const sessionRole = activeSession.role_key || "CEO";
+      const sessionRole = activeSession.role_key || getWorkspaceDefaultRole(activeWsObj);
       setRoleKey(sessionRole);
+      if (activeWs) localStorage.setItem(`aads-chat-role-${activeWs}`, sessionRole);
     }
     // AADS-190: 세션 전환 시 누적비용 즉시 표시
     const ct = activeSession.cost_total;
@@ -2410,22 +2434,28 @@ export default function ChatPage() {
   }
 
   // ── Session management ──
-  const createSession = useCallback(async function createSession(workspaceId?: string) {
-    const wsId = workspaceId || activeWsRef.current;
+  const createSession = useCallback(async function createSession(options?: string | { workspaceId?: string; title?: string; roleKey?: string; model?: string }) {
+    const opts = typeof options === "string" ? { workspaceId: options } : (options || {});
+    const wsId = opts.workspaceId || activeWsRef.current;
     if (!wsId) return null;
+    const nextRoleKey = (opts.roleKey || roleKeyRef.current || "CEO").trim();
+    const nextModel = opts.model || modelRef.current;
+    const nextTitle = opts.title?.trim() || "새 대화";
     try {
       const s = await chatApi<ChatSession>("/chat/sessions", {
         method: "POST",
         body: JSON.stringify({
           workspace_id: wsId,
-          title: "새 대화",
-          current_model: modelRef.current,
-          role_key: roleKeyRef.current,
+          title: nextTitle,
+          current_model: nextModel,
+          role_key: nextRoleKey,
         }),
       });
       setSessions((prev) => [s, ...prev]);
       isInitialLoadRef.current = true;
       setActiveSession(s);
+      setRoleKey(s.role_key || nextRoleKey);
+      setModel(normalizeModelIdForSelector(s.current_model || nextModel || DEFAULT_MODEL));
       setMessages([]);
       if (screenSizeRef.current !== "desktop") setMobileOverlay(null);
       return s;
@@ -2446,14 +2476,22 @@ export default function ChatPage() {
           name: `[${code}] ${name}`,
           icon: newProjectIcon || "📁",
           color: "#6366F1",
+          settings: {
+            project_key: code,
+            default_role_key: newProjectDefaultRole,
+            allowed_roles: ROLE_IDS,
+            role_routing_enabled: true,
+          },
         }),
       });
       setWorkspaces((prev) => [...prev, ws]);
       setActiveWs(ws.id);
+      setRoleKey(newProjectDefaultRole);
       setShowAddProject(false);
       setNewProjectCode("");
       setNewProjectName("");
       setNewProjectIcon("📁");
+      setNewProjectDefaultRole("CEO");
     } catch { /* ignore */ }
   }
 
@@ -4084,6 +4122,14 @@ export default function ChatPage() {
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
   });
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
+
+  useEffect(() => {
+    if (!activeWs || activeSession) return;
+    const savedRole = localStorage.getItem(`aads-chat-role-${activeWs}`);
+    const nextRole = savedRole && ROLE_LABELS.has(savedRole) ? savedRole : getWorkspaceDefaultRole(activeWsObj);
+    setRoleKey(nextRole);
+  }, [activeWs, activeSession, activeWsObj]);
+
   const artifactCounts: Record<string, number> = {
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
     dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
@@ -4093,6 +4139,32 @@ export default function ChatPage() {
     log: systemMessages.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
   };
+
+  function openCreateSessionModal() {
+    const defaultRole = getWorkspaceDefaultRole(activeWsObj);
+    const lastRoleKey = activeWs ? localStorage.getItem(`aads-chat-role-${activeWs}`) : null;
+    const initialRole = lastRoleKey && ROLE_LABELS.has(lastRoleKey) ? lastRoleKey : defaultRole;
+    setNewSessionTitle("");
+    setNewSessionRoleKey(initialRole);
+    setNewSessionModel(selectedModelValue || modelRef.current || DEFAULT_MODEL);
+    setShowCreateSession(true);
+  }
+
+  async function submitCreateSession() {
+    if (!activeWs) return;
+    const created = await createSession({
+      workspaceId: activeWs,
+      title: newSessionTitle,
+      roleKey: newSessionRoleKey,
+      model: newSessionModel,
+    });
+    if (created) {
+      localStorage.setItem(`aads-chat-role-${activeWs}`, newSessionRoleKey);
+      setShowCreateSession(false);
+      setNewSessionTitle("");
+    }
+  }
+
   // C1: swipe gesture handlers
   function onSwipeStart(e: React.TouchEvent) {
     if (screenSize === "desktop") return;
@@ -4126,7 +4198,7 @@ export default function ChatPage() {
       // Ctrl/Cmd + N: 새 대화
       if (mod && e.key === "n") {
         e.preventDefault();
-        createSession();
+        openCreateSessionModal();
       }
       // Ctrl/Cmd + Shift + S: 사이드바 토글
       if (mod && e.shiftKey && (e.key === "S" || e.key === "s")) {
@@ -4146,7 +4218,7 @@ export default function ChatPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [createSession]);
+  }, [openCreateSessionModal]);
 
   // ══════════════════════════════════════════════════════════════════
   // Render
@@ -4523,6 +4595,130 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* ── 세션 생성 모달 ── */}
+      {showCreateSession && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 3000,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setShowCreateSession(false)}
+        >
+          <div
+            style={{
+              background: "var(--ct-card)", borderRadius: "16px",
+              padding: "22px", width: "380px", maxWidth: "92vw",
+              border: "1px solid var(--ct-border)",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 14px 0", fontSize: "16px", color: "var(--ct-text)" }}>
+              새 세션 생성
+            </h3>
+            <div style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              padding: "8px 10px", border: "1px solid var(--ct-border)",
+              borderRadius: "8px", color: "var(--ct-text)", marginBottom: "12px",
+              background: "var(--ct-hover)",
+            }}>
+              <span>{activeWsObj?.icon || "📁"}</span>
+              <strong style={{ fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {activeWsName}
+              </strong>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  세션명
+                </label>
+                <input
+                  autoFocus
+                  value={newSessionTitle}
+                  onChange={(e) => setNewSessionTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitCreateSession(); }}
+                  placeholder="비우면 프로젝트 번호로 자동 생성"
+                  maxLength={200}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "13px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  역할
+                </label>
+                <select
+                  value={newSessionRoleKey}
+                  onChange={(e) => setNewSessionRoleKey(e.target.value)}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "13px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role.id} value={role.id}>{role.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  모델
+                </label>
+                <select
+                  value={newSessionModel}
+                  onChange={(e) => setNewSessionModel(e.target.value)}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "13px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                >
+                  {selectableModels.filter((option) => option.isActive).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                <button
+                  onClick={() => setShowCreateSession(false)}
+                  style={{
+                    flex: 1, padding: "8px", fontSize: "13px",
+                    background: "var(--ct-hover)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={submitCreateSession}
+                  disabled={!activeWs}
+                  style={{
+                    flex: 1, padding: "8px", fontSize: "13px", fontWeight: 600,
+                    background: activeWs ? "var(--ct-accent)" : "var(--ct-hover)",
+                    color: "#fff", border: "none", borderRadius: "8px",
+                    cursor: activeWs ? "pointer" : "not-allowed",
+                    opacity: activeWs ? 1 : 0.5,
+                  }}
+                >
+                  생성
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 프로젝트 추가 모달 ── */}
       {showAddProject && (
         <div
@@ -4608,11 +4804,32 @@ export default function ChatPage() {
                   ))}
                 </div>
               </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
+                  기본 역할
+                </label>
+                <select
+                  value={newProjectDefaultRole}
+                  onChange={(e) => setNewProjectDefaultRole(e.target.value)}
+                  style={{
+                    width: "100%", padding: "8px 12px", fontSize: "13px",
+                    background: "var(--ct-input)", color: "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "8px",
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role.id} value={role.id}>{role.label}</option>
+                  ))}
+                </select>
+              </div>
               {newProjectCode && (
                 <div style={{ fontSize: "12px", color: "var(--ct-text2)", padding: "4px 0" }}>
                   미리보기: <strong style={{ color: "var(--ct-text)" }}>[{newProjectCode}] {newProjectName || "..."}</strong>
                   <br />
                   세션명 예시: <strong style={{ color: "var(--ct-accent)" }}>{newProjectCode}-001</strong>, {newProjectCode}-002, ...
+                  <br />
+                  기본 역할: <strong style={{ color: "var(--ct-accent)" }}>{getRoleLabel(newProjectDefaultRole)}</strong>
                 </div>
               )}
               <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
@@ -4681,7 +4898,8 @@ export default function ChatPage() {
         isInitialLoadRef={isInitialLoadRef}
         onSessionContextMenu={onSessionContextMenu}
         search={search} setSearch={setSearch}
-        createSession={createSession} setShowAddProject={setShowAddProject}
+        createSession={openCreateSessionModal} deleteSession={deleteSession}
+        setShowAddProject={setShowAddProject}
         theme={theme} toggleTheme={toggleTheme}
         tagFilter={tagFilter} setTagFilter={setTagFilter} allTags={allTags}
       />
@@ -4768,6 +4986,7 @@ export default function ChatPage() {
             onChange={(e) => {
               const newRole = e.target.value;
               setRoleKey(newRole);
+              if (activeWs) localStorage.setItem(`aads-chat-role-${activeWs}`, newRole);
               if (activeSession) {
                 setSessions((prev) =>
                   prev.map((s) => (s.id === activeSession.id ? { ...s, role_key: newRole } : s))

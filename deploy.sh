@@ -61,11 +61,13 @@ import sys
 src, dst, target = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(src, "r", encoding="utf-8").read()
 blue_active = "server 127.0.0.1:3100 max_fails=3 fail_timeout=30s;"
+blue_active_legacy = "server 127.0.0.1:3100 max_fails=0;"
 blue_backup = "server 127.0.0.1:3100 max_fails=3 fail_timeout=30s backup;"
 green_active = "server 127.0.0.1:3101 max_fails=3 fail_timeout=30s;"
 green_backup = "server 127.0.0.1:3101 max_fails=3 fail_timeout=30s backup;"
 
 text = text.replace(blue_active, "__BLUE_ACTIVE__")
+text = text.replace(blue_active_legacy, "__BLUE_ACTIVE__")
 text = text.replace(blue_backup, "__BLUE_BACKUP__")
 text = text.replace(green_active, "__GREEN_ACTIVE__")
 text = text.replace(green_backup, "__GREEN_BACKUP__")

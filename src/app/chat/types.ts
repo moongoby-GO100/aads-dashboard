@@ -3,9 +3,10 @@
 export interface Workspace {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   icon: string;
   color: string;
+  settings?: Record<string, unknown>;
 }
 
 export interface ChatSession {

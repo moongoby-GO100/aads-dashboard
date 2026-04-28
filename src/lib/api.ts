@@ -230,7 +230,7 @@ export const api = {
 
   // AADS-170: Chat-First System API
   getChatWorkspaces: () => request<any>("/chat/workspaces"),
-  createChatWorkspace: (data: { name: string; description?: string; icon?: string; color?: string }) =>
+  createChatWorkspace: (data: { name: string; description?: string; icon?: string; color?: string; settings?: Record<string, unknown> }) =>
     request<any>("/chat/workspaces", { method: "POST", body: JSON.stringify(data) }),
   updateChatWorkspace: (id: string, data: Record<string, unknown>) =>
     request<any>(`/chat/workspaces/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -241,9 +241,9 @@ export const api = {
     request<any>(`/chat/sessions${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`),
   getChatSession: (sessionId: string) =>
     request<any>(`/chat/sessions/${encodeURIComponent(sessionId)}`),
-  createChatSession: (data: { workspace_id: string; title?: string; current_model?: string }) =>
+  createChatSession: (data: { workspace_id: string; title?: string; current_model?: string; role_key?: string }) =>
     request<any>("/chat/sessions", { method: "POST", body: JSON.stringify(data) }),
-  updateChatSession: (id: string, data: { title?: string; pinned?: boolean }) =>
+  updateChatSession: (id: string, data: { title?: string; pinned?: boolean; tags?: string[]; current_model?: string; role_key?: string }) =>
     request<any>(`/chat/sessions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteChatSession: (id: string) =>
     request<any>(`/chat/sessions/${id}`, { method: "DELETE" }),
