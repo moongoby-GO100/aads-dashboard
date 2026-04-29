@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
@@ -447,6 +448,20 @@ export default function OpsPage() {
                 {loading ? "-" : safeNum(health?.stalled_count) + safeNum(health?.error_count)}건
               </div>
             </div>
+            <Link
+              href="/ops/mobile-agent"
+              style={{
+                ...cardStyle,
+                textAlign: "center",
+                textDecoration: "none",
+                color: "var(--text-primary)",
+                display: "block",
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 6 }}>📱</div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Mobile Agent</div>
+              <div style={{ fontSize: 13, color: "var(--accent)" }}>설치 / 페어링</div>
+            </Link>
           </div>
         </section>
 

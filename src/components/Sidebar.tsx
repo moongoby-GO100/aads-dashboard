@@ -21,6 +21,7 @@ const navItems = [
   { href: "/ops/servers", label: "Servers", icon: "🖥️" },
   { href: "/ops/memory", label: "메모리", icon: "🧠" },
   { href: "/ops/pc-agents", label: "PC Agent", icon: "💻" },
+  { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱" },
   { href: "/lessons", label: "교훈", icon: "💡" },
   { href: "/flow", label: "FLOW", icon: "🔄" },
   { href: "/reports", label: "Reports", icon: "📊" },

@@ -311,6 +311,22 @@ export const api = {
   stopPCStream: (agent_id: string) =>
     request<any>(`/pc-agent/stream/${encodeURIComponent(agent_id)}/stop`, { method: "POST" }),
 
+  // Device / Android Agent
+  getDevices: (deviceType?: string) =>
+    request<unknown>(`/devices${deviceType ? `?device_type=${encodeURIComponent(deviceType)}` : ""}`),
+  getAndroidAgentManifest: () => request<unknown>("/devices/android/manifest"),
+  createAndroidPairing: (data: { agent_id?: string; label?: string; device_type?: "android" | "pc" | "ios"; expires_hours?: number }) =>
+    request<unknown>("/devices/android/pairing", {
+      method: "POST",
+      body: JSON.stringify({
+        device_type: "android",
+        expires_hours: 24,
+        ...data,
+      }),
+    }),
+  revokeAndroidPairing: (agentId: string) =>
+    request<unknown>(`/devices/android/pairing/${encodeURIComponent(agentId)}/revoke`, { method: "POST" }),
+
   // Memory Evolution Dashboard
   getOpsMemoryStats: () => request<any>("/ops/memory/stats"),
   getOpsMemoryEntries: (params?: { category?: string; project?: string; search?: string; page?: number; page_size?: number }) => {
