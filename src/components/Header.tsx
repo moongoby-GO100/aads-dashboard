@@ -73,6 +73,13 @@ export default function Header({ title }: { title: string }) {
         >
           💬 AI Chat
         </a>
+        <a
+          href="/ops/mobile-agent"
+          className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+          style={{ background: "#111827", color: "#fff", textDecoration: "none" }}
+        >
+          📱 Android 설치
+        </a>
         <div className="flex items-center gap-1.5" title={`Pipeline: ${pipelineStatus}`}>
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
           <span className="text-xs text-gray-500">{pipelineStatus}</span>
