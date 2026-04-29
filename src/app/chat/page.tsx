@@ -5102,6 +5102,9 @@ export default function ChatPage() {
                 {role.label}
               </option>
             ))}
+            {roleKey && !roleOptions.some(r => r.id === roleKey) && (
+              <option value={roleKey}>{roleKey}</option>
+            )}
           </select>
 
           {/* Model selector */}

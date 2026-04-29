@@ -1,7 +1,16 @@
 // T-072: Flat API response types
 export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
 export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
-export interface ChatWorkspaceRoleOption { value: string; role?: string; label: string; display_name_ko?: string | null; project_scope?: string[]; }
+export interface ChatWorkspaceRoleOption {
+  value: string;
+  role?: string;
+  label: string;
+  display_name_ko?: string | null;
+  project_scope?: string[];
+  when_to_use?: string[] | null;
+  how_to_instruct?: string[] | null;
+  instruction_template?: string | null;
+}
 export interface ChatWorkspaceRolesResponse { roles: ChatWorkspaceRoleOption[]; total: number; }
 
 import type {

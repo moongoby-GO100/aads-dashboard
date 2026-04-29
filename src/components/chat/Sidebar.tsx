@@ -24,6 +24,9 @@ interface Session {
 interface RoleOption {
   value: string;
   label: string;
+  when_to_use?: string[] | null;
+  how_to_instruct?: string[] | null;
+  instruction_template?: string | null;
 }
 
 const WORKSPACE_ICONS: Record<string, string> = {
@@ -184,11 +187,19 @@ export default function ChatSidebar({
     api.getChatWorkspaceRoles(selectedWorkspace)
       .then((data) => {
         const dbRoles = (data?.roles || [])
-          .map((role: { value?: string; role?: string; label?: string; display_name_ko?: string }) => {
+          .map((role) => {
             const value = String(role.value || role.role || "").trim();
             const ko = String(role.display_name_ko || "").trim();
             const label = String(role.label || (ko ? `${value} / ${ko}` : value)).trim();
-            return value ? { value, label } : null;
+            return value
+              ? {
+                  value,
+                  label,
+                  when_to_use: role.when_to_use,
+                  how_to_instruct: role.how_to_instruct,
+                  instruction_template: role.instruction_template,
+                }
+              : null;
           })
           .filter(Boolean) as RoleOption[];
 
@@ -323,6 +334,23 @@ export default function ChatSidebar({
                 const isActive = activeSessionId === sessionId;
                 const roleKey = (s.role_key || "").trim();
                 const isSavingRole = savingRoleSessionId === sessionId;
+                const selectedRoleOption = roleOptions.find((role) => role.value === roleKey);
+                const roleHelp = selectedRoleOption
+                  ? [
+                      selectedRoleOption.label,
+                      selectedRoleOption.when_to_use?.length
+                        ? `언제 쓰나: ${selectedRoleOption.when_to_use.join(" / ")}`
+                        : "",
+                      selectedRoleOption.how_to_instruct?.length
+                        ? `지시 팁: ${selectedRoleOption.how_to_instruct.join(" / ")}`
+                        : "",
+                      selectedRoleOption.instruction_template
+                        ? `템플릿: ${selectedRoleOption.instruction_template}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join("\n")
+                  : "";
 
                 return (
                 <div
@@ -398,6 +426,18 @@ export default function ChatSidebar({
                         </option>
                       ))}
                     </select>
+                    {roleHelp && (
+                      <span
+                        className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[10px]"
+                        style={{
+                          border: "1px solid var(--ct-border)",
+                          color: "var(--ct-text-muted)",
+                        }}
+                        title={roleHelp}
+                      >
+                        ?
+                      </span>
+                    )}
                     {roleErrorSessionId === sessionId && (
                       <span className="text-[10px]" style={{ color: "#ef4444" }}>
                         실패
