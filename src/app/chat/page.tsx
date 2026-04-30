@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, u
 import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
-import { MODEL_OPTIONS, DEFAULT_MODEL } from "@/components/chat/ModelSelector";
+import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
@@ -52,6 +52,7 @@ type LlmRegistryModel = {
   input_cost?: string | number | null;
   output_cost?: string | number | null;
   is_active?: boolean;
+  metadata?: Record<string, unknown> | null;
 };
 
 type ChatModelPreference = {
@@ -77,16 +78,31 @@ type SelectableModelOption = {
   isHidden?: boolean;
 };
 
-const STATIC_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
-
-const MODEL_ID_TO_SELECTOR_ID: Record<string, string> = {
-  auto: "mixture",
-  mixture: "mixture",
+const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
+const LEGACY_CANONICAL_DISPLAY_MODEL_ID: Record<string, string> = {
   "claude-sonnet": "claude-sonnet-4-6",
   "claude-opus": "claude-opus-4-7",
   "claude-opus-46": "claude-opus-4-6",
   "claude-haiku": "claude-haiku-4-5-20251001",
 };
+const LEGACY_MODEL_ID_ALIASES: Record<string, string> = {
+  auto: "mixture",
+  mixture: "mixture",
+  "claude-sonnet-4-6": "claude-sonnet",
+  "claude-sonnet-4-5": "claude-sonnet",
+  "claude-3-5-sonnet-20241022": "claude-sonnet",
+  "claude-3-sonnet-20240229": "claude-sonnet",
+  "claude-2.1": "claude-sonnet",
+  "claude-opus-4-7": "claude-opus",
+  "claude-opus-4-5": "claude-opus",
+  "claude-3-opus-20240229": "claude-opus",
+  "claude-opus-4-6": "claude-opus-46",
+  "claude-haiku-4-5": "claude-haiku",
+  "claude-haiku-4-5-20251001": "claude-haiku",
+  "claude-3-5-haiku-20241022": "claude-haiku",
+  "claude-3-haiku-20240307": "claude-haiku",
+};
+const DEFAULT_RUNTIME_MODEL = "claude-sonnet";
 
 const DEFAULT_ROLE_OPTIONS = [
   { id: "CEO", label: "CEO" },
@@ -99,14 +115,162 @@ const DEFAULT_ROLE_OPTIONS = [
   { id: "Analyst", label: "Analyst" },
 ];
 
+const LOCAL_MESSAGE_PREFIXES = ["tmp-", "ai-", "stopped-"];
+
+function messageTime(message: ChatMessage): number {
+  const time = new Date(message.created_at || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function normalizedMessageContent(message: ChatMessage): string {
+  return (message.content || "").trim();
+}
+
+function isLocalTransientMessage(message: ChatMessage): boolean {
+  return LOCAL_MESSAGE_PREFIXES.some((prefix) => message.id.startsWith(prefix));
+}
+
+function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
+  return message.intent === "streaming_placeholder" || message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-");
+}
+
+function getLatestFinalAssistantId(messages: ChatMessage[]): string | null {
+  return messages
+    .filter((message) => message.role === "assistant" && message.intent !== "streaming_placeholder" && message.intent !== "rate_limited")
+    .sort((a, b) => messageTime(b) - messageTime(a))[0]?.id || null;
+}
+
+function findLocalMatchForServerMessage(
+  localMessages: ChatMessage[],
+  serverMessage: ChatMessage,
+  incomingMessages: ChatMessage[],
+): ChatMessage | undefined {
+  const serverContent = normalizedMessageContent(serverMessage);
+  const exactContentMatch = localMessages.find((localMessage) =>
+    localMessage.role === serverMessage.role &&
+    normalizedMessageContent(localMessage) !== "" &&
+    normalizedMessageContent(localMessage) === serverContent
+  );
+  if (exactContentMatch) return exactContentMatch;
+
+  if (serverMessage.intent === "streaming_placeholder" && !getLatestFinalAssistantId(incomingMessages)) {
+    return localMessages.find((localMessage) => localMessage.role === "assistant" && isStreamingPlaceholderMessage(localMessage));
+  }
+
+  if (serverMessage.role === "assistant" && serverMessage.intent !== "rate_limited") {
+    const latestAssistantId = getLatestFinalAssistantId(incomingMessages);
+    if (serverMessage.id === latestAssistantId) {
+      const placeholder = localMessages.find((localMessage) => localMessage.role === "assistant" && isStreamingPlaceholderMessage(localMessage));
+      if (placeholder) return placeholder;
+    }
+
+    return localMessages.find((localMessage) => {
+      if (localMessage.role !== "assistant") return false;
+      const localContent = normalizedMessageContent(localMessage);
+      return localContent !== "" && serverContent !== "" && (localContent.startsWith(serverContent) || serverContent.startsWith(localContent));
+    });
+  }
+
+  return undefined;
+}
+
+function mergeServerMessagesPreservingLocal(prev: ChatMessage[], incomingMessages: ChatMessage[]): ChatMessage[] {
+  if (incomingMessages.length === 0) return prev;
+
+  const localMessages = prev.filter(isLocalTransientMessage);
+  const matchedLocalIds = new Set<string>();
+  const incomingIds = new Set(incomingMessages.map((message) => message.id));
+  const mergedIncoming = incomingMessages.map((serverMessage) => {
+    const localMatch = findLocalMatchForServerMessage(
+      localMessages.filter((localMessage) => !matchedLocalIds.has(localMessage.id)),
+      serverMessage,
+      incomingMessages,
+    );
+    if (!localMatch) return serverMessage;
+
+    matchedLocalIds.add(localMatch.id);
+    const localContent = localMatch.content || "";
+    const serverContent = serverMessage.content || "";
+    return {
+      ...serverMessage,
+      content: localContent.length > serverContent.length ? localContent : serverContent,
+      render_id: localMatch.render_id || localMatch.id,
+    };
+  });
+
+  return [
+    ...prev.filter((message) =>
+      !incomingIds.has(message.id) &&
+      !(isLocalTransientMessage(message) && matchedLocalIds.has(message.id))
+    ),
+    ...mergedIncoming,
+  ].sort((a, b) => messageTime(a) - messageTime(b));
+}
+
 function getWorkspaceSettings(workspace?: Workspace | null): Record<string, unknown> {
   const settings = workspace?.settings;
   return settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
 }
 
-function normalizeModelIdForSelector(modelId?: string | null): string {
+function coerceModelMetadata(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function collectMetadataAliases(metadata: Record<string, unknown>): string[] {
+  const aliases = new Set<string>();
+  for (const key of ["execution_model_id", "canonical_model"]) {
+    const value = String(metadata[key] || "").trim();
+    if (value) aliases.add(value);
+  }
+  for (const key of ["aliases", "accepted_aliases"]) {
+    const values = metadata[key];
+    if (!Array.isArray(values)) continue;
+    for (const value of values) {
+      const alias = String(value || "").trim();
+      if (alias) aliases.add(alias);
+    }
+  }
+  return Array.from(aliases);
+}
+
+function buildRuntimeModelAliasMap(rows: LlmRegistryModel[]): Map<string, string> {
+  const aliasMap = new Map<string, string>();
+  for (const row of rows) {
+    const canonicalModelId = String(row.model_id || "").trim();
+    if (!canonicalModelId) continue;
+    aliasMap.set(canonicalModelId, canonicalModelId);
+    for (const alias of collectMetadataAliases(coerceModelMetadata(row.metadata))) {
+      aliasMap.set(alias, canonicalModelId);
+    }
+  }
+  return aliasMap;
+}
+
+function getLegacyModelOption(modelId?: string | null): (typeof MODEL_OPTIONS)[number] | null {
+  const trimmed = String(modelId || "").trim();
+  if (!trimmed) return null;
+  return (
+    LEGACY_MODEL_OPTION_MAP.get(trimmed) ||
+    LEGACY_MODEL_OPTION_MAP.get(LEGACY_CANONICAL_DISPLAY_MODEL_ID[trimmed] || "") ||
+    LEGACY_MODEL_OPTION_MAP.get(LEGACY_CANONICAL_DISPLAY_MODEL_ID[LEGACY_MODEL_ID_ALIASES[trimmed] || ""] || "") ||
+    null
+  );
+}
+
+function normalizeModelIdForSelector(modelId?: string | null, aliasMap?: Map<string, string>): string {
   const trimmed = (modelId || "").trim();
-  return MODEL_ID_TO_SELECTOR_ID[trimmed] ?? trimmed;
+  if (!trimmed) return trimmed;
+  if (aliasMap?.has(trimmed)) return aliasMap.get(trimmed) || trimmed;
+  if (trimmed.includes(":")) {
+    const unqualified = trimmed.split(":").slice(1).join(":").trim();
+    if (unqualified) {
+      if (aliasMap?.has(unqualified)) return aliasMap.get(unqualified) || unqualified;
+      if (LEGACY_MODEL_ID_ALIASES[unqualified]) return LEGACY_MODEL_ID_ALIASES[unqualified];
+    }
+  }
+  return LEGACY_MODEL_ID_ALIASES[trimmed] ?? trimmed;
 }
 
 function formatCostLabel(inputCost?: string | number | null, outputCost?: string | number | null): string {
@@ -124,30 +288,31 @@ function buildChatPreferenceKey(provider: string | undefined, modelId: string): 
   return `${normalizedProvider}:${normalizedModel}`;
 }
 
-function preferenceKeyForSelectorId(optionId: string, provider?: string): string {
+function preferenceKeyForSelectorId(optionId: string, provider?: string, aliasMap?: Map<string, string>): string {
   if (!optionId || optionId === "mixture" || optionId === "auto") return "mixture";
   if (optionId.includes(":")) return optionId;
-  return buildChatPreferenceKey(provider, optionId);
+  return buildChatPreferenceKey(provider, normalizeModelIdForSelector(optionId, aliasMap));
 }
 
 function buildSelectableModelOption(row: LlmRegistryModel, duplicateModelIds: Set<string>): SelectableModelOption {
-  const modelId = normalizeModelIdForSelector(row.model_id);
-  const optionId = duplicateModelIds.has(row.model_id) ? `${row.provider}:${modelId}` : modelId;
-  const staticOption = STATIC_MODEL_OPTION_MAP.get(optionId);
-  const fallbackStaticOption = STATIC_MODEL_OPTION_MAP.get(modelId);
+  const modelId = String(row.model_id || "").trim();
+  const optionId = duplicateModelIds.has(modelId) ? `${row.provider}:${modelId}` : modelId;
+  const fallbackStaticOption = getLegacyModelOption(modelId);
+  const costLabel = formatCostLabel(row.input_cost, row.output_cost);
   return {
     id: optionId,
     modelId,
     preferenceKey: buildChatPreferenceKey(row.provider, row.model_id),
-    name: staticOption?.name || fallbackStaticOption?.name || row.display_name || optionId,
-    provider: staticOption?.provider || fallbackStaticOption?.provider || row.provider,
-    cost: staticOption?.cost || fallbackStaticOption?.cost || formatCostLabel(row.input_cost, row.output_cost),
+    name: row.display_name || fallbackStaticOption?.name || optionId,
+    provider: row.provider || fallbackStaticOption?.provider || "legacy",
+    cost: costLabel !== "변동" ? costLabel : fallbackStaticOption?.cost || costLabel,
     isActive: true,
   };
 }
 
 function buildNormalizedPreferenceMap(
   preferences: ChatModelPreference[],
+  aliasMap?: Map<string, string>,
 ): Map<string, ChatModelPreference> {
   const normalized = new Map<string, ChatModelPreference>();
   for (const item of preferences) {
@@ -155,7 +320,7 @@ function buildNormalizedPreferenceMap(
     normalized.set(preferenceKey, item);
     if (!item.preference_key) {
       normalized.set(item.model_id, item);
-      normalized.set(normalizeModelIdForSelector(item.model_id), item);
+      normalized.set(normalizeModelIdForSelector(item.model_id, aliasMap), item);
     }
   }
   return normalized;
@@ -1011,7 +1176,7 @@ export default function ChatPage() {
   // ── Chat state ──
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
-  const [model, setModel] = useState(DEFAULT_MODEL);
+  const [model, setModel] = useState(DEFAULT_RUNTIME_MODEL);
   const [roleKey, setRoleKey] = useState("CEO");
   const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
   const roleLabels = useMemo(() => new Map(roleOptions.map((role) => [role.id, role.label])), [roleOptions]);
@@ -1088,7 +1253,7 @@ export default function ChatPage() {
   const [showCreateSession, setShowCreateSession] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState("");
   const [newSessionRoleKey, setNewSessionRoleKey] = useState("CEO");
-  const [newSessionModel, setNewSessionModel] = useState(DEFAULT_MODEL);
+  const [newSessionModel, setNewSessionModel] = useState(DEFAULT_RUNTIME_MODEL);
 
   // ── Prompt Templates (P2-10) ──
   const [showTemplates, setShowTemplates] = useState(false);
@@ -1105,8 +1270,13 @@ export default function ChatPage() {
   // ── AADS-188D: diff_preview 승인 패널 ──
   const diffApproval = useDiffApproval();
 
+  const modelAliasMap = useMemo(
+    () => buildRuntimeModelAliasMap(runtimeModels || []),
+    [runtimeModels],
+  );
+
   const selectableModels = useMemo<SelectableModelOption[]>(() => {
-    const preferenceMap = buildNormalizedPreferenceMap(modelPreferences);
+    const preferenceMap = buildNormalizedPreferenceMap(modelPreferences, modelAliasMap);
     const modelIdCounts = (runtimeModels || []).reduce((acc, row) => {
       acc.set(row.model_id, (acc.get(row.model_id) || 0) + 1);
       return acc;
@@ -1117,7 +1287,7 @@ export default function ChatPage() {
         .map(([modelId]) => modelId),
     );
     const autoOption = {
-      ...(STATIC_MODEL_OPTION_MAP.get("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
+      ...(getLegacyModelOption("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
       modelId: "mixture",
       preferenceKey: "mixture",
       isActive: true,
@@ -1127,9 +1297,12 @@ export default function ChatPage() {
     };
 
     if (runtimeModels === null) {
-      const currentModelId = normalizeModelIdForSelector(model || DEFAULT_MODEL);
-      const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
-      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider);
+      const currentModelId = normalizeModelIdForSelector(model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
+      const currentOption = getLegacyModelOption(currentModelId);
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider, modelAliasMap);
+      const currentOptionName = currentOption ? currentOption.name : currentModelId;
+      const currentOptionProvider = currentOption ? currentOption.provider : "legacy";
+      const currentOptionCost = currentOption ? currentOption.cost : "변동";
       return currentModelId && currentModelId !== "mixture"
         ? [
             autoOption,
@@ -1147,9 +1320,9 @@ export default function ChatPage() {
                   id: currentModelId,
                   modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
                   preferenceKey: currentPreferenceKey,
-                  name: currentModelId,
-                  provider: "legacy",
-                  cost: "변동",
+                  name: currentOptionName,
+                  provider: currentOptionProvider,
+                  cost: currentOptionCost,
                   isActive: true,
                   isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
                   isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
@@ -1159,7 +1332,7 @@ export default function ChatPage() {
         : [autoOption];
     }
 
-    const currentModelId = normalizeModelIdForSelector(model);
+    const currentModelId = normalizeModelIdForSelector(model, modelAliasMap);
     const activeOptions = runtimeModels.map((row) => {
       const option = buildSelectableModelOption(row, duplicateModelIds);
       const preference = preferenceMap.get(option.preferenceKey) || (!duplicateModelIds.has(row.model_id) ? preferenceMap.get(option.modelId) : undefined);
@@ -1172,7 +1345,7 @@ export default function ChatPage() {
     });
     const activeOptionsMap = new Map(activeOptions.map((option) => [option.id, option]));
     const orderedOptions = Array.from(activeOptionsMap.values())
-      .filter((option) => !option.isHidden || option.id === currentModelId)
+      .filter((option) => !option.isHidden || option.id === currentModelId || option.modelId === currentModelId)
       .sort((a, b) => compareSelectableModels(a, b, preferenceMap))
       .map((option) => ({
         ...option,
@@ -1180,9 +1353,13 @@ export default function ChatPage() {
       }));
 
     const options: SelectableModelOption[] = [autoOption, ...orderedOptions];
-    if (currentModelId && currentModelId !== "mixture" && !options.some((option) => option.id === currentModelId)) {
-      const currentOption = STATIC_MODEL_OPTION_MAP.get(currentModelId);
-      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider);
+    if (
+      currentModelId &&
+      currentModelId !== "mixture" &&
+      !options.some((option) => option.id === currentModelId || option.modelId === currentModelId)
+    ) {
+      const currentOption = getLegacyModelOption(currentModelId);
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider, modelAliasMap);
       options.push(
         currentOption
           ? {
@@ -1210,7 +1387,7 @@ export default function ChatPage() {
       );
     }
     return options;
-  }, [model, modelPreferences, runtimeModels]);
+  }, [model, modelAliasMap, modelPreferences, runtimeModels]);
 
   const activeSelectableModelIds = useMemo(
     () => {
@@ -1225,13 +1402,13 @@ export default function ChatPage() {
   );
 
   const selectedModelValue = useMemo(() => {
-    const normalized = normalizeModelIdForSelector(model);
+    const normalized = normalizeModelIdForSelector(model, modelAliasMap);
     if (selectableModels.some((option) => option.id === normalized)) return normalized;
     const matching = selectableModels.filter((option) => option.modelId === normalized && option.isActive);
     if (matching.length === 1) return matching[0].id;
     const codexMatch = matching.find((option) => option.provider === "codex");
     return codexMatch?.id || matching[0]?.id || normalized;
-  }, [model, selectableModels]);
+  }, [model, modelAliasMap, selectableModels]);
 
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1319,9 +1496,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!activeSession || runtimeModels === null) return;
-    const currentModelId = normalizeModelIdForSelector(model);
+    const currentModelId = normalizeModelIdForSelector(model, modelAliasMap);
     if (!currentModelId || currentModelId === "mixture" || activeSelectableModelIds.has(currentModelId)) return;
-    const fallbackModel = activeSelectableModelIds.has(DEFAULT_MODEL) ? DEFAULT_MODEL : "mixture";
+    const fallbackModel = activeSelectableModelIds.has(DEFAULT_RUNTIME_MODEL) ? DEFAULT_RUNTIME_MODEL : "mixture";
     if (!fallbackModel || fallbackModel === currentModelId) return;
 
     setModel(fallbackModel);
@@ -1337,7 +1514,7 @@ export default function ChatPage() {
       method: "PUT",
       body: JSON.stringify({ current_model: fallbackModel }),
     }).catch(() => {});
-  }, [activeSelectableModelIds, activeSession, model, runtimeModels]);
+  }, [activeSelectableModelIds, activeSession, model, modelAliasMap, runtimeModels]);
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
@@ -1517,6 +1694,11 @@ export default function ChatPage() {
               // 무해 — 표시 없음
             } else if (ev.type === "error") {
               setToolStatus("🔄 서버 재시작 감지 — 자동으로 이어집니다...");
+            } else if (ev.type === "resume_unavailable" || ev.type === "resume_timeout") {
+              setWaitingBgResponse(true);
+              setBgPartialContent(full || bgPartialContent || "");
+              setToolStatus("🔄 응답 복구 상태 확인 중...");
+              return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc`).then((msgs) => msgs.reverse());
               if (activeSessionRef.current !== attachSessionId) return;
@@ -2072,9 +2254,9 @@ export default function ChatPage() {
     chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWs}`)
       .then(setArtifacts)
       .catch(() => setArtifacts([]));
-    // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 DEFAULT_MODEL)
+    // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 기본 모델)
     {
-      const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_MODEL);
+      const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
       setModel(sessionModel);
     }
     {
@@ -2274,8 +2456,6 @@ export default function ChatPage() {
           setWaitingBgResponse(false); setBgPartialContent("");
           // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
-          // 끊김 복구 후 대기 메시지 큐 클리어 (interrupt로 이미 전달됨 or 폐기)
-          if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -2284,20 +2464,7 @@ export default function ChatPage() {
               // ★ FIX: 최종 AI 메시지를 streamBuf에 먼저 표시 (같은 버블에서 전환)
               const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiJc?.content) setStreamBuf(_lastAiJc.content);
-              setMessages(prev => {
-                // ★ 완전 in-place: placeholder를 최종 AI 메시지로 교체 (같은 React key → 새 버블 방지)
-                const placeholder = prev.find(m => m.intent === "streaming_placeholder");
-                if (placeholder && _lastAiJc) {
-                  // placeholder의 id 유지 → React DOM 재사용 (새 버블 생성 불가)
-                  const inPlaceMsg = { ..._lastAiJc, id: placeholder.id };
-                  return prev.map(m => m.intent === "streaming_placeholder" ? inPlaceMsg : m);
-                }
-                // fallback: placeholder 없을 때
-                const freshIds = new Set(filtered.map(m => m.id));
-                const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
-                return [...preserved, ...filtered];
-              });
+              setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               // ★ FIX: 다음 프레임에서 스트리밍 버블 제거 (깜빡임 방지)
               requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
             } else {
@@ -2327,8 +2494,6 @@ export default function ChatPage() {
           // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
-          // 끊김 후 대화 못이어가는 문제 방지 — 대기 큐 클리어
-          if (msgQueueRef.current.length > 0) { msgQueueRef.current = []; setQueueCount(0); }
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
           if (cancelled) return;
           if (freshMsgs) {
@@ -2337,19 +2502,7 @@ export default function ChatPage() {
               // ★ FIX: 최종 AI 메시지를 streamBuf에 표시 후 전환
               const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiSse?.content) setStreamBuf(_lastAiSse.content);
-              setMessages(prev => {
-                // ★ 완전 in-place: placeholder를 최종 AI 메시지로 교체 (새 버블 방지)
-                const placeholder = prev.find(m => m.intent === "streaming_placeholder");
-                if (placeholder && _lastAiSse) {
-                  const inPlaceMsg = { ..._lastAiSse, id: placeholder.id };
-                  return prev.map(m => m.intent === "streaming_placeholder" ? inPlaceMsg : m);
-                }
-                // fallback: placeholder 없을 때
-                const freshIds = new Set(filtered.map(m => m.id));
-                const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
-                return [...preserved, ...filtered];
-              });
+              setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
             } else {
               setStreaming(false); setStreamBuf("");
@@ -2412,12 +2565,7 @@ export default function ChatPage() {
               if (allMsgs) {
                 const filtered = allMsgs;
                 if (filtered.length > 0) {
-                  setMessages(prev => {
-                    const freshIds = new Set(filtered.map(m => m.id));
-                    const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                    const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
-                    return [...preserved, ...filtered];
-                  });
+                  setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
                 }
               }
             } catch { /* 재조회 실패 무시 */ }
@@ -2452,57 +2600,7 @@ export default function ChatPage() {
         setMessages((prev) => {
           const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
           if (hasStoppedMsg && !_waitingBg) return prev;
-          const existingIds = new Set(prev.map((m) => m.id));
-          const existingHashes = new Set(
-            prev.map((m) => `${m.role}:${(m.content || "").slice(0, 200)}`)
-          );
-          const newMsgs = latest.filter(
-            (m) => !existingIds.has(m.id) && !existingHashes.has(`${m.role}:${(m.content || "").slice(0, 200)}`)
-          );
-          if (newMsgs.length === 0) {
-            let replaced = false;
-            const updated = prev
-              .map((m) => {
-                if (m.id.startsWith("ai-") || m.id.startsWith("tmp-") || m.id.startsWith("stopped-")) {
-                  const match = latest.find(
-                    (l) => l.role === m.role && (l.content || "").slice(0, 200) === (m.content || "").slice(0, 200)
-                  );
-                  if (match) {
-                    replaced = true;
-                    // Bug 3: match ID가 이미 state에 있으면 temp 메시지 제거 (실제 DB 버전이 이미 존재)
-                    if (existingIds.has(match.id)) return null;
-                    // Bug 1: fields=minimal로 잘린 응답이 긴 기존 content를 덮어쓰지 않도록 보존
-                    const content = (m.content || "").length > (match.content || "").length ? m.content : match.content;
-                    return { ...match, content };
-                  }
-                }
-                return m;
-              })
-              .filter((m) => m !== null) as typeof prev;
-            return replaced ? updated : prev;
-          }
-          // FIX: DB 메시지 도착 시 클라이언트 임시 메시지(ai-*/stopped-*/tmp-*) 제거 → 버블 중복 방지
-          const removedTemps = prev.filter((m) =>
-            m.id.startsWith("ai-") || m.id.startsWith("stopped-") || m.id.startsWith("tmp-")
-          );
-          const cleanPrev = prev.filter((m) =>
-            !(m.id.startsWith("ai-") || m.id.startsWith("stopped-") || m.id.startsWith("tmp-"))
-          );
-          // Bug 1: 제거된 temp 메시지보다 짧은 content를 가진 신규 DB 메시지에 긴 content 복원
-          const preservedNewMsgs = newMsgs.map((m) => {
-            const tempMatch = removedTemps.find((t) =>
-              t.role === m.role &&
-              (t.content || "").slice(0, (m.content || "").length) === (m.content || "") &&
-              (t.content || "").length > (m.content || "").length
-            );
-            return tempMatch ? { ...m, content: tempMatch.content! } : m;
-          });
-          // Bug 3: cleanPrev에 이미 있는 ID는 preservedNewMsgs에서 제거 (중복 방지)
-          const newMsgIds = new Set(preservedNewMsgs.map((m) => m.id));
-          const dedupedCleanPrev = cleanPrev.filter((m) => !newMsgIds.has(m.id));
-          return [...dedupedCleanPrev, ...preservedNewMsgs].sort(
-            (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-          );
+          return mergeServerMessagesPreservingLocal(prev, latest);
         });
       } catch { /* 폴링 실패 무시 */ }
     }, 3000); // 3초 간격: waitingBg=true 3초, 아닐 때 15초 폴링 (성능 최적화)
@@ -2538,7 +2636,7 @@ export default function ChatPage() {
       isInitialLoadRef.current = true;
       setActiveSession(s);
       setRoleKey(s.role_key || nextRoleKey);
-      setModel(normalizeModelIdForSelector(s.current_model || nextModel || DEFAULT_MODEL));
+      setModel(normalizeModelIdForSelector(s.current_model || nextModel || DEFAULT_RUNTIME_MODEL, modelAliasMap));
       setMessages([]);
       if (screenSizeRef.current !== "desktop") setMobileOverlay(null);
       return s;
@@ -2735,16 +2833,19 @@ export default function ChatPage() {
       }]);
       // 백엔드 인터럽트 큐에 push (첨부파일 포함)
       if (activeSessionObjRef.current?.id) {
-        chatApi(`/chat/sessions/${activeSessionObjRef.current.id}/interrupt`, {
+        chatApi<{ queued: boolean; message?: string }>(`/chat/sessions/${activeSessionObjRef.current.id}/interrupt`, {
           method: "POST",
           body: JSON.stringify({ content: interruptContent, attachments: interruptAttachments }),
-        }).then(() => {
-          // interrupt API 성공 → 큐에서 제거 (done 후 재전송 방지)
-          const idx = msgQueueRef.current.indexOf(interruptContent);
-          if (idx !== -1) msgQueueRef.current.splice(idx, 1);
+        }).then((res) => {
+          if (!res?.queued) {
+            const idx = msgQueueRef.current.indexOf(interruptContent);
+            if (idx !== -1) msgQueueRef.current.splice(idx, 1);
+            setQueueCount(msgQueueRef.current.length);
+            setYellowWarning(res?.message || "현재 스트리밍이 아니어서 추가 지시를 대기열에서 제거했습니다.");
+            return;
+          }
+          // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
           setQueueCount(msgQueueRef.current.length);
-          // 대기 완료 시 경고도 즉시 해제
-          if (msgQueueRef.current.length === 0) setYellowWarning(null);
         }).catch((e: unknown) => {
           console.warn("interrupt push failed, keeping in queue for retry:", e);
         });
@@ -2947,6 +3048,11 @@ export default function ChatPage() {
         if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
         while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
       };
+      const _resetDrain = () => {
+        if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
+        _tokenQueue.length = 0;
+        _displayedText = "";
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -2994,9 +3100,10 @@ export default function ChatPage() {
             resetSseTimeout();
             if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
+              _resetDrain();
               full = "";
               setStreamBuf("");
-              setToolStatus("🔄 응답 재검증 중...");
+              setToolStatus(ev.reason === "interrupt_applied" ? "🔄 추가 지시 반영 중..." : "🔄 응답 재검증 중...");
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
@@ -3170,7 +3277,12 @@ export default function ChatPage() {
             } else if (ev.type === "interrupt_applied") {
               // CEO 인터럽트가 LLM에 반영됨 → 큐에서 해당 지시 제거 (완료 후 중복 전송 방지)
               if (msgQueueRef.current.length > 0) {
-                msgQueueRef.current.shift();
+                const applied = String(ev.content || "");
+                const idx = msgQueueRef.current.findIndex((item) =>
+                  item === applied || item.startsWith(applied) || applied.startsWith(item.slice(0, 100))
+                );
+                if (idx >= 0) msgQueueRef.current.splice(idx, 1);
+                else msgQueueRef.current.shift();
               }
               // 무조건 큐 카운트 동기화 (배지 확실 해제)
               setQueueCount(msgQueueRef.current.length);
@@ -3591,27 +3703,7 @@ export default function ChatPage() {
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
-                    setMessages(prev => {
-                      // ★ in-place 업데이트: placeholder가 있으면 최종 메시지로 교체
-                      const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                      if (hasPlaceholder) {
-                        const _lastAiJc = [...filtered].reverse().find((m: ChatMessage) => m.role === "assistant");
-                        if (_lastAiJc) {
-                          const freshIds = new Set(filtered.map(m => m.id));
-                          const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                          const preserved = prev.filter(m =>
-                            m.intent !== "streaming_placeholder" &&
-                            !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") &&
-                            new Date(m.created_at || 0).getTime() < oldestFreshTime
-                          );
-                          return [...preserved, ...filtered];
-                        }
-                      }
-                      const freshIds = new Set(filtered.map(m => m.id));
-                      const oldestFreshTime = new Date(filtered[0]?.created_at || 0).getTime();
-                      const preserved = prev.filter(m => !freshIds.has(m.id) && !m.id.startsWith("tmp-") && !m.id.startsWith("ai-") && !m.id.startsWith("stopped-") && new Date(m.created_at || 0).getTime() < oldestFreshTime);
-                      return [...preserved, ...filtered];
-                    });
+                    setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
                     requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
                   }
                 }
@@ -3630,11 +3722,7 @@ export default function ChatPage() {
           _checkCompletion(300);
         }
 
-        // 스트리밍 완료 시 큐 잔여분 전체 클리어 (interrupt로 이미 전달됨)
-        if (msgQueueRef.current.length > 0) {
-          msgQueueRef.current = [];
-        }
-        setQueueCount(0);
+        setQueueCount(msgQueueRef.current.length);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4229,7 +4317,7 @@ export default function ChatPage() {
     const initialRole = lastRoleKey && roleLabels.has(lastRoleKey) ? lastRoleKey : defaultRole;
     setNewSessionTitle("");
     setNewSessionRoleKey(initialRole);
-    setNewSessionModel(selectedModelValue || modelRef.current || DEFAULT_MODEL);
+    setNewSessionModel(selectedModelValue || modelRef.current || DEFAULT_RUNTIME_MODEL);
     setShowCreateSession(true);
   }
 
@@ -5408,7 +5496,7 @@ export default function ChatPage() {
               const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "runner_response" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
-                <React.Fragment key={msg.id || idx}>
+                <React.Fragment key={msg.render_id || msg.id || idx}>
                   <MessageItem
                     msg={msg}
                     idx={idx}
