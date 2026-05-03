@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Header from "@/components/Header";
 import DatabaseOverviewPanel from "@/components/settings/DatabaseOverviewPanel";
 import LlmRegistryWorkspacePanel from "@/components/settings/LlmRegistryWorkspacePanel";
@@ -27,7 +27,7 @@ const SIZE_LABELS: Record<string, string> = {
 
 
 
-const AVAILABLE_MODELS = [
+const LEGACY_AVAILABLE_MODELS = [
   { group: "Claude (월정액)", models: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] },
   { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.5", "codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex", "codex:gpt-5.3-codex-spark", "codex:gpt-5.2"] },
   { group: "MiniMax (월정액)", models: ["litellm:minimax-m2.7", "litellm:minimax-m2.5"] },
@@ -38,6 +38,23 @@ const AVAILABLE_MODELS = [
   { group: "Kimi", models: ["litellm:kimi-k2", "litellm:kimi-k2.5"] },
   { group: "OpenRouter", models: ["litellm:openrouter-grok-4-fast", "litellm:openrouter-deepseek-v3"] },
 ];
+
+interface RunnerRegistryModel {
+  provider: string;
+  model_id: string;
+  display_name?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface RunnerAvailableModelOption {
+  value: string;
+  label: string;
+}
+
+interface RunnerAvailableModelGroup {
+  group: string;
+  models: RunnerAvailableModelOption[];
+}
 
 interface ModelConfig {
   size: string;
@@ -99,6 +116,73 @@ const REGISTRY_STATUS_COLORS: Record<string, string> = {
   inactive: "var(--text-secondary)",
   review_required: "var(--danger)",
 };
+
+const RUNNER_PROVIDER_GROUP_LABELS: Record<string, string> = {
+  anthropic: "Claude (월정액)",
+  codex: "Codex/GPT (월정액)",
+  deepseek: "DeepSeek",
+  gemini: "Gemini",
+  groq: "Groq (무료)",
+  kimi: "Kimi",
+  minimax: "MiniMax (월정액)",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  qwen: "Qwen",
+};
+
+const RUNNER_PROVIDER_ORDER = [
+  "anthropic",
+  "codex",
+  "openai",
+  "gemini",
+  "deepseek",
+  "qwen",
+  "groq",
+  "kimi",
+  "minimax",
+  "openrouter",
+];
+
+function buildRunnerModelValue(model: RunnerRegistryModel): string {
+  const provider = (model.provider || "").trim().toLowerCase();
+  const backend = String(model.metadata?.["execution_backend"] || "").trim().toLowerCase();
+  if (provider === "codex") return `codex:${model.model_id}`;
+  if (
+    backend === "litellm_proxy" ||
+    provider === "gemini" ||
+    provider === "groq" ||
+    provider === "openrouter" ||
+    provider === "litellm"
+  ) {
+    return `litellm:${model.model_id}`;
+  }
+  return model.model_id;
+}
+
+function buildRunnerModelGroups(models: RunnerRegistryModel[]): RunnerAvailableModelGroup[] {
+  const grouped = new Map<string, RunnerAvailableModelOption[]>();
+  const seen = new Set<string>();
+  const sorted = [...models].sort((a, b) => {
+    const providerOrder =
+      RUNNER_PROVIDER_ORDER.indexOf((a.provider || "").toLowerCase()) -
+      RUNNER_PROVIDER_ORDER.indexOf((b.provider || "").toLowerCase());
+    if (providerOrder !== 0) return providerOrder;
+    return (a.display_name || a.model_id).localeCompare(b.display_name || b.model_id);
+  });
+
+  for (const model of sorted) {
+    const value = buildRunnerModelValue(model);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    const provider = (model.provider || "").trim().toLowerCase();
+    const group = RUNNER_PROVIDER_GROUP_LABELS[provider] || provider.toUpperCase();
+    const item = { value, label: model.display_name || model.model_id };
+    if (!grouped.has(group)) grouped.set(group, []);
+    grouped.get(group)!.push(item);
+  }
+
+  return Array.from(grouped.entries()).map(([group, items]) => ({ group, models: items }));
+}
 
 function toKst(ts: string | null | undefined): string {
   if (!ts) return "—";
@@ -385,6 +469,7 @@ function LlmModelRegistryPanel() {
 
 function RunnerModelConfig() {
   const [configs, setConfigs] = useState<ModelConfig[]>([]);
+  const [registryModels, setRegistryModels] = useState<RunnerRegistryModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -392,18 +477,50 @@ function RunnerModelConfig() {
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getRunnerModels()
-      .then((r: any) => {
-        const sorted = (r.configs || []).sort(
-          (a: ModelConfig, b: ModelConfig) => SIZE_ORDER.indexOf(a.size) - SIZE_ORDER.indexOf(b.size)
-        );
-        setConfigs(sorted);
+    Promise.allSettled([
+      api.getRunnerModels(),
+      (api as any).getLlmModels({ active_only: true }),
+    ])
+      .then(([configsRes, registryRes]) => {
+        if (configsRes.status === "fulfilled") {
+          const sorted = (configsRes.value.configs || []).sort(
+            (a: ModelConfig, b: ModelConfig) => SIZE_ORDER.indexOf(a.size) - SIZE_ORDER.indexOf(b.size)
+          );
+          setConfigs(sorted);
+        } else {
+          setMsg("러너 설정 로드 실패");
+        }
+
+        if (registryRes.status === "fulfilled" && Array.isArray(registryRes.value.models)) {
+          setRegistryModels(registryRes.value.models);
+        } else {
+          setRegistryModels([]);
+          setMsg((prev) => prev || "모델 레지스트리 로드 실패");
+        }
       })
-      .catch(() => setMsg("로드 실패"))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const registryGroups = useMemo<RunnerAvailableModelGroup[]>(() => {
+    const groups = buildRunnerModelGroups(registryModels);
+    if (groups.length > 0) return groups;
+    return LEGACY_AVAILABLE_MODELS.map((group) => ({
+      group: group.group,
+      models: group.models.map((value) => ({ value, label: value })),
+    }));
+  }, [registryModels]);
+
+  const availableRegistryValues = useMemo(() => {
+    const values = new Set<string>();
+    for (const group of registryGroups) {
+      for (const model of group.models) {
+        values.add(model.value);
+      }
+    }
+    return values;
+  }, [registryGroups]);
 
   const moveModel = (sizeIdx: number, modelIdx: number, dir: -1 | 1) => {
     const next = [...configs];
@@ -455,6 +572,14 @@ function RunnerModelConfig() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {configs.map((cfg, si) => (
         <div key={cfg.size} className="rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          {(() => {
+            const missingModels = cfg.models.filter((model) => !availableRegistryValues.has(model));
+            return missingModels.length > 0 ? (
+              <div className="mb-3 rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}>
+                레지스트리에 현재 노출되지 않는 모델: {missingModels.join(", ")}
+              </div>
+            ) : null;
+          })()}
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold" style={{ color: cfg.size === "AI_REVIEW" ? "var(--accent)" : "var(--text-primary)" }}>
               {SIZE_LABELS[cfg.size] || cfg.size}
@@ -489,10 +614,10 @@ function RunnerModelConfig() {
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
             >
               <option value="">모델 선택...</option>
-              {AVAILABLE_MODELS.map((g) => (
+              {registryGroups.map((g) => (
                 <optgroup key={g.group} label={g.group}>
-                  {g.models.filter((m) => !cfg.models.includes(m)).map((m) => (
-                    <option key={m} value={m}>{m}</option>
+                  {g.models.filter((m) => !cfg.models.includes(m.value)).map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </optgroup>
               ))}
@@ -503,6 +628,9 @@ function RunnerModelConfig() {
         </div>
       ))}
       </div>
+      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+        러너 모델 추가 목록은 활성 레지스트리 기준으로 자동 갱신되며, 레지스트리 조회 실패 시에만 정적 목록으로 폴백됩니다.
+      </p>
       <div className="flex items-center gap-3 pt-2">
         <button onClick={save} disabled={saving}
           className="px-5 py-2 rounded-lg text-sm font-bold"

@@ -7,11 +7,35 @@ export interface ChatWorkspaceRoleOption {
   label: string;
   display_name_ko?: string | null;
   project_scope?: string[];
+  role_category?: string | null;
+  role_category_label_ko?: string | null;
+  role_group_order?: number | null;
+  lifecycle_stage?: string | null;
   when_to_use?: string[] | null;
   how_to_instruct?: string[] | null;
   instruction_template?: string | null;
 }
 export interface ChatWorkspaceRolesResponse { roles: ChatWorkspaceRoleOption[]; total: number; }
+export interface AdminDeployStatusResponse {
+  servers: Array<{
+    id: string;
+    name: string;
+    ip: string;
+    projects: Array<{
+      name: string;
+      status: "ok" | "error" | "unknown";
+      last_commit: string | null;
+      last_deploy_at: string | null;
+    }>;
+  }>;
+}
+export interface AdminSessionItem {
+  [key: string]: unknown;
+  session_id: string;
+  workspace: string;
+  created_at: string | null;
+  message_count: number;
+}
 
 import type {
   HealthResponse,
@@ -388,15 +412,25 @@ export const api = {
   getTokenProfile: () => request<any>("/admin/prompts/token-profile"),
   getGovernance: () => request<any>("/admin/governance"),
   getGovernanceLayers: () => request<any>("/admin/governance/layers"),
+  getGovernanceIntentPolicies: () => request<any>("/governance/intent-policies"),
+  getGovernanceFeatureFlags: () => request<any>("/governance/feature-flags"),
+  updateGovernanceFeatureFlag: (flagKey: string, enabled: boolean) =>
+    request<any>(`/governance/feature-flags/${encodeURIComponent(flagKey)}`, {
+      method: "POST",
+      body: JSON.stringify({ enabled, changed_by: "admin_dashboard" }),
+    }),
+  getGovernanceAuditLog: (limit = 100) => request<any>(`/governance/audit-log?limit=${limit}`),
   getModelParity: () => request<any>("/admin/model-parity"),
   getModelParityIntentMap: () => request<any>("/admin/model-parity/intent-map"),
   getDeployStatus: () => request<any>("/admin/deploy/status"),
+  getAdminDeployStatus: () => request<AdminDeployStatusResponse>("/admin/deploy/status"),
   getEmergencyStatus: () => request<any>("/admin/emergency"),
   postEmergencyAction: (action: string, reason: string) =>
     request<any>("/admin/emergency", { method: "POST", body: JSON.stringify({ action, reason }) }),
   getAdminAgents: () => request<any>("/admin/agents"),
   getAdminAgent: (role: string) => request<any>(`/admin/agents/${encodeURIComponent(role)}`),
   getAdminAgentStats: () => request<any>("/admin/agents/stats"),
+  getAdminSessions: () => request<{ sessions: AdminSessionItem[]; total: number }>("/admin/sessions"),
   getAdminTasks: (params?: { status?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);

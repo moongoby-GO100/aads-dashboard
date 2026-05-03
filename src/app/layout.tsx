@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Geist } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
-
-const geist = Geist({ subsets: ["latin"] });
 
 export async function generateViewport(): Promise<Viewport> {
   const headersList = await headers();
@@ -51,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}` }} />
       </head>
-      <body className={geist.className}>
+      <body>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

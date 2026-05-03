@@ -28,6 +28,17 @@ interface LlmModelProviderSummary {
   verified_key_count: number;
   active_model_count: number;
   template_model_count: number;
+  discovered_model_count?: number;
+  selectable_model_count?: number;
+  executable_model_count?: number;
+  template_active_model_count?: number;
+  discovery_active_model_count?: number;
+  active_model_source?: string;
+  runtime_executable?: boolean;
+  auto_discovery_supported?: boolean;
+  discovery_requirement?: string | null;
+  discovery_mode?: string | null;
+  last_seen_at?: string | null;
   linked_key_name: string | null;
   requires_admin_review: boolean;
 }
@@ -121,6 +132,12 @@ function formatCostLabel(model: LlmRegistryModel): string {
   if (!Number.isFinite(input) || !Number.isFinite(output)) return "변동";
   if (input === 0 && output === 0) return "무료";
   return `$${input}/$${output}`;
+}
+
+function formatDiscoveryMode(provider: LlmModelProviderSummary): string {
+  if (provider.auto_discovery_supported) return "자동 discovery";
+  if (provider.runtime_executable) return "실행 가능 / discovery 제한";
+  return "템플릿 대기";
 }
 
 function compareChatModelRows(a: ChatModelConfigRow, b: ChatModelConfigRow): number {
@@ -344,8 +361,20 @@ export default function LlmRegistryWorkspacePanel() {
           active_key_count: summaryRow?.active_key_count ?? providerKeys.filter((key) => key.is_active).length,
           available_key_count: summaryRow?.available_key_count ?? providerKeys.filter((key) => key.is_active && !isRateLimited(key)).length,
           rate_limited_key_count: summaryRow?.rate_limited_key_count ?? providerKeys.filter(isRateLimited).length,
+          verified_key_count: summaryRow?.verified_key_count ?? providerKeys.filter((key) => !!key.last_verified_at).length,
           active_model_count: summaryRow?.active_model_count ?? (providerModels[provider]?.length || 0),
           template_model_count: summaryRow?.template_model_count ?? (providerModels[provider]?.length || 0),
+          discovered_model_count: summaryRow?.discovered_model_count ?? 0,
+          selectable_model_count: summaryRow?.selectable_model_count ?? (providerModels[provider]?.length || 0),
+          executable_model_count: summaryRow?.executable_model_count ?? (providerModels[provider]?.length || 0),
+          template_active_model_count: summaryRow?.template_active_model_count ?? 0,
+          discovery_active_model_count: summaryRow?.discovery_active_model_count ?? 0,
+          active_model_source: summaryRow?.active_model_source ?? "none",
+          runtime_executable: summaryRow?.runtime_executable ?? false,
+          auto_discovery_supported: summaryRow?.auto_discovery_supported ?? false,
+          discovery_requirement: summaryRow?.discovery_requirement ?? null,
+          discovery_mode: summaryRow?.discovery_mode ?? null,
+          last_seen_at: summaryRow?.last_seen_at ?? null,
           linked_key_name: summaryRow?.linked_key_name || providerKeys[0]?.key_name || null,
           requires_admin_review: summaryRow?.requires_admin_review ?? false,
           keys: providerKeys,
@@ -584,12 +613,43 @@ export default function LlmRegistryWorkspacePanel() {
                   <p className="font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{provider.keys.length}</p>
                 </div>
                 <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
-                  <p style={{ color: "var(--text-secondary)" }}>운영 상태</p>
-                  <p className="font-semibold mt-1" style={{ color: provider.requires_admin_review ? "var(--danger)" : "var(--text-primary)" }}>
-                    {provider.requires_admin_review ? "검토 필요" : "정상"}
+                  <p style={{ color: "var(--text-secondary)" }}>Discovery</p>
+                  <p className="font-semibold mt-1" style={{ color: provider.auto_discovery_supported ? "var(--success)" : "var(--warning)" }}>
+                    {formatDiscoveryMode(provider)}
                   </p>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                  <p style={{ color: "var(--text-secondary)" }}>활성 소스</p>
+                  <p className="font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{provider.active_model_source || "none"}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                  <p style={{ color: "var(--text-secondary)" }}>실행 가능 모델</p>
+                  <p className="font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{provider.executable_model_count ?? provider.active_model_count}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                  <p style={{ color: "var(--text-secondary)" }}>Discovery 활성</p>
+                  <p className="font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{provider.discovery_active_model_count ?? 0}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                  <p style={{ color: "var(--text-secondary)" }}>마지막 반영</p>
+                  <p className="font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{toKst(provider.last_seen_at)}</p>
+                </div>
+              </div>
+
+              {provider.runtime_executable && !provider.auto_discovery_supported && (
+                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}>
+                  현재 이 provider는 실행은 가능하지만 catalog discovery는 제한됩니다. 자동 반영은 템플릿 기반이며, 조건: {provider.discovery_requirement || "별도 API 키 필요"}
+                </div>
+              )}
+
+              {provider.requires_admin_review && (
+                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.24)", color: "var(--danger)" }}>
+                  관리자 검토 필요: 템플릿이 없거나 review_required 상태의 모델이 포함됩니다.
+                </div>
+              )}
 
               <div className="space-y-2">
                 {provider.keys.length === 0 ? (

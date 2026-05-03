@@ -30,6 +30,7 @@ export interface ChatMessage {
   execution_id?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
+  render_id?: string;
   model_used?: string;
   intent?: string;
   input_tokens?: number;

@@ -24,6 +24,8 @@ interface Session {
 interface RoleOption {
   value: string;
   label: string;
+  role_category?: string | null;
+  role_category_label_ko?: string | null;
   when_to_use?: string[] | null;
   how_to_instruct?: string[] | null;
   instruction_template?: string | null;
@@ -195,6 +197,8 @@ export default function ChatSidebar({
               ? {
                   value,
                   label,
+                  role_category: role.role_category,
+                  role_category_label_ko: role.role_category_label_ko,
                   when_to_use: role.when_to_use,
                   how_to_instruct: role.how_to_instruct,
                   instruction_template: role.instruction_template,
@@ -338,6 +342,9 @@ export default function ChatSidebar({
                 const roleHelp = selectedRoleOption
                   ? [
                       selectedRoleOption.label,
+                      selectedRoleOption.role_category_label_ko
+                        ? `분류: ${selectedRoleOption.role_category_label_ko}`
+                        : "",
                       selectedRoleOption.when_to_use?.length
                         ? `언제 쓰나: ${selectedRoleOption.when_to_use.join(" / ")}`
                         : "",
