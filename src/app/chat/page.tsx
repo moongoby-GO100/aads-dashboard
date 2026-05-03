@@ -1727,7 +1727,7 @@ export default function ChatPage() {
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
-    return !!(lastUser?.content?.startsWith("[시스템]") || lastUser?.intent === "auto_reaction" || lastUser?.intent === "system_trigger" || lastAi?.intent === "auto_reaction" || lastAi?.intent === "runner_response" || lastAi?.intent === "interrupted");
+    return !!(lastUser?.content?.startsWith("[시스템]") || lastUser?.intent === "auto_reaction" || lastUser?.intent === "system_trigger" || lastAi?.intent === "auto_reaction" || lastAi?.intent === "interrupted");
   };
 
   // ── Performance: ref로 폴링 useEffect 의존성 폭탄 방지 ──
@@ -1763,18 +1763,17 @@ export default function ChatPage() {
 
   // Runner 응답 판별 — intent 또는 컨텐츠 패턴으로 소급 적용
   const isRunnerMsg = (m: ChatMessage) =>
-    m.intent === "runner_response" ||
-    (m.role === "assistant" && (
+    m.role === "assistant" && (
       m.content?.includes("[Pipeline Runner]") ||
       m.content?.includes("[Runner]") ||
       (m.content?.startsWith("Step ") && m.content?.includes("runner-")) ||
       m.content?.includes("pipeline_runner_approve") ||
       m.content?.includes("배포 검증 5단계")
-    ));
+    );
 
   // 시스템 메시지 목록 (로그 탭용)
   const systemMessages = messages.filter(
-    (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+    (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
   );
   // ── 로그 탭 unread 카운트 ──
   const prevSystemMsgCountRef = useRef(0);
@@ -1783,7 +1782,7 @@ export default function ChatPage() {
   }, [artifactTab]);
   useEffect(() => {
     const current = messages.filter(
-      (m) => m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+      (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
     ).length;
     if (current > prevSystemMsgCountRef.current && artifactTab !== "log") {
       setUnreadLogCount(n => n + (current - prevSystemMsgCountRef.current));
@@ -5486,14 +5485,14 @@ export default function ChatPage() {
             }
             const lastAssistantId = display.slice().reverse().find(d => {
               const m = d.msg;
-              const isSystemMsg = m.intent === "auto_reaction" || m.intent === "runner_response" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
+              const isSystemMsg = m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
               return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
             })?.msg.id;
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 시스템 메시지: 접이식 한 줄 표시
               // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
-              const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "runner_response" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
+              const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
                 <React.Fragment key={msg.render_id || msg.id || idx}>
