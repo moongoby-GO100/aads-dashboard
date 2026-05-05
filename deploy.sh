@@ -22,11 +22,27 @@ BLUE_PORT="3100"
 GREEN_PORT="3101"
 HEALTH_BLUE="http://127.0.0.1:${BLUE_PORT}/login"
 HEALTH_GREEN="http://127.0.0.1:${GREEN_PORT}/login"
-HEALTH_EXTERNAL="https://aads.newtalk.kr/login"
+HEALTH_EXTERNAL="${DASHBOARD_EXTERNAL_HEALTH_URL:-https://aads.newtalk.kr/login}"
 NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
 MAX_WAIT=90
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
+
+nginx_test() {
+    if command -v nginx >/dev/null 2>&1; then
+        nginx -t
+        return $?
+    fi
+    docker exec aads-nginx nginx -t
+}
+
+nginx_reload() {
+    if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then
+        systemctl reload nginx
+        return $?
+    fi
+    docker exec aads-nginx nginx -s reload
+}
 
 wait_health() {
     local url="$1" max_wait="$2" label="$3"
@@ -44,7 +60,7 @@ wait_health() {
 }
 
 current_active_slot() {
-    if rg -q "127\\.0\\.0\\.1:${GREEN_PORT} max_fails=3 fail_timeout=30s;$" "$NGINX_UPSTREAM"; then
+    if grep -Eq "127\\.0\\.0\\.1:${GREEN_PORT} max_fails=3 fail_timeout=30s;$" "$NGINX_UPSTREAM"; then
         echo "green"
         return 0
     fi
@@ -112,7 +128,7 @@ log "현재 활성 슬롯: $ACTIVE_SLOT"
 log "배포 대상 슬롯: $TARGET_SLOT"
 
 # Step 0.5: 대상 슬롯 잔여 컨테이너 정리
-if docker ps -a --format '{{.Names}}' | rg -x "$TARGET_CONTAINER" >/dev/null 2>&1; then
+if docker ps -a --format '{{.Names}}' | grep -Fx "$TARGET_CONTAINER" >/dev/null 2>&1; then
     log "Step 0.5: 대상 슬롯 잔여 컨테이너 정리 (${TARGET_CONTAINER})"
     docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 fi
@@ -132,19 +148,19 @@ fi
 log "Step 3: nginx upstream → ${TARGET_SLOT}"
 cp "$NGINX_UPSTREAM" "${NGINX_UPSTREAM}.dashboard.bak"
 switch_dashboard_upstream "$TARGET_SLOT"
-if ! nginx -t >/dev/null 2>&1; then
+if ! nginx_test >/dev/null 2>&1; then
     log "FAIL: nginx 설정 검증 실패 — upstream 롤백"
     mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
     exit 1
 fi
-systemctl reload nginx
+nginx_reload
 log "OK: nginx reload 완료"
 
 # Step 4: 외부 헬스체크
 if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     log "FAIL: 외부 헬스체크 실패 — upstream 롤백"
     mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
-    nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    nginx_test >/dev/null 2>&1 && nginx_reload
     exit 1
 fi
 
