@@ -4,6 +4,8 @@ const PUBLIC_PATHS = ["/login", "/signup", "/_next", "/favicon.ico", "/api", "/c
 
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
+const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$/;
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get("host") || "";
@@ -31,7 +33,7 @@ export function middleware(request: NextRequest) {
   }
 
   // 공개 경로는 인증 불필요
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p)) || PUBLIC_REPORT_FILE.test(pathname)) {
     return NextResponse.next();
   }
 
