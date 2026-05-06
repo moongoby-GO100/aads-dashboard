@@ -30,6 +30,9 @@ export interface ChatMessage {
   execution_id?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
+  content_length?: number;
+  is_truncated?: boolean;
+  status?: "streaming" | "rate_limited" | "completed";
   render_id?: string;
   model_used?: string;
   intent?: string;

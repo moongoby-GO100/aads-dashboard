@@ -134,6 +134,33 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
   return message.intent === "streaming_placeholder" || message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-");
 }
 
+function isTruncatedMinimalMessage(message: ChatMessage): boolean {
+  const contentLength = Number(message.content_length || 0);
+  const visibleLength = (message.content || "").length;
+  return message.is_truncated === true || (contentLength > 0 && contentLength > visibleLength);
+}
+
+function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serverMessage: ChatMessage): ChatMessage {
+  if (!existing) return serverMessage;
+  const existingContent = existing.content || "";
+  const serverContent = serverMessage.content || "";
+  if (!isTruncatedMinimalMessage(serverMessage) || existingContent.length <= serverContent.length) {
+    return serverMessage;
+  }
+  return {
+    ...serverMessage,
+    content: existingContent,
+    render_id: existing.render_id || serverMessage.render_id,
+    tools_called: serverMessage.tools_called || existing.tools_called,
+    attachments: serverMessage.attachments || existing.attachments,
+    attachmentPreviews: serverMessage.attachmentPreviews || existing.attachmentPreviews,
+    sources: serverMessage.sources || existing.sources,
+    artifact_id: serverMessage.artifact_id || existing.artifact_id,
+    thinking_summary: serverMessage.thinking_summary || existing.thinking_summary,
+    thought_summary: serverMessage.thought_summary || existing.thought_summary,
+  };
+}
+
 function getLatestFinalAssistantId(messages: ChatMessage[]): string | null {
   return messages
     .filter((message) => message.role === "assistant" && message.intent !== "streaming_placeholder" && message.intent !== "rate_limited")
@@ -181,18 +208,20 @@ function mergeServerMessagesPreservingLocal(prev: ChatMessage[], incomingMessage
   const matchedLocalIds = new Set<string>();
   const incomingIds = new Set(incomingMessages.map((message) => message.id));
   const mergedIncoming = incomingMessages.map((serverMessage) => {
+    const existingMessage = prev.find((message) => message.id === serverMessage.id);
+    const serverMessageWithPreservedContent = mergeServerMessageWithExisting(existingMessage, serverMessage);
     const localMatch = findLocalMatchForServerMessage(
       localMessages.filter((localMessage) => !matchedLocalIds.has(localMessage.id)),
-      serverMessage,
+      serverMessageWithPreservedContent,
       incomingMessages,
     );
-    if (!localMatch) return serverMessage;
+    if (!localMatch) return serverMessageWithPreservedContent;
 
     matchedLocalIds.add(localMatch.id);
     const localContent = localMatch.content || "";
-    const serverContent = serverMessage.content || "";
+    const serverContent = serverMessageWithPreservedContent.content || "";
     return {
-      ...serverMessage,
+      ...serverMessageWithPreservedContent,
       content: localContent.length > serverContent.length ? localContent : serverContent,
       render_id: localMatch.render_id || localMatch.id,
     };
