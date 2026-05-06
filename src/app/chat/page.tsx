@@ -1544,7 +1544,7 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-      `/chat/messages?session_id=${activeSession.id}&limit=100&cursor=${encodeURIComponent(nextCursor)}`
+      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}`
     ).catch(() => null);
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
@@ -2108,7 +2108,7 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=100${filterPlaceholder ? "" : "&include_streaming=true"}`
+        `/chat/messages?session_id=${fetchSid}&limit=40${filterPlaceholder ? "" : "&include_streaming=true"}`
       )
         .then((result) => {
           const msgs = result.messages;
@@ -2300,7 +2300,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=100`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -3769,7 +3769,7 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=100&sort=desc`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
@@ -3816,7 +3816,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=100`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
