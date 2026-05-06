@@ -882,7 +882,10 @@ const MessageItem = memo(function MessageItem({
                     || (Object.values(input).filter((x: unknown) => typeof x === 'string')[0] as string) || '';
                   return String(v).slice(0, 80);
                 };
-                const toolUseCount = toolEventsForRender.filter((e) => e.type === 'tool_use').length || Number(msg.tool_count || 0);
+                const toolUseCount = toolEventsForRender.filter((e) => e.type === 'tool_use').length
+                  || Number(msg.tool_count || 0)
+                  || getToolNamesFromMessage(msg).length
+                  || toolEventsForRender.length;
                 const lastEvent = [...toolEventsForRender].reverse().find((e) => e.type === 'tool_use' || e.type === 'tool_result');
                 const isHydrating = normalizedToolEvents.length === 0 && toolHydrationStatus === "loading";
                 const hydrateFailed = normalizedToolEvents.length === 0 && toolHydrationStatus === "error";
