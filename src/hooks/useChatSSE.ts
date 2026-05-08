@@ -463,6 +463,7 @@ export function useChatSSE() {
                 readerRef.current = resumeReader;
                 const resumeDecoder = new TextDecoder();
                 let resumeBuffer = "";
+                let resumeSawTerminalEvent = false;
                 while (true) {
                   if (abort.signal.aborted) break;
                   const { done: rDone, value: rValue } = await resumeReader.read();
@@ -489,6 +490,7 @@ export function useChatSSE() {
                         updateStreamText(sessionId, fullText);
                       } else if (rChunk.type === "resume_done" || rChunk.type === "done") {
                         // resume 완료 — 정상 종료 처리
+                        resumeSawTerminalEvent = true;
                         streamDoneRef.current = true;
                         if (tokenBufferRef.current.length > 0) {
                           displayTextRef.current += tokenBufferRef.current.join('');
@@ -503,7 +505,9 @@ export function useChatSSE() {
                     }
                   }
                 }
-                // resume stream ended normally
+                if (!resumeSawTerminalEvent) {
+                  throw new Error("Resume stream ended without terminal event");
+                }
                 return;
               }
             } catch { /* resume failed, fall through to retry */ }
