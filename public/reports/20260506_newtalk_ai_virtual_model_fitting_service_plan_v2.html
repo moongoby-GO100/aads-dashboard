@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NewTalk AI Virtual Model Fitting Service Plan</title>
+  <title>NewTalk AI Model Studio Service Plan v2</title>
   <style>
     :root {
       --ink: #18202a;
@@ -185,10 +185,36 @@
     a { color: #0f5f9f; }
     .small { color: var(--muted); font-size: 13px; }
     .nowrap { white-space: nowrap; }
+    .version-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .version-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 11px;
+      background: rgba(255,255,255,0.78);
+      color: #0f5f9f;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .timeline .step { min-height: 180px; }
     @media (max-width: 900px) {
       header { padding: 34px 24px 26px; }
       main { padding: 24px 16px 48px; }
-      .meta, .summary, .grid-2, .grid-3, .flow, .kpi { grid-template-columns: 1fr; }
+      .meta, .summary, .grid-2, .grid-3, .flow, .timeline, .kpi { grid-template-columns: 1fr; }
       table { font-size: 13px; }
       th, td { padding: 8px; }
     }
@@ -196,20 +222,21 @@
 </head>
 <body>
   <header>
-    <h1>NewTalk AI 가상모델 피팅 이미지 서비스 기획안</h1>
+    <h1>NewTalk AI 모델 스튜디오 서비스 기획안 v2</h1>
     <p>
-      제품 실사컷만으로 쇼핑몰 상세페이지에 바로 사용할 수 있는 AI 모델 착용컷을 생성하고,
-      뉴톡 상품 등록·상세이미지 정렬·검수 흐름에 연결하는 서비스 기획입니다.
+      다양한 페르소나의 가상모델, 뉴톡 보유 상품 코디 믹싱, 촬영 컨셉·장소 설계,
+      판매 전환형 사진 생성, 상세페이지 제작, 상품 매너 및 SNS 숏츠 제작까지 하나의
+      운영 파이프라인으로 묶는 뉴톡 내부 기능 겸 독립 SaaS 서비스 기획입니다.
     </p>
-    <p style="margin-top:14px;font-size:14px;">
-      업데이트 버전:
-      <a href="/reports/20260506_newtalk_ai_virtual_model_fitting_service_plan_v2.html">v2 상세 기획안 보기</a>
-    </p>
+    <div class="version-links">
+      <a href="/reports/20260506_newtalk_ai_virtual_model_fitting_service_plan.html">이전 버전 v1 보기</a>
+      <a href="/reports/20260506_newtalk_ai_virtual_model_fitting_service_plan_v2.html">현재 버전 v2 보기</a>
+    </div>
     <div class="meta">
-      <div class="pill"><strong>작성 시각</strong>2026-05-06 14:00 KST</div>
-      <div class="pill"><strong>대상 서비스</strong>NewTalk V1/V2 상품 이미지 운영</div>
-      <div class="pill"><strong>핵심 목표</strong>촬영 대체가 아닌 촬영 수준 후보컷 자동 생산</div>
-      <div class="pill"><strong>권장 방식</strong>AI 생성 + 운영자 QA 승인 + 자동 반영</div>
+      <div class="pill"><strong>작성 시각</strong>2026-05-06 16:51 KST</div>
+      <div class="pill"><strong>버전</strong>v2 — 7단계 AI 커머스 콘텐츠 파이프라인</div>
+      <div class="pill"><strong>대상 서비스</strong>NewTalk 내부 + 판매자용 별도 SaaS</div>
+      <div class="pill"><strong>권장 방식</strong>API 자동화 + 운영자 QA + 크레딧 과금</div>
     </div>
   </header>
 
@@ -218,15 +245,14 @@
       <div class="panel">
         <h2>1. 결론</h2>
         <p>
-          뉴톡에 적용 가능합니다. 다만 고객에게 바로 노출하는 "실시간 개인 피팅"보다,
-          우선은 <strong>운영자용 AI 촬영실</strong>로 시작하는 것이 맞습니다.
-          제품 실사컷을 넣으면 AI가 모델 착용컷 후보를 만들고, 사람이 승인한 이미지만
-          기존 상세페이지에 넣는 방식입니다.
+          뉴톡에 적용 가능하며, 단순 가상피팅이 아니라 <strong>AI 모델 스튜디오</strong>로
+          설계하는 것이 맞습니다. 제품 실사컷만 입력해도 모델 페르소나, 보유 상품 코디,
+          촬영 컨셉, 장소, 상세페이지 컷, SNS 숏츠까지 자동 기획·생성·검수되는 흐름입니다.
         </p>
         <p>
-          기술 선택은 <strong>FASHN Try-On/Product-to-Model</strong>을 1차 엔진으로 쓰고,
-          <strong>Gemini 3.1 Flash Image</strong>와 <strong>GPT-image-2</strong>를 보정·배경·카피용
-          보조 엔진으로 붙이는 하이브리드가 가장 현실적입니다.
+          기술 선택은 패션 특화 <strong>FASHN Try-On/Product-to-Model/Model Create/Image-to-Video</strong>를
+          1차 엔진으로 쓰고, <strong>Nano Banana 2/Pro</strong>, <strong>Imagen 4</strong>,
+          <strong>GPT-image-2</strong>, <strong>Veo 3.1</strong>을 보조 엔진으로 붙이는 하이브리드가 현실적입니다.
         </p>
         <div class="kpi">
           <div><strong>Phase 1</strong>2주 MVP<br><span class="small">운영자 생성·검수·저장</span></div>
@@ -247,7 +273,24 @@
     </section>
 
     <section>
-      <h2>2. 서비스 컨셉</h2>
+      <h2>2. v2 핵심 확장 — 7단계 AI 커머스 콘텐츠 흐름</h2>
+      <div class="timeline">
+        <div class="step"><b>1</b><h3>AI 모델</h3><p>다양한 페르소나의 전용 가상모델을 생성·보관합니다. 연령대, 체형, 분위기, 얼굴 노출, 시즌별 스타일을 모델 프로필로 관리합니다.</p></div>
+        <div class="step"><b>2</b><h3>코디</h3><p>뉴톡 보유 상품을 자동 매칭해 상의·하의·아우터·가방·신발·액세서리 조합을 만듭니다. 재고와 마진이 높은 상품을 우선 노출합니다.</p></div>
+        <div class="step"><b>3</b><h3>촬영 컨셉</h3><p>상품 카테고리와 타깃 고객에 따라 데일리룩, 오피스룩, 여행룩, 프리미엄룩, 시즌 캠페인 프리셋을 선택합니다.</p></div>
+        <div class="step"><b>4</b><h3>장소</h3><p>화이트 스튜디오, 거리, 카페, 쇼룸, 리조트, 실내 거울샷 등 장소 라이브러리를 적용합니다. 장소는 상품보다 튀지 않게 제한합니다.</p></div>
+        <div class="step"><b>5</b><h3>판매 사진</h3><p>썸네일, 대표컷, 착용컷, 디테일컷, 색상 비교컷을 생성하고 전환 점수 기준으로 후보를 정렬합니다.</p></div>
+        <div class="step"><b>6</b><h3>상세페이지</h3><p>승인 이미지를 기존 상세 이미지 정렬 플로우에 넣고, 카피·사이즈·소재·AI 고지 문구까지 묶어 상품 상세를 제작합니다.</p></div>
+        <div class="step"><b>7</b><h3>SNS 숏츠</h3><p>승인 컷을 3~8초 영상으로 변환하고 상품 매너, 릴스, 쇼츠, 스토리용 세로 영상 템플릿으로 배포합니다.</p></div>
+      </div>
+      <div class="note">
+        v2의 핵심은 "AI 이미지 생성 도구"가 아니라 <strong>상품 판매 목적의 콘텐츠 생산 공장</strong>입니다.
+        뉴톡 내부 운영자는 상품 판매력을 높이는 데 쓰고, 외부 판매자는 크레딧을 결제해 같은 파이프라인을 SaaS로 사용할 수 있습니다.
+      </div>
+    </section>
+
+    <section>
+      <h2>3. 서비스 컨셉</h2>
       <div class="grid-3">
         <div class="panel">
           <h3>상품 판매자 관점</h3>
@@ -268,7 +311,90 @@
     </section>
 
     <section>
-      <h2>3. 권장 사용자 흐름</h2>
+      <h2>4. AI 모델·코디·컨셉 운영 설계</h2>
+      <div class="grid-3">
+        <div class="panel">
+          <h3>AI 모델 라이브러리</h3>
+          <ul>
+            <li>기본 모델군: 20대 여성, 30대 여성, 미시/오피스, 캐주얼 남성, 스트릿 남성, 플러스 체형.</li>
+            <li>페르소나 속성: 이름, 연령대, 키/체형, 얼굴 공개 여부, 피부톤, 헤어, 주력 카테고리, 금지 카테고리.</li>
+            <li>일관성 관리: Face Reference 또는 기준 모델 이미지를 등록해 같은 모델이 여러 상품에 반복 등장하도록 관리.</li>
+            <li>라이선스 관리: 모델별 사용권, 생성 허용 범위, 외부 SaaS 재판매 가능 여부를 DB에 기록.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>코디 믹싱 엔진</h3>
+          <ul>
+            <li>입력: 판매 상품, 보유 재고, 카테고리, 색상, 시즌, 가격대, 마진율, 판매 랭킹.</li>
+            <li>출력: 단품 착용컷, 2개 상품 코디컷, 3~5개 상품 풀코디컷.</li>
+            <li>제약: 품절/저재고 상품 제외, 브랜드 충돌 제외, 색상 조합 점수, 계절 부적합 제외.</li>
+            <li>목표: 단일 상품 노출을 넘어 객단가를 올리는 세트 판매 이미지 생성.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>촬영 컨셉·장소 엔진</h3>
+          <ul>
+            <li>컨셉: 데일리, 출근, 데이트, 여행, 하객룩, 홈웨어, 골프, 프리미엄 쇼룸.</li>
+            <li>장소: 스튜디오, 거리, 카페, 호텔, 리조트, 지하철 입구, 피팅룸 거울, 전신 거울.</li>
+            <li>프롬프트 프리셋: 카메라 각도, 렌즈감, 포즈, 조명, 배경 밀도, 상품 강조 비율.</li>
+            <li>금지: 배경 과장, 실존 브랜드 로고 노출, 제품보다 모델·장소가 튀는 구성.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note">
+        운영 핵심은 "모델을 많이 만든다"가 아니라 <strong>상품군별로 잘 팔리는 모델·코디·장소 조합을 데이터화</strong>하는 것입니다.
+        생성 결과의 클릭률, 장바구니율, 구매전환율을 다시 프리셋 점수에 반영해야 시간이 갈수록 성능이 좋아집니다.
+      </div>
+    </section>
+
+    <section>
+      <h2>5. 판매 전환형 이미지 생성 기준</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>컷 종류</th>
+            <th>목적</th>
+            <th>생성 규칙</th>
+            <th>운영 지표</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>대표 썸네일</td>
+            <td>상품 목록 클릭 유도</td>
+            <td>제품이 화면 55~70%를 차지하고, 모델 얼굴보다 상품 실루엣이 먼저 보이게 구성.</td>
+            <td>CTR, 스크롤 정지율, 찜 추가율</td>
+          </tr>
+          <tr>
+            <td>전신 착용컷</td>
+            <td>기장·핏 이해</td>
+            <td>정면/측면/45도 컷을 생성하고, 신체 비율 과장과 의류 변형을 제한.</td>
+            <td>상세 체류시간, 사이즈 문의 감소</td>
+          </tr>
+          <tr>
+            <td>코디컷</td>
+            <td>객단가 상승</td>
+            <td>뉴톡 보유 상품만 조합하고, 함께 구매 가능한 상품코드를 이미지 메타데이터에 연결.</td>
+            <td>세트 장바구니율, 연관상품 클릭률</td>
+          </tr>
+          <tr>
+            <td>디테일 보조컷</td>
+            <td>소재·포인트 강조</td>
+            <td>실제 제품컷을 우선 사용하고, AI는 배경 정리·톤 보정·확대 컷 생성에 제한.</td>
+            <td>반품 사유, 상품 문의, 리뷰 불만</td>
+          </tr>
+          <tr>
+            <td>SNS 세로컷</td>
+            <td>릴스/쇼츠 첫 프레임</td>
+            <td>9:16 비율, 1초 안에 상품과 코디가 보이도록 모델 움직임 전 기준컷 제작.</td>
+            <td>3초 유지율, 저장/공유율</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>6. 권장 사용자 흐름</h2>
       <div class="flow">
         <div class="step"><b>1</b><h3>제품컷 입력</h3><p>기존 뉴톡 상품 이미지 또는 새 제품 단독컷을 선택합니다.</p></div>
         <div class="step"><b>2</b><h3>촬영 프리셋 선택</h3><p>모델 성별·연령대·체형·배경·포즈·비율을 선택합니다.</p></div>
@@ -284,7 +410,7 @@
     </section>
 
     <section>
-      <h2>4. 기능 범위</h2>
+      <h2>7. 기능 범위</h2>
       <table>
         <thead>
           <tr>
@@ -348,7 +474,7 @@
     </section>
 
     <section>
-      <h2>5. AI 엔진 선택</h2>
+      <h2>8. AI 엔진 선택</h2>
       <table>
         <thead>
           <tr>
@@ -375,9 +501,9 @@
             <td><span class="badge">1순위</span> 제품컷만 있을 때</td>
           </tr>
           <tr>
-            <td><strong>Gemini 3.1 Flash Image</strong></td>
+            <td><strong>Nano Banana 2 / Pro</strong></td>
             <td>보조 생성·편집·빠른 후보 생성</td>
-            <td>텍스트+이미지를 입력으로 받아 이미지 출력 가능. 1K 이미지 기준 공식 가격이 명시되어 있음.</td>
+            <td>Gemini API의 네이티브 이미지 생성·편집 모델. 텍스트+이미지 입력으로 이미지 출력 가능, 생성 이미지에 SynthID 워터마크 포함.</td>
             <td>일반 이미지 모델이므로 의류 핏 보존은 목적형 VTON보다 약할 수 있음.</td>
             <td><span class="badge purple">보조</span> 배경·소품·후보 확장</td>
           </tr>
@@ -400,7 +526,7 @@
     </section>
 
     <section>
-      <h2>6. 비용 모델</h2>
+      <h2>9. 비용 모델</h2>
       <div class="warning">
         월정액 ChatGPT/Gemini/Claude 구독은 웹·앱 사용권 중심이라 뉴톡 서버에서 자동 대량 생성하는 API 권한으로 볼 수 없습니다.
         대량 운영은 공식 API 또는 패션 특화 SaaS의 API/크레딧 플랜으로 설계해야 합니다.
@@ -425,9 +551,9 @@
             <td>1장당 대략 2~5 credits 기준으로 상품당 6장 생성 시 12~30 credits 소모.</td>
           </tr>
           <tr>
-            <td>Gemini 3.1 Flash Image</td>
-            <td>공식 가격: 1K 이미지 $0.067, Batch 1K 이미지 $0.034.</td>
-            <td>대량 후보·배경 생성에 적합. 패션 핏 정확성은 FASHN 대비 별도 검증.</td>
+            <td>Google Imagen 4 / Nano Banana</td>
+            <td>Imagen 4 Fast $0.02/image, Standard $0.04/image, Ultra $0.06/image. Nano Banana 계열은 Gemini API 네이티브 이미지 생성·편집 모델로 별도 rate limit 적용.</td>
+            <td>대량 후보·배경·상품 재맥락화에 적합. 의류 핏 정확성은 FASHN 대비 별도 검증.</td>
           </tr>
           <tr>
             <td>GPT-image-2</td>
@@ -481,7 +607,7 @@
     </section>
 
     <section>
-      <h2>7. 뉴톡 화면 기획</h2>
+      <h2>10. 뉴톡 화면 기획</h2>
       <div class="grid-2">
         <div class="panel">
           <h3>관리자: AI 촬영실</h3>
@@ -526,7 +652,7 @@
     </section>
 
     <section>
-      <h2>8. 시스템 아키텍처</h2>
+      <h2>11. 시스템 아키텍처</h2>
       <pre><code>NewTalk Product Admin
   └─ AI 촬영 요청 생성
       ├─ product_image_url / product_code / category / prompt_preset
@@ -567,7 +693,106 @@ ai_fitting_audit_logs
     </section>
 
     <section>
-      <h2>9. QA 기준</h2>
+      <h2>12. 별도 SaaS 서비스화 설계</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>상품명</th>
+            <th>대상 고객</th>
+            <th>제공 기능</th>
+            <th>과금 방식</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>NewTalk AI Studio Internal</td>
+            <td>뉴톡 운영팀</td>
+            <td>상품별 AI 촬영, 코디 믹싱, 상세페이지 이미지 승인, SNS 컷 제작</td>
+            <td>내부 비용 센터. 월 예산·상품별 생성 상한 관리.</td>
+          </tr>
+          <tr>
+            <td>AI Fitting Studio Seller</td>
+            <td>뉴톡 입점 판매자</td>
+            <td>셀프 생성, 운영자 승인 요청, 상품 상세 자동 반영, 크레딧 충전</td>
+            <td>상품당 무료 1장 + 추가 후보 크레딧 차감. 승인본 다운로드/상세 반영 별도 과금 가능.</td>
+          </tr>
+          <tr>
+            <td>AI Commerce Content SaaS</td>
+            <td>외부 쇼핑몰/브랜드</td>
+            <td>API/웹 콘솔, 브랜드 모델 라이브러리, 대량 배치, CDN 저장, 숏츠 생성</td>
+            <td>월 구독 + 생성 크레딧 + 저장/전송량 + 팀 계정 수 기준.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>SaaS 필수 기능</h3>
+          <ul>
+            <li>테넌트별 모델 라이브러리, 상품 이미지, 생성 결과 완전 분리.</li>
+            <li>브랜드별 금지 프롬프트, 로고/상표 정책, AI 고지 문구 커스터마이징.</li>
+            <li>크레딧 지갑, 월 예산, 초과 사용 차단, provider별 원가 리포트.</li>
+            <li>팀 권한: 소유자, 관리자, 디자이너, 검수자, 외부 대행사.</li>
+            <li>API 키, webhook, Shopify/Cafe24/자체몰 연동 어댑터.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>뉴톡 내부와 SaaS의 차이</h3>
+          <ul>
+            <li>뉴톡 내부는 상품 판매 성과가 KPI이고, SaaS는 생성량·유료 전환·재사용률이 KPI입니다.</li>
+            <li>뉴톡 내부는 운영자 승인 중심, SaaS는 고객사별 브랜드 승인 워크플로우가 필요합니다.</li>
+            <li>뉴톡 내부는 기존 상세페이지에 붙이고, SaaS는 다운로드/API/webhook을 모두 제공합니다.</li>
+            <li>SaaS는 테넌트 격리, 결제, 약관, 저작권·초상권 동의 로그가 P0입니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>13. 운영 조직·작업 규칙</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>역할</th>
+            <th>담당 업무</th>
+            <th>일일 기준</th>
+            <th>검수 기준</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AI 촬영 운영자</td>
+            <td>상품 선택, 프리셋 선택, 생성 작업 예약</td>
+            <td>상품 50~100개 큐 등록</td>
+            <td>입력 이미지 품질, 카테고리, 촬영 목적 확인</td>
+          </tr>
+          <tr>
+            <td>이미지 QA</td>
+            <td>후보 이미지 승인/반려/재생성</td>
+            <td>후보 300~600장 검수</td>
+            <td>상품 왜곡, 로고 훼손, 인체 오류, AI 고지 필요 여부</td>
+          </tr>
+          <tr>
+            <td>MD/상품기획</td>
+            <td>코디 조합, 세트 판매 전략, 대표컷 선정</td>
+            <td>상위 노출 상품 우선 처리</td>
+            <td>판매가 잘될 이미지인지, 객단가 상승 조합인지 판단</td>
+          </tr>
+          <tr>
+            <td>SNS 콘텐츠 운영자</td>
+            <td>승인 컷 기반 숏츠/릴스 제작 및 예약</td>
+            <td>상품별 1~3개 숏츠 후보</td>
+            <td>첫 1초 상품 노출, 저작권 음악, 플랫폼 비율</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="warning">
+        완전 자동 공개는 금지해야 합니다. AI 결과가 상품 색상·소재·핏을 왜곡하면 구매전환보다 반품과 CS가 먼저 늘어날 수 있으므로,
+        초기에는 운영자 승인 후 공개를 기본 정책으로 두는 것이 안전합니다.
+      </div>
+    </section>
+
+    <section>
+      <h2>14. QA 기준</h2>
       <table>
         <thead>
           <tr>
@@ -613,7 +838,7 @@ ai_fitting_audit_logs
     </section>
 
     <section>
-      <h2>10. 법무·고지·운영 리스크</h2>
+      <h2>15. 법무·고지·운영 리스크</h2>
       <div class="grid-2">
         <div class="panel">
           <h3>필수 정책</h3>
@@ -639,7 +864,7 @@ ai_fitting_audit_logs
     </section>
 
     <section>
-      <h2>11. 단계별 실행 계획</h2>
+      <h2>16. 단계별 실행 계획</h2>
       <table>
         <thead>
           <tr>
@@ -685,7 +910,7 @@ ai_fitting_audit_logs
     </section>
 
     <section>
-      <h2>12. MVP 작업 지시서 초안</h2>
+      <h2>17. MVP 작업 지시서 초안</h2>
       <pre><code>&gt;&gt;&gt;DIRECTIVE_START
 TASK_ID: NT-AI-FIT-001
 TITLE: 뉴톡 AI 가상모델 피팅 이미지 MVP 구축
@@ -714,7 +939,7 @@ DESCRIPTION:
     </section>
 
     <section>
-      <h2>13. 현재 AADS 상태와 필요한 확장</h2>
+      <h2>18. 현재 AADS 상태와 필요한 확장</h2>
       <table>
         <thead>
           <tr>
@@ -754,14 +979,14 @@ DESCRIPTION:
     </section>
 
     <section>
-      <h2>14. 참고 근거</h2>
+      <h2>19. 참고 근거</h2>
       <ul class="small">
         <li>FASHN API Reference: Try-On Max, Product to Model, Face to Model, Edit, Reframe, Image to Video 기능 목록. <a href="https://docs.fashn.ai/api-reference">https://docs.fashn.ai/api-reference</a></li>
         <li>FASHN Try-On Max: PDP·카탈로그·마케팅용 publishable e-commerce content, product/model image 입력, 20~120초, 2~5 credits. <a href="https://docs.fashn.ai/api-reference/tryon-max">https://docs.fashn.ai/api-reference/tryon-max</a></li>
         <li>FASHN Pricing: Basic/Pro/Agency 월정액 및 credits/top-up 구조. <a href="https://fashn.ai/pricing">https://fashn.ai/pricing</a></li>
         <li>Google Merchant Center Try-on: 사용자 사진과 상품 이미지를 AI로 결합, 상품 이미지 품질 요구사항. <a href="https://support.google.com/merchants/answer/16159685?hl=en">https://support.google.com/merchants/answer/16159685?hl=en</a></li>
         <li>Gemini Image Generation: <code>gemini-3.1-flash-image-preview</code>의 text+image to image 예시. <a href="https://ai.google.dev/gemini-api/docs/image-generation">https://ai.google.dev/gemini-api/docs/image-generation</a></li>
-        <li>Gemini API Pricing: 1K 이미지 $0.067, Batch 1K 이미지 $0.034 등. <a href="https://ai.google.dev/gemini-api/docs/pricing">https://ai.google.dev/gemini-api/docs/pricing</a></li>
+        <li>Gemini API Pricing: Imagen 4 Fast/Standard/Ultra 이미지 가격, Veo 3.1 영상 초당 가격, API 유료 티어 기준. <a href="https://ai.google.dev/gemini-api/docs/pricing">https://ai.google.dev/gemini-api/docs/pricing</a></li>
         <li>OpenAI GPT Image 2 Model: 고품질 이미지 생성·편집, 고충실도 이미지 입력 지원. <a href="https://developers.openai.com/api/docs/models/gpt-image-2">https://developers.openai.com/api/docs/models/gpt-image-2</a></li>
         <li>OpenAI API Pricing: GPT-image-2 이미지 입력/출력 token 가격. <a href="https://openai.com/api/pricing/">https://openai.com/api/pricing/</a></li>
         <li>Cloudflare R2 Pricing: 저장 $0.015/GB-month, egress free. <a href="https://developers.cloudflare.com/r2/pricing/">https://developers.cloudflare.com/r2/pricing/</a></li>
