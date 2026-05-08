@@ -15,6 +15,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: "/검색", desc: "웹 검색", expand: "다음을 검색해줘: " },
   { cmd: "/코드", desc: "코드 분석/수정", expand: "다음 코드를 분석해줘: " },
   { cmd: "/파이프라인", desc: "Pipeline Runner 상태", expand: "Pipeline Runner 전체 작업 상태 확인해" },
+  { cmd: "/토론", desc: "멀티 LLM 토론 시작", expand: "__DISCUSSION__" },
   { cmd: "/도움말", desc: "사용 가능한 명령어 목록", expand: "" },
 ];
 

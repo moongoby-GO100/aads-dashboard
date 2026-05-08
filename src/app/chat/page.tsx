@@ -14,6 +14,7 @@ import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
+import DiscussionPanel from "@/components/chat/DiscussionPanel";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
 import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
@@ -1355,6 +1356,7 @@ export default function ChatPage() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [mobileOverlay, setMobileOverlay] = useState<"sidebar" | "artifact" | null>(null);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [showDiscussion, setShowDiscussion] = useState(false);
   const swipeRef = useRef<{ startX: number; startY: number; t: number } | null>(null);
   const [selectedArtifactIdx, setSelectedArtifactIdx] = useState(0);
 
@@ -6148,6 +6150,10 @@ export default function ChatPage() {
                 onKeyDown={onKeyDown}
                 onHasInput={setHasInput}
                 onLocalMessage={(text) => {
+                  if (text === "__DISCUSSION__") {
+                    setShowDiscussion(true);
+                    return;
+                  }
                   const localMsg: ChatMessage = {
                     id: `local-${Date.now()}`,
                     session_id: activeSessionObjRef.current?.id || "",
@@ -6545,6 +6551,14 @@ export default function ChatPage() {
 
       {/* 키보드 단축키 도움말 모달 */}
       <ShortcutHelp open={showShortcutHelp} onClose={() => setShowShortcutHelp(false)} />
+
+      {/* 멀티 LLM 토론 패널 */}
+      {showDiscussion && activeSession?.id && (
+        <DiscussionPanel
+          sessionId={activeSession.id}
+          onClose={() => setShowDiscussion(false)}
+        />
+      )}
 
     </div>
   );

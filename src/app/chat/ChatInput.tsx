@@ -196,6 +196,13 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     }, [updateHasInput]);
 
     const selectSlashCommand = useCallback((cmd: SlashCommand) => {
+      if (cmd.expand === "__DISCUSSION__") {
+        onLocalMessage?.("__DISCUSSION__");
+        setLocalInput("");
+        updateHasInput("");
+        setShowSlash(false);
+        return;
+      }
       if (cmd.cmd === "/도움말") {
         const helpText = SLASH_COMMANDS
           .map((c) => `${c.cmd} — ${c.desc}`)
