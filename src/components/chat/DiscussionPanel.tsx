@@ -38,6 +38,11 @@ interface DiscussionPanelProps {
   onClose: () => void;
 }
 
+interface ModelOption {
+  value: string;
+  label: string;
+}
+
 const BASE_URL =
   typeof window !== "undefined"
     ? process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1"
@@ -83,12 +88,14 @@ const DEFAULT_PRESETS: Record<string, Preset> = {
   },
 };
 
-const MODEL_OPTIONS = [
-  { value: "claude-opus-4-6", label: "Claude Opus" },
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku" },
-  { value: "gemini-2.5-pro", label: "Gemini Pro" },
-  { value: "gemini-2.5-flash", label: "Gemini Flash" },
+const FALLBACK_MODEL_OPTIONS: ModelOption[] = [
+  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
+  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
 /* ── Component ── */
@@ -98,7 +105,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
   const [ceoInput, setCeoInput] = useState("");
   const [currentRound, setCurrentRound] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
-  const [budgetRemaining, setBudgetRemaining] = useState(0);
+  const [, setBudgetRemaining] = useState(0);
   const [synthesis, setSynthesis] = useState("");
   const [error, setError] = useState("");
   const [discussionId, setDiscussionId] = useState("");
@@ -112,9 +119,38 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     DEFAULT_PRESETS.standard.participants
   );
   const [useCustom, setUseCustom] = useState(false);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODEL_OPTIONS);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  /* ── Fetch AADS model list on mount ── */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/llm-models?active_only=true`, {
+          headers: authHdrs(),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const models: ModelOption[] = (data.models || [])
+          .filter((m: Record<string, unknown>) => m.is_active)
+          .map((m: Record<string, unknown>) => ({
+            value: m.model_id as string,
+            label: (m.display_name as string) || (m.model_id as string),
+          }))
+          .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
+        if (models.length > 0) {
+          setModelOptions(models);
+        }
+      } catch {
+        /* fallback to hardcoded list */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!useCustom) {
@@ -130,40 +166,11 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     setEntries((prev) => [...prev, e]);
   }, []);
 
-  /* ── SSE reader ── */
-  const readSSE = useCallback(
-    async (res: Response) => {
-      const reader = res.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      let buf = "";
+  /* ── SSE event handler (use ref to avoid stale closure) ── */
+  const handleSSEEventRef = useRef<(ev: Record<string, unknown>) => void>(() => {});
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw || raw === "[DONE]") continue;
-          try {
-            const ev = JSON.parse(raw);
-            handleSSEEvent(ev);
-          } catch {
-            /* ignore malformed */
-          }
-        }
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
-  const handleSSEEvent = useCallback(
-    (ev: Record<string, unknown>) => {
+  useEffect(() => {
+    handleSSEEventRef.current = (ev: Record<string, unknown>) => {
       const event = ev.event as string;
 
       if (event === "discussion_start") {
@@ -255,9 +262,50 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
         });
       } else if (event === "error") {
         setError(ev.message as string);
+        setPhase("setup");
+      }
+    };
+  }, [addEntry, preset, participants]);
+
+  /* ── SSE reader (uses ref to always get latest handler) ── */
+  const readSSE = useCallback(
+    async (res: Response) => {
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError("SSE 스트림을 읽을 수 없습니다.");
+        setPhase("setup");
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (!raw || raw === "[DONE]") continue;
+            try {
+              const ev = JSON.parse(raw);
+              handleSSEEventRef.current(ev);
+            } catch {
+              /* ignore malformed */
+            }
+          }
+        }
+      } catch (e: unknown) {
+        if ((e as Error).name !== "AbortError") {
+          setError(`스트림 읽기 오류: ${(e as Error).message}`);
+        }
       }
     },
-    [addEntry, preset, participants]
+    []
   );
 
   /* ── Start discussion ── */
@@ -267,6 +315,8 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     setError("");
     setEntries([]);
     setSynthesis("");
+    setCurrentRound(0);
+    setTotalCost(0);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -294,15 +344,12 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
 
       if (!res.ok) {
         const msg = await res.text();
-        setError(`API 오류: ${res.status} — ${msg}`);
+        setError(`API 오류 (${res.status}): ${msg}`);
         setPhase("setup");
         return;
       }
 
       await readSSE(res);
-
-      /* If manual mode ended at wait_ceo, phase is already set. */
-      /* If auto mode finished, phase is "done". */
     } catch (e: unknown) {
       if ((e as Error).name !== "AbortError") {
         setError(`연결 오류: ${(e as Error).message}`);
@@ -338,7 +385,8 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
         }
       );
       if (!res.ok) {
-        setError(`API 오류: ${res.status}`);
+        const errText = await res.text();
+        setError(`API 오류 (${res.status}): ${errText}`);
         setPhase("wait_ceo");
         return;
       }
@@ -444,13 +492,14 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                     width: "100%", marginTop: 6, padding: 12, borderRadius: 10,
                     background: "var(--ct-input-bg, #16213e)", border: "1px solid var(--ct-border, #333)",
                     color: "var(--ct-text, #e0e0e0)", fontSize: 14, resize: "vertical",
+                    boxSizing: "border-box",
                   }}
                 />
               </label>
 
               {/* Preset + Mode row */}
-              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                <label style={{ flex: 1, color: "var(--ct-text, #e0e0e0)" }}>
+              <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                <label style={{ flex: 1, minWidth: 140, color: "var(--ct-text, #e0e0e0)" }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>프리셋</span>
                   <select value={preset} onChange={(e) => setPreset(e.target.value)}
                     style={{
@@ -463,7 +512,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                     <option value="light">경량 2인 (Sonnet + Flash)</option>
                   </select>
                 </label>
-                <label style={{ flex: 1, color: "var(--ct-text, #e0e0e0)" }}>
+                <label style={{ flex: 1, minWidth: 140, color: "var(--ct-text, #e0e0e0)" }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>진행 모드</span>
                   <select value={mode} onChange={(e) => setMode(e.target.value as "manual" | "auto")}
                     style={{
@@ -485,7 +534,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                   style={{
                     width: "100%", marginTop: 6, padding: 10, borderRadius: 8,
                     background: "var(--ct-input-bg, #16213e)", border: "1px solid var(--ct-border, #333)",
-                    color: "var(--ct-text, #e0e0e0)", fontSize: 14,
+                    color: "var(--ct-text, #e0e0e0)", fontSize: 14, boxSizing: "border-box",
                   }}
                 />
               </label>
@@ -506,7 +555,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                 border: "1px solid var(--ct-border, #333)", marginBottom: 16,
               }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#888", marginBottom: 8 }}>
-                  참가자 ({participants.length}명)
+                  참가자 ({participants.length}명) · 모델 {modelOptions.length}종 사용 가능
                 </div>
                 {participants.map((p, i) => (
                   <div key={i} style={{
@@ -514,19 +563,20 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                     padding: 8, borderRadius: 8,
                     background: useCustom ? "var(--ct-input-bg, #16213e)" : "transparent",
                     opacity: useCustom ? 1 : 0.7,
+                    flexWrap: "wrap",
                   }}>
                     <span style={{
                       width: 28, height: 28, borderRadius: "50%", display: "flex",
                       alignItems: "center", justifyContent: "center",
-                      background: p.color, color: "#fff", fontWeight: 700, fontSize: 13,
+                      background: p.color, color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0,
                     }}>{p.avatar}</span>
                     {useCustom ? (
                       <>
                         <input value={p.name} onChange={(e) => updateParticipant(i, "name", e.target.value)}
-                          style={{ flex: 1, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 13 }} />
+                          style={{ flex: 1, minWidth: 80, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 13 }} />
                         <select value={p.model} onChange={(e) => updateParticipant(i, "model", e.target.value)}
-                          style={{ padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
-                          {MODEL_OPTIONS.map((m) => (
+                          style={{ flex: 2, minWidth: 120, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
+                          {modelOptions.map((m) => (
                             <option key={m.value} value={m.value}>{m.label}</option>
                           ))}
                         </select>
@@ -537,7 +587,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                     ) : (
                       <>
                         <span style={{ flex: 1, fontSize: 13, color: "#e0e0e0" }}>{p.name}</span>
-                        <span style={{ fontSize: 12, color: "#888" }}>{p.model.split("-").slice(-2).join(" ")}</span>
+                        <span style={{ fontSize: 12, color: "#888" }}>{p.model}</span>
                       </>
                     )}
                   </div>
@@ -551,8 +601,8 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
               </div>
 
               {error && (
-                <div style={{ color: "#e74c3c", fontSize: 13, marginBottom: 12, padding: 8, background: "rgba(231,76,60,0.1)", borderRadius: 8 }}>
-                  {error}
+                <div style={{ color: "#e74c3c", fontSize: 13, marginBottom: 12, padding: 10, background: "rgba(231,76,60,0.1)", borderRadius: 8, border: "1px solid rgba(231,76,60,0.3)" }}>
+                  ⚠️ {error}
                 </div>
               )}
 
@@ -637,98 +687,77 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
 
               {/* Streaming indicator */}
               {phase === "streaming" && (
-                <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0" }}>
                   <div style={{
-                    display: "flex", gap: 4, alignItems: "center",
-                    padding: "6px 14px", borderRadius: 20,
-                    background: "var(--ct-card, #1e1e2e)", border: "1px solid var(--ct-border, #333)",
-                    fontSize: 13, color: "#888",
-                  }}>
-                    <span className="discussion-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#6c5ce7", animation: "pulse 1.2s infinite" }} />
-                    <span className="discussion-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#6c5ce7", animation: "pulse 1.2s infinite 0.2s" }} />
-                    <span className="discussion-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#6c5ce7", animation: "pulse 1.2s infinite 0.4s" }} />
-                    <span style={{ marginLeft: 6 }}>토론 진행 중...</span>
-                  </div>
+                    width: 8, height: 8, borderRadius: "50%", background: "#6c5ce7",
+                    animation: "pulse 1.5s infinite",
+                  }} />
+                  <span style={{ fontSize: 13, color: "#888" }}>AI 응답 대기 중...</span>
+                  <button onClick={handleCancel} style={{
+                    marginLeft: "auto", padding: "4px 12px", borderRadius: 6,
+                    background: "rgba(231,76,60,0.2)", border: "1px solid rgba(231,76,60,0.4)",
+                    color: "#e74c3c", cursor: "pointer", fontSize: 12,
+                  }}>중단</button>
+                </div>
+              )}
+
+              {/* Error during streaming */}
+              {error && (
+                <div style={{ color: "#e74c3c", fontSize: 13, padding: 10, background: "rgba(231,76,60,0.1)", borderRadius: 8, border: "1px solid rgba(231,76,60,0.3)" }}>
+                  ⚠️ {error}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Footer — CEO input or action buttons */}
+        {/* Footer: CEO input (wait_ceo phase) */}
         {phase === "wait_ceo" && (
           <div style={{
             padding: "12px 20px", borderTop: "1px solid var(--ct-border, #333)",
-            display: "flex", gap: 8, background: "var(--ct-card, #1e1e2e)",
+            background: "var(--ct-card, #1e1e2e)",
+            display: "flex", gap: 8,
           }}>
             <input
               value={ceoInput}
               onChange={(e) => setCeoInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCeoSend(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCeoSend(); }}}
               placeholder="다음 / 계속 / 그만 / 또는 지시사항 입력..."
               style={{
-                flex: 1, padding: "10px 14px", borderRadius: 10,
+                flex: 1, padding: 10, borderRadius: 8,
                 background: "var(--ct-input-bg, #16213e)", border: "1px solid var(--ct-border, #333)",
                 color: "var(--ct-text, #e0e0e0)", fontSize: 14,
               }}
             />
-            <button onClick={handleCeoSend}
-              style={{
-                padding: "10px 20px", borderRadius: 10, border: "none",
-                background: "#6c5ce7", color: "#fff", fontWeight: 600, cursor: "pointer",
-              }}>전송</button>
-            <button onClick={() => { setCeoInput("그만"); setTimeout(handleCeoSend, 50); }}
-              style={{
-                padding: "10px 14px", borderRadius: 10, border: "1px solid #e17055",
-                background: "transparent", color: "#e17055", fontWeight: 600, cursor: "pointer",
-              }}>종료</button>
+            <button onClick={handleCeoSend} style={{
+              padding: "10px 20px", borderRadius: 8, border: "none",
+              background: "linear-gradient(135deg, #6c5ce7, #a29bfe)",
+              color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14,
+            }}>전송</button>
           </div>
         )}
 
-        {phase === "streaming" && (
-          <div style={{
-            padding: "12px 20px", borderTop: "1px solid var(--ct-border, #333)",
-            display: "flex", justifyContent: "center", background: "var(--ct-card, #1e1e2e)",
-          }}>
-            <button onClick={handleCancel}
-              style={{
-                padding: "8px 20px", borderRadius: 10, border: "1px solid #e17055",
-                background: "transparent", color: "#e17055", fontSize: 13, cursor: "pointer",
-              }}>토론 취소</button>
-          </div>
-        )}
-
+        {/* Footer: Done phase */}
         {phase === "done" && (
           <div style={{
             padding: "12px 20px", borderTop: "1px solid var(--ct-border, #333)",
-            display: "flex", justifyContent: "space-between", alignItems: "center",
             background: "var(--ct-card, #1e1e2e)",
+            display: "flex", justifyContent: "space-between", alignItems: "center",
           }}>
             <span style={{ fontSize: 13, color: "#888" }}>
-              {currentRound}라운드 · 총 ${totalCost.toFixed(2)}
+              토론 완료 · 총 비용: ${totalCost.toFixed(2)}
+              {discussionId && ` · ID: ${discussionId}`}
             </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setPhase("setup"); setEntries([]); setSynthesis(""); setCurrentRound(0); setTotalCost(0); }}
-                style={{
-                  padding: "8px 16px", borderRadius: 10, border: "1px solid #555",
-                  background: "transparent", color: "#e0e0e0", fontSize: 13, cursor: "pointer",
-                }}>새 토론</button>
-              <button onClick={onClose}
-                style={{
-                  padding: "8px 16px", borderRadius: 10, border: "none",
-                  background: "#6c5ce7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }}>닫기</button>
-            </div>
+            <button onClick={onClose} style={{
+              padding: "8px 20px", borderRadius: 8, border: "none",
+              background: "#27ae60", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14,
+            }}>닫기</button>
           </div>
         )}
       </div>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1.2); }
-        }
-      `}</style>
+      {/* pulse animation */}
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </div>
   );
 }
