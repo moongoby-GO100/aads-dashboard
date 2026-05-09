@@ -59,28 +59,28 @@ const DEFAULT_PRESETS: Record<string, Preset> = {
   standard: {
     name: "standard",
     label: "기본 3인",
-    synthesizer_model: "claude-opus-4-6",
+    synthesizer_model: "claude-sonnet-4-6",
     participants: [
-      { name: "기획 A", role: "strategic_planner", model: "claude-opus-4-6", color: "#6c5ce7", avatar: "A" },
+      { name: "기획 A", role: "strategic_planner", model: "claude-sonnet-4-6", color: "#6c5ce7", avatar: "A" },
       { name: "기획 B", role: "market_analyst", model: "gemini-2.5-pro", color: "#00cec9", avatar: "B" },
-      { name: "검증 C", role: "critical_reviewer", model: "claude-sonnet-4-6", color: "#fdcb6e", avatar: "C" },
+      { name: "검증 C", role: "critical_reviewer", model: "gemini-2.5-flash", color: "#fdcb6e", avatar: "C" },
     ],
   },
   deep: {
     name: "deep",
     label: "심층 4인",
-    synthesizer_model: "claude-opus-4-6",
+    synthesizer_model: "claude-sonnet-4-6",
     participants: [
-      { name: "기획 A", role: "strategic_planner", model: "claude-opus-4-6", color: "#6c5ce7", avatar: "A" },
+      { name: "기획 A", role: "strategic_planner", model: "claude-sonnet-4-6", color: "#6c5ce7", avatar: "A" },
       { name: "시장 B", role: "market_analyst", model: "gemini-2.5-pro", color: "#00cec9", avatar: "B" },
-      { name: "검증 C", role: "critical_reviewer", model: "claude-sonnet-4-6", color: "#fdcb6e", avatar: "C" },
+      { name: "검증 C", role: "critical_reviewer", model: "claude-haiku-4-5-20251001", color: "#fdcb6e", avatar: "C" },
       { name: "속도 D", role: "rapid_ideator", model: "gemini-2.5-flash", color: "#55efc4", avatar: "D" },
     ],
   },
   light: {
     name: "light",
     label: "경량 2인",
-    synthesizer_model: "claude-sonnet-4-6",
+    synthesizer_model: "claude-haiku-4-5-20251001",
     participants: [
       { name: "기획 A", role: "planner", model: "claude-sonnet-4-6", color: "#6c5ce7", avatar: "A" },
       { name: "속도 B", role: "rapid_ideator", model: "gemini-2.5-flash", color: "#00cec9", avatar: "B" },
@@ -89,7 +89,7 @@ const DEFAULT_PRESETS: Record<string, Preset> = {
 };
 
 const FALLBACK_MODEL_OPTIONS: ModelOption[] = [
-  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+  { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
   { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
@@ -545,7 +545,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                   <input type="checkbox" checked={useCustom}
                     onChange={(e) => setUseCustom(e.target.checked)}
                     style={{ accentColor: "#6c5ce7" }} />
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>참가자 직접 설정</span>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>참가자 이름/역할 편집</span>
                 </label>
               </div>
 
@@ -561,8 +561,8 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                   <div key={i} style={{
                     display: "flex", gap: 8, alignItems: "center", marginBottom: 8,
                     padding: 8, borderRadius: 8,
-                    background: useCustom ? "var(--ct-input-bg, #16213e)" : "transparent",
-                    opacity: useCustom ? 1 : 0.7,
+                    background: "var(--ct-input-bg, #16213e)",
+                    opacity: 1,
                     flexWrap: "wrap",
                   }}>
                     <span style={{
@@ -571,24 +571,21 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                       background: p.color, color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0,
                     }}>{p.avatar}</span>
                     {useCustom ? (
-                      <>
-                        <input value={p.name} onChange={(e) => updateParticipant(i, "name", e.target.value)}
-                          style={{ flex: 1, minWidth: 80, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 13 }} />
-                        <select value={p.model} onChange={(e) => updateParticipant(i, "model", e.target.value)}
-                          style={{ flex: 2, minWidth: 120, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
-                          {modelOptions.map((m) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                        <button onClick={() => removeParticipant(i)} style={{
-                          background: "none", border: "none", color: "#e17055", cursor: "pointer", fontSize: 16,
-                        }}>✕</button>
-                      </>
+                      <input value={p.name} onChange={(e) => updateParticipant(i, "name", e.target.value)}
+                        style={{ flex: 1, minWidth: 80, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 13 }} />
                     ) : (
-                      <>
-                        <span style={{ flex: 1, fontSize: 13, color: "#e0e0e0" }}>{p.name}</span>
-                        <span style={{ fontSize: 12, color: "#888" }}>{p.model}</span>
-                      </>
+                      <span style={{ flex: 1, fontSize: 13, color: "#e0e0e0" }}>{p.name}</span>
+                    )}
+                    <select value={p.model} onChange={(e) => updateParticipant(i, "model", e.target.value)}
+                      style={{ flex: 2, minWidth: 140, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
+                      {modelOptions.map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                    {useCustom && (
+                      <button onClick={() => removeParticipant(i)} style={{
+                        background: "none", border: "none", color: "#e17055", cursor: "pointer", fontSize: 16,
+                      }}>✕</button>
                     )}
                   </div>
                 ))}
