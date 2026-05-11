@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import Header from "@/components/Header";
-import type { HealthResponse, ConversationStatsResponse, Conversation } from "@/types";
+import type { HealthResponse, ConversationStatsResponse, Conversation, DesignModificationRequestSource } from "@/types";
 
 function toDisplayText(v: unknown): string {
   if (v == null) return "";
@@ -20,6 +20,8 @@ export default function DashboardPage() {
   const [recentConvs, setRecentConvs] = useState<Conversation[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [ceoDecisions, setCeoDecisions] = useState<any[]>([]);
+  const [designRequestCount, setDesignRequestCount] = useState(0);
+  const [designRequestSource, setDesignRequestSource] = useState<DesignModificationRequestSource | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,6 +34,12 @@ export default function DashboardPage() {
         .catch(() => {}),
       api.getAlerts().then((r) => setAlerts(Array.isArray(r.alerts) ? r.alerts : [])).catch(() => {}),
       api.getCeoDecisions(7).then((r) => setCeoDecisions(Array.isArray(r.data) ? r.data : Array.isArray(r.decisions) ? r.decisions : [])).catch(() => {}),
+      api.getDesignModificationRequests()
+        .then((r) => {
+          setDesignRequestCount(r.items.length);
+          setDesignRequestSource(r.source);
+        })
+        .catch(() => {}),
     ]).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -115,6 +123,39 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mb-6">
+          <Link
+            href="/design-modifications"
+            className="flex items-center gap-4 rounded-xl p-4 transition-colors"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+          >
+            <div className="text-3xl">🧩</div>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>Design Modification Requests</p>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                분류기 포함 요청 카드 워크스페이스
+              </p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                {loading ? "—" : designRequestCount}
+              </p>
+              <p className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                {loading
+                  ? "—"
+                  : designRequestSource === "local_stub"
+                    ? "local draft"
+                    : designRequestSource === "api"
+                      ? "api"
+                      : "unavailable"}
+              </p>
+            </div>
+            <div className="text-xs px-3 py-1 rounded-full" style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}>
+              열기 →
+            </div>
+          </Link>
         </div>
 
         {/* Genspark AI 바로가기 카드 */}

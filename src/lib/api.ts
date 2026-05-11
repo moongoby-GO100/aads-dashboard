@@ -38,6 +38,10 @@ export interface AdminSessionItem {
 }
 
 import type {
+  CreateDesignModificationRequestResponse,
+  DesignModificationRequestDetailResponse,
+  DesignModificationRequestDraft,
+  DesignModificationRequestListResponse,
   HealthResponse,
   ProjectListResponse,
   ProjectStatusResponse,
@@ -51,8 +55,23 @@ import type {
   MemorySearchResponse,
   MemoryInboxResponse,
 } from "@/types";
+import {
+  buildLocalDesignModificationDetailResponse,
+  buildLocalDesignModificationListResponse,
+  createDesignModificationRequestEntity,
+  normalizeDesignModificationDetailResponse,
+  normalizeDesignModificationListResponse,
+  saveLocalDesignModificationRequest,
+} from "@/lib/designModificationRequests";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const DESIGN_MODIFICATION_REQUEST_PATHS = [
+  "/design-modification-requests",
+  "/design-modifications/requests",
+  "/ops/design-modification-requests",
+  "/design/requests",
+];
+const OPTIONAL_API_STATUSES = new Set([404, 405, 501]);
 
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -94,6 +113,43 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function requestFirstAvailable<T>(
+  paths: string[],
+  options?: RequestInit
+): Promise<{ data: T; endpoint: string } | null> {
+  for (const path of paths) {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+        ...options?.headers,
+      },
+    });
+
+    if (res.status === 401) {
+      handle401Redirect();
+      throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+
+    if (res.ok) {
+      const text = await res.text();
+      return {
+        data: (text ? JSON.parse(text) : {}) as T,
+        endpoint: path,
+      };
+    }
+
+    if (OPTIONAL_API_STATUSES.has(res.status)) {
+      continue;
+    }
+
+    throw new Error(`API error ${res.status}: ${await res.text()}`);
+  }
+
+  return null;
 }
 
 export const api = {
@@ -242,6 +298,58 @@ export const api = {
   // AADS-163: QA Results + Design Reviews
   getOpsQaResults: (limit = 20) => request<any>(`/ops/qa-results?limit=${limit}`),
   getOpsDesignReviews: (limit = 10) => request<any>(`/ops/design-reviews?limit=${limit}`),
+
+  // AADS-DESIGN-MOD-002: Design modification requests with local draft fallback
+  getDesignModificationRequests: async (): Promise<DesignModificationRequestListResponse> => {
+    const result = await requestFirstAvailable<unknown>(DESIGN_MODIFICATION_REQUEST_PATHS);
+    if (!result) {
+      return buildLocalDesignModificationListResponse();
+    }
+    return normalizeDesignModificationListResponse(result.data, {
+      source: "api",
+      api_available: true,
+      endpoint: result.endpoint,
+    });
+  },
+  getDesignModificationRequest: async (id: string): Promise<DesignModificationRequestDetailResponse> => {
+    const result = await requestFirstAvailable<unknown>(
+      DESIGN_MODIFICATION_REQUEST_PATHS.map((path) => `${path}/${encodeURIComponent(id)}`)
+    );
+    if (!result) {
+      return buildLocalDesignModificationDetailResponse(id);
+    }
+    return normalizeDesignModificationDetailResponse(result.data, {
+      source: "api",
+      api_available: true,
+      endpoint: result.endpoint,
+    });
+  },
+  createDesignModificationRequest: async (
+    data: DesignModificationRequestDraft
+  ): Promise<CreateDesignModificationRequestResponse> => {
+    const result = await requestFirstAvailable<unknown>(DESIGN_MODIFICATION_REQUEST_PATHS, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+
+    if (!result) {
+      return saveLocalDesignModificationRequest(data);
+    }
+
+    const normalized = normalizeDesignModificationDetailResponse(result.data, {
+      source: "api",
+      api_available: true,
+      endpoint: result.endpoint,
+    });
+
+    return {
+      item: normalized.item ?? createDesignModificationRequestEntity(data, "api"),
+      source: "api",
+      api_available: true,
+      endpoint: result.endpoint,
+      message: normalized.item ? undefined : "생성 응답 본문이 비어 있어 제출 payload를 기준으로 임시 표시합니다.",
+    };
+  },
 
   // AADS-166: Pipeline Health Check
   getDirectiveFolder: (status: string) => request<any>(`/directives/${status}`),

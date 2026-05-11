@@ -8,6 +8,7 @@ const navItems = [
   { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
   { href: "/braming", label: "브레인스토밍", icon: "🧠" },
   { href: "/project-status", label: "Project Status", icon: "📊" },
+  { href: "/design-modifications", label: "Design Mods", icon: "🧩" },
   { href: "/conversations", label: "Conversations", icon: "🗨️" },
   { href: "/channels", label: "대화창 관리", icon: "📌" },
   { href: "/managers", label: "Managers", icon: "👥" },
