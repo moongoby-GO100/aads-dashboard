@@ -441,6 +441,29 @@ export const api = {
   getAdminTask: (jobId: string) => request<any>(`/admin/tasks/${encodeURIComponent(jobId)}`),
   getAdminTaskStats: () => request<any>("/admin/tasks/stats"),
 
+  // Design Modification Studio
+  getDesignScreens: (projectKey = "AADS") =>
+    request<any>(`/admin/design/projects/${encodeURIComponent(projectKey)}/screens`),
+  getDesignModificationRequests: (projectKey = "AADS", params?: { status?: string; screen_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.screen_id) q.set("screen_id", params.screen_id);
+    const qs = q.toString();
+    return request<any>(`/admin/design/projects/${encodeURIComponent(projectKey)}/modification-requests${qs ? `?${qs}` : ""}`);
+  },
+  createDesignModificationRequest: (data: Record<string, unknown>) =>
+    request<any>("/admin/design/modification-requests", { method: "POST", body: JSON.stringify(data) }),
+  getDesignModificationRequest: (requestId: string) =>
+    request<any>(`/admin/design/modification-requests/${encodeURIComponent(requestId)}`),
+  buildDesignContextPack: (requestId: string) =>
+    request<any>(`/admin/design/modification-requests/${encodeURIComponent(requestId)}/build-context`, { method: "POST" }),
+  getDesignContextPacks: (requestId: string) =>
+    request<any>(`/admin/design/modification-requests/${encodeURIComponent(requestId)}/context-packs`),
+  getDesignContextPackPreview: (contextPackId: string) =>
+    request<any>(`/admin/design/context-packs/${encodeURIComponent(contextPackId)}/preview`),
+  scoreDesignModification: (requestId: string) =>
+    request<any>(`/admin/design/modification-requests/${encodeURIComponent(requestId)}/score`, { method: "POST" }),
+
   // LLM API 키 관리 (AADS-188)
   getLlmKeys: () => request<any[]>("/llm-keys"),
   createLlmKey: (data: { provider: string; key_name: string; value: string; label?: string; priority?: number; notes?: string }) =>

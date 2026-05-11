@@ -15,6 +15,7 @@ const navItems = [
   { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
   { href: "/tasks", label: "Tasks", icon: "📋" },
   { href: "/docs", label: "문서 통합", icon: "📄" },
+  { href: "/design/modifications", label: "Design Studio", icon: "🎨" },
   { href: "/projects", label: "Pipeline", icon: "🔧" },
   { href: "/ops", label: "운영 현황", icon: "📊" },
   { href: "/ops/recovery", label: "Recovery", icon: "🔄" },
