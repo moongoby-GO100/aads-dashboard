@@ -39,8 +39,6 @@ interface RunnerJob {
   instruction: string;
   status: string;
   phase: string | null;
-  display_status?: string;
-  status_label?: string;
   cycle: number;
   error_detail: string | null;
   error_message: string | null;
@@ -203,14 +201,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       disk_full: "디스크 부족",
       rate_limit: "API 제한",
       process_died: "프로세스 종료",
-      no_changes: "변경 없음",
-      dedup_blocked: "중복 차단",
-      blocked_dependency: "의존 차단",
-      cancelled: "종결",
     };
-    if (!d) return "";
-    const key = d.split(":")[0];
-    return map[key] ?? map[d] ?? d;
+    return d ? (map[d] ?? d) : "";
   };
 
   const elapsedStr = (start: string | null, end: string | null): string => {
@@ -735,8 +727,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       이 세션의 Runner 작업이 없습니다
                     </div>
                   ) : (() => {
-                    const jobIds = new Set(runnerJobs.map(j => j.job_id));
-                    const roots = runnerJobs.filter(j => !j.depends_on || !jobIds.has(j.depends_on));
+                    const roots = runnerJobs.filter(j => !j.depends_on);
                     const childMap: Record<string, RunnerJob[]> = {};
                     runnerJobs.forEach(j => {
                       if (j.depends_on) {
@@ -746,20 +737,16 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     });
 
                     const statusIcon = (s: string) => ({
-                      queued: "⏳", running: "🔄", awaiting_approval: "✋", done: "✅", error: "❌",
-                      cancelled: "⚪", no_changes: "⚪", dedup_blocked: "⛔", blocked_dependency: "⛔"
+                      queued: "⏳", running: "🔄", awaiting_approval: "✋", done: "✅", error: "❌"
                     }[s] ?? "❓");
 
                     const statusColor = (s: string) => ({
-                      queued: "#888", running: "#3b82f6", awaiting_approval: "#f59e0b", done: "#22c55e", error: "#ef4444",
-                      cancelled: "#9ca3af", no_changes: "#9ca3af", dedup_blocked: "#f59e0b", blocked_dependency: "#f59e0b"
+                      queued: "#888", running: "#3b82f6", awaiting_approval: "#f59e0b", done: "#22c55e", error: "#ef4444"
                     }[s] ?? "#888");
 
                     const renderJob = (job: RunnerJob, depth = 0): React.ReactNode => {
                       const children = childMap[job.job_id] ?? [];
                       const isRunning = job.status === "running";
-                      const displayStatus = job.display_status || job.phase || job.status;
-                      const statusLabel = job.status_label || displayStatus;
                       return (
                         <div key={job.job_id} style={{ marginLeft: depth * 12 }}>
                           <details style={{ borderBottom: depth === 0 ? "1px solid var(--ct-border)" : "none" }}>
@@ -768,11 +755,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                               display: "flex", alignItems: "flex-start", gap: "6px",
                               padding: `${depth === 0 ? 8 : 4}px 8px`, userSelect: "none",
                             }}>
-                              <span style={{ color: statusColor(displayStatus), minWidth: 14 }}>{statusIcon(displayStatus)}</span>
+                              <span style={{ color: statusColor(job.status), minWidth: 14 }}>{statusIcon(job.status)}</span>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                                   <span style={{ fontFamily: "monospace", fontSize: "10px", opacity: 0.6 }}>{job.job_id}</span>
-                                  <span style={{ fontSize: "10px", color: statusColor(displayStatus), fontWeight: 600 }}>{statusLabel}</span>
+                                  <span style={{ fontSize: "10px", color: statusColor(job.status), fontWeight: 600 }}>{job.status}</span>
                                   {isRunning && job.started_at && (
                                     <span style={{ fontSize: "10px", color: "#f59e0b" }}>⏱ {elapsedStr(job.started_at, null)}</span>
                                   )}
@@ -807,8 +794,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                     {job.started_at && ` · 시작 ${new Date(job.started_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`}
                                   </div>
                                 )}
-                                {(job.status === "error" || ["no_changes", "dedup_blocked", "blocked_dependency"].includes(displayStatus)) && (
-                                  <div style={{ fontSize: "10px", color: displayStatus === "error" ? "#ef4444" : "#f59e0b", marginTop: 2 }}>
+                                {job.status === "error" && (
+                                  <div style={{ fontSize: "10px", color: "#ef4444", marginTop: 2 }}>
                                     {job.error_detail ? `원인: ${errorDetailKo(job.error_detail)}` : ""}
                                     {job.error_message ? ` — ${job.error_message.slice(0, 80)}` : ""}
                                   </div>
@@ -867,7 +854,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       <button
                         onClick={async () => {
                           try {
-                            const res = await fetch(`${BASE_URL}/chat/artifacts/${activeArtifact.id}/export`, {
+                            const res = await fetch(\`\${BASE_URL}/chat/artifacts/\${activeArtifact.id}/export\`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json", ...authHdrs() },
                               body: JSON.stringify({ format: "md" }),
@@ -1045,51 +1032,6 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         (다른 세션)
                       </span>
                     )}
-                    {/* artifact-summary-stats */}
-                    {(() => {
-                      const c = displayArtifact.content || "";
-                      const chars = c.length;
-                      const words = c.trim().split(/\s+/).filter(Boolean).length;
-                      const lines = c.split("\n").length;
-                      const sections = (c.match(/^#{1,3}\s+/gm) || []).length;
-                      const tables = (c.match(/^\|.+\|$/gm) || []).length;
-                      const codeBlocks = Math.floor(((c.match(/```/g) || []).length) / 2);
-                      const typeLabel: Record<string, string> = {
-                        report: "\ud83d\udcc4 \ubcf4\uace0\uc11c",
-                        code: "\ud83d\udcbb \ucf54\ub4dc",
-                        chart: "\ud83d\udcca \ucc28\ud2b8",
-                        full_response: "\ud83d\udcc4 \ubcf4\uace0\uc11c",
-                        table: "\ud83d\udcca \ud45c",
-                        image: "\ud83d\uddbc\ufe0f \uc774\ubbf8\uc9c0",
-                        file: "\ud83d\udcce \ud30c\uc77c",
-                      };
-                      const label = typeLabel[displayArtifact.artifact_type] || "\ud83d\udcc4 \ubb38\uc11c";
-                      if (chars < 10) return null;
-                      const stats = [
-                        { k: "\uc720\ud615", v: label },
-                        { k: "\uae00\uc790", v: chars.toLocaleString() },
-                        { k: "\ub2e8\uc5b4", v: words.toLocaleString() },
-                        { k: "\uc904", v: lines.toLocaleString() },
-                      ];
-                      if (sections > 0) stats.push({ k: "\uc139\uc158", v: String(sections) });
-                      if (tables > 0) stats.push({ k: "\ud45c", v: String(tables) });
-                      if (codeBlocks > 0) stats.push({ k: "\ucf54\ub4dc\ube14\ub85d", v: String(codeBlocks) });
-                      return (
-                        <div style={{
-                          display: "flex", alignItems: "center", gap: "12px",
-                          padding: "4px 0", marginBottom: "8px",
-                          borderBottom: "1px solid var(--ct-border)",
-                          overflowX: "auto",
-                        }}>
-                          {stats.map((s, i) => (
-                            <span key={i} style={{ display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}>
-                              <span style={{ color: "var(--ct-text-muted)", fontSize: "10px" }}>{s.k}</span>
-                              <span style={{ color: "var(--ct-text)", fontSize: "11px", fontWeight: 500 }}>{s.v}</span>
-                            </span>
-                          ))}
-                        </div>
-                      );
-                    })()}
                     <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
                       {displayArtifact.artifact_type === "image" ? (
                         <img
@@ -1187,6 +1129,24 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   { icon: "📋", label: "복사", fn: () => copyArtifact(activeArtifact.content) },
                   { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
                   { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
+                  { icon: "⬇️", label: "내보내기", fn: async () => {
+                    try {
+                      const res = await fetch(\`\${BASE_URL}/chat/artifacts/\${activeArtifact.id}/export\`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...authHdrs() },
+                        body: JSON.stringify({ format: "md" }),
+                      });
+                      if (!res.ok) throw new Error("export failed");
+                      const data = await res.json();
+                      const blob = new Blob([data.content], { type: data.mime || "text/markdown" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = data.filename || "artifact.md";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch { /* silent */ }
+                  }},
                 ].map((btn) => (
                   <button
                     key={btn.label}

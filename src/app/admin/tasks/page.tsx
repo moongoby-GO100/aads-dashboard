@@ -6,7 +6,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
-type TaskStatus = "queued" | "running" | "awaiting_approval" | "done" | "error";
+type TaskStatus =
+  | "queued"
+  | "running"
+  | "awaiting_approval"
+  | "done"
+  | "no_changes"
+  | "dedup_blocked"
+  | "blocked_dependency"
+  | "error";
 
 interface TaskSummary {
   job_id: string;
@@ -65,6 +73,9 @@ interface TaskStats {
   running: number;
   awaiting_approval: number;
   done: number;
+  no_changes: number;
+  dedup_blocked: number;
+  blocked_dependency: number;
   error: number;
   total: number;
 }
@@ -75,6 +86,9 @@ const BOARD_COLUMNS: { key: TaskStatus; label: string; accent: string; empty: st
   { key: "running", label: "Running", accent: "#3b82f6", empty: "실행 중인 작업이 없습니다." },
   { key: "awaiting_approval", label: "Awaiting Approval", accent: "#f59e0b", empty: "승인 대기 작업이 없습니다." },
   { key: "done", label: "Done", accent: "#22c55e", empty: "완료된 작업이 없습니다." },
+  { key: "no_changes", label: "No Changes", accent: "#94a3b8", empty: "변경 없음 종결 작업이 없습니다." },
+  { key: "dedup_blocked", label: "Dedup Blocked", accent: "#eab308", empty: "중복 차단 작업이 없습니다." },
+  { key: "blocked_dependency", label: "Blocked Dependency", accent: "#f97316", empty: "의존 차단 작업이 없습니다." },
   { key: "error", label: "Error", accent: "#ef4444", empty: "에러 작업이 없습니다." },
 ];
 
@@ -128,6 +142,27 @@ function toneForStatus(status: TaskStatus): { background: string; color: string;
       border: "1px solid rgba(34,197,94,0.24)",
     };
   }
+  if (status === "no_changes") {
+    return {
+      background: "rgba(148,163,184,0.12)",
+      color: "#cbd5e1",
+      border: "1px solid rgba(148,163,184,0.22)",
+    };
+  }
+  if (status === "dedup_blocked") {
+    return {
+      background: "rgba(234,179,8,0.12)",
+      color: "#facc15",
+      border: "1px solid rgba(234,179,8,0.24)",
+    };
+  }
+  if (status === "blocked_dependency") {
+    return {
+      background: "rgba(249,115,22,0.12)",
+      color: "#fb923c",
+      border: "1px solid rgba(249,115,22,0.24)",
+    };
+  }
   if (status === "error") {
     return {
       background: "rgba(239,68,68,0.12)",
@@ -140,6 +175,23 @@ function toneForStatus(status: TaskStatus): { background: string; color: string;
     color: "var(--text-secondary)",
     border: "1px solid rgba(148,163,184,0.18)",
   };
+}
+
+function statusLabel(status: TaskStatus): string {
+  return {
+    queued: "queued",
+    running: "running",
+    awaiting_approval: "awaiting approval",
+    done: "done",
+    no_changes: "변경 없음",
+    dedup_blocked: "중복 차단",
+    blocked_dependency: "의존 차단",
+    error: "error",
+  }[status];
+}
+
+function errorDetailTone(status: TaskStatus): string {
+  return status === "error" ? "#fca5a5" : "#fbbf24";
 }
 
 function modelLabel(task: Pick<TaskSummary, "worker_model" | "model">): string {
@@ -237,6 +289,9 @@ export default function AdminTasksPage() {
       running: [],
       awaiting_approval: [],
       done: [],
+      no_changes: [],
+      dedup_blocked: [],
+      blocked_dependency: [],
       error: [],
     });
   }, [tasks]);
@@ -298,6 +353,9 @@ export default function AdminTasksPage() {
                 ["Running", stats.running, "#60a5fa"],
                 ["Awaiting", stats.awaiting_approval, "#fbbf24"],
                 ["Done", stats.done, "#4ade80"],
+                ["No Changes", stats.no_changes, "#cbd5e1"],
+                ["Dedup Blocked", stats.dedup_blocked, "#facc15"],
+                ["Blocked Dep", stats.blocked_dependency, "#fb923c"],
                 ["Error", stats.error, "#f87171"],
                 ["Total", stats.total, "var(--text-primary)"],
               ].map(([label, value, color]) => (
@@ -353,7 +411,7 @@ export default function AdminTasksPage() {
             <div style={{ ...cardStyle, color: "var(--text-secondary)", textAlign: "center" }}>로딩 중...</div>
           ) : (
             <div style={{ overflowX: "auto", paddingBottom: "4px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(250px, 1fr))", gap: "14px", minWidth: "1280px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(8, minmax(250px, 1fr))", gap: "14px", minWidth: "2048px" }}>
                 {BOARD_COLUMNS.map((column) => (
                   <div
                     key={column.key}
@@ -464,7 +522,7 @@ export default function AdminTasksPage() {
                                   fontWeight: 600,
                                 }}
                               >
-                                {task.status}
+                                {statusLabel(task.status)}
                               </span>
                               <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>
                                 {task.phase || "-"}
@@ -472,7 +530,7 @@ export default function AdminTasksPage() {
                             </div>
 
                             {task.error_detail ? (
-                              <div style={{ color: "#fca5a5", fontSize: "11px", lineHeight: "1.45", marginTop: "10px" }}>
+                              <div style={{ color: errorDetailTone(task.status), fontSize: "11px", lineHeight: "1.45", marginTop: "10px" }}>
                                 {task.error_detail}
                               </div>
                             ) : null}
@@ -525,7 +583,7 @@ export default function AdminTasksPage() {
                       fontWeight: 700,
                     }}
                   >
-                    {detail?.status || "loading"}
+                    {detail ? statusLabel(detail.status) : "loading"}
                   </span>
                   <span
                     style={{
@@ -595,7 +653,7 @@ export default function AdminTasksPage() {
 
                 {detail.error_detail ? (
                   <DetailSection title="Error Detail">
-                    <pre style={{ ...contentStyle, color: "#fca5a5" }}>{detail.error_detail}</pre>
+                    <pre style={{ ...contentStyle, color: errorDetailTone(detail.status) }}>{detail.error_detail}</pre>
                   </DetailSection>
                 ) : null}
 

@@ -1,0 +1,170 @@
+time="2026-05-09T10:45:46+09:00" level=warning msg="/root/aads/aads-dashboard/docker-compose.yml: `version` is obsolete"
+#0 building with "default" instance using docker driver
+
+#1 [aads-dashboard internal] load build definition from Dockerfile
+#1 transferring dockerfile: 641B 0.0s done
+#1 DONE 0.1s
+
+#2 [aads-dashboard internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 1.3s
+
+#3 [aads-dashboard builder 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#3 DONE 0.0s
+
+#4 [aads-dashboard builder 2/6] WORKDIR /app
+#4 CACHED
+
+#5 [aads-dashboard internal] load .dockerignore
+#5 transferring context: 134B done
+#5 DONE 0.0s
+
+#6 [aads-dashboard internal] load build context
+#6 transferring context: 715.92kB 0.0s done
+#6 DONE 0.1s
+
+#7 [aads-dashboard builder 3/6] COPY package*.json ./
+#7 DONE 0.2s
+
+#8 [aads-dashboard builder 4/6] RUN npm ci
+#8 16.29 npm warn deprecated xterm@5.3.0: This package is now deprecated. Move to @xterm/xterm instead.
+#8 41.48 
+#8 41.48 added 511 packages, and audited 512 packages in 41s
+#8 41.48 
+#8 41.48 247 packages are looking for funding
+#8 41.48   run `npm fund` for details
+#8 41.73 
+#8 41.73 7 vulnerabilities (4 moderate, 3 high)
+#8 41.73 
+#8 41.73 To address issues that do not require attention, run:
+#8 41.73   npm audit fix
+#8 41.73 
+#8 41.73 To address all issues, run:
+#8 41.73   npm audit fix --force
+#8 41.73 
+#8 41.73 Run `npm audit` for details.
+#8 41.74 npm notice
+#8 41.74 npm notice New major version of npm available! 10.8.2 -> 11.14.1
+#8 41.74 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.14.1
+#8 41.74 npm notice To update run: npm install -g npm@11.14.1
+#8 41.74 npm notice
+#8 DONE 43.7s
+
+#9 [aads-dashboard builder 3/6] COPY package*.json ./
+#9 CACHED
+
+#10 [aads-dashboard builder 4/6] RUN npm ci
+#10 CACHED
+
+#11 [aads-dashboard builder 5/6] COPY . .
+#11 DONE 1.9s
+
+#12 [aads-dashboard builder 6/6] RUN npm run build
+#12 1.571 
+#12 1.571 > aads-dashboard@0.2.1 build
+#12 1.571 > next build --webpack
+#12 1.571 
+#12 4.403 ▲ Next.js 16.1.6 (webpack)
+#12 4.404 - Environments: .env.local
+#12 4.404 - Experiments (use with caution):
+#12 4.404   ⨯ webpackBuildWorker
+#12 4.405 
+#12 4.411 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+#12 4.517   Creating an optimized production build ...
+#12 88.44 ✓ Compiled successfully in 83s
+#12 88.60   Skipping validation of types
+#12 88.89   Collecting page data using 7 workers ...
+#12 97.54   Generating static pages using 7 workers (0/49) ...
+#12 98.44   Generating static pages using 7 workers (12/49) 
+#12 99.00   Generating static pages using 7 workers (24/49) 
+#12 99.45   Generating static pages using 7 workers (36/49) 
+#12 99.86 ✓ Generating static pages using 7 workers (49/49) in 2.3s
+#12 101.9   Finalizing page optimization ...
+#12 101.9   Collecting build traces ...
+#12 157.5 
+#12 157.5 Route (app)
+#12 157.5 ┌ ƒ /
+#12 157.5 ├ ƒ /_not-found
+#12 157.5 ├ ƒ /admin/agents
+#12 157.5 ├ ƒ /admin/deploy
+#12 157.5 ├ ƒ /admin/emergency
+#12 157.5 ├ ƒ /admin/governance
+#12 157.5 ├ ƒ /admin/model-parity
+#12 157.5 ├ ƒ /admin/prompts
+#12 157.5 ├ ƒ /admin/sessions
+#12 157.5 ├ ƒ /admin/tasks
+#12 157.5 ├ ƒ /agenda
+#12 157.5 ├ ƒ /braming
+#12 157.5 ├ ƒ /channels
+#12 157.5 ├ ƒ /chat
+#12 157.5 ├ ƒ /chat/[id]
+#12 157.5 ├ ƒ /chat/terminal
+#12 157.5 ├ ƒ /conversations
+#12 157.5 ├ ƒ /decisions
+#12 157.5 ├ ƒ /docs
+#12 157.5 ├ ƒ /flow
+#12 157.5 ├ ƒ /genspark
+#12 157.5 ├ ƒ /kakaobot
+#12 157.5 ├ ƒ /kakaobot/agent
+#12 157.5 ├ ƒ /kakaobot/ai-writer
+#12 157.5 ├ ƒ /kakaobot/anniversaries
+#12 157.5 ├ ƒ /kakaobot/contacts
+#12 157.5 ├ ƒ /kakaobot/history
+#12 157.5 ├ ƒ /kakaobot/scheduled
+#12 157.5 ├ ƒ /kakaobot/settings
+#12 157.5 ├ ƒ /kakaobot/templates
+#12 157.5 ├ ƒ /lessons
+#12 157.5 ├ ƒ /login
+#12 157.5 ├ ƒ /managers
+#12 157.5 ├ ○ /manifest.webmanifest
+#12 157.5 ├ ƒ /memory
+#12 157.5 ├ ƒ /ops
+#12 157.5 ├ ƒ /ops/memory
+#12 157.5 ├ ƒ /ops/mobile-agent
+#12 157.5 ├ ƒ /ops/pc-agents
+#12 157.5 ├ ƒ /ops/recovery
+#12 157.5 ├ ƒ /ops/servers
+#12 157.5 ├ ƒ /project-status
+#12 157.5 ├ ƒ /project-status/[id]
+#12 157.5 ├ ƒ /projects
+#12 157.5 ├ ƒ /projects/[id]
+#12 157.5 ├ ƒ /projects/[id]/approve-plan
+#12 157.5 ├ ƒ /projects/[id]/costs
+#12 157.5 ├ ƒ /projects/[id]/full-cycle
+#12 157.5 ├ ƒ /projects/[id]/select-item
+#12 157.5 ├ ƒ /projects/[id]/stream
+#12 157.5 ├ ƒ /reports
+#12 157.5 ├ ƒ /server-status
+#12 157.5 ├ ƒ /settings
+#12 157.5 ├ ƒ /signup
+#12 157.5 └ ƒ /tasks
+#12 157.5 
+#12 157.5 
+#12 157.5 ƒ Proxy (Middleware)
+#12 157.5 
+#12 157.5 ○  (Static)   prerendered as static content
+#12 157.5 ƒ  (Dynamic)  server-rendered on demand
+#12 157.5 
+#12 DONE 158.3s
+
+#13 [aads-dashboard runner 2/6] RUN apk add --no-cache tzdata && cp /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo 'Asia/Seoul' > /etc/timezone
+#13 CACHED
+
+#14 [aads-dashboard runner 3/6] WORKDIR /app
+#14 CACHED
+
+#15 [aads-dashboard runner 4/6] COPY --from=builder /app/public ./public
+#15 CACHED
+
+#16 [aads-dashboard runner 5/6] COPY --from=builder /app/.next/standalone ./
+#16 DONE 1.2s
+
+#17 [aads-dashboard runner 6/6] COPY --from=builder /app/.next/static ./.next/static
+#17 DONE 0.1s
+
+#18 [aads-dashboard] exporting to image
+#18 exporting layers
+#18 exporting layers 0.8s done
+#18 writing image sha256:0afb15fef190e15ccd326143010d7693538a7f6c6f336f6e1abf51e73716d9d6 done
+#18 naming to docker.io/library/aads-dashboard-aads-dashboard done
+#18 DONE 0.8s
+BUILD_SUCCESS
