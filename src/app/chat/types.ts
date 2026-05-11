@@ -102,6 +102,21 @@ export interface ChatExecution {
   updated_at: string;
 }
 
+export interface ChatTodoItem {
+  id: string;
+  session_id: string;
+  message_id?: string | null;
+  execution_id?: string | null;
+  title: string;
+  status: "pending" | "in_progress" | "completed" | "failed" | "skipped";
+  sort_order: number;
+  source: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
 export interface Artifact {
   id: string;
   session_id: string;

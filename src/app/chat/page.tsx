@@ -17,7 +17,7 @@ import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import DiscussionPanel from "@/components/chat/DiscussionPanel";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
-import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
+import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
 
@@ -1297,6 +1297,9 @@ export default function ChatPage() {
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
+  const [todoLoading, setTodoLoading] = useState(false);
+  const [todoError, setTodoError] = useState<string | null>(null);
 
   // ── Chat state ──
   const [input, setInput] = useState("");
@@ -1562,6 +1565,32 @@ export default function ChatPage() {
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
+  const refreshTodos = useCallback(async (sessionId?: string | null) => {
+    const sid = sessionId || activeSessionRef.current;
+    if (!sid) {
+      setTodoItems([]);
+      setTodoError(null);
+      return;
+    }
+    setTodoLoading(true);
+    try {
+      const items = await chatApi<ChatTodoItem[]>(
+        `/chat/sessions/${sid}/todos?include_completed=true&cleanup_stale=true`
+      );
+      if (activeSessionRef.current === sid) {
+        setTodoItems(items);
+        setTodoError(null);
+      }
+    } catch (err) {
+      if (activeSessionRef.current === sid) {
+        setTodoError(err instanceof Error ? err.message : "TODO 조회 실패");
+      }
+    } finally {
+      if (activeSessionRef.current === sid) {
+        setTodoLoading(false);
+      }
+    }
+  }, []);
   // BUG-2 FIX: 초기 로드와 워크스페이스 전환 구분
   const initialWsLoadRef = useRef(true);
   // BUG-REFRESH FIX: 초기 마운트 시 hash 삭제 방지
@@ -2485,6 +2514,20 @@ export default function ChatPage() {
     // BUG-1 FIX: cleanup — 세션 전환 시 이전 fetch 응답 폐기
     return () => { cancelled = true; };
   }, [activeSession?.id]);
+
+  useEffect(() => {
+    const sid = activeSession?.id;
+    if (!sid) {
+      setTodoItems([]);
+      setTodoError(null);
+      setTodoLoading(false);
+      return;
+    }
+    refreshTodos(sid);
+    const intervalMs = streaming || waitingBgResponse ? 4000 : 30000;
+    const timer = window.setInterval(() => refreshTodos(sid), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [activeSession?.id, refreshTodos, streaming, waitingBgResponse]);
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
   useEffect(() => {
@@ -4633,6 +4676,27 @@ export default function ChatPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openCreateSessionModal]);
 
+  const todoCounts = useMemo(() => ({
+    active: todoItems.filter((item) => item.status === "pending" || item.status === "in_progress").length,
+    completed: todoItems.filter((item) => item.status === "completed").length,
+    failed: todoItems.filter((item) => item.status === "failed").length,
+  }), [todoItems]);
+  const visibleTodos = useMemo(() => (
+    [...todoItems]
+      .sort((a, b) => {
+        const rank = (status: ChatTodoItem["status"]) => (
+          status === "in_progress" ? 0 :
+          status === "pending" ? 1 :
+          status === "failed" ? 2 :
+          status === "skipped" ? 3 : 4
+        );
+        const byRank = rank(a.status) - rank(b.status);
+        if (byRank !== 0) return byRank;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      })
+      .slice(0, 8)
+  ), [todoItems]);
+
   // ══════════════════════════════════════════════════════════════════
   // Render
   // ══════════════════════════════════════════════════════════════════
@@ -5911,6 +5975,90 @@ export default function ChatPage() {
         >
           {/* 메모리 & 맥락 뷰어 */}
           <MemoryContextBar sessionId={activeSession?.id ?? null} />
+
+          {activeSession?.id && (todoItems.length > 0 || todoLoading || todoError) && (
+            <div
+              style={{
+                marginBottom: "8px",
+                padding: "8px 10px",
+                borderRadius: "8px",
+                background: "var(--ct-card)",
+                border: "1px solid var(--ct-border)",
+                color: "var(--ct-text)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: visibleTodos.length ? "6px" : 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}>TODO</span>
+                  <span style={{ fontSize: "11px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
+                    진행 {todoCounts.active} · 완료 {todoCounts.completed}{todoCounts.failed ? ` · 실패 ${todoCounts.failed}` : ""}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshTodos(activeSession.id)}
+                  disabled={todoLoading}
+                  title="TODO 새로고침"
+                  style={{
+                    width: "26px",
+                    height: "26px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--ct-border)",
+                    background: "var(--ct-hover)",
+                    color: "var(--ct-text2)",
+                    cursor: todoLoading ? "default" : "pointer",
+                    opacity: todoLoading ? 0.6 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  ↻
+                </button>
+              </div>
+              {todoError ? (
+                <div style={{ fontSize: "12px", color: "#ef4444" }}>{todoError}</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {visibleTodos.map((item) => {
+                    const isDone = item.status === "completed";
+                    const isFailed = item.status === "failed";
+                    const isActive = item.status === "in_progress";
+                    return (
+                      <div key={item.id} style={{ display: "flex", alignItems: "center", gap: "7px", minHeight: "20px" }}>
+                        <span
+                          aria-hidden
+                          style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            flexShrink: 0,
+                            background: isDone ? "#22c55e" : isFailed ? "#ef4444" : isActive ? "var(--ct-accent)" : "var(--ct-text2)",
+                          }}
+                        />
+                        <span
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: "12px",
+                            color: isDone ? "var(--ct-text2)" : "var(--ct-text)",
+                            textDecoration: isDone ? "line-through" : "none",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={item.title}
+                        >
+                          {item.title}
+                        </span>
+                        <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
+                          {item.status === "in_progress" ? "진행" : item.status === "pending" ? "대기" : item.status === "completed" ? "완료" : item.status === "failed" ? "실패" : "제외"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* AADS-190: Yellow 경고 바 */}
           {yellowWarning && streaming && (
