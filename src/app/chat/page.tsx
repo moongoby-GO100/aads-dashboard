@@ -1358,6 +1358,8 @@ export default function ChatPage() {
   const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
   const [todoLoading, setTodoLoading] = useState(false);
   const [todoError, setTodoError] = useState<string | null>(null);
+  const [todoCollapsed, setTodoCollapsed] = useState(false);
+  const [showAllTodos, setShowAllTodos] = useState(false);
   const activeWsObj = useMemo(
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
@@ -2602,6 +2604,11 @@ export default function ChatPage() {
     const timer = window.setInterval(() => refreshTodos(sid), intervalMs);
     return () => window.clearInterval(timer);
   }, [activeSession?.id, refreshTodos, streaming, waitingBgResponse]);
+
+  useEffect(() => {
+    setShowAllTodos(false);
+    setTodoCollapsed(false);
+  }, [activeSession?.id]);
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
   useEffect(() => {
@@ -4867,9 +4874,12 @@ export default function ChatPage() {
     active: todoItems.filter((item) => item.status === "pending" || item.status === "in_progress").length,
     completed: todoItems.filter((item) => item.status === "completed").length,
     failed: todoItems.filter((item) => item.status === "failed").length,
+    skipped: todoItems.filter((item) => item.status === "skipped").length,
   }), [todoItems]);
+  const hiddenDoneTodoCount = todoCounts.completed + todoCounts.failed + todoCounts.skipped;
   const visibleTodos = useMemo(() => (
     [...todoItems]
+      .filter((item) => showAllTodos || item.status === "pending" || item.status === "in_progress")
       .sort((a, b) => {
         const rank = (status: ChatTodoItem["status"]) => (
           status === "in_progress" ? 0 :
@@ -4882,7 +4892,7 @@ export default function ChatPage() {
         return (a.sort_order ?? 0) - (b.sort_order ?? 0);
       })
       .slice(0, 8)
-  ), [todoItems]);
+  ), [showAllTodos, todoItems]);
 
   // ══════════════════════════════════════════════════════════════════
   // Render
@@ -6174,38 +6184,83 @@ export default function ChatPage() {
                 color: "var(--ct-text)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: visibleTodos.length ? "6px" : 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: !todoCollapsed && (visibleTodos.length || todoError) ? "6px" : 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
                   <span style={{ fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}>TODO</span>
                   <span style={{ fontSize: "11px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
                     진행 {todoCounts.active} · 완료 {todoCounts.completed}{todoCounts.failed ? ` · 실패 ${todoCounts.failed}` : ""}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => refreshTodos(activeSession.id)}
-                  disabled={todoLoading}
-                  title="TODO 새로고침"
-                  style={{
-                    width: "26px",
-                    height: "26px",
-                    borderRadius: "6px",
-                    border: "1px solid var(--ct-border)",
-                    background: "var(--ct-hover)",
-                    color: "var(--ct-text2)",
-                    cursor: todoLoading ? "default" : "pointer",
-                    opacity: todoLoading ? 0.6 : 1,
-                    flexShrink: 0,
-                  }}
-                >
-                  ↻
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                  {hiddenDoneTodoCount > 0 && !todoCollapsed && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllTodos((prev) => !prev)}
+                      title={showAllTodos ? "진행/대기 TODO만 표시" : "완료/실패 TODO까지 표시"}
+                      style={{
+                        height: "26px",
+                        padding: "0 8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: showAllTodos ? "var(--ct-accent)" : "var(--ct-hover)",
+                        color: showAllTodos ? "#fff" : "var(--ct-text2)",
+                        cursor: "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {showAllTodos ? "진행만" : "전체"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => refreshTodos(activeSession.id)}
+                    disabled={todoLoading}
+                    title="TODO 새로고침"
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--ct-border)",
+                      background: "var(--ct-hover)",
+                      color: "var(--ct-text2)",
+                      cursor: todoLoading ? "default" : "pointer",
+                      opacity: todoLoading ? 0.6 : 1,
+                      flexShrink: 0,
+                    }}
+                  >
+                    ↻
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTodoCollapsed((prev) => !prev)}
+                    aria-expanded={!todoCollapsed}
+                    title={todoCollapsed ? "TODO 목록 펼치기" : "TODO 목록 접기"}
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--ct-border)",
+                      background: "var(--ct-hover)",
+                      color: "var(--ct-text2)",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {todoCollapsed ? "▾" : "▴"}
+                  </button>
+                </div>
               </div>
-              {todoError ? (
+              {!todoCollapsed && todoError ? (
                 <div style={{ fontSize: "12px", color: "#ef4444" }}>{todoError}</div>
-              ) : (
+              ) : !todoCollapsed ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  {visibleTodos.map((item) => {
+                  {visibleTodos.length === 0 ? (
+                    <div style={{ fontSize: "12px", color: "var(--ct-text2)" }}>
+                      진행/대기 TODO 없음{hiddenDoneTodoCount > 0 ? " · 전체 보기로 완료 항목 확인 가능" : ""}
+                    </div>
+                  ) : visibleTodos.map((item) => {
                     const isDone = item.status === "completed";
                     const isFailed = item.status === "failed";
                     const isActive = item.status === "in_progress";
@@ -6243,7 +6298,7 @@ export default function ChatPage() {
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 

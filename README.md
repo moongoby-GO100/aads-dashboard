@@ -103,6 +103,7 @@ docker compose up -d --build
 ## 주요 기능
 
 - **대시보드**: 전체 프로젝트 목록, 새 프로젝트 생성
+- **채팅 TODO 패널**: 세션별 `pending`/`in_progress` TODO를 채팅 입력창 상단에서 우선 노출하고, 필요할 때만 완료/실패 이력을 펼쳐 볼 수 있음
 - **8-agent 파이프라인 시각화**: PM→Supervisor→Architect→Developer→QA→Judge→DevOps→Researcher
 - **SSE 실시간 모니터**: 터미널 스타일, 자동 스크롤
 - **HITL 체크포인트**: 6단계 타임라인 뷰
