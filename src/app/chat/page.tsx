@@ -79,6 +79,25 @@ type SelectableModelOption = {
   isHidden?: boolean;
 };
 
+type DesignScreenOption = {
+  id: string;
+  route?: string;
+  name?: string;
+  purpose?: string;
+  component_paths?: unknown[];
+};
+
+type DesignRequestCreateResponse = {
+  request?: {
+    id: string;
+    project_key?: string;
+    screen_id?: string | null;
+    user_prompt?: string;
+    request_type?: string;
+    status?: string;
+  };
+};
+
 const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
 const LEGACY_CANONICAL_DISPLAY_MODEL_ID: Record<string, string> = {
   "claude-sonnet": "claude-sonnet-4-6",
@@ -105,6 +124,19 @@ const LEGACY_MODEL_ID_ALIASES: Record<string, string> = {
 };
 const DEFAULT_RUNTIME_MODEL = "claude-sonnet";
 
+const DESIGN_REQUEST_TYPE_LABELS: Record<string, string> = {
+  spacing_density: "밀도/간격",
+  visual_hierarchy: "시각 위계",
+  color_brand: "색상/브랜드",
+  typography: "타이포그래피",
+  component_consistency: "컴포넌트 일관성",
+  responsive: "반응형",
+  interaction: "인터랙션",
+  content_clarity: "문구 명확성",
+  workflow_layout: "업무 흐름",
+  other: "기타",
+};
+
 const DEFAULT_ROLE_OPTIONS = [
   { id: "CEO", label: "CEO" },
   { id: "CTO", label: "CTO" },
@@ -118,6 +150,32 @@ const DEFAULT_ROLE_OPTIONS = [
 
 const LOCAL_MESSAGE_PREFIXES = ["tmp-", "ai-", "stopped-"];
 type ChatToolEvent = NonNullable<ChatMessage["tools_called"]>[number];
+
+function classifyDesignRequest(text: string): string {
+  const value = text.toLowerCase();
+  if (/간격|여백|좁|넓|밀도|카드|row|compact|spacing|density/.test(value)) return "spacing_density";
+  if (/위계|강조|눈에|정렬|hierarchy|emphasis/.test(value)) return "visual_hierarchy";
+  if (/색|컬러|브랜드|톤|color|brand/.test(value)) return "color_brand";
+  if (/글씨|폰트|타이포|typography|font/.test(value)) return "typography";
+  if (/컴포넌트|버튼|카드|테이블|component|button|table/.test(value)) return "component_consistency";
+  if (/모바일|반응형|viewport|responsive|겹침/.test(value)) return "responsive";
+  if (/클릭|전환|hover|focus|interaction/.test(value)) return "interaction";
+  if (/문구|라벨|설명|copy|label|content/.test(value)) return "content_clarity";
+  if (/흐름|단계|업무|workflow|layout/.test(value)) return "workflow_layout";
+  return "other";
+}
+
+function splitDesignLines(text: string): string[] {
+  return text.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function projectKeyFromWorkspace(workspace?: Workspace | null): string {
+  const settings = getWorkspaceSettings(workspace);
+  const configured = String(settings.project_key || settings.active_project || settings.project || "").trim().toUpperCase();
+  if (configured) return configured;
+  const nameMatch = String(workspace?.name || "").match(/\[([A-Z0-9_-]+)\]/);
+  return (nameMatch?.[1] || "AADS").toUpperCase();
+}
 
 function messageTime(message: ChatMessage): number {
   const time = new Date(message.created_at || 0).getTime();
@@ -1300,6 +1358,11 @@ export default function ChatPage() {
   const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
   const [todoLoading, setTodoLoading] = useState(false);
   const [todoError, setTodoError] = useState<string | null>(null);
+  const activeWsObj = useMemo(
+    () => workspaces.find((w) => w.id === activeWs),
+    [activeWs, workspaces],
+  );
+  const activeWsName = activeWsObj?.name || "워크스페이스";
 
   // ── Chat state ──
   const [input, setInput] = useState("");
@@ -1333,6 +1396,17 @@ export default function ChatPage() {
   const [showMobileActions, setShowMobileActions] = useState(true);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
   const [imageGenLoading, setImageGenLoading] = useState(false);
+  const [showDesignOps, setShowDesignOps] = useState(false);
+  const [designScreens, setDesignScreens] = useState<DesignScreenOption[]>([]);
+  const [designScreensLoading, setDesignScreensLoading] = useState(false);
+  const [designScreenId, setDesignScreenId] = useState("");
+  const [designPrompt, setDesignPrompt] = useState("");
+  const [designAllowedScope, setDesignAllowedScope] = useState("선택한 화면의 레이아웃, 간격, 컴포넌트 표현만 수정");
+  const [designForbiddenScope, setDesignForbiddenScope] = useState("인증, API 호출, 데이터 구조, 사이드바 네비게이션 변경 금지");
+  const [designCriteria, setDesignCriteria] = useState("데스크톱에서 핵심 정보가 더 잘 보여야 함\n모바일에서 버튼/텍스트 겹침이 없어야 함\n기존 색상 토큰과 컴포넌트 패턴을 유지해야 함");
+  const [designSubmitting, setDesignSubmitting] = useState(false);
+  const [designError, setDesignError] = useState("");
+  const [lastDesignRequest, setLastDesignRequest] = useState<{ id: string; contextUrl: string; workbenchUrl: string } | null>(null);
   // 메시지 수정/재지시
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -2995,6 +3069,121 @@ export default function ChatPage() {
     }
   };
 
+  const loadDesignScreens = useCallback(async () => {
+    const projectKey = projectKeyFromWorkspace(activeWsObj);
+    setDesignScreensLoading(true);
+    setDesignError("");
+    try {
+      const data = await chatApi<{ screens?: DesignScreenOption[] }>(
+        `/admin/design/projects/${encodeURIComponent(projectKey)}/screens`
+      );
+      const nextScreens = Array.isArray(data?.screens) ? data.screens : [];
+      setDesignScreens(nextScreens);
+      if (!designScreenId && nextScreens[0]?.id) setDesignScreenId(nextScreens[0].id);
+    } catch (err) {
+      setDesignError(err instanceof Error ? err.message : "디자인 화면 목록을 불러오지 못했습니다.");
+    } finally {
+      setDesignScreensLoading(false);
+    }
+  }, [activeWsObj, designScreenId]);
+
+  const openDesignOps = useCallback(() => {
+    const currentText = (chatInputRef.current?.getValue() || inputRef.current || "").trim();
+    if (currentText && !designPrompt.trim()) setDesignPrompt(currentText);
+    setShowDesignOps((prev) => !prev);
+    if (designScreens.length === 0 && !designScreensLoading) {
+      void loadDesignScreens();
+    }
+  }, [designPrompt, designScreens.length, designScreensLoading, loadDesignScreens]);
+
+  const buildDesignOperationPrompt = useCallback((requestId?: string) => {
+    const selectedScreen = designScreens.find((screen) => screen.id === designScreenId);
+    const promptText = designPrompt.trim() || (chatInputRef.current?.getValue() || inputRef.current || "").trim();
+    const route = selectedScreen?.route || "화면 미지정";
+    return [
+      "[디자인 수정 운영]",
+      `요청 ID: ${requestId || lastDesignRequest?.id || "(아직 생성 전)"}`,
+      `대상 화면: ${route}`,
+      `수정 요청: ${promptText}`,
+      `허용 범위: ${splitDesignLines(designAllowedScope).join(" / ") || "선택 화면의 디자인 표현만"}`,
+      `금지 범위: ${splitDesignLines(designForbiddenScope).join(" / ") || "기능/API/데이터 구조 변경 금지"}`,
+      `검수 기준: ${splitDesignLines(designCriteria).join(" / ") || "데스크톱/모바일에서 겹침 없이 기존 디자인 맥락 유지"}`,
+      "",
+      "위 Design Studio 요청의 컨텍스트팩을 기준으로 구현 범위를 확인하고, 필요한 경우 러너 투입 또는 직접 수정 계획을 보고한 뒤 진행하세요.",
+    ].join("\n");
+  }, [designAllowedScope, designCriteria, designForbiddenScope, designPrompt, designScreenId, designScreens, lastDesignRequest?.id]);
+
+  const copyDesignOperationToInput = useCallback((requestId?: string) => {
+    const nextPrompt = buildDesignOperationPrompt(requestId);
+    setInput(nextPrompt);
+    chatInputRef.current?.setValue(nextPrompt);
+    setHasInput(Boolean(nextPrompt.trim()));
+    setEditMode(null);
+  }, [buildDesignOperationPrompt]);
+
+  const submitDesignRequestFromChat = useCallback(async () => {
+    const promptText = designPrompt.trim() || (chatInputRef.current?.getValue() || inputRef.current || "").trim();
+    if (!promptText) {
+      setDesignError("디자인 수정 요청 내용을 입력해야 합니다.");
+      return;
+    }
+    const projectKey = projectKeyFromWorkspace(activeWsObj);
+    const selectedScreen = designScreens.find((screen) => screen.id === designScreenId);
+    const requestType = classifyDesignRequest(promptText);
+    setDesignSubmitting(true);
+    setDesignError("");
+    try {
+      const created = await chatApi<DesignRequestCreateResponse>("/admin/design/modification-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          project_key: projectKey,
+          screen_id: designScreenId || null,
+          user_prompt: promptText,
+          request_type: requestType,
+          status: "ready",
+          normalized_card: {
+            source: "chat",
+            chat_session_id: activeSessionObjRef.current?.id || activeSession?.id || null,
+            workspace_id: activeWs || null,
+            target_route: selectedScreen?.route || null,
+            screen_name: selectedScreen?.name || null,
+            request_type: requestType,
+            summary: promptText.slice(0, 240),
+          },
+          allowed_scope: { notes: splitDesignLines(designAllowedScope) },
+          forbidden_scope: { notes: splitDesignLines(designForbiddenScope) },
+          acceptance_criteria: splitDesignLines(designCriteria),
+        }),
+      });
+      const requestId = created?.request?.id;
+      if (!requestId) throw new Error("요청 ID가 반환되지 않았습니다.");
+      await chatApi(`/admin/design/modification-requests/${encodeURIComponent(requestId)}/build-context`, { method: "POST" });
+      const next = {
+        id: requestId,
+        contextUrl: `/design/modifications/${requestId}/context`,
+        workbenchUrl: `/design/modifications/${requestId}/workbench`,
+      };
+      setLastDesignRequest(next);
+      copyDesignOperationToInput(requestId);
+      showCompletionToast("Design Studio 요청과 컨텍스트팩을 생성했습니다");
+    } catch (err) {
+      setDesignError(err instanceof Error ? err.message : "디자인 수정 요청 생성에 실패했습니다.");
+    } finally {
+      setDesignSubmitting(false);
+    }
+  }, [
+    activeSession?.id,
+    activeWs,
+    activeWsObj,
+    copyDesignOperationToInput,
+    designAllowedScope,
+    designCriteria,
+    designForbiddenScope,
+    designPrompt,
+    designScreenId,
+    designScreens,
+  ]);
+
   // ── Send message (SSE streaming) ──
   const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number, _existingMsgId?: string, _existingIdempotencyKey?: string) {
     const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
@@ -4558,8 +4747,6 @@ export default function ChatPage() {
 
   // ── Derived ──
   const vars = theme === "dark" ? DARK : LIGHT;
-  const activeWsObj = workspaces.find((w) => w.id === activeWs);
-  const activeWsName = activeWsObj?.name || "워크스페이스";
   const filteredSessions = sessions.filter(
     (s) => {
       if (search && !s.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -6216,6 +6403,7 @@ export default function ChatPage() {
                 { icon: "🧪", label: "딥리서치", prefix: "[딥리서치]" },
                 { icon: "📎", label: "파일", action: "file" as const },
                 { icon: "🎨", label: "이미지생성", action: "imagegen" as const },
+                { icon: "▣", label: "디자인수정", action: "design" as const },
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
                 { icon: "📋", label: "템플릿", action: "template" as const },
@@ -6230,6 +6418,11 @@ export default function ChatPage() {
                     }
                     if ("action" in chip && chip.action === "imagegen") {
                       setShowImageGen(true);
+                      if (screenSize === "mobile") setShowMobileActions(false);
+                      return;
+                    }
+                    if ("action" in chip && chip.action === "design") {
+                      openDesignOps();
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
@@ -6261,6 +6454,178 @@ export default function ChatPage() {
                   {chip.icon} {chip.label}
                 </button>
               ))}
+            </div>
+          )}
+
+          {showDesignOps && (
+            <div
+              style={{
+                marginBottom: "8px",
+                padding: "10px",
+                borderRadius: "8px",
+                background: "var(--ct-card)",
+                border: "1px solid var(--ct-border)",
+                color: "var(--ct-text)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700 }}>Design Studio</div>
+                  <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "2px" }}>
+                    채팅 문장을 수정 카드로 저장하고 컨텍스트팩까지 생성합니다.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDesignOps(false)}
+                  title="닫기"
+                  style={{
+                    width: "26px",
+                    height: "26px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--ct-border)",
+                    background: "var(--ct-hover)",
+                    color: "var(--ct-text2)",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  x
+                </button>
+              </div>
+
+              {designError && (
+                <div style={{ marginBottom: "8px", fontSize: "12px", color: "#ef4444" }}>
+                  {designError}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: screenSize === "mobile" ? "1fr" : "220px minmax(0,1fr)", gap: "8px", marginBottom: "8px" }}>
+                <select
+                  value={designScreenId}
+                  onChange={(event) => setDesignScreenId(event.target.value)}
+                  disabled={designScreensLoading}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    fontSize: "12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--ct-border)",
+                    background: "var(--ct-input)",
+                    color: "var(--ct-text)",
+                    outline: "none",
+                  }}
+                >
+                  {designScreens.length === 0 ? (
+                    <option value="">{designScreensLoading ? "화면 로딩 중" : "등록된 화면 없음"}</option>
+                  ) : null}
+                  {designScreens.map((screen) => (
+                    <option key={screen.id} value={screen.id}>
+                      {screen.route || screen.name || screen.id}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={designPrompt}
+                  onChange={(event) => setDesignPrompt(event.target.value)}
+                  placeholder="예: 카드 간격을 줄이고 모바일에서 버튼이 겹치지 않게 수정"
+                  style={{
+                    width: "100%",
+                    minWidth: 0,
+                    padding: "8px 10px",
+                    fontSize: "12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--ct-border)",
+                    background: "var(--ct-input)",
+                    color: "var(--ct-text)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: screenSize === "desktop" ? "1fr 1fr 1fr" : "1fr", gap: "8px" }}>
+                {[
+                  { label: "허용", value: designAllowedScope, setter: setDesignAllowedScope },
+                  { label: "금지", value: designForbiddenScope, setter: setDesignForbiddenScope },
+                  { label: "검수", value: designCriteria, setter: setDesignCriteria },
+                ].map((item) => (
+                  <label key={item.label} style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "11px", color: "var(--ct-text2)" }}>
+                    {item.label}
+                    <textarea
+                      value={item.value}
+                      onChange={(event) => item.setter(event.target.value)}
+                      rows={2}
+                      style={{
+                        width: "100%",
+                        minHeight: "52px",
+                        resize: "vertical",
+                        padding: "7px 8px",
+                        fontSize: "12px",
+                        lineHeight: 1.4,
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-input)",
+                        color: "var(--ct-text)",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px", marginTop: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--ct-text2)" }}>
+                  분류: {DESIGN_REQUEST_TYPE_LABELS[classifyDesignRequest(designPrompt || input)] || "기타"}
+                  {lastDesignRequest ? ` · 최근 요청 ${lastDesignRequest.id.slice(0, 8)}` : ""}
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {lastDesignRequest && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => window.open(lastDesignRequest.contextUrl, "_blank", "noopener,noreferrer")}
+                        style={{ padding: "6px 10px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--ct-border)", background: "var(--ct-hover)", color: "var(--ct-text)", cursor: "pointer" }}
+                      >
+                        Context
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.open(lastDesignRequest.workbenchUrl, "_blank", "noopener,noreferrer")}
+                        style={{ padding: "6px 10px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--ct-border)", background: "var(--ct-hover)", color: "var(--ct-text)", cursor: "pointer" }}
+                      >
+                        Workbench
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => copyDesignOperationToInput()}
+                    style={{ padding: "6px 10px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--ct-border)", background: "var(--ct-hover)", color: "var(--ct-text)", cursor: "pointer" }}
+                  >
+                    AI 운영 지시로 넣기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitDesignRequestFromChat}
+                    disabled={designSubmitting}
+                    style={{
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      borderRadius: "6px",
+                      border: "none",
+                      background: designSubmitting ? "var(--ct-hover)" : "var(--ct-accent)",
+                      color: "#fff",
+                      cursor: designSubmitting ? "wait" : "pointer",
+                      opacity: designSubmitting ? 0.7 : 1,
+                    }}
+                  >
+                    {designSubmitting ? "생성 중" : "요청+맥락 생성"}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
