@@ -1733,6 +1733,27 @@ export default function ChatPage() {
     }
   }, [activeSession?.id, messages.length, nextCursor]);
 
+  const mergeLatestAssistantFromServer = useCallback(async (sessionId: string): Promise<ChatMessage | null> => {
+    if (!sessionId) return null;
+    try {
+      const resp = await chatApi<{ found: boolean; generating?: boolean; message?: ChatMessage }>(
+        `/chat/sessions/${sessionId}/last-response`
+      );
+      if (activeSessionRef.current !== sessionId || !resp.found || !resp.message) return null;
+      const finalMessage = resp.message;
+      setMessages((prev) => mergeServerMessagesPreservingLocal(prev, [finalMessage]));
+      lastKnownMsgIdRef.current = finalMessage.id;
+      pendingResponseSessions.current.delete(sessionId);
+      setWaitingBgResponse(false);
+      setBgPartialContent("");
+      setStreaming(false);
+      setStreamBuf("");
+      return finalMessage;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string, replayFromStart = false) => {
     if (!attachSessionId || !executionId) return;
     if (
@@ -1866,7 +1887,8 @@ export default function ChatPage() {
             } else if (ev.type === "resume_done" || ev.type === "done") {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc`).then((msgs) => msgs.reverse());
               if (activeSessionRef.current !== attachSessionId) return;
-              setMessages(fresh);
+              setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+              void mergeLatestAssistantFromServer(attachSessionId);
               setStreaming(false);
               setWaitingBgResponse(false);
               setStreamBuf("");
@@ -1887,7 +1909,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [bgPartialContent]);
+  }, [bgPartialContent, mergeLatestAssistantFromServer]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -2292,7 +2314,11 @@ export default function ChatPage() {
                   : m
               );
           if (processed.length > 0 || msgs.length === 0) {
-            setMessages(processed);
+            setMessages((prev) => (
+              prev.length > 0
+                ? mergeServerMessagesPreservingLocal(prev, processed)
+                : processed
+            ));
             // 2번: rate_limited 메시지가 있으면 자동 폴링 활성화 (CEO 수동 재전송 불필요)
             if (processed.some(m => m.intent === "rate_limited") && !waitingBgRef.current) {
               rateLimitedPollRef.current = true;
@@ -2350,6 +2376,7 @@ export default function ChatPage() {
         // 완료 직후인데 최종 응답이 아직 DB에 없을 수 있음 → 빠른 폴링 + 1.5초 후 재시도
         if (msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           setWaitingBgResponse(true); // 빠른 폴링(1초) 활성화하여 최종 응답 캐치
+          void mergeLatestAssistantFromServer(fetchSid);
           setTimeout(() => {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
@@ -2370,6 +2397,7 @@ export default function ChatPage() {
         // pending 세션이었는데 assistant 응답이 없으면 → 재시도 (placeholder 삭제~응답 저장 gap)
         if (isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           setWaitingBgResponse(true);
+          void mergeLatestAssistantFromServer(fetchSid);
           setTimeout(() => {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
@@ -3368,6 +3396,11 @@ export default function ChatPage() {
                   return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
                 });
               }
+              if (requestSessionId) {
+                const doneSessionId = requestSessionId;
+                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 350);
+                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 1500);
+              }
               break; // done 이벤트 수신 → for 루프 탈출
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
@@ -3468,6 +3501,10 @@ export default function ChatPage() {
                 }
                 return [...prev.filter(m => m.intent !== "streaming_placeholder"), mergedMessage];
               });
+              if (requestSessionId) {
+                const doneSessionId = requestSessionId;
+                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 350);
+              }
               break; // done → for 루프 탈출
             } else if (ev.type === "yellow_limit") {
               // Yellow 도구 연속 실행 경고
@@ -3582,9 +3619,9 @@ export default function ChatPage() {
           await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
           try {
             const msgs = await chatApi<ChatMessage[]>(
-              `/chat/messages?session_id=${requestSessionId}&limit=5`
+              `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc`
             );
-            const aiMsg = [...msgs].reverse().find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+            const aiMsg = msgs.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (aiMsg) {
               // ★ in-place 업데이트
               setMessages((prev) => {
@@ -3931,7 +3968,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, showCompletionToast]);
+  }, [createSession, mergeLatestAssistantFromServer, showCompletionToast]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
