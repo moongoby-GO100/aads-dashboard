@@ -7,7 +7,7 @@
 #   1. 비활성 슬롯(blue 또는 green) 이미지 빌드 + 기동
 #   2. 헬스체크 통과 시 nginx upstream 전환
 #   3. 외부 헬스체크 검증
-#   4. 이전 슬롯 정리
+#   4. 이전 슬롯을 같은 release로 재빌드해 warm standby 동기화
 #   5. 실패 시 upstream 롤백
 
 set -euo pipefail
@@ -57,6 +57,24 @@ wait_health() {
     done
     log "FAIL: ${label} 헬스체크 실패 (${max_wait}초 초과)"
     return 1
+}
+
+sync_dashboard_standby() {
+    local slot="$1" service="$2" container="$3" health_url="$4"
+    local args=(-f "$COMPOSE_FILE")
+
+    if [ "$slot" = "green" ]; then
+        args+=(--profile green)
+    fi
+
+    log "Step 5: 이전 슬롯 standby 동기화 (${container})"
+    docker compose "${args[@]}" up -d --build --no-deps "$service"
+    if wait_health "$health_url" "$MAX_WAIT" "standby-${slot}"; then
+        log "OK: 이전 슬롯 standby 동기화 완료 (${container})"
+        return 0
+    fi
+    log "WARN: 이전 슬롯 standby 동기화 후 헬스체크 실패 (${container})"
+    return 0
 }
 
 current_active_slot() {
@@ -116,13 +134,19 @@ if [ "$ACTIVE_SLOT" = "blue" ]; then
     TARGET_CONTAINER="$GREEN_CONTAINER"
     TARGET_HEALTH="$HEALTH_GREEN"
     COMPOSE_ARGS+=(--profile green)
+    PREV_SLOT="blue"
+    PREV_SERVICE="$BLUE_SERVICE"
     PREV_CONTAINER="$BLUE_CONTAINER"
+    PREV_HEALTH="$HEALTH_BLUE"
 else
     TARGET_SLOT="blue"
     TARGET_SERVICE="$BLUE_SERVICE"
     TARGET_CONTAINER="$BLUE_CONTAINER"
     TARGET_HEALTH="$HEALTH_BLUE"
+    PREV_SLOT="green"
+    PREV_SERVICE="$GREEN_SERVICE"
     PREV_CONTAINER="$GREEN_CONTAINER"
+    PREV_HEALTH="$HEALTH_GREEN"
 fi
 log "현재 활성 슬롯: $ACTIVE_SLOT"
 log "배포 대상 슬롯: $TARGET_SLOT"
@@ -164,12 +188,12 @@ if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     exit 1
 fi
 
-# Step 5: 이전 슬롯 유지
+# Step 5: 이전 슬롯 동기화
 if [ "${AADS_DASHBOARD_STOP_PREVIOUS:-false}" = "true" ]; then
     log "Step 5: 이전 슬롯 정리 (${PREV_CONTAINER})"
     docker stop "$PREV_CONTAINER" >/dev/null 2>&1 || true
 else
-    log "Step 5: 이전 슬롯 유지 (${PREV_CONTAINER}) — warm standby/rollback 보존"
+    sync_dashboard_standby "$PREV_SLOT" "$PREV_SERVICE" "$PREV_CONTAINER" "$PREV_HEALTH"
 fi
 
 # Step 6: 최종 확인
@@ -180,7 +204,8 @@ log "AADS Dashboard blue-green 배포 성공"
 # Step 7: 프론트엔드 QA 자동 실행
 log "Step 7: 프론트엔드 QA 실행 (30초 안정화 대기 후)"
 sleep 30
-QA_RESPONSE=$(curl -sf -X POST "http://localhost:8080/api/v1/visual-qa/full-qa" \
+QA_API_BASE="${AADS_API_BASE:-http://127.0.0.1:8100}"
+QA_RESPONSE=$(curl -sf -X POST "${QA_API_BASE}/api/v1/visual-qa/full-qa" \
     -H "Content-Type: application/json" \
     -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
     --max-time 120 2>/dev/null || echo '{"error":"QA API 호출 실패"}')
