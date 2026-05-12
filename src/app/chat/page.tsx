@@ -99,6 +99,27 @@ type DesignRequestCreateResponse = {
 };
 
 const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
+const INITIAL_GATEWAY_RETRY_LIMIT = 30;
+const INITIAL_GATEWAY_RETRY_DELAY_MS = 5000;
+const PROVIDER_CAPACITY_OR_LIMIT_MARKERS = [
+  "selected model is at capacity",
+  "model is at capacity",
+  "please try a different model",
+  "you've hit your limit",
+  "you have hit your limit",
+  "hit your limit",
+  "limit reached",
+  "rate limit reached",
+  "insufficient quota",
+  "current quota",
+];
+
+function isProviderCapacityOrLimitText(value: string): boolean {
+  const lowered = String(value || "").toLowerCase();
+  return PROVIDER_CAPACITY_OR_LIMIT_MARKERS.some((marker) => lowered.includes(marker))
+    || (lowered.includes("resets ") && lowered.includes("limit"));
+}
+
 const LEGACY_CANONICAL_DISPLAY_MODEL_ID: Record<string, string> = {
   "claude-sonnet": "claude-sonnet-4-6",
   "claude-opus": "claude-opus-4-7",
@@ -2073,6 +2094,10 @@ export default function ChatPage() {
               setStreamBuf("");
               setToolStatus("🔄 응답 재검증 중...");
             } else if (ev.type === "delta" && typeof ev.content === "string") {
+              if (isProviderCapacityOrLimitText(ev.content)) {
+                setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
+                continue;
+              }
               full += ev.content;
               setStreamBuf(full);
               if (toolStatusRef.current) setToolStatus(null);
@@ -3655,8 +3680,8 @@ export default function ChatPage() {
 
       if (!res.ok) {
         const statusCode = res.status;
-        // 502/503/504: 서버 재시작 — 자동 재시도 (최대 3회, 지수 백오프)
-        if ((statusCode === 502 || statusCode === 503 || statusCode === 504) && (retryCount || 0) < 3) {
+        // 502/503/504: 서버 재시작/게이트웨이 오류 — 자동 재시도 (5초 간격, 최대 30회)
+        if ((statusCode === 502 || statusCode === 503 || statusCode === 504) && (retryCount || 0) < INITIAL_GATEWAY_RETRY_LIMIT) {
           // 사용자 메시지 버블 유지 — 깜빡임 방지 (재시도 중에도 화면에 남음)
 
 
@@ -3664,8 +3689,8 @@ export default function ChatPage() {
           setStreaming(false);
           setStreamBuf("");
           const attempt = (retryCount || 0) + 1;
-          const delay = Math.min(5000 * Math.pow(1.5, attempt - 1), 15000);
-          setToolStatus(`🔄 서버 재시작 감지 — ${Math.round(delay/1000)}초 후 자동 재전송 (${attempt}/3)...`);
+          const delay = INITIAL_GATEWAY_RETRY_DELAY_MS;
+          setToolStatus(`🔄 서버 재시작 감지 — ${Math.round(delay/1000)}초 후 자동 재전송 (${attempt}/${INITIAL_GATEWAY_RETRY_LIMIT})...`);
           await new Promise((r) => setTimeout(r, delay));
           setToolStatus(null);
           return sendMessage(content, undefined, attempt, userMsg.id, _idempotencyKey);
@@ -3776,6 +3801,10 @@ export default function ChatPage() {
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
+              if (isProviderCapacityOrLimitText(deltaContent)) {
+                if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
+                continue;
+              }
               if (deltaContent.includes("[SCREEN_CAPTURE_REQUEST]")) {
                 aiCaptureRequestedRef.current = true;
                 deltaContent = deltaContent.replace(/\[SCREEN_CAPTURE_REQUEST\]/g, "");
@@ -4200,6 +4229,10 @@ export default function ChatPage() {
                 try {
                   const rev = JSON.parse(rLine.slice(6).trim());
                   if (rev.type === "delta" && rev.content) {
+                    if (isProviderCapacityOrLimitText(String(rev.content))) {
+                      if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
+                      continue;
+                    }
                     full += rev.content;
                     if (!isStale()) {
                       setStreamBuf(full);
@@ -4667,6 +4700,10 @@ export default function ChatPage() {
             if (ev.type === "heartbeat") { resetSseTimeout(); continue; }
             resetSseTimeout();
             if (ev.type === "delta" && typeof ev.content === "string") {
+              if (isProviderCapacityOrLimitText(ev.content)) {
+                if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
+                continue;
+              }
               full += ev.content;
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "token" && typeof ev.text === "string") {
