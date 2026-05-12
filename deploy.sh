@@ -164,9 +164,13 @@ if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     exit 1
 fi
 
-# Step 5: 이전 슬롯 정리
-log "Step 5: 이전 슬롯 정리 (${PREV_CONTAINER})"
-docker stop "$PREV_CONTAINER" >/dev/null 2>&1 || true
+# Step 5: 이전 슬롯 유지
+if [ "${AADS_DASHBOARD_STOP_PREVIOUS:-false}" = "true" ]; then
+    log "Step 5: 이전 슬롯 정리 (${PREV_CONTAINER})"
+    docker stop "$PREV_CONTAINER" >/dev/null 2>&1 || true
+else
+    log "Step 5: 이전 슬롯 유지 (${PREV_CONTAINER}) — warm standby/rollback 보존"
+fi
 
 # Step 6: 최종 확인
 STATUS=$(docker inspect "$TARGET_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "unknown")
