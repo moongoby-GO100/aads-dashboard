@@ -29,11 +29,22 @@ MAX_WAIT=90
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
 nginx_test() {
+    local test_log="/tmp/aads-dashboard-nginx-test.log"
+    local test_pid="/tmp/aads-dashboard-nginx-test.pid"
     if command -v nginx >/dev/null 2>&1; then
-        nginx -t
+        # Runner/sandbox 환경에서 /var/run/nginx.pid 쓰기 권한 이슈로 false-fail이 날 수 있어 pid 경로를 임시로 우회한다.
+        if nginx -t -g "pid ${test_pid};" >"${test_log}" 2>&1; then
+            rm -f "${test_log}" "${test_pid}"
+            return 0
+        fi
+        cat "${test_log}" >&2 || true
+        rm -f "${test_log}" "${test_pid}"
+    fi
+    if docker ps --format '{{.Names}}' | grep -Fx "aads-nginx" >/dev/null 2>&1; then
+        docker exec aads-nginx nginx -t
         return $?
     fi
-    docker exec aads-nginx nginx -t
+    return 1
 }
 
 nginx_reload() {
@@ -41,7 +52,14 @@ nginx_reload() {
         systemctl reload nginx
         return $?
     fi
-    docker exec aads-nginx nginx -s reload
+    if command -v nginx >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1; then
+        return 0
+    fi
+    if docker ps --format '{{.Names}}' | grep -Fx "aads-nginx" >/dev/null 2>&1; then
+        docker exec aads-nginx nginx -s reload
+        return $?
+    fi
+    return 1
 }
 
 wait_health() {
@@ -122,6 +140,17 @@ PY
     mv "$tmp" "$NGINX_UPSTREAM"
 }
 
+verify_upstream_shape() {
+    local blue_count green_count
+    blue_count=$(grep -Ec "127\\.0\\.0\\.1:${BLUE_PORT} .*;" "$NGINX_UPSTREAM" || true)
+    green_count=$(grep -Ec "127\\.0\\.0\\.1:${GREEN_PORT} .*;" "$NGINX_UPSTREAM" || true)
+    if [ "${blue_count}" -lt 1 ] || [ "${green_count}" -lt 1 ]; then
+        log "FAIL: upstream 서버 라인 검증 실패 (blue=${blue_count}, green=${green_count})"
+        return 1
+    fi
+    return 0
+}
+
 cd "$COMPOSE_DIR"
 
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
@@ -172,7 +201,7 @@ fi
 log "Step 3: nginx upstream → ${TARGET_SLOT}"
 cp "$NGINX_UPSTREAM" "${NGINX_UPSTREAM}.dashboard.bak"
 switch_dashboard_upstream "$TARGET_SLOT"
-if ! nginx_test >/dev/null 2>&1; then
+if ! verify_upstream_shape || ! nginx_test; then
     log "FAIL: nginx 설정 검증 실패 — upstream 롤백"
     mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
     exit 1
@@ -184,7 +213,7 @@ log "OK: nginx reload 완료"
 if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     log "FAIL: 외부 헬스체크 실패 — upstream 롤백"
     mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
-    nginx_test >/dev/null 2>&1 && nginx_reload
+    nginx_test && nginx_reload
     exit 1
 fi
 
