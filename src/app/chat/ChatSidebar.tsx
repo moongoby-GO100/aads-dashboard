@@ -1,5 +1,6 @@
 "use client";
 import { memo, RefObject, type CSSProperties } from "react";
+import Link from "next/link";
 import type { Workspace, ChatSession, Theme, ScreenSize } from "./types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -28,13 +29,17 @@ export interface ChatSidebarProps {
   activeWsName: string;
   workspaces: Workspace[];
   activeWs: string | null;
-  setActiveWs: (v: string) => void;
+  onWorkspaceToggle: (workspaceId: string) => void;
+  expandedWorkspaceIds: string[];
+  workspaceSessions: Record<string, ChatSession[]>;
+  workspaceSessionLoading: Record<string, boolean>;
+  workspaceSessionErrors: Record<string, string | null>;
   filteredSessions: ChatSession[];
   renaming: { id: string; value: string } | null;
   setRenaming: (v: { id: string; value: string } | null) => void;
   commitRename: () => void;
   activeSession: ChatSession | null;
-  setActiveSession: (s: ChatSession | null) => void;
+  onSessionSelect: (s: ChatSession) => void;
   isInitialLoadRef: RefObject<boolean>;
   onSessionContextMenu: (e: React.MouseEvent, s: ChatSession) => void;
   search: string;
@@ -54,16 +59,16 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
   const {
     screenSize, leftOpen, setLeftOpen,
     mobileOverlay, setMobileOverlay,
-    activeWsObj, activeWsName, workspaces, activeWs, setActiveWs,
+    activeWsObj, activeWsName, workspaces, activeWs, onWorkspaceToggle,
+    expandedWorkspaceIds, workspaceSessions, workspaceSessionLoading, workspaceSessionErrors,
     filteredSessions, renaming, setRenaming, commitRename,
-    activeSession, setActiveSession, isInitialLoadRef,
+    activeSession, onSessionSelect, isInitialLoadRef,
     onSessionContextMenu, search, setSearch,
     createSession, deleteSession, setShowAddProject, theme, toggleTheme,
     tagFilter, setTagFilter, allTags,
   } = props;
 
   const showLeftSidebar = screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
-  const defaultRoleKey = getWorkspaceDefaultRole(activeWsObj);
 
   return (
     <div
@@ -231,7 +236,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
               <div key={ws.id} style={{ marginBottom: "4px" }}>
                 {/* Workspace header */}
                 <button
-                  onClick={() => setActiveWs(ws.id)}
+                  onClick={() => onWorkspaceToggle(ws.id)}
                   style={{
                     width: "100%",
                     textAlign: "left",
@@ -244,7 +249,11 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                     border: "none",
                     borderRadius: "6px",
                     cursor: "pointer",
-                    color: activeWs === ws.id ? "var(--ct-accent)" : "var(--ct-text2)",
+                    color: activeWs === ws.id
+                      ? "var(--ct-accent)"
+                      : expandedWorkspaceIds.includes(ws.id)
+                        ? "var(--ct-text)"
+                        : "var(--ct-text2)",
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
@@ -252,16 +261,23 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                 >
                   <span>{ws.icon || "📁"}</span>
                   <span style={{ flex: 1 }}>{ws.name}</span>
-                  {activeWs === ws.id && (
-                    <span style={{ fontSize: "10px" }}>▾</span>
-                  )}
+                  <span style={{ fontSize: "10px" }}>
+                    {expandedWorkspaceIds.includes(ws.id) ? "▾" : "▸"}
+                  </span>
                 </button>
 
                 {/* Sessions */}
-                {activeWs === ws.id && (() => {
-                  const pinned = filteredSessions.filter((s) => s.pinned);
-                  const unpinned = filteredSessions.filter((s) => !s.pinned);
-                  const sessionRoleLabel = (s: ChatSession) => ROLE_LABELS[s.role_key || defaultRoleKey] || s.role_key || defaultRoleKey;
+                {expandedWorkspaceIds.includes(ws.id) && (() => {
+                  const sourceSessions = workspaceSessions[ws.id] || (activeWs === ws.id ? filteredSessions : []);
+                  const visibleSessions = sourceSessions.filter((s) => {
+                    if (search && !s.title.toLowerCase().includes(search.toLowerCase())) return false;
+                    if (tagFilter && !(s.tags || []).includes(tagFilter)) return false;
+                    return true;
+                  });
+                  const pinned = visibleSessions.filter((s) => s.pinned);
+                  const unpinned = visibleSessions.filter((s) => !s.pinned);
+                  const workspaceDefaultRole = getWorkspaceDefaultRole(ws);
+                  const sessionRoleLabel = (s: ChatSession) => ROLE_LABELS[s.role_key || workspaceDefaultRole] || s.role_key || workspaceDefaultRole;
                   const actionStyle = (isActive: boolean): CSSProperties => ({
                     width: "22px",
                     height: "22px",
@@ -321,7 +337,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                             onClick={(e) => {
                               e.preventDefault();
                               isInitialLoadRef.current = true;
-                              setActiveSession(s);
+                              onSessionSelect(s);
                               if (screenSize !== "desktop") setMobileOverlay(null);
                             }}
                             style={{
@@ -455,6 +471,33 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                   );
                   return (
                     <>
+                      {workspaceSessionLoading[ws.id] && (
+                        <div style={{
+                          padding: "8px 12px",
+                          fontSize: "11px",
+                          color: "var(--ct-text2)",
+                        }}>
+                          세션 불러오는 중...
+                        </div>
+                      )}
+                      {workspaceSessionErrors[ws.id] && (
+                        <div style={{
+                          padding: "8px 12px",
+                          fontSize: "11px",
+                          color: "var(--ct-warn)",
+                        }}>
+                          {workspaceSessionErrors[ws.id]}
+                        </div>
+                      )}
+                      {!workspaceSessionLoading[ws.id] && !workspaceSessionErrors[ws.id] && visibleSessions.length === 0 && (
+                        <div style={{
+                          padding: "8px 12px",
+                          fontSize: "11px",
+                          color: "var(--ct-text2)",
+                        }}>
+                          세션 없음
+                        </div>
+                      )}
                       {pinned.map(renderSession)}
                       {pinned.length > 0 && unpinned.length > 0 && (
                         <div style={{
@@ -540,7 +583,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
             >
               {theme === "dark" ? "☀️ 라이트" : "🌙 다크"}
             </button>
-            <a
+            <Link
               href="/"
               style={{
                 padding: "7px 10px",
@@ -555,7 +598,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
               title="대시보드로"
             >
               🏠
-            </a>
+            </Link>
             <a
               href="/memory"
               style={{
@@ -621,7 +664,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
           {workspaces.map((ws) => (
             <button
               key={ws.id}
-              onClick={() => { setActiveWs(ws.id); setLeftOpen(true); }}
+              onClick={() => { onWorkspaceToggle(ws.id); setLeftOpen(true); }}
               title={ws.name}
               style={{
                 background:

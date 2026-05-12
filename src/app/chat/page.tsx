@@ -1352,6 +1352,10 @@ export default function ChatPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWs, setActiveWs] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sidebarSessionsByWorkspace, setSidebarSessionsByWorkspace] = useState<Record<string, ChatSession[]>>({});
+  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<string[]>([]);
+  const [workspaceSessionLoading, setWorkspaceSessionLoading] = useState<Record<string, boolean>>({});
+  const [workspaceSessionErrors, setWorkspaceSessionErrors] = useState<Record<string, string | null>>({});
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -1738,6 +1742,16 @@ export default function ChatPage() {
         session.id === activeSession.id ? { ...session, current_model: fallbackModel } : session
       )
     );
+    setSidebarSessionsByWorkspace((prev) => {
+      const workspaceId = activeSession.workspace_id;
+      const current = prev[workspaceId] || [];
+      return {
+        ...prev,
+        [workspaceId]: current.map((session) =>
+          session.id === activeSession.id ? { ...session, current_model: fallbackModel } : session
+        ),
+      };
+    });
     setActiveSession((prev) =>
       prev && prev.id === activeSession.id ? { ...prev, current_model: fallbackModel } : prev
     );
@@ -2052,6 +2066,88 @@ export default function ChatPage() {
   useEffect(() => { uploadingRef.current = uploading; }, [uploading]);
   useEffect(() => { queueCountRef.current = queueCount; }, [queueCount]);
 
+  const cacheWorkspaceSessions = useCallback((workspaceId: string, nextSessions: ChatSession[]) => {
+    setSidebarSessionsByWorkspace((prev) => ({
+      ...prev,
+      [workspaceId]: nextSessions,
+    }));
+  }, []);
+
+  const patchCachedSession = useCallback((session: ChatSession) => {
+    setSidebarSessionsByWorkspace((prev) => {
+      const next = { ...prev };
+      const workspaceId = session.workspace_id;
+      const current = next[workspaceId] || [];
+      next[workspaceId] = current.some((item) => item.id === session.id)
+        ? current.map((item) => (item.id === session.id ? session : item))
+        : [session, ...current];
+      return next;
+    });
+  }, []);
+
+  const removeCachedSession = useCallback((sessionId: string) => {
+    setSidebarSessionsByWorkspace((prev) => {
+      const next: Record<string, ChatSession[]> = {};
+      for (const [workspaceId, workspaceSessions] of Object.entries(prev)) {
+        next[workspaceId] = workspaceSessions.filter((session) => session.id !== sessionId);
+      }
+      return next;
+    });
+  }, []);
+
+  const loadSidebarWorkspaceSessions = useCallback(async (workspaceId: string) => {
+    setWorkspaceSessionLoading((prev) => ({ ...prev, [workspaceId]: true }));
+    setWorkspaceSessionErrors((prev) => ({ ...prev, [workspaceId]: null }));
+    try {
+      const loaded = await chatApi<ChatSession[]>(`/chat/sessions?workspace_id=${workspaceId}`);
+      cacheWorkspaceSessions(workspaceId, loaded);
+      if (activeWsRef.current === workspaceId) setSessions(loaded);
+      return loaded;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "세션 목록 로드 실패";
+      setWorkspaceSessionErrors((prev) => ({ ...prev, [workspaceId]: detail }));
+      return null;
+    } finally {
+      setWorkspaceSessionLoading((prev) => ({ ...prev, [workspaceId]: false }));
+    }
+  }, [cacheWorkspaceSessions]);
+
+  const toggleSidebarWorkspace = useCallback((workspaceId: string) => {
+    setExpandedWorkspaceIds((prev) => {
+      const expanded = prev.includes(workspaceId);
+      if (expanded && workspaceId !== activeWsRef.current) {
+        return prev.filter((id) => id !== workspaceId);
+      }
+      if (expanded) return prev;
+      return [...prev, workspaceId];
+    });
+    if (!sidebarSessionsByWorkspace[workspaceId]) {
+      void loadSidebarWorkspaceSessions(workspaceId);
+    }
+  }, [loadSidebarWorkspaceSessions, sidebarSessionsByWorkspace]);
+
+  const selectSidebarSession = useCallback((session: ChatSession) => {
+    const workspaceId = session.workspace_id;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("aads-chat-activeWs", workspaceId);
+      localStorage.setItem(`aads-chat-activeSession-${workspaceId}`, session.id);
+      window.history.replaceState(null, "", `#${session.id}`);
+    }
+    patchCachedSession(session);
+    setExpandedWorkspaceIds((prev) => prev.includes(workspaceId) ? prev : [...prev, workspaceId]);
+    if (activeWsRef.current !== workspaceId) {
+      const cached = sidebarSessionsByWorkspace[workspaceId];
+      if (cached) setSessions(cached);
+      setActiveWs(workspaceId);
+    }
+    isInitialLoadRef.current = true;
+    setActiveSession(session);
+    if (session.role_key) setRoleKey(session.role_key);
+    if (session.current_model) {
+      setModel(normalizeModelIdForSelector(session.current_model, modelAliasMap));
+    }
+  }, [modelAliasMap, patchCachedSession, sidebarSessionsByWorkspace]);
+
   // Runner 응답 판별 — intent 또는 컨텐츠 패턴으로 소급 적용
   const isRunnerMsg = (m: ChatMessage) =>
     m.role === "assistant" && (
@@ -2281,6 +2377,8 @@ export default function ChatPage() {
     chatApi<ChatSession[]>(`/chat/sessions?workspace_id=${activeWs}`)
       .then(async (loaded) => {
         setSessions(loaded);
+        cacheWorkspaceSessions(activeWs, loaded);
+        setExpandedWorkspaceIds((prev) => prev.includes(activeWs) ? prev : [...prev, activeWs]);
         if (loaded.length === 0) {
           setActiveSession(null);
           setMessages([]);
@@ -2298,6 +2396,7 @@ export default function ChatPage() {
             if (directSession && directSession.workspace_id === activeWs) {
               loaded.unshift(directSession);
               setSessions([directSession, ...loaded.filter(s => s.id !== directSession.id)]);
+              cacheWorkspaceSessions(activeWs, [directSession, ...loaded.filter(s => s.id !== directSession.id)]);
               setActiveSession(directSession);
               return;
             }
@@ -2319,7 +2418,7 @@ export default function ChatPage() {
         if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
         yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
       });
-  }, [activeWs]);
+  }, [activeWs, cacheWorkspaceSessions]);
 
   // ── Load messages & artifacts on session change ──
   useEffect(() => {
@@ -2948,6 +3047,7 @@ export default function ChatPage() {
         }),
       });
       setSessions((prev) => [s, ...prev]);
+      patchCachedSession(s);
       isInitialLoadRef.current = true;
       setActiveSession(s);
       setRoleKey(s.role_key || nextRoleKey);
@@ -2982,6 +3082,7 @@ export default function ChatPage() {
       });
       setWorkspaces((prev) => [...prev, ws]);
       setActiveWs(ws.id);
+      setExpandedWorkspaceIds((prev) => prev.includes(ws.id) ? prev : [...prev, ws.id]);
       setRoleKey(newProjectDefaultRole);
       setShowAddProject(false);
       setNewProjectCode("");
@@ -2995,6 +3096,7 @@ export default function ChatPage() {
     try {
       await chatApi(`/chat/sessions/${id}`, { method: "DELETE" });
       setSessions((prev) => prev.filter((s) => s.id !== id));
+      removeCachedSession(id);
       if (activeSession?.id === id) { setActiveSession(null); setMessages([]); }
     } catch { /* ignore */ }
     setContextMenu(null);
@@ -3007,6 +3109,7 @@ export default function ChatPage() {
         body: JSON.stringify({ pinned: !session.pinned }),
       });
       setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, pinned: updated.pinned } : s)));
+      patchCachedSession(updated);
     } catch { /* ignore */ }
     setContextMenu(null);
   }
@@ -3018,6 +3121,7 @@ export default function ChatPage() {
         body: JSON.stringify({ tags }),
       });
       setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, tags: updated.tags || [] } : s)));
+      patchCachedSession(updated);
     } catch { /* ignore */ }
   }
 
@@ -3029,6 +3133,7 @@ export default function ChatPage() {
         body: JSON.stringify({ title: renaming.value }),
       });
       setSessions((prev) => prev.map((s) => (s.id === renaming.id ? updated : s)));
+      patchCachedSession(updated);
       if (activeSession?.id === renaming.id) setActiveSession(updated);
     } catch { /* ignore */ }
     setRenaming(null);
@@ -5565,10 +5670,14 @@ export default function ChatPage() {
         screenSize={screenSize} leftOpen={leftOpen} setLeftOpen={setLeftOpen}
         mobileOverlay={mobileOverlay} setMobileOverlay={setMobileOverlay}
         activeWsObj={activeWsObj} activeWsName={activeWsName}
-        workspaces={workspaces} activeWs={activeWs} setActiveWs={setActiveWs}
+        workspaces={workspaces} activeWs={activeWs} onWorkspaceToggle={toggleSidebarWorkspace}
+        expandedWorkspaceIds={expandedWorkspaceIds}
+        workspaceSessions={sidebarSessionsByWorkspace}
+        workspaceSessionLoading={workspaceSessionLoading}
+        workspaceSessionErrors={workspaceSessionErrors}
         filteredSessions={filteredSessions}
         renaming={renaming} setRenaming={setRenaming} commitRename={commitRename}
-        activeSession={activeSession} setActiveSession={setActiveSession}
+        activeSession={activeSession} onSessionSelect={selectSidebarSession}
         isInitialLoadRef={isInitialLoadRef}
         onSessionContextMenu={onSessionContextMenu}
         search={search} setSearch={setSearch}
