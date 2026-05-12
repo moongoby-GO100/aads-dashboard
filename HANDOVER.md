@@ -7,8 +7,8 @@
 
 ### 반영된 수정 (`deploy.sh`)
 - `nginx_test()`:
-  - `nginx -t -g "pid /tmp/aads-dashboard-nginx-test.pid;"`로 테스트해 실행 환경의 pid 경로 제약을 우회.
-  - 실패 시 stderr를 그대로 출력해 원인 로그를 남김.
+  - `nginx -t`를 기본 검증으로 사용하고 실패 시 stderr를 그대로 출력해 원인 로그를 남김.
+  - 1차 후속 배포에서 `-g "pid ..."` 방식이 서버의 기존 `pid` 지시어와 중복되는 문제가 확인되어 제거함.
   - 호스트 nginx 테스트 실패 시 `aads-nginx` 컨테이너가 실제로 존재할 때만 컨테이너 검증으로 폴백.
 - `nginx_reload()`:
   - `systemctl reload nginx`가 불가한 환경이면 `nginx -s reload`를 먼저 시도.

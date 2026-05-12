@@ -30,15 +30,13 @@ log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
 nginx_test() {
     local test_log="/tmp/aads-dashboard-nginx-test.log"
-    local test_pid="/tmp/aads-dashboard-nginx-test.pid"
     if command -v nginx >/dev/null 2>&1; then
-        # Runner/sandbox 환경에서 /var/run/nginx.pid 쓰기 권한 이슈로 false-fail이 날 수 있어 pid 경로를 임시로 우회한다.
-        if nginx -t -g "pid ${test_pid};" >"${test_log}" 2>&1; then
-            rm -f "${test_log}" "${test_pid}"
+        if nginx -t >"${test_log}" 2>&1; then
+            rm -f "${test_log}"
             return 0
         fi
         cat "${test_log}" >&2 || true
-        rm -f "${test_log}" "${test_pid}"
+        rm -f "${test_log}"
     fi
     if docker ps --format '{{.Names}}' | grep -Fx "aads-nginx" >/dev/null 2>&1; then
         docker exec aads-nginx nginx -t
