@@ -1,6 +1,8 @@
 // AADS Dashboard Service Worker — PWA 설치용
-const CACHE_NAME = 'aads-v1';
-const PRECACHE_URLS = ['/login', '/chat', '/kakaobot'];
+// Chat/API/build assets must stay network-only. Serving an old /chat shell after
+// refresh can run stale message merge logic and hide responses that are in DB.
+const CACHE_NAME = 'aads-v2-static-only';
+const PRECACHE_URLS = ['/login', '/kakaobot'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -20,6 +22,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  if (
+    url.pathname.startsWith('/chat') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/_next')
+  ) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );

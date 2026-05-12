@@ -194,6 +194,20 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
   return message.intent === "streaming_placeholder" || message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-");
 }
 
+function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = ""): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.intent !== "streaming_placeholder") return message;
+    const preservedContent = (message.content || fallbackContent || "").trim();
+    return {
+      ...message,
+      content: preservedContent || "⏳ 이전 응답을 보존 중입니다...",
+      intent: undefined,
+      model_used: message.model_used === "streaming" ? "interrupted" : message.model_used,
+      render_id: message.render_id || message.id,
+    };
+  });
+}
+
 function isTruncatedMinimalMessage(message: ChatMessage): boolean {
   const contentLength = Number(message.content_length || 0);
   const visibleLength = (message.content || "").length;
@@ -326,12 +340,28 @@ function findLocalMatchForServerMessage(
   return undefined;
 }
 
-function mergeServerMessagesPreservingLocal(prev: ChatMessage[], incomingMessages: ChatMessage[]): ChatMessage[] {
+function mergeServerMessagesPreservingLocal(
+  prev: ChatMessage[],
+  incomingMessages: ChatMessage[],
+  options: { preserveStreamingPlaceholders?: boolean } = {},
+): ChatMessage[] {
   if (incomingMessages.length === 0) return prev;
 
-  const localMessages = prev.filter(isLocalTransientMessage);
+  const localMessages = prev.filter((message) =>
+    isLocalTransientMessage(message) &&
+    !(options.preserveStreamingPlaceholders && isStreamingPlaceholderMessage(message))
+  );
   const matchedLocalIds = new Set<string>();
   const incomingIds = new Set(incomingMessages.map((message) => message.id));
+  const finalizedExecutionIds = new Set(
+    incomingMessages
+      .filter((message) =>
+        message.role === "assistant" &&
+        message.intent !== "streaming_placeholder" &&
+        Boolean(message.execution_id)
+      )
+      .map((message) => message.execution_id as string)
+  );
   const mergedIncoming = incomingMessages.map((serverMessage) => {
     const existingMessage = prev.find((message) => message.id === serverMessage.id);
     const serverMessageWithPreservedContent = mergeServerMessageWithExisting(existingMessage, serverMessage);
@@ -355,6 +385,7 @@ function mergeServerMessagesPreservingLocal(prev: ChatMessage[], incomingMessage
   return [
     ...prev.filter((message) =>
       !incomingIds.has(message.id) &&
+      !(message.intent === "streaming_placeholder" && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
       !(isLocalTransientMessage(message) && matchedLocalIds.has(message.id))
     ),
     ...mergedIncoming,
@@ -1771,6 +1802,7 @@ export default function ChatPage() {
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
+  const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
   const rateLimitedPollRef = useRef(false);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
@@ -1858,8 +1890,26 @@ export default function ChatPage() {
       const resp = await chatApi<{ found: boolean; generating?: boolean; message?: ChatMessage }>(
         `/chat/sessions/${sessionId}/last-response`
       );
-      if (activeSessionRef.current !== sessionId || !resp.found || !resp.message) return null;
-      const finalMessage = resp.message;
+      let finalMessage = resp.found && resp.message ? resp.message : null;
+      if (!finalMessage) {
+        const latest = await chatApi<ChatMessage[]>(
+          `/chat/messages?session_id=${sessionId}&limit=8&sort=desc&include_streaming=true`
+        ).catch(() => [] as ChatMessage[]);
+        const savedAssistant = latest.find((m) =>
+          m.role === "assistant" &&
+          m.intent !== "rate_limited" &&
+          (
+            m.intent !== "streaming_placeholder" ||
+            Boolean(m.content && m.content.trim().length > 10)
+          )
+        );
+        if (savedAssistant) {
+          finalMessage = savedAssistant.intent === "streaming_placeholder"
+            ? { ...savedAssistant, intent: undefined, model_used: savedAssistant.model_used === "streaming" ? "recovered" : savedAssistant.model_used }
+            : savedAssistant;
+        }
+      }
+      if (activeSessionRef.current !== sessionId || !finalMessage) return null;
       setMessages((prev) => mergeServerMessagesPreservingLocal(prev, [finalMessage]));
       lastKnownMsgIdRef.current = finalMessage.id;
       pendingResponseSessions.current.delete(sessionId);
@@ -1872,6 +1922,51 @@ export default function ChatPage() {
       return null;
     }
   }, []);
+
+  const preservePartialAndContinueStreaming = useCallback((message: ChatMessage, fallbackSessionId?: string | null) => {
+    const preservedMessage: ChatMessage = {
+      ...message,
+      intent: undefined,
+      model_used: message.model_used || "interrupted",
+      render_id: message.render_id || message.id,
+    };
+    const continuationSessionId = preservedMessage.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
+    const continuationCreatedAt = new Date(Date.now() + 1).toISOString();
+    setMessages((prev) => {
+      let hasPlaceholder = false;
+      const resetPrev = prev
+        .filter((m) => m.id !== preservedMessage.id)
+        .map((m) => {
+          if (m.intent !== "streaming_placeholder") return m;
+          hasPlaceholder = true;
+          return {
+            ...m,
+            content: "",
+            created_at: continuationCreatedAt,
+            execution_id: currentExecutionIdRef.current || m.execution_id,
+            render_id: m.render_id || m.id,
+          };
+        });
+      const merged = mergeServerMessagesPreservingLocal(
+        resetPrev,
+        [preservedMessage],
+        { preserveStreamingPlaceholders: true },
+      );
+      if (hasPlaceholder) return merged;
+      return [
+        ...merged,
+        {
+          id: `ai-streaming-${Date.now()}`,
+          session_id: continuationSessionId,
+          execution_id: currentExecutionIdRef.current || undefined,
+          role: "assistant" as const,
+          content: "",
+          intent: "streaming_placeholder",
+          created_at: continuationCreatedAt,
+        },
+      ].sort((a, b) => messageTime(a) - messageTime(b));
+    });
+  }, [activeSession?.id]);
 
   const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string, replayFromStart = false) => {
     if (!attachSessionId || !executionId) return;
@@ -1944,6 +2039,11 @@ export default function ChatPage() {
                 currentExecutionIdRef.current = ev.execution_id;
               }
               if (!full && !streamBufRef.current) setStreamBuf("분석 중...");
+            } else if (ev.type === "partial_preserved" && ev.message) {
+              preservePartialAndContinueStreaming(ev.message as ChatMessage, attachSessionId);
+              full = "";
+              setStreamBuf("");
+              setToolStatus("🔄 최신 지시를 이어서 처리 중...");
             } else if (ev.type === "stream_reset") {
               full = "";
               setStreamBuf("");
@@ -2028,7 +2128,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [bgPartialContent, mergeLatestAssistantFromServer]);
+  }, [bgPartialContent, mergeLatestAssistantFromServer, preservePartialAndContinueStreaming]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -2475,6 +2575,8 @@ export default function ChatPage() {
       setWaitingBgResponse(false); setBgPartialContent("");
       setStreamBuf("");
       lastEventIdRef.current = "";
+      lastKnownMsgIdRef.current = null;
+      lastKnownMessageRevisionRef.current = null;
     } else {
       setMessagesLoading(true);
     }
@@ -2850,9 +2952,9 @@ export default function ChatPage() {
       tickCount++;
       if (!_waitingBg && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
-      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null } | null = null;
+      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null } | null = null;
       try {
-        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null }>(
+        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null }>(
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
@@ -2947,15 +3049,24 @@ export default function ChatPage() {
           }
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
-      // PERF: streaming-status에서 last_message_id 캡처 — 변경 없으면 messages fetch skip
+      // PERF: DB 저장 상태 기준 변경 감지. placeholder_revision까지 봐야 새로고침 후 진행 버블이 누락되지 않는다.
       const _ssLastMsgId = ss?.last_message_id || null;
-      if (_ssLastMsgId && _ssLastMsgId === lastKnownMsgIdRef.current && !_waitingBg) return;
+      const _ssRevisionParts = [
+        _ssLastMsgId || "",
+        ss?.message_revision || "",
+        ss?.placeholder_revision || "",
+      ];
+      const _ssMessageRevision = _ssRevisionParts.some(Boolean) ? _ssRevisionParts.join("|") : "";
+      if (_ssMessageRevision && _ssMessageRevision === lastKnownMessageRevisionRef.current && !_waitingBg) return;
+      if (_ssMessageRevision) lastKnownMessageRevisionRef.current = _ssMessageRevision;
       if (_ssLastMsgId) lastKnownMsgIdRef.current = _ssLastMsgId;
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
+        const _hasDbPlaceholder = Boolean(ss?.placeholder_revision && !String(ss.placeholder_revision).startsWith("0:"));
+        const _includeStreamingFromDb = _waitingBg || Boolean(ss?.is_streaming) || _hasDbPlaceholder;
         const rawLatest = await chatApi<ChatMessage[]>(
-          `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal${_waitingBg ? "&include_streaming=true" : ""}`
+          `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal${_includeStreamingFromDb ? "&include_streaming=true" : ""}`
         );
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
@@ -3445,13 +3556,13 @@ export default function ChatPage() {
     // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
     if (!_existingMsgId) {
       setMessages(prev => [
-        ...prev.filter(m => m.intent !== "streaming_placeholder"),
+        ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         userMsg,
         { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     } else {
       setMessages(prev => [
-        ...prev.filter(m => m.intent !== "streaming_placeholder"),
+        ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     }
@@ -3634,6 +3745,14 @@ export default function ChatPage() {
             }
             // real data events도 timeout 리셋
             resetSseTimeout();
+            if (ev.type === "partial_preserved" && ev.message) {
+              preservePartialAndContinueStreaming(ev.message as ChatMessage, requestSessionId);
+              _resetDrain();
+              full = "";
+              setStreamBuf("");
+              setToolStatus("🔄 최신 지시를 이어서 처리 중...");
+              continue;
+            }
             if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
               _resetDrain();
@@ -4175,9 +4294,11 @@ export default function ChatPage() {
               const resp = await chatApi<{found: boolean; generating?: boolean; message?: ChatMessage}>(
                 `/chat/sessions/${sessionId}/last-response`
               );
-              // generating=true → 아직 생성 중, 이전 답변 교체 금지
+              // generating=true can be stale when the DB already has a saved
+              // placeholder with content. Try the same DB merge fallback used
+              // by the completion path before giving polling control back.
               if (resp.generating) {
-                // 폴링으로 완료 대기
+                await mergeLatestAssistantFromServer(sessionId);
                 break;
               }
               if (resp.found && resp.message) {

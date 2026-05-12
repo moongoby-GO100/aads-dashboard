@@ -50,8 +50,11 @@ export interface ChatSession {
 export interface ChatMessage {
   id: string;
   session_id: string;
+  execution_id?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
+  content_length?: number;
+  render_id?: string;
   model_used: string | null;
   intent?: string | null;
   input_tokens: number | null;
@@ -93,9 +96,12 @@ export interface SSEChunk {
     | "tool_turn_limit"
     // AADS-192: resume stream
     | "resume_done"
+    // Partial response preservation before stream reset
+    | "partial_preserved"
     // Gemini 재시도 등 스트림 초기화
     | "stream_reset";
   content?: string;
+  message?: ChatMessage;
   summary?: string;
   sources?: SourceItem[];
   message_id?: string;
@@ -153,7 +159,20 @@ export const chatApi = {
       `/chat/messages?session_id=${sessionId}&limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
   getStreamingStatus: (sessionId: string) =>
-    req<{ is_streaming: boolean; just_completed?: boolean; content_length?: number; tool_count?: number; last_tool?: string }>(
+    req<{
+      is_streaming: boolean;
+      just_completed?: boolean;
+      content_length?: number;
+      tool_count?: number;
+      last_tool?: string;
+      partial_content?: string;
+      execution_id?: string | null;
+      last_event_id?: string | null;
+      last_message_id?: string | null;
+      message_revision?: string | null;
+      placeholder_revision?: string | null;
+      artifact_revision?: string | null;
+    }>(
       `/chat/sessions/${sessionId}/streaming-status`
     ),
   toggleBookmark: (messageId: string) =>
