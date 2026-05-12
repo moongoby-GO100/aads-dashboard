@@ -497,6 +497,20 @@ export const api = {
       is_pinned: boolean;
     }>,
   ) => request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify(items) }),
+  getModelRoutingPreferences: () => request<any>("/llm-models/routing-preferences"),
+  updateModelRoutingPreferences: (preferences: Array<{
+    route_key: string;
+    provider: string;
+    model_id: string;
+    display_order: number;
+    is_enabled: boolean;
+    is_default: boolean;
+    notes?: string;
+  }>) =>
+    request<any>("/llm-models/routing-preferences", {
+      method: "PUT",
+      body: JSON.stringify({ preferences }),
+    }),
 
   // Prompt Assets (5-Layer System)
   getPromptAssets: (layer?: number) =>
