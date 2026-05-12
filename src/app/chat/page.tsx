@@ -208,6 +208,35 @@ function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = 
   });
 }
 
+function surfaceDbSavedStreamingPlaceholders(
+  messages: ChatMessage[],
+  options: { keepEmpty?: boolean; fallbackContent?: string } = {},
+): ChatMessage[] {
+  const fallbackContent = options.fallbackContent || "";
+  return messages
+    .map((message) => {
+      if (message.intent !== "streaming_placeholder") return message;
+      const persistedContent = (message.content || fallbackContent || "").trim();
+      if (persistedContent.length > 10) {
+        return {
+          ...message,
+          content: persistedContent,
+          intent: undefined,
+          model_used: message.model_used === "streaming" ? "recovered" : message.model_used,
+          render_id: message.render_id || message.id,
+        };
+      }
+      if (options.keepEmpty) {
+        return {
+          ...message,
+          content: message.content || fallbackContent || "⏳ AI가 응답을 생성 중입니다...",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as ChatMessage[];
+}
+
 function isTruncatedMinimalMessage(message: ChatMessage): boolean {
   const contentLength = Number(message.content_length || 0);
   const visibleLength = (message.content || "").length;
@@ -1859,17 +1888,12 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}`
+      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
     ).catch(() => null);
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
       setNextCursor(result.next_cursor);
-      const filtered = result.messages.map(m => {
-        if (m.intent !== "streaming_placeholder") return m;
-        // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
-        if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-        return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
-      }) as ChatMessage[];
+      const filtered = surfaceDbSavedStreamingPlaceholders(result.messages, { keepEmpty: true });
       setMessages(prev => {
         const existingIds = new Set(prev.map(m => m.id));
         const unique = filtered.filter(m => !existingIds.has(m.id));
@@ -2104,7 +2128,8 @@ export default function ChatPage() {
               setToolStatus("🔄 응답 복구 상태 확인 중...");
               return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
-              const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc`).then((msgs) => msgs.reverse());
+              const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc&include_streaming=true`)
+                .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full }).reverse());
               if (activeSessionRef.current !== attachSessionId) return;
               setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
               void mergeLatestAssistantFromServer(attachSessionId);
@@ -2600,25 +2625,17 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=40${filterPlaceholder ? "" : "&include_streaming=true"}`
+        `/chat/messages?session_id=${fetchSid}&limit=40&include_streaming=true`
       )
         .then((result) => {
           const msgs = result.messages;
           if (cancelled) return msgs;
           setHasMoreMessages(result.has_more);
           setNextCursor(result.next_cursor);
-          const processed = filterPlaceholder
-            ? msgs.map((m) => {
-                if (m.intent !== "streaming_placeholder") return m;
-                // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
-                if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-                return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
-              })
-            : msgs.map((m) =>
-                m.intent === "streaming_placeholder"
-                  ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." }
-                  : m
-              );
+          const processed = surfaceDbSavedStreamingPlaceholders(msgs, {
+            keepEmpty: !filterPlaceholder,
+            fallbackContent: bgPartialContent,
+          });
           if (processed.length > 0 || msgs.length === 0) {
             setMessages((prev) => (
               prev.length > 0
@@ -2817,17 +2834,12 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
-            setMessages(msgs.map((m) => {
-              if (m.intent !== "streaming_placeholder") return m;
-              // FIX: placeholder 삭제 금지 — 내용 있으면 recovered로, 없으면 생성 중 표시
-              if (m.content && m.content.trim().length > 10) return { ...m, intent: undefined, model_used: "recovered" };
-              return { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." };
-            }) as ChatMessage[]);
+            setMessages(surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true }));
           }
         })
         .catch(() => {});
@@ -2972,7 +2984,8 @@ export default function ChatPage() {
           setWaitingBgResponse(false); setBgPartialContent("");
           // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs;
@@ -3010,7 +3023,8 @@ export default function ChatPage() {
           // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
+          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
           if (freshMsgs) {
             const filtered = freshMsgs;
@@ -3063,17 +3077,15 @@ export default function ChatPage() {
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
       try {
-        const _hasDbPlaceholder = Boolean(ss?.placeholder_revision && !String(ss.placeholder_revision).startsWith("0:"));
-        const _includeStreamingFromDb = _waitingBg || Boolean(ss?.is_streaming) || _hasDbPlaceholder;
         const rawLatest = await chatApi<ChatMessage[]>(
-          `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal${_includeStreamingFromDb ? "&include_streaming=true" : ""}`
+          `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal&include_streaming=true`
         );
         if (cancelled) return;
         if (!rawLatest || rawLatest.length === 0) return;
-        const latest = _waitingBg
-          ? rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || bgPartialContent || "⏳ AI가 응답을 생성 중입니다..." } : m)
-          // FIX: placeholder 삭제 금지 — streaming 아닐 때도 placeholder는 표시 유지
-          : rawLatest.map((m) => m.intent === "streaming_placeholder" ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." } : m);
+        const latest = surfaceDbSavedStreamingPlaceholders(rawLatest, {
+          keepEmpty: _waitingBg || Boolean(ss?.is_streaming),
+          fallbackContent: bgPartialContent,
+        });
         if (latest.length === 0) return;
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
@@ -3085,7 +3097,8 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false); setBgPartialContent("");
             try {
-              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
+              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+                .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
               if (cancelled) return;
               if (allMsgs) {
                 const filtered = allMsgs;
@@ -4082,8 +4095,8 @@ export default function ChatPage() {
           await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
           try {
             const msgs = await chatApi<ChatMessage[]>(
-              `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc`
-            );
+              `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc&include_streaming=true`
+            ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
             const aiMsg = msgs.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (aiMsg) {
               // ★ in-place 업데이트
@@ -4406,7 +4419,8 @@ export default function ChatPage() {
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
-                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc`).then(msgs => msgs.reverse());
+                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc&include_streaming=true`)
+                  .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: streamBufRef.current }).reverse());
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
@@ -4477,14 +4491,11 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc&include_streaming=true`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
-            const filtered = msgs.map((m) => m.intent === "streaming_placeholder"
-              ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
-              : m
-            );
+            const filtered = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
             // FIX: placeholder 삭제 금지 — stopped/interrupt 메시지가 있으면 유지하면서 DB 메시지와 병합
             isNearBottomRef.current = false;
             setMessages((prev) => {
@@ -4524,14 +4535,11 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
-          const filtered = msgs.map((m: ChatMessage) => m.intent === "streaming_placeholder"
-            ? { ...m, content: m.content || "⏳ AI가 응답을 생성 중입니다..." }
-            : m
-          );
+          const filtered = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
           // FIX: placeholder 삭제 금지
           setMessages((prev) => {
             const localMsgs = prev.filter((m) => m.id.startsWith("stopped-") || m.id.startsWith("interrupt-"));
