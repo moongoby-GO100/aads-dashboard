@@ -408,7 +408,8 @@ function mergeServerMessagesPreservingLocal(
       .filter((message) =>
         message.role === "assistant" &&
         message.intent !== "streaming_placeholder" &&
-        Boolean(message.execution_id)
+        Boolean(message.execution_id) &&
+        Boolean(message.content?.trim())
       )
       .map((message) => message.execution_id as string)
   );
@@ -3055,6 +3056,7 @@ export default function ChatPage() {
     // PERF: 3초 interval, waitingBg=true 3초/아닐 때 15초 폴링 (성능 최적화)
     let tickCount = 0;
     let prevWaitingBg = false; // waitingBg 전환 감지용
+    let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
     const iv = setInterval(async () => {
       if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
@@ -3066,7 +3068,7 @@ export default function ChatPage() {
       if (prevWaitingBg && !_waitingBg) { tickCount = 0; }
       prevWaitingBg = _waitingBg;
       tickCount++;
-      if (!_waitingBg && tickCount % 5 !== 0) return;
+      if (!_waitingBg && !_streaming && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
       let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null } | null = null;
       try {
@@ -3161,6 +3163,28 @@ export default function ChatPage() {
             if (shouldReplayFromStart) lastEventIdRef.current = "0";
             attachExecutionReplay(sid, _exec_id_for_attach, shouldReplayFromStart);
           }
+        }
+        // STREAMING-STUCK 안전장치: 서버 is_streaming=true + 프론트 streaming=true 지속 시 카운터 증가
+        if (ss.is_streaming && _streaming) {
+          streamingStuckCount++;
+          if (streamingStuckCount >= 40) {
+            streamingSessionRef.current = null;
+            setWaitingBgResponse(false); setBgPartialContent("");
+            const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+              .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
+            if (!cancelled && freshMsgs && freshMsgs.length > 0) {
+              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
+            }
+            setMessages(prev => prev.map(m =>
+              m.intent === "streaming_placeholder"
+                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
+                : m
+            ));
+            setStreaming(false); setStreamBuf("");
+            streamingStuckCount = 0;
+          }
+        } else {
+          streamingStuckCount = 0;
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
       // PERF: DB 저장 상태 기준 변경 감지. placeholder_revision까지 봐야 새로고침 후 진행 버블이 누락되지 않는다.
