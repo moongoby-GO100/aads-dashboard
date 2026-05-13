@@ -1445,6 +1445,7 @@ export default function ChatPage() {
   const [todoError, setTodoError] = useState<string | null>(null);
   const [todoCollapsed, setTodoCollapsed] = useState(false);
   const [showAllTodos, setShowAllTodos] = useState(false);
+  const [todoActionLoading, setTodoActionLoading] = useState<string | null>(null);
   const activeWsObj = useMemo(
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
@@ -1752,6 +1753,75 @@ export default function ChatPage() {
       }
     }
   }, []);
+  const runTodoAction = useCallback(async (
+    actionKey: string,
+    path: string,
+    init: RequestInit,
+    sessionId?: string | null,
+  ) => {
+    const sid = sessionId || activeSessionRef.current;
+    if (!sid || todoActionLoading) return;
+    setTodoActionLoading(actionKey);
+    setTodoError(null);
+    try {
+      await chatApi(path, init);
+      await refreshTodos(sid);
+    } catch (err) {
+      if (activeSessionRef.current === sid) {
+        setTodoError(err instanceof Error ? err.message : "TODO 작업 실패");
+      }
+    } finally {
+      if (activeSessionRef.current === sid) {
+        setTodoActionLoading(null);
+      }
+    }
+  }, [refreshTodos, todoActionLoading]);
+  const updateTodoStatus = useCallback((item: ChatTodoItem, status: ChatTodoItem["status"]) => {
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    return runTodoAction(
+      `update:${item.id}:${status}`,
+      `/chat/sessions/${sid}/todos/${item.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status, metadata: { updated_from_chat_ui: true } }),
+      },
+      sid,
+    );
+  }, [runTodoAction]);
+  const deleteTodoItem = useCallback((item: ChatTodoItem) => {
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    return runTodoAction(
+      `delete:${item.id}`,
+      `/chat/sessions/${sid}/todos/${item.id}`,
+      { method: "DELETE" },
+      sid,
+    );
+  }, [runTodoAction]);
+  const clearTodoStatuses = useCallback((statuses: ChatTodoItem["status"][]) => {
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    return runTodoAction(
+      `clear:${statuses.join(",")}`,
+      `/chat/sessions/${sid}/todos/clear`,
+      {
+        method: "POST",
+        body: JSON.stringify({ statuses }),
+      },
+      sid,
+    );
+  }, [runTodoAction]);
+  const retryFailedTodos = useCallback(() => {
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    return runTodoAction(
+      "retry-failed",
+      `/chat/sessions/${sid}/todos/retry-failed`,
+      { method: "POST" },
+      sid,
+    );
+  }, [runTodoAction]);
   // BUG-2 FIX: 초기 로드와 워크스페이스 전환 구분
   const initialWsLoadRef = useRef(true);
   // BUG-REFRESH FIX: 초기 마운트 시 hash 삭제 방지
@@ -5139,6 +5209,8 @@ export default function ChatPage() {
 
   const todoCounts = useMemo(() => ({
     active: todoItems.filter((item) => item.status === "pending" || item.status === "in_progress").length,
+    pending: todoItems.filter((item) => item.status === "pending").length,
+    inProgress: todoItems.filter((item) => item.status === "in_progress").length,
     completed: todoItems.filter((item) => item.status === "completed").length,
     failed: todoItems.filter((item) => item.status === "failed").length,
     skipped: todoItems.filter((item) => item.status === "skipped").length,
@@ -6462,7 +6534,7 @@ export default function ChatPage() {
                     진행 {todoCounts.active} · 완료 {todoCounts.completed}{todoCounts.failed ? ` · 실패 ${todoCounts.failed}` : ""}
                   </span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", flexShrink: 1, flexWrap: "wrap" }}>
                   {hiddenDoneTodoCount > 0 && !todoCollapsed && (
                     <button
                       type="button"
@@ -6482,6 +6554,98 @@ export default function ChatPage() {
                       }}
                     >
                       {showAllTodos ? "진행만" : "전체"}
+                    </button>
+                  )}
+                  {!todoCollapsed && todoCounts.failed > 0 && (
+                    <button
+                      type="button"
+                      onClick={retryFailedTodos}
+                      disabled={!!todoActionLoading}
+                      title="실패 TODO를 대기로 되돌림"
+                      style={{
+                        height: "26px",
+                        padding: "0 8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-hover)",
+                        color: "var(--ct-text2)",
+                        cursor: todoActionLoading ? "default" : "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        opacity: todoActionLoading ? 0.6 : 1,
+                      }}
+                    >
+                      실패 재시도
+                    </button>
+                  )}
+                  {!todoCollapsed && showAllTodos && todoCounts.completed > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => clearTodoStatuses(["completed"])}
+                      disabled={!!todoActionLoading}
+                      title="완료 TODO를 목록에서 제거"
+                      style={{
+                        height: "26px",
+                        padding: "0 8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-hover)",
+                        color: "var(--ct-text2)",
+                        cursor: todoActionLoading ? "default" : "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        opacity: todoActionLoading ? 0.6 : 1,
+                      }}
+                    >
+                      완료 비우기
+                    </button>
+                  )}
+                  {!todoCollapsed && showAllTodos && todoCounts.failed > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => clearTodoStatuses(["failed"])}
+                      disabled={!!todoActionLoading}
+                      title="실패 TODO를 목록에서 제거"
+                      style={{
+                        height: "26px",
+                        padding: "0 8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-hover)",
+                        color: "var(--ct-text2)",
+                        cursor: todoActionLoading ? "default" : "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        opacity: todoActionLoading ? 0.6 : 1,
+                      }}
+                    >
+                      실패 비우기
+                    </button>
+                  )}
+                  {!todoCollapsed && showAllTodos && todoCounts.pending > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => clearTodoStatuses(["pending"])}
+                      disabled={!!todoActionLoading}
+                      title="대기 TODO를 목록에서 제거"
+                      style={{
+                        height: "26px",
+                        padding: "0 8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-hover)",
+                        color: "var(--ct-text2)",
+                        cursor: todoActionLoading ? "default" : "pointer",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                        opacity: todoActionLoading ? 0.6 : 1,
+                      }}
+                    >
+                      대기 비우기
                     </button>
                   )}
                   <button
@@ -6565,6 +6729,72 @@ export default function ChatPage() {
                         <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
                           {item.status === "in_progress" ? "진행" : item.status === "pending" ? "대기" : item.status === "completed" ? "완료" : item.status === "failed" ? "실패" : "제외"}
                         </span>
+                        {isFailed && (
+                          <button
+                            type="button"
+                            onClick={() => updateTodoStatus(item, "pending")}
+                            disabled={!!todoActionLoading}
+                            title="이 실패 TODO를 대기로 되돌림"
+                            style={{
+                              height: "20px",
+                              padding: "0 6px",
+                              borderRadius: "5px",
+                              border: "1px solid var(--ct-border)",
+                              background: "var(--ct-hover)",
+                              color: "var(--ct-text2)",
+                              cursor: todoActionLoading ? "default" : "pointer",
+                              fontSize: "10px",
+                              whiteSpace: "nowrap",
+                              opacity: todoActionLoading ? 0.6 : 1,
+                            }}
+                          >
+                            재시도
+                          </button>
+                        )}
+                        {(item.status === "pending" || item.status === "in_progress") && (
+                          <button
+                            type="button"
+                            onClick={() => updateTodoStatus(item, "skipped")}
+                            disabled={!!todoActionLoading}
+                            title="이 TODO를 제외 처리"
+                            style={{
+                              height: "20px",
+                              padding: "0 6px",
+                              borderRadius: "5px",
+                              border: "1px solid var(--ct-border)",
+                              background: "var(--ct-hover)",
+                              color: "var(--ct-text2)",
+                              cursor: todoActionLoading ? "default" : "pointer",
+                              fontSize: "10px",
+                              whiteSpace: "nowrap",
+                              opacity: todoActionLoading ? 0.6 : 1,
+                            }}
+                          >
+                            제외
+                          </button>
+                        )}
+                        {(isDone || isFailed || item.status === "skipped") && (
+                          <button
+                            type="button"
+                            onClick={() => deleteTodoItem(item)}
+                            disabled={!!todoActionLoading}
+                            title="이 TODO를 목록에서 제거"
+                            style={{
+                              height: "20px",
+                              padding: "0 6px",
+                              borderRadius: "5px",
+                              border: "1px solid var(--ct-border)",
+                              background: "var(--ct-hover)",
+                              color: "var(--ct-text2)",
+                              cursor: todoActionLoading ? "default" : "pointer",
+                              fontSize: "10px",
+                              whiteSpace: "nowrap",
+                              opacity: todoActionLoading ? 0.6 : 1,
+                            }}
+                          >
+                            숨김
+                          </button>
+                        )}
                       </div>
                     );
                   })}
