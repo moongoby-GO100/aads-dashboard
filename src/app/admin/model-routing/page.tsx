@@ -28,6 +28,10 @@ interface RoutingPreference {
   updated_by?: string | null;
 }
 
+interface RoutingPreferencesResponse {
+  preferences?: RoutingPreference[];
+}
+
 const ROUTES: Array<{ key: RouteKey; label: string; desc: string }> = [
   { key: "image", label: "이미지", desc: "generate_image 기본 라우팅" },
   { key: "edit_image", label: "이미지 편집", desc: "edit_image 기본 라우팅" },
@@ -66,7 +70,7 @@ export default function ModelRoutingPage() {
     setLoading(true);
     setMessage("");
     api.getModelRoutingPreferences()
-      .then((res: any) => setItems(Array.isArray(res.preferences) ? res.preferences : []))
+      .then((res: RoutingPreferencesResponse) => setItems(Array.isArray(res.preferences) ? res.preferences : []))
       .catch((err) => setMessage(err instanceof Error ? err.message : "모델 라우팅 설정을 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, []);
@@ -80,8 +84,17 @@ export default function ModelRoutingPage() {
     }, {} as Record<RouteKey, RoutingPreference[]>);
   }, [items]);
 
-  const visibleItems = grouped[activeRoute] || [];
+  const visibleItems = useMemo(() => grouped[activeRoute] || [], [activeRoute, grouped]);
   const defaultItem = visibleItems.find((item) => item.is_default);
+  const routeStats = useMemo(() => {
+    const disabled = visibleItems.filter((item) => !item.is_enabled || item.availability === "disabled").length;
+    const available = visibleItems.filter((item) => item.availability === "available").length;
+    return {
+      available,
+      disabled,
+      blocked: Math.max(visibleItems.length - available - disabled, 0),
+    };
+  }, [visibleItems]);
 
   const patchItem = (target: RoutingPreference, patch: Partial<RoutingPreference>) => {
     setItems((prev) => prev.map((item) => (
@@ -100,6 +113,14 @@ export default function ModelRoutingPage() {
   };
 
   const save = async () => {
+    const missingDefault = ROUTES.find((route) => (
+      items.some((item) => item.route_key === route.key)
+      && !items.some((item) => item.route_key === route.key && item.is_default)
+    ));
+    if (missingDefault) {
+      setMessage(`${missingDefault.label} 기본 모델을 선택하세요.`);
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -112,7 +133,7 @@ export default function ModelRoutingPage() {
         is_default: item.is_default,
         notes: item.notes || "",
       }));
-      const res: any = await api.updateModelRoutingPreferences(preferences);
+      const res = await api.updateModelRoutingPreferences(preferences) as RoutingPreferencesResponse;
       setItems(Array.isArray(res.preferences) ? res.preferences : items);
       setMessage("저장 완료");
     } catch (err) {
@@ -200,9 +221,11 @@ export default function ModelRoutingPage() {
                 현재 기본값: {defaultItem ? `${defaultItem.provider}:${defaultItem.model_id}` : "-"}
               </p>
             </div>
-            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              Updated by DB seed/API
-            </span>
+            <div className="flex items-center gap-2 flex-wrap text-xs" style={{ color: "var(--text-secondary)" }}>
+              <span>available {routeStats.available}</span>
+              <span>blocked {routeStats.blocked}</span>
+              <span>disabled {routeStats.disabled}</span>
+            </div>
           </div>
 
           {loading ? (
@@ -214,7 +237,7 @@ export default function ModelRoutingPage() {
               <table className="w-full text-sm">
                 <thead style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                   <tr>
-                    {["기본", "상태", "Provider", "Model", "Availability", "비고", "Updated"].map((header) => (
+                    {["기본", "상태", "Provider", "Model", "Availability", "Registry", "비고", "Updated"].map((header) => (
                       <th key={header} className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">{header}</th>
                     ))}
                   </tr>
@@ -261,6 +284,14 @@ export default function ModelRoutingPage() {
                           {item.verification_status && (
                             <p className="text-[11px] mt-1" style={{ color: "var(--text-secondary)" }}>{item.verification_status}</p>
                           )}
+                        </td>
+                        <td className="px-4 py-3 min-w-[180px]">
+                          <p className="text-[11px]" style={{ color: "var(--text-primary)" }}>
+                            {item.is_active ? "active" : "inactive"} · {item.is_executable ? "executable" : "not executable"}
+                          </p>
+                          <p className="text-[11px] mt-1" style={{ color: "var(--text-secondary)" }}>
+                            {item.is_selectable === false ? "not selectable" : "selectable"} · {item.category || item.family || "-"}
+                          </p>
                         </td>
                         <td className="px-4 py-3 min-w-[320px]">
                           <textarea
