@@ -2782,7 +2782,7 @@ export default function ChatPage() {
             waitingBgTimeoutRef.current = setTimeout(() => {
               setWaitingBgResponse(false); setBgPartialContent("");
               pendingResponseSessions.current.delete(fetchSid);
-            }, 120000);
+            }, 30000);
           }
         }
       }
@@ -4406,6 +4406,7 @@ export default function ChatPage() {
               setWaitingBgResponse(false);
               setBgPartialContent("");
               streamingSessionRef.current = null;
+              // ★ FIX: 버블 유지 — streaming 해제하되 placeholder를 partial 메시지로 교체
               setMessages((prev) => prev.map(m =>
                 m.intent === "streaming_placeholder"
                   ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
