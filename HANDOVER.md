@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-05-13 (Chat TODO 즉시 갱신 보강)
+- 대상: 채팅창 상단 TODO 패널의 생성/완료 직후 갱신 지연.
+- 반영: 사용자 메시지 전송 직후 `600ms/1.8s/4.2s` 지연 재조회와 스트리밍 완료 직후 즉시 재조회를 추가해, 새로 생성되거나 완료 처리된 TODO가 폴링 주기까지 기다리지 않고 패널에 반영되도록 했다.
+- 변경 파일: `src/app/chat/page.tsx`.
+- 검증: `npx tsc --noEmit --pretty false` 통과. `npx eslint src/app/chat/page.tsx`는 에러 0개, 기존 경고 21개.
+
 ## 2026-05-13 (Chat TODO 정리 UI)
 - 대상: 채팅창 상단 TODO 패널의 사용자 정리 액션.
 - 반영: 실패 TODO 재시도, 완료/실패/대기 일괄 비우기, 항목별 재시도/제외/숨김 버튼을 `src/app/chat/page.tsx`에 추가했다.

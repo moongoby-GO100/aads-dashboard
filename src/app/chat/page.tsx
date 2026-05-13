@@ -1753,6 +1753,15 @@ export default function ChatPage() {
       }
     }
   }, []);
+  const refreshTodosSoon = useCallback((sessionId?: string | null) => {
+    const sid = sessionId || activeSessionRef.current;
+    if (!sid) return;
+    [600, 1800, 4200].forEach((delay) => {
+      window.setTimeout(() => {
+        if (activeSessionRef.current === sid) void refreshTodos(sid);
+      }, delay);
+    });
+  }, [refreshTodos]);
   const runTodoAction = useCallback(async (
     actionKey: string,
     path: string,
@@ -3670,6 +3679,7 @@ export default function ChatPage() {
         { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     }
+    refreshTodosSoon(sessionId);
 
     abortCtrl.current = new AbortController();
     // 90초 비활성 타임아웃 → heartbeat(5초) + 실제 데이터 모두 리셋
@@ -4527,6 +4537,7 @@ export default function ChatPage() {
                     requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
                   }
                 }
+                void refreshTodos(_sid);
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
