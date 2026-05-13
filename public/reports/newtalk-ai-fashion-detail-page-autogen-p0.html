@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>뉴톡 AI 패션 — 상세페이지 자동생성 기획서 P0</title>
+  <style>
+    :root{--ink:#202124;--muted:#5f6368;--line:#d8dee4;--paper:#fff;--bg:#f5f7f9;--nav:#17202a;--green:#0f766e;--blue:#2563eb;--rose:#be123c;--amber:#b45309;--violet:#6d28d9;--slate:#334155}
+    *{box-sizing:border-box}
+    body{margin:0;color:var(--ink);background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.62}
+    a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+    header{background:#111827;color:#fff;padding:32px clamp(18px,4vw,56px) 28px}
+    .eyebrow{margin:0 0 8px;color:#a7f3d0;font-size:13px;font-weight:700}
+    h1{margin:0;font-size:clamp(28px,5vw,48px);line-height:1.08}
+    .subtitle{max-width:980px;margin:16px 0 0;color:#d1d5db;font-size:17px}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+    .pill{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border:1px solid rgba(255,255,255,.24);border-radius:999px;color:#e5e7eb;font-size:13px;white-space:nowrap}
+    nav{position:sticky;top:0;z-index:20;display:flex;gap:4px;overflow-x:auto;padding:8px clamp(12px,4vw,48px);background:var(--nav);border-top:1px solid rgba(255,255,255,.08)}
+    nav a{flex:0 0 auto;min-height:36px;padding:7px 12px;border-radius:6px;color:#e5e7eb;font-size:13px;text-decoration:none}
+    nav a:hover{background:rgba(255,255,255,.12)}
+    main{max-width:1280px;margin:0 auto;padding:28px clamp(16px,3vw,34px) 70px}
+    section{padding:34px 0;border-bottom:1px solid var(--line)}section:last-child{border-bottom:0}
+    h2{margin:0 0 14px;font-size:26px;line-height:1.2}
+    h3{margin:24px 0 8px;font-size:18px;line-height:1.3}
+    h4{margin:18px 0 6px;font-size:15px;font-weight:700;color:var(--slate)}
+    p{margin:8px 0}.lead{max-width:980px;color:#394150;font-size:16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px}
+    .card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}.card h3{margin-top:0}
+    .ok{background:#f0fdf4;border-color:#bbf7d0}.warn{background:#fff7ed;border-color:#fed7aa}.risk{background:#fff1f2;border-color:#fecdd3}
+    table{width:100%;margin-top:14px;border-collapse:collapse;background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;font-size:13px}
+    th{background:#f1f5f9;color:#334155;font-weight:800}tr:last-child td{border-bottom:0}
+    code{padding:2px 5px;border-radius:4px;background:#eef2f7;color:#0f172a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+    .list{margin:8px 0 0;padding-left:18px}.list li{margin:5px 0}
+    .flow-section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:24px;margin-top:18px}
+    .sub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}
+    .sub-card{border:1px solid var(--line);border-radius:6px;padding:12px;font-size:13px}
+    .sub-card h4{margin:0 0 6px;font-size:14px}
+    .highlight-box{border-left:4px solid var(--blue);padding:12px 16px;background:#eff6ff;border-radius:0 6px 6px 0;margin:12px 0;font-size:14px}
+    .highlight-box.green{border-left-color:var(--green);background:#f0fdf4}
+    .highlight-box.amber{border-left-color:var(--amber);background:#fffbeb}
+    .highlight-box.rose{border-left-color:var(--rose);background:#fff1f2}
+    .num{display:grid;place-items:center;width:48px;height:48px;border-radius:10px;color:#fff;font-weight:900;font-size:20px;flex-shrink:0}
+    .step-header{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+    .block-preview{border:2px dashed var(--line);border-radius:8px;padding:16px;margin:12px 0;background:#fafbfc}
+    .block-preview .block-label{display:inline-block;padding:2px 8px;border-radius:4px;background:#111827;color:#a7f3d0;font-size:11px;font-weight:700;margin-bottom:8px}
+    .mobile-frame{max-width:375px;margin:16px auto;border:2px solid #334155;border-radius:24px;padding:16px;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+    .mobile-frame .notch{width:120px;height:6px;margin:0 auto 12px;background:#334155;border-radius:3px}
+    footer{padding:24px clamp(18px,4vw,56px) 36px;color:#e5e7eb;background:#111827;font-size:14px}
+    @media(max-width:760px){.sub-grid{grid-template-columns:1fr}th,td{font-size:12px;padding:8px}.mobile-frame{max-width:100%}}
+    @media print{nav{display:none}body{background:#fff}main{max-width:none}section{break-inside:avoid}}
+  </style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">NewTalk AI Fashion — Detail Page Auto-Generation P0</p>
+  <h1>뉴톡 AI 패션 상세페이지<br>자동생성 기획서</h1>
+  <p class="subtitle">
+    AI 모델컷·감성컷·상품 정보를 조합하여 V1 호환 상세페이지를 자동 생성하는 시스템 기획서입니다.
+    블록 기반 템플릿, AI 카피라이팅, 모바일 퍼스트 레이아웃, A/B 테스트, 도매몰 자동등록 연동까지 포함합니다.
+  </p>
+  <div class="meta">
+    <span class="pill">작성 기준: 2026-05-13 13:31 KST</span>
+    <span class="pill">대상: NTV2 / NewTalk</span>
+    <span class="pill">범위: 상세페이지 자동생성 파이프라인 전체</span>
+    <span class="pill">상태: P0 상세 기획</span>
+    <span class="pill">선행 문서: 사용자흐름 v2 ⑦단계</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#summary">요약</a>
+  <a href="#v1-compat">V1 호환</a>
+  <a href="#blocks">블록 구조</a>
+  <a href="#template">템플릿</a>
+  <a href="#ai-copy">AI 카피</a>
+  <a href="#image-layout">이미지 배치</a>
+  <a href="#mobile">모바일</a>
+  <a href="#seo">SEO</a>
+  <a href="#ab-test">A/B 테스트</a>
+  <a href="#wholesale">도매몰</a>
+  <a href="#pipeline">파이프라인</a>
+  <a href="#data">데이터</a>
+  <a href="#review">검수</a>
+  <a href="#roadmap">로드맵</a>
+  <a href="#criteria">완료 기준</a>
+  <a href="/reports/newtalk-ai-fashion-influencer-plan-v1.html">← 사업기획서</a>
+  <a href="/reports/newtalk-ai-fashion-user-flow-detail-v2.html">← 사용자흐름 v2</a>
+</nav>
+
+<main>
+
+<section id="summary">
+  <h2>요약</h2>
+  <p class="lead">
+    뉴톡 AI 패션 시스템의 마지막 제작 단계인 <b>상세페이지 자동생성</b>을 전담하는 기획서입니다.
+    사용자 흐름 ①~⑥ 단계에서 확정된 승인 모델컷·감성컷·상품 정보·코디 세트를 입력받아,
+    V1 뉴톡 상품 상세페이지와 호환되는 HTML을 자동 조립합니다.
+  </p>
+
+  <div class="highlight-box green">
+    <b>핵심 원칙:</b> 상세페이지는 "이미지 나열"이 아니라 <b>판매 스토리 구조</b>입니다.
+    히어로 → 핵심 카피 → 착용 핏 → 소재 디테일 → 코디 제안 → 사이즈 가이드 → CTA 순서로,
+    고객이 스크롤 한 번에 구매 결정에 필요한 정보를 모두 얻도록 설계합니다.
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>자동생성 범위</h3>
+      <ul class="list">
+        <li>승인 이미지 자동 배치 (히어로, 착용, 디테일, 코디)</li>
+        <li>AI 카피라이팅 (상품명 기반 판매 문구 생성)</li>
+        <li>블록 기반 템플릿 자동 조립</li>
+        <li>모바일/PC 반응형 HTML 출력</li>
+        <li>V1 상품등록 시스템 호환 포맷</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>수동 편집 범위</h3>
+      <ul class="list">
+        <li>블록 순서 변경, 추가, 삭제</li>
+        <li>카피 문구 수정·교체</li>
+        <li>이미지 교체·크롭·순서 변경</li>
+        <li>CTA 버튼 위치·문구 조정</li>
+        <li>최종 판매 반영 승인</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>기대 효과</h3>
+      <ul class="list">
+        <li>상세페이지 제작 시간: 2~4시간 → <b>15~30분</b></li>
+        <li>디자이너 의존도 제거 (운영자 단독 완성)</li>
+        <li>일관된 브랜드 톤·레이아웃 유지</li>
+        <li>A/B 테스트로 전환율 최적화 가능</li>
+        <li>도매몰(신상마켓 등) 동시 등록</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="v1-compat">
+  <h2>V1 상세페이지 호환 기준</h2>
+  <p class="lead">
+    뉴톡 V1의 상품 상세페이지는 <code>goods_content</code> 필드에 HTML을 저장하고,
+    이 HTML이 상품 상세 화면에 그대로 렌더링되는 구조입니다.
+    자동생성 결과물은 이 구조를 100% 호환해야 합니다.
+  </p>
+
+  <h3>V1 호환 구조</h3>
+  <table>
+    <thead><tr><th>영역</th><th>V1 현재</th><th>자동생성 개선</th><th>호환 방식</th></tr></thead>
+    <tbody>
+      <tr><td>상단 이미지</td><td>제품 이미지 1~3장 세로 나열</td><td>히어로 이미지 + 핵심 카피 오버레이</td><td>동일 img 태그, 추가 div로 카피 삽입</td></tr>
+      <tr><td>상품 설명</td><td>텍스트 + 이미지 혼합 (수동 입력)</td><td>블록 단위 구조화 (카피+이미지 세트)</td><td>div.block으로 감싸되 V1 렌더러가 무시 가능</td></tr>
+      <tr><td>사이즈 표</td><td>이미지 또는 table</td><td>반응형 HTML 테이블 자동 생성</td><td>인라인 스타일로 V1 CSS 의존 없이 독립 렌더링</td></tr>
+      <tr><td>배송/교환</td><td>공통 HTML 템플릿</td><td>공통 블록 자동 삽입</td><td>V1 공통 템플릿 ID 참조 또는 인라인 복사</td></tr>
+      <tr><td>이미지 경로</td><td>/data/files/goods/{GoodsCode}/img/</td><td>CDN 경로 또는 V1 호환 경로</td><td>V1 이미지 서버 경로 유지, AI컷은 별도 prefix</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box amber">
+    <b>V1 호환 제약:</b> V1 상세페이지 렌더러는 외부 CSS/JS를 로드하지 않습니다.
+    따라서 자동생성 HTML은 <b>인라인 스타일만 사용</b>하고, JavaScript는 포함하지 않습니다.
+  </div>
+
+  <h3>이미지 경로 규칙</h3>
+  <table>
+    <thead><tr><th>이미지 유형</th><th>V1 경로</th><th>자동생성 경로</th></tr></thead>
+    <tbody>
+      <tr><td>제품 원본컷</td><td><code>/data/files/goods/{code}/img/</code></td><td>동일 경로 유지</td></tr>
+      <tr><td>AI 모델컷</td><td>없음 (신규)</td><td><code>/data/files/goods/{code}/ai-model/</code></td></tr>
+      <tr><td>AI 감성컷</td><td>없음 (신규)</td><td><code>/data/files/goods/{code}/ai-mood/</code></td></tr>
+      <tr><td>공통 소재</td><td><code>/data/files/common/</code></td><td>동일 경로 유지</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="blocks">
+  <h2>블록 기반 상세페이지 구조</h2>
+  <p class="lead">
+    상세페이지를 13개 표준 블록으로 구성합니다. 각 블록은 독립적으로 추가·제거·순서 변경이 가능하며,
+    자동생성 시 상품 속성에 따라 필요한 블록만 조립됩니다.
+  </p>
+
+  <table>
+    <thead><tr><th>#</th><th>블록명</th><th>필수</th><th>입력 소스</th><th>자동생성 내용</th></tr></thead>
+    <tbody>
+      <tr><td>B1</td><td><b>히어로 이미지</b></td><td>✅</td><td>감성컷 중 최고 점수 1장</td><td>전폭 이미지 + 상품명 + 한줄 카피 오버레이</td></tr>
+      <tr><td>B2</td><td><b>핵심 판매 카피</b></td><td>✅</td><td>상품명, 카테고리, 핏 키워드, 모델 톤</td><td>3~5줄 판매 포인트 (소재, 핏, 활용도, 가격 어필)</td></tr>
+      <tr><td>B3</td><td><b>모델 착용컷 (전신)</b></td><td>✅</td><td>승인 모델컷 전신 상위 4장</td><td>2x2 그리드 또는 세로 나열, 컬러/사이즈 캡션</td></tr>
+      <tr><td>B4</td><td><b>핏 설명</b></td><td>✅</td><td>핏 키워드, 모델 신체 정보, 착용 사이즈</td><td>"모델 OOO (168cm/S) 착용" + 핏감 설명 2~3줄</td></tr>
+      <tr><td>B5</td><td><b>반신/디테일 컷</b></td><td>✅</td><td>승인 모델컷 반신 + 소재 클로즈업</td><td>디테일 포인트 캡션 (봉제, 단추, 라벨 등)</td></tr>
+      <tr><td>B6</td><td><b>소재/원단 정보</b></td><td>⭐</td><td>상품 설명, 소재 클로즈업컷</td><td>소재 구성 표 + 세탁 안내 아이콘</td></tr>
+      <tr><td>B7</td><td><b>컬러 옵션 갤러리</b></td><td>⭐</td><td>옵션별 모델컷 또는 제품컷</td><td>컬러별 이미지 + 컬러명 라벨 가로 나열</td></tr>
+      <tr><td>B8</td><td><b>코디 추천</b></td><td>⭐</td><td>코디 세트, 부상품 정보</td><td>"이 상품과 함께" 코디 카드 + 부상품 링크</td></tr>
+      <tr><td>B9</td><td><b>사이즈 가이드</b></td><td>✅</td><td>카테고리별 표준 사이즈표</td><td>반응형 HTML 사이즈 테이블 + 측정 안내</td></tr>
+      <tr><td>B10</td><td><b>감성 무드컷</b></td><td>⬜</td><td>승인 감성컷 3~5장</td><td>라이프스타일 연출 이미지 세로 나열</td></tr>
+      <tr><td>B11</td><td><b>리뷰/착용 후기</b></td><td>⬜</td><td>V1 리뷰 시스템 연동 (P1)</td><td>P0: 플레이스홀더, P1: 실제 리뷰 삽입</td></tr>
+      <tr><td>B12</td><td><b>배송/교환/반품</b></td><td>✅</td><td>공통 템플릿</td><td>표준 배송/교환/반품 정책 HTML 자동 삽입</td></tr>
+      <tr><td>B13</td><td><b>AI 생성 표시</b></td><td>✅</td><td>워크플로우 메타데이터</td><td>"AI로 제작된 이미지입니다" 고지 배너</td></tr>
+    </tbody>
+  </table>
+
+  <h3>블록 조립 규칙</h3>
+  <div class="sub-grid">
+    <div class="sub-card">
+      <h4>필수 블록 (항상 포함)</h4>
+      <p>B1→B2→B3→B4→B5→B9→B12→B13. 이 8개 블록은 상품 유형과 무관하게 항상 포함됩니다.</p>
+    </div>
+    <div class="sub-card">
+      <h4>조건부 블록</h4>
+      <p><b>B6:</b> 소재 정보+클로즈업컷 존재 시<br>
+      <b>B7:</b> 컬러 옵션 2개 이상일 때<br>
+      <b>B8:</b> 코디 세트 확정+부상품 판매중일 때<br>
+      <b>B10:</b> 감성컷 3장 이상 승인 시</p>
+    </div>
+    <div class="sub-card">
+      <h4>카테고리별 변형</h4>
+      <p><b>아우터:</b> B5를 B3 직후로 (안감/지퍼 강조)<br>
+      <b>원피스:</b> B4에 기장 측정 이미지 추가<br>
+      <b>액세서리:</b> B3 대신 착용 클로즈업 중심</p>
+    </div>
+  </div>
+</section>
+
+<section id="template">
+  <h2>템플릿 시스템</h2>
+  <p class="lead">
+    5가지 기본 템플릿을 제공하고, 상품의 <code>detail_page_tone</code> 설정에 따라 자동 선택됩니다.
+  </p>
+
+  <table>
+    <thead><tr><th>템플릿</th><th>톤</th><th>적합 카테고리</th><th>레이아웃 특징</th><th>모델 매핑</th></tr></thead>
+    <tbody>
+      <tr><td><b>T1 미니멀</b></td><td>깔끔, 절제</td><td>오피스룩, 베이직, 셋업</td><td>여백 넓음, 이미지 1열, 폰트 크기 작음</td><td>윤서아, 이도연</td></tr>
+      <tr><td><b>T2 감성</b></td><td>따뜻, 무드</td><td>원피스, 니트, 코트</td><td>감성컷 대형 배치, 부드러운 구분선</td><td>정하린</td></tr>
+      <tr><td><b>T3 캐주얼</b></td><td>활기, 트렌디</td><td>후디, 데님, 스트릿</td><td>2x2 그리드 중심, 볼드 텍스트</td><td>한루아</td></tr>
+      <tr><td><b>T4 프리미엄</b></td><td>고급, 클래식</td><td>트렌치, 가죽, 수입</td><td>다크 배경, 골드 라인, 여유 레이아웃</td><td>강민채</td></tr>
+      <tr><td><b>T5 뉴어덜트</b></td><td>캠퍼스, 활동적</td><td>티셔츠, 가디건, 백팩</td><td>밝은 톤, 동적 레이아웃, SNS 강조</td><td>박세린</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <b>자동 선택 우선순위:</b> ① 운영자 직접 선택 → ② detail_page_tone 매핑 → ③ 모델 페르소나 기본 톤 → ④ 카테고리 기반 추천
+  </div>
+
+  <h3>템플릿 커스터마이징</h3>
+  <div class="sub-grid">
+    <div class="sub-card">
+      <h4>컬러 테마</h4>
+      <p>각 템플릿은 3가지 컬러 변형(라이트/다크/브랜드)을 가집니다. 브랜드 테마는 뉴톡 CI 색상(#111827 + #a7f3d0) 기본.</p>
+    </div>
+    <div class="sub-card">
+      <h4>이미지 배치 모드</h4>
+      <p><b>세로 나열:</b> 모바일 최적<br><b>2열 그리드:</b> PC 밀도<br><b>혼합:</b> 히어로는 전폭, 나머지 그리드</p>
+    </div>
+    <div class="sub-card">
+      <h4>폰트 스케일</h4>
+      <p>미니멀/프리미엄: 본문14px/제목20px<br>캐주얼/뉴어덜트: 본문15px/제목22px 볼드<br>감성: 본문14px/제목24px</p>
+    </div>
+  </div>
+</section>
+
+<section id="ai-copy">
+  <h2>AI 카피라이팅</h2>
+  <p class="lead">
+    각 블록에 필요한 판매 문구를 AI가 자동 생성합니다.
+    모델 페르소나의 말투를 반영하되, 과장 광고·허위 효능·가격 오인을 유발하는 문구는 자동 차단합니다.
+  </p>
+
+  <h3>블록별 카피 생성 규격</h3>
+  <table>
+    <thead><tr><th>블록</th><th>카피 유형</th><th>길이</th><th>입력 데이터</th><th>금지 표현</th></tr></thead>
+    <tbody>
+      <tr><td>B1 히어로</td><td>한줄 후킹</td><td>20자</td><td>상품명, 시즌, 키워드</td><td>"최저가", "한정", "매진임박"</td></tr>
+      <tr><td>B2 핵심 카피</td><td>판매 포인트</td><td>150자</td><td>소재, 핏, 활용, 가격</td><td>체형 보정 과장, 미검증 소재 비율</td></tr>
+      <tr><td>B4 핏 설명</td><td>착용 핏</td><td>100자</td><td>모델 신체, 착용 사이즈</td><td>"날씬해 보이는", "10kg 감량"</td></tr>
+      <tr><td>B5 디테일</td><td>포인트 캡션</td><td>30자/포인트</td><td>디테일 이미지, 봉제</td><td>"명품급", "해외 직수입" (미확인)</td></tr>
+      <tr><td>B6 소재</td><td>소재 설명</td><td>80자</td><td>소재 구성, 세탁법</td><td>소재 비율 변경, "친환경" (인증 없이)</td></tr>
+      <tr><td>B8 코디</td><td>코디 추천</td><td>50자</td><td>코디 구성, 모델 톤</td><td>부상품 가격 누락, 품절 추천</td></tr>
+    </tbody>
+  </table>
+
+  <h3>카피 생성 프롬프트 구조</h3>
+  <div class="block-preview">
+    <div class="block-label">SYSTEM</div>
+    <p style="font-size:13px;margin:0">
+      당신은 뉴톡 AI 패션 상세페이지 카피라이터입니다.<br>
+      - 모델 페르소나: {persona_name} ({persona_style})<br>
+      - 톤: {detail_page_tone}<br>
+      - 금지: 과장 광고, 허위 효능, 근거 없는 한정성, 체형 비하, 실존 브랜드 비교<br>
+      - 출력: JSON {"copy": "...", "confidence": 0.0~1.0}
+    </p>
+  </div>
+
+  <h3>카피 품질 자동 검증</h3>
+  <div class="sub-grid">
+    <div class="sub-card ok">
+      <h4>✅ 통과 조건</h4>
+      <ul class="list">
+        <li>금지 표현 패턴 매칭 0건</li>
+        <li>소재 비율이 상품 DB와 일치</li>
+        <li>가격 언급이 실제 판매가와 일치</li>
+        <li>글자 수 제한 준수</li>
+      </ul>
+    </div>
+    <div class="sub-card risk">
+      <h4>❌ 자동 재생성 (최대 3회)</h4>
+      <ul class="list">
+        <li>금지 표현 1개 이상 감지</li>
+        <li>confidence &lt; 0.7</li>
+        <li>소재/가격 불일치</li>
+        <li>글자 수 초과</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="image-layout">
+  <h2>이미지 자동 배치 로직</h2>
+  <p class="lead">
+    승인된 모델컷·감성컷·제품컷을 각 블록의 용도에 맞게 자동 배치합니다.
+    이미지 선택은 QA 점수·용도 태그·다양성 점수를 종합해 결정합니다.
+  </p>
+
+  <table>
+    <thead><tr><th>블록</th><th>이미지 소스</th><th>선택 기준</th><th>수량</th><th>폴백</th></tr></thead>
+    <tbody>
+      <tr><td>B1 히어로</td><td>감성컷 &gt; 전신컷</td><td>QA 최고점 + 1200px 이상 + 오버레이 여유</td><td>1장</td><td>모델컷 전신 최고점</td></tr>
+      <tr><td>B3 전신컷</td><td>모델컷 전신</td><td>QA 상위 4장, 포즈 다양성</td><td>3~4장</td><td>전신 부족 시 반신 포함</td></tr>
+      <tr><td>B5 디테일</td><td>반신 + 클로즈업</td><td>디테일 부위별 1장씩</td><td>3~5장</td><td>제품 원본컷</td></tr>
+      <tr><td>B7 컬러</td><td>옵션별 모델컷/제품컷</td><td>옵션 수만큼, 동일 포즈</td><td>옵션 수</td><td>제품컷</td></tr>
+      <tr><td>B8 코디</td><td>코디 함께 착용컷</td><td>코디당 대표 1장</td><td>코디 수</td><td>개별 컷 조합</td></tr>
+      <tr><td>B10 무드</td><td>감성컷</td><td>히어로 미중복 3~5장</td><td>3~5장</td><td>라이프스타일컷</td></tr>
+    </tbody>
+  </table>
+
+  <h3>이미지 후처리 파이프라인</h3>
+  <div class="sub-grid">
+    <div class="sub-card">
+      <h4>리사이즈</h4>
+      <p>모바일 폭 750px (Retina 1500px 원본 유지), PC 최대 860px. WebP 변환 + JPEG 폴백.</p>
+    </div>
+    <div class="sub-card">
+      <h4>이미지 압축</h4>
+      <p>장당 200KB 이하 (WebP), 상세페이지 전체 3MB 이하. Lazy loading 자동 삽입.</p>
+    </div>
+    <div class="sub-card">
+      <h4>Alt 텍스트 자동 생성</h4>
+      <p>형식: "{상품명} {컬러} {포즈/용도} - AI 모델 착용컷". SEO + 접근성 동시 만족.</p>
+    </div>
+  </div>
+</section>
+
+<section id="mobile">
+  <h2>모바일 퍼스트 레이아웃</h2>
+  <p class="lead">
+    뉴톡 트래픽의 80% 이상이 모바일입니다. 375px 기준 최적화 후, PC(1280px)에서 여백과 그리드를 확장합니다.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>모바일 규칙</h3>
+      <ul class="list">
+        <li>이미지: 전폭 100%, 세로 나열</li>
+        <li>텍스트: 좌우 패딩 16px, 본문 14px</li>
+        <li>사이즈표: 가로 스크롤 허용, 고정 헤더</li>
+        <li>코디 추천: 가로 스와이프 카드</li>
+        <li>CTA 버튼: 하단 고정 (V1 유지)</li>
+        <li>이미지 간격: 2px (밀착 나열)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>PC 확장 규칙</h3>
+      <ul class="list">
+        <li>콘텐츠 최대폭: 860px 중앙 정렬</li>
+        <li>이미지: 2열 그리드 옵션</li>
+        <li>텍스트: 좌우 패딩 40px, 본문 15px</li>
+        <li>사이즈표: 전체 노출</li>
+        <li>코디 추천: 가로 3열 그리드</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>모바일 와이어프레임</h3>
+  <div class="mobile-frame">
+    <div class="notch"></div>
+    <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:8px;text-align:center;min-height:180px;display:grid;place-items:center">
+      <div><b style="font-size:11px;color:#065f46">B1 히어로 이미지</b><br><span style="font-size:10px;color:#6b7280">전폭 감성컷 + 한줄 카피</span></div>
+    </div>
+    <div style="padding:8px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700">B2 핵심 판매 카피</div>
+      <div style="font-size:9px;color:#6b7280;margin-top:4px">소재, 핏, 활용도 3~5줄</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:8px">
+      <div style="background:#e5e7eb;border-radius:4px;min-height:100px;display:grid;place-items:center"><span style="font-size:9px">전신1</span></div>
+      <div style="background:#e5e7eb;border-radius:4px;min-height:100px;display:grid;place-items:center"><span style="font-size:9px">전신2</span></div>
+      <div style="background:#e5e7eb;border-radius:4px;min-height:100px;display:grid;place-items:center"><span style="font-size:9px">전신3</span></div>
+      <div style="background:#e5e7eb;border-radius:4px;min-height:100px;display:grid;place-items:center"><span style="font-size:9px">전신4</span></div>
+    </div>
+    <div style="padding:8px;margin-bottom:8px;border-top:1px solid #e5e7eb">
+      <div style="font-size:11px;font-weight:700">B4 핏 설명</div>
+      <div style="font-size:9px;color:#6b7280">모델 168cm/S 착용</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-bottom:8px">
+      <div style="background:#dbeafe;border-radius:4px;min-height:70px;display:grid;place-items:center"><span style="font-size:8px">디테일1</span></div>
+      <div style="background:#dbeafe;border-radius:4px;min-height:70px;display:grid;place-items:center"><span style="font-size:8px">디테일2</span></div>
+      <div style="background:#dbeafe;border-radius:4px;min-height:70px;display:grid;place-items:center"><span style="font-size:8px">디테일3</span></div>
+    </div>
+    <div style="padding:8px;margin-bottom:8px;background:#f0fdf4;border-radius:6px">
+      <div style="font-size:11px;font-weight:700">B8 코디 추천</div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <div style="width:50px;height:50px;background:#d1fae5;border-radius:4px;display:grid;place-items:center"><span style="font-size:7px">부상품1</span></div>
+        <div style="width:50px;height:50px;background:#d1fae5;border-radius:4px;display:grid;place-items:center"><span style="font-size:7px">부상품2</span></div>
+        <div style="width:50px;height:50px;background:#d1fae5;border-radius:4px;display:grid;place-items:center"><span style="font-size:7px">부상품3</span></div>
+      </div>
+    </div>
+    <div style="padding:8px;background:#fee2e2;border-radius:6px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:#991b1b">B9 사이즈 + B12 배송 + B13 AI표시</div>
+    </div>
+  </div>
+</section>
+
+<section id="seo">
+  <h2>SEO 최적화</h2>
+  <table>
+    <thead><tr><th>SEO 항목</th><th>자동 생성 규칙</th><th>예시</th></tr></thead>
+    <tbody>
+      <tr><td>페이지 타이틀</td><td>{상품명} - {카테고리} | 뉴톡</td><td>오버핏 크롭 블레이저 - 여성 자켓 | 뉴톡</td></tr>
+      <tr><td>Meta Description</td><td>B2 핵심 카피의 첫 2줄 (120자 이내)</td><td>데일리 오피스룩에 딱 맞는 오버핏 블레이저...</td></tr>
+      <tr><td>이미지 Alt</td><td>{상품명} {컬러} {용도}</td><td>오버핏 크롭 블레이저 블랙 전신 착용컷</td></tr>
+      <tr><td>OG Image</td><td>B1 히어로 이미지 URL</td><td>SNS 공유 시 히어로 이미지 노출</td></tr>
+      <tr><td>JSON-LD Product</td><td>상품명, 가격, 재고, 이미지, 브랜드</td><td>네이버/구글 쇼핑 리치 스니펫</td></tr>
+    </tbody>
+  </table>
+  <div class="highlight-box green">
+    <b>네이버 쇼핑 최적화:</b> EP(상품피드)에 상세페이지 URL, 대표 이미지, 카테고리 코드, 가격을 자동 매핑.
+    이미지 파일명에 상품명 키워드를 포함하여 네이버 이미지 검색 노출 극대화.
+  </div>
+</section>
+
+<section id="ab-test">
+  <h2>A/B 테스트 시스템</h2>
+  <p class="lead">
+    P0 수동 A/B 비교, P1 자동 트래픽 분배. 템플릿·히어로·카피·블록 순서를 달리한 변형으로 전환율을 비교합니다.
+  </p>
+  <table>
+    <thead><tr><th>테스트 항목</th><th>A안 (기본)</th><th>B안 (변형)</th><th>측정 지표</th></tr></thead>
+    <tbody>
+      <tr><td>히어로 이미지</td><td>감성컷</td><td>모델 전신컷</td><td>스크롤 유지율</td></tr>
+      <tr><td>카피 톤</td><td>미니멀</td><td>캐주얼</td><td>CTA 클릭률</td></tr>
+      <tr><td>코디 블록 위치</td><td>B8 (하단)</td><td>B3 직후 (상단)</td><td>부상품 장바구니율</td></tr>
+      <tr><td>이미지 수량</td><td>4장 (간결)</td><td>8장 (풍부)</td><td>페이지 이탈률</td></tr>
+    </tbody>
+  </table>
+  <div class="sub-grid">
+    <div class="sub-card">
+      <h4>P0 수동 A/B</h4>
+      <p>"변형 추가" 버튼으로 기존 상세페이지 복제 → 히어로/카피/템플릿 변경 → 별도 URL 저장 → 7일 이상 성과 수집 후 우수 변형 기본 설정.</p>
+    </div>
+    <div class="sub-card">
+      <h4>P1 자동 A/B</h4>
+      <p>트래픽 50:50 자동 분배 → 통계 유의성 도달 시 자동 승격 → MAB(Multi-Armed Bandit) 알고리즘으로 실시간 최적화.</p>
+    </div>
+  </div>
+</section>
+
+<section id="wholesale">
+  <h2>도매몰 자동등록 연동</h2>
+  <p class="lead">
+    생성된 상세페이지를 뉴톡 자체 쇼핑몰뿐 아니라 도매몰(신상마켓 등)에도 자동 등록합니다.
+  </p>
+
+  <table>
+    <thead><tr><th>플랫폼</th><th>포맷</th><th>이미지 규격</th><th>연동 방식</th><th>P0/P1</th></tr></thead>
+    <tbody>
+      <tr><td><b>신상마켓</b></td><td>HTML 또는 이미지 나열</td><td>최대 860px, JPG/PNG</td><td>API 연동 (V1 라이브러리)</td><td>P0</td></tr>
+      <tr><td><b>동대문닷컴</b></td><td>이미지 세로 나열</td><td>최대 750px, JPG</td><td>이미지 업로드 API</td><td>P1</td></tr>
+      <tr><td><b>링크샵스</b></td><td>HTML</td><td>최대 860px</td><td>상품피드 XML</td><td>P1</td></tr>
+      <tr><td><b>소매몰</b></td><td>HTML + 이미지 CDN</td><td>플랫폼별 상이</td><td>각 플랫폼 API (V1 기존)</td><td>P1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>변환 규칙</h3>
+  <div class="sub-grid">
+    <div class="sub-card">
+      <h4>이미지 전용 모드</h4>
+      <p>HTML 미지원 플랫폼용. 블록을 이미지로 렌더링(Puppeteer) 후 세로 나열.</p>
+    </div>
+    <div class="sub-card">
+      <h4>가격 변환</h4>
+      <p>도매가(wholesale_price)로 자동 전환. 소비자가 제거, 도매 단가/MOQ/마진율 표시.</p>
+    </div>
+    <div class="sub-card">
+      <h4>AI 표시 조정</h4>
+      <p>도매몰에서는 B2B 맥락에 맞게 "AI 촬영 대체 이미지" 등 용어 변경.</p>
+    </div>
+  </div>
+
+  <div class="highlight-box amber">
+    <b>V1 기존 연동 활용:</b> 뉴톡 V1에는 이미 쿠팡/스마트스토어/ESM+/11번가/위메프/신상마켓 API 연동 라이브러리가
+    (<code>/seller/</code> 디렉토리) 구축되어 있습니다. V2에서 재활용하여 상세페이지 HTML을 각 플랫폼 포맷으로 변환합니다.
+  </div>
+</section>
+
+<section id="pipeline">
+  <h2>상세페이지 생성 파이프라인</h2>
+  <p class="lead">
+    워크플로우 ⑥단계 완료 후 자동 트리거. 4단계 순차 처리, 각 단계 실패 시 재시도 또는 운영자 개입 요청.
+  </p>
+
+  <table>
+    <thead><tr><th>단계</th><th>처리 내용</th><th>입력</th><th>출력</th><th>시간</th><th>실패 시</th></tr></thead>
+    <tbody>
+      <tr><td><b>P1. 이미지 수집</b></td><td>승인 이미지 수집 + 블록별 배치</td><td>ai_product_assets (approved)</td><td>블록별 이미지 매핑 JSON</td><td>2~5초</td><td>승인 이미지 부족 → 운영자 추가 승인 요청</td></tr>
+      <tr><td><b>P2. 카피 생성</b></td><td>블록별 AI 카피 생성 + 검증</td><td>상품 정보 + 페르소나 톤</td><td>블록별 카피 JSON</td><td>10~20초</td><td>검증 실패 → 자동 재생성 (최대 3회)</td></tr>
+      <tr><td><b>P3. HTML 조립</b></td><td>템플릿 + 블록 + 이미지 + 카피</td><td>이미지 매핑 + 카피 + 템플릿</td><td>완성 HTML + 블록 JSON</td><td>3~5초</td><td>오류 → 기본 T1 템플릿 폴백</td></tr>
+      <tr><td><b>P4. 후처리</b></td><td>리사이즈/압축 + SEO + 도매몰 변환</td><td>완성 HTML</td><td>최종 HTML + 도매몰용 세트</td><td>10~30초</td><td>이미지 처리 실패 → 원본 이미지 폴백</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <b>전체 소요:</b> 25~60초 | <b>비용:</b> AI 카피 1회 약 $0.01~0.03 | <b>재시도:</b> 단계별 최대 3회, 전체 실패 시 운영자 알림
+  </div>
+</section>
+
+<section id="data">
+  <h2>데이터 설계</h2>
+
+  <h3>핵심 테이블: ai_detail_pages</h3>
+  <table>
+    <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>SERIAL PK</td><td>상세페이지 고유 ID</td></tr>
+      <tr><td><code>workflow_id</code></td><td>INT FK</td><td>ai_product_workflows 참조</td></tr>
+      <tr><td><code>product_id</code></td><td>INT FK</td><td>products 참조</td></tr>
+      <tr><td><code>template_id</code></td><td>VARCHAR(20)</td><td>T1~T5 템플릿 코드</td></tr>
+      <tr><td><code>html_content</code></td><td>TEXT</td><td>완성 상세페이지 HTML</td></tr>
+      <tr><td><code>blocks_json</code></td><td>JSONB</td><td>블록 구조 + 이미지/카피 매핑</td></tr>
+      <tr><td><code>copy_json</code></td><td>JSONB</td><td>생성 카피 원문 + confidence</td></tr>
+      <tr><td><code>seo_json</code></td><td>JSONB</td><td>title, description, og_image, json_ld</td></tr>
+      <tr><td><code>version</code></td><td>INT</td><td>버전 (A/B 변형 포함)</td></tr>
+      <tr><td><code>variant_label</code></td><td>VARCHAR(10)</td><td>'A', 'B', 'C' 또는 NULL</td></tr>
+      <tr><td><code>status</code></td><td>VARCHAR(20)</td><td>draft→review→approved→published→archived</td></tr>
+      <tr><td><code>v1_goods_idx</code></td><td>INT</td><td>V1 상품 매핑</td></tr>
+      <tr><td><code>wholesale_html</code></td><td>TEXT</td><td>도매몰용 변환 HTML</td></tr>
+      <tr><td><code>published_at</code></td><td>TIMESTAMPTZ</td><td>판매 반영 시각</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>생성 시각</td></tr>
+    </tbody>
+  </table>
+
+  <h3>성과 테이블: ai_detail_page_metrics</h3>
+  <table>
+    <thead><tr><th>컬럼</th><th>타입</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td><code>detail_page_id</code></td><td>INT FK</td><td>ai_detail_pages 참조</td></tr>
+      <tr><td><code>date</code></td><td>DATE</td><td>집계 일자</td></tr>
+      <tr><td><code>views</code></td><td>INT</td><td>조회수</td></tr>
+      <tr><td><code>scroll_depth_avg</code></td><td>FLOAT</td><td>평균 스크롤 깊이 (%)</td></tr>
+      <tr><td><code>time_on_page_avg</code></td><td>FLOAT</td><td>평균 체류시간 (초)</td></tr>
+      <tr><td><code>cart_adds</code></td><td>INT</td><td>장바구니 추가 수</td></tr>
+      <tr><td><code>purchases</code></td><td>INT</td><td>구매 수</td></tr>
+      <tr><td><code>sub_product_clicks</code></td><td>INT</td><td>코디 부상품 클릭 수</td></tr>
+    </tbody>
+  </table>
+
+  <h3>API 엔드포인트</h3>
+  <table>
+    <thead><tr><th>API</th><th>메서드</th><th>목적</th></tr></thead>
+    <tbody>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/generate</code></td><td>POST</td><td>상세페이지 자동생성 트리거</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page</code></td><td>GET</td><td>생성 상세페이지 조회</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/blocks</code></td><td>PATCH</td><td>블록 편집</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/preview</code></td><td>GET</td><td>모바일/PC 미리보기</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/approve</code></td><td>POST</td><td>상세페이지 승인</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/publish</code></td><td>POST</td><td>V1 판매 시스템 반영</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/wholesale</code></td><td>POST</td><td>도매몰 자동등록</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/variant</code></td><td>POST</td><td>A/B 변형 생성</td></tr>
+      <tr><td><code>/api/ai-fashion/workflows/{id}/detail-page/metrics</code></td><td>GET</td><td>성과 조회</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="review">
+  <h2>검수 기준</h2>
+
+  <h3>자동 검수 (P4 직후)</h3>
+  <table>
+    <thead><tr><th>항목</th><th>기준</th><th>자동 탈락</th><th>검증 방법</th></tr></thead>
+    <tbody>
+      <tr><td>필수 블록</td><td>B1,B2,B3,B4,B5,B9,B12,B13 모두 포함</td><td>1개 누락 시</td><td>blocks_json 파싱</td></tr>
+      <tr><td>이미지 로드</td><td>모든 이미지 HTTP 200</td><td>1장 404</td><td>URL 헬스체크</td></tr>
+      <tr><td>HTML 용량</td><td>500KB 이하</td><td>초과 시 재압축</td><td>strlen</td></tr>
+      <tr><td>모바일 렌더링</td><td>375px 가로 스크롤 없음</td><td>발생 시</td><td>Puppeteer 검증</td></tr>
+      <tr><td>카피 금지 표현</td><td>0건</td><td>1건 이상</td><td>정규식</td></tr>
+      <tr><td>가격 일치</td><td>카피 가격 = 판매가</td><td>불일치</td><td>숫자 추출 비교</td></tr>
+      <tr><td>AI 표시</td><td>B13 블록 + 고지 문구</td><td>미포함</td><td>텍스트 검색</td></tr>
+    </tbody>
+  </table>
+
+  <h3>운영자 검수 체크리스트</h3>
+  <div class="grid">
+    <div class="card ok">
+      <h3>✅ 승인</h3>
+      <ul class="list">
+        <li>상품 실물과 모델컷 색상/핏/길이 일치</li>
+        <li>카피가 상품 특성을 정확히 설명</li>
+        <li>코디 부상품이 판매 가능 상태</li>
+        <li>사이즈표 수치 정확</li>
+        <li>모바일 미리보기 가독성 확인</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h3>⚠️ 조건부 승인</h3>
+      <ul class="list">
+        <li>카피 일부 수정 (직접 편집)</li>
+        <li>이미지 순서 변경</li>
+        <li>사이즈표 수치 보정</li>
+        <li>코디 부상품 1개 교체</li>
+      </ul>
+    </div>
+    <div class="card risk">
+      <h3>❌ 반려</h3>
+      <ul class="list">
+        <li>모델컷 색상이 실물과 현저히 다름</li>
+        <li>핵심 디테일(로고, 패턴) 왜곡</li>
+        <li>과장 광고·허위 정보</li>
+        <li>부적절 연출</li>
+        <li>이미지 품질 저하</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap">
+  <h2>구현 로드맵</h2>
+  <table>
+    <thead><tr><th>단계</th><th>작업</th><th>산출물</th><th>완료 기준</th><th>의존성</th></tr></thead>
+    <tbody>
+      <tr><td><b>R1</b></td><td>V1 상세페이지 HTML 분석 + 템플릿 설계</td><td>5개 템플릿 HTML/CSS, V1 호환 테스트</td><td>V1 렌더러에서 정상 노출</td><td>없음</td></tr>
+      <tr><td><b>R2</b></td><td>블록 시스템 구현 (13개 블록 컴포넌트)</td><td>블록 JSON 스키마, 조립 엔진</td><td>블록 조합으로 HTML 생성</td><td>R1</td></tr>
+      <tr><td><b>R3</b></td><td>AI 카피 생성 + 검증 시스템</td><td>카피 생성 API, 금지 표현 필터</td><td>10개 상품 카피 생성+검증 통과</td><td>R2</td></tr>
+      <tr><td><b>R4</b></td><td>이미지 자동 배치 + 후처리</td><td>이미지 선택 엔진, 리사이즈/압축</td><td>블록별 이미지 자동 배치</td><td>R2, ⑤⑥ 완료</td></tr>
+      <tr><td><b>R5</b></td><td>상세페이지 빌더 UI (편집·미리보기)</td><td>관리자 에디터, 미리보기</td><td>운영자 블록 편집 가능</td><td>R2~R4</td></tr>
+      <tr><td><b>R6</b></td><td>V1 판매 반영 + 도매몰 자동등록</td><td>V1 연동 API, 신상마켓 등록</td><td>V1 + 신상마켓 노출</td><td>R5</td></tr>
+      <tr><td><b>R7</b></td><td>성과 추적 + A/B 테스트 (P1)</td><td>메트릭 대시보드, 변형 UI</td><td>변형별 전환율 비교</td><td>R6</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="criteria">
+  <h2>P0 완료 기준</h2>
+  <div class="card ok">
+    <h3>상품 10개 파일럿 기준</h3>
+    <ul class="list">
+      <li>상품 10개 자동생성 상세페이지 → 운영자 검수 후 V1 반영</li>
+      <li>5개 템플릿 중 3개 이상 실제 사용</li>
+      <li>AI 카피 승인률 70% 이상</li>
+      <li>자동생성 소요시간: 평균 60초 이내</li>
+      <li>모바일 정상 노출 (가로 스크롤 없음, 이미지 로드 100%)</li>
+      <li>필수 블록 8개 + AI 표시 정상</li>
+      <li>코디 블록 부상품 클릭 → 상품 페이지 이동 정상</li>
+      <li>신상마켓 1개 플랫폼 자동등록 성공</li>
+    </ul>
+  </div>
+  <div class="card warn">
+    <h3>P1 전환 조건</h3>
+    <ul class="list">
+      <li>P0 파일럿 10개 상품 7일 이상 성과 데이터 수집</li>
+      <li>카피 승인률 → 자동 재학습 파이프라인</li>
+      <li>자동 A/B 테스트 트래픽 분배</li>
+      <li>추가 도매몰 3개 이상 연동</li>
+      <li>소매몰(스마트스토어, 쿠팡) 포맷 변환</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>문서 근거: NTV2 DB 실측(products, product_images, product_details), V1 상품등록 코드 분석, 기존 사업기획서, 사용자흐름 v2.</p>
+  <p>
+    관련 문서:
+    <a href="/reports/newtalk-ai-fashion-influencer-plan-v1.html">사업기획서 v1</a> ·
+    <a href="/reports/newtalk-ai-fashion-user-flow-detail-v2.html">사용자흐름 v2</a> ·
+    <a href="/reports/newtalk-ai-fashion-product-workflow-detail-p0.html">상품제작 P0</a> ·
+    <a href="/reports/newtalk-ai-fashion-uiux-plan-p0.html">UI/UX P0</a> ·
+    <a href="/reports/newtalk-ai-fashion-persona-cards-p0.html">페르소나 P0</a> ·
+    <a href="/reports/newtalk-ai-fashion-commerce-flow-plan-p0.html">실행흐름 P0</a>
+  </p>
+  <p style="margin-top:12px;color:#9ca3af;font-size:12px">Generated: 2026-05-13 13:31 KST · AADS CTO AI · NewTalk V2 Project</p>
+</footer>
+
+</body>
+</html>
