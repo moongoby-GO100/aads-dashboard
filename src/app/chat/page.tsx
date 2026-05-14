@@ -6397,6 +6397,34 @@ export default function ChatPage() {
                   continue;
                 }
               }
+              if (msg.role === "assistant" && msg.intent !== "rate_limited") {
+                const baseContent = normalizedMessageContent(msg);
+                const isDraftLike = (item: ChatMessage) =>
+                  item.intent === "streaming_placeholder" ||
+                  isLocalTransientMessage(item) ||
+                  item.model_used === "interrupted" ||
+                  item.model_used === "recovered";
+                let j = i + 1;
+                while (j < sorted.length && sorted[j].role === "assistant") {
+                  const next = sorted[j];
+                  const nextContent = normalizedMessageContent(next);
+                  const overlaps =
+                    baseContent.length > 30 &&
+                    nextContent.length > 30 &&
+                    (baseContent.startsWith(nextContent) || nextContent.startsWith(baseContent));
+                  if (!overlaps || (!isDraftLike(msg) && !isDraftLike(next))) break;
+                  j++;
+                }
+                if (j > i + 1) {
+                  const group = sorted.slice(i, j);
+                  const keeper = group
+                    .slice()
+                    .sort((a, b) => normalizedMessageContent(b).length - normalizedMessageContent(a).length)[0];
+                  display.push({ msg: keeper, idx: i, hiddenMsgs: group.filter((item) => item.id !== keeper.id) });
+                  i = j;
+                  continue;
+                }
+              }
               display.push({ msg, idx: i });
               i++;
             }
