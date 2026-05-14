@@ -239,14 +239,15 @@ function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = 
   return messages.map((message) => {
     if (message.intent !== "streaming_placeholder") return message;
     const preservedContent = (message.content || fallbackContent || "").trim();
+    if (!preservedContent) return null;
     return {
       ...message,
-      content: preservedContent || "⏳ 이전 응답을 보존 중입니다...",
+      content: preservedContent,
       intent: undefined,
       model_used: message.model_used === "streaming" ? "interrupted" : message.model_used,
       render_id: message.render_id || message.id,
     };
-  });
+  }).filter(Boolean) as ChatMessage[];
 }
 
 function surfaceDbSavedStreamingPlaceholders(
@@ -433,6 +434,14 @@ function mergeServerMessagesPreservingLocal(
       )
       .map((message) => message.execution_id as string)
   );
+  const hasServerAssistantAtOrAfter = (localMessage: ChatMessage) => {
+    const localTime = messageTime(localMessage);
+    return incomingMessages.some((message) =>
+      message.role === "assistant" &&
+      message.intent !== "rate_limited" &&
+      messageTime(message) >= localTime - 1000
+    );
+  };
   const mergedIncoming = incomingMessages.map((serverMessage) => {
     const existingMessage = prev.find((message) => message.id === serverMessage.id);
     const serverMessageWithPreservedContent = mergeServerMessageWithExisting(existingMessage, serverMessage);
@@ -457,6 +466,12 @@ function mergeServerMessagesPreservingLocal(
     ...prev.filter((message) =>
       !incomingIds.has(message.id) &&
       !(message.intent === "streaming_placeholder" && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
+      !(
+        !options.preserveStreamingPlaceholders &&
+        isLocalTransientMessage(message) &&
+        isStreamingPlaceholderMessage(message) &&
+        hasServerAssistantAtOrAfter(message)
+      ) &&
       !(isLocalTransientMessage(message) && matchedLocalIds.has(message.id))
     ),
     ...mergedIncoming,

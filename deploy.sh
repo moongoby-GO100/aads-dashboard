@@ -20,6 +20,7 @@ BLUE_CONTAINER="aads-dashboard"
 GREEN_CONTAINER="aads-dashboard-green"
 BLUE_PORT="3100"
 GREEN_PORT="3101"
+STATE_DIR="/root/aads/aads-dashboard"
 HEALTH_BLUE="http://127.0.0.1:${BLUE_PORT}/login"
 HEALTH_GREEN="http://127.0.0.1:${GREEN_PORT}/login"
 HEALTH_EXTERNAL="${DASHBOARD_EXTERNAL_HEALTH_URL:-https://aads.newtalk.kr/login}"
@@ -27,6 +28,13 @@ NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
 MAX_WAIT=90
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
+
+write_active_state() {
+    local container="$1"
+    local port="$2"
+    printf '%s\n' "$container" > "${STATE_DIR}/.active_container"
+    printf '%s\n' "$port" > "${STATE_DIR}/.active_port"
+}
 
 nginx_test() {
     local test_log="/tmp/aads-dashboard-nginx-test.log"
@@ -159,6 +167,7 @@ if [ "$ACTIVE_SLOT" = "blue" ]; then
     TARGET_SLOT="green"
     TARGET_SERVICE="$GREEN_SERVICE"
     TARGET_CONTAINER="$GREEN_CONTAINER"
+    TARGET_PORT="$GREEN_PORT"
     TARGET_HEALTH="$HEALTH_GREEN"
     COMPOSE_ARGS+=(--profile green)
     PREV_SLOT="blue"
@@ -169,6 +178,7 @@ else
     TARGET_SLOT="blue"
     TARGET_SERVICE="$BLUE_SERVICE"
     TARGET_CONTAINER="$BLUE_CONTAINER"
+    TARGET_PORT="$BLUE_PORT"
     TARGET_HEALTH="$HEALTH_BLUE"
     PREV_SLOT="green"
     PREV_SERVICE="$GREEN_SERVICE"
@@ -214,6 +224,7 @@ if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     nginx_test && nginx_reload
     exit 1
 fi
+write_active_state "$TARGET_CONTAINER" "$TARGET_PORT"
 
 # Step 5: 이전 슬롯 동기화
 if [ "${AADS_DASHBOARD_STOP_PREVIOUS:-false}" = "true" ]; then
