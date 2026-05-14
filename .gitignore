@@ -4,3 +4,10 @@ node_modules/
 .env*.local
 npm-debug.log*
 page.tsx.bak_refactor
+
+# BG runtime markers
+.active_container
+.active_port
+
+# Build cache
+tsconfig.tsbuildinfo
