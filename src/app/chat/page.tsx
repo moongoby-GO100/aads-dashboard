@@ -3659,7 +3659,12 @@ export default function ChatPage() {
             const idx = msgQueueRef.current.indexOf(interruptContent);
             if (idx !== -1) msgQueueRef.current.splice(idx, 1);
             setQueueCount(msgQueueRef.current.length);
-            setYellowWarning(res?.message || "현재 스트리밍이 아니어서 추가 지시를 대기열에서 제거했습니다.");
+            // FIX: streaming stuck 해제 + 입력 복원 (메시지 유실 방지)
+            streamingSessionRef.current = null;
+            setStreaming(false); setStreamBuf("");
+            setInput(interruptContent);
+            setMessages(prev => prev.filter(m => !m.id.startsWith("interrupt-")));
+            setYellowWarning("스트리밍이 종료되어 입력을 복원했습니다. 다시 전송해 주세요.");
             return;
           }
           // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
