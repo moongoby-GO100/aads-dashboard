@@ -673,11 +673,12 @@ const MessageItem = memo(function MessageItem({
 
   // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
   useEffect(() => {
-  useEffect(() => {
     if (!isStreamingPlaceholder && msg.role === "assistant" && msg.content.length > 800) {
       setContentCollapsed(!isLastAssistantMsg);
     }
   }, [isLastAssistantMsg]);
+
+  return (
     <div
       className="ct-msg-enter group"
       style={{
