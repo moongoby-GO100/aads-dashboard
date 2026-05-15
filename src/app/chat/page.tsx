@@ -371,6 +371,31 @@ function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serve
   };
 }
 
+function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage: ChatMessage): ChatMessage[] {
+  const placeholder = prev.find((message) => isStreamingPlaceholderMessage(message));
+  const stableRenderId = placeholder?.render_id || placeholder?.id || finalMessage.render_id || finalMessage.id;
+  const messageWithStableRenderId: ChatMessage = {
+    ...finalMessage,
+    id: finalMessage.id || placeholder?.id || `ai-${Date.now()}`,
+    content: finalMessage.content || placeholder?.content || "",
+    render_id: stableRenderId,
+  };
+
+  let replaced = false;
+  const next = prev.flatMap((message) => {
+    if (!isStreamingPlaceholderMessage(message)) return [message];
+    if (replaced) return [];
+    replaced = true;
+    return [messageWithStableRenderId];
+  });
+
+  if (replaced) return next;
+  return [
+    ...prev.filter((message) => !message.id.startsWith("ai-partial-")),
+    messageWithStableRenderId,
+  ].sort((a, b) => messageTime(a) - messageTime(b));
+}
+
 function getLatestFinalAssistantId(messages: ChatMessage[]): string | null {
   return messages
     .filter((message) => message.role === "assistant" && message.intent !== "streaming_placeholder" && message.intent !== "rate_limited")
@@ -672,25 +697,14 @@ const MessageItem = memo(function MessageItem({
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
-  const toolsOpenLockedRef = useRef(false);
-  useEffect(() => {
-    if (isLastAssistantMsg && !isActiveStreaming) {
-      setToolsOpen(true);
-      toolsOpenLockedRef.current = true;
-    }
-  }, [isLastAssistantMsg, isActiveStreaming]);
+  const forceToolsOpen = Boolean(isLastAssistantMsg && !isActiveStreaming);
+  const effectiveToolsOpen = forceToolsOpen || toolsOpen;
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
   );
-  const effectiveContentCollapsed = isStreamingPlaceholder ? false : contentCollapsed;
-
-  // 마지막 응답 자동 펼침: isLastAssistantMsg가 true가 되면 펼침 (false 전환 시 접지 않음 — merge 깜빡임 방지)
-  useEffect(() => {
-    if (isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant") {
-      setContentCollapsed(false);
-    }
-  }, [isLastAssistantMsg]);
+  const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant");
+  const effectiveContentCollapsed = isStreamingPlaceholder || forceContentOpen ? false : contentCollapsed;
 
   return (
     <div
@@ -1082,7 +1096,7 @@ const MessageItem = memo(function MessageItem({
                 const hydrateFailed = normalizedToolEvents.length === 0 && toolHydrationStatus === "error";
                 const needsHydrate = normalizedToolEvents.length === 0 && !toolHydrationStatus && Boolean(msg.has_tools);
                 return (
-                  <details open={toolsOpen} onToggle={(e) => setToolsOpen((e.target as HTMLDetailsElement).open)} style={{marginBottom: '8px'}}>
+                  <details open={effectiveToolsOpen} onToggle={(e) => setToolsOpen((e.target as HTMLDetailsElement).open)} style={{marginBottom: '8px'}}>
                     <summary style={{
                       cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
                       borderRadius: '8px', background: 'rgba(108,99,255,0.06)',
@@ -4061,16 +4075,11 @@ export default function ChatPage() {
                     tool_names: Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
                     created_at: new Date().toISOString(),
                   };
-                  if (hasPlaceholder) {
-                    return prev.map(m => m.intent === "streaming_placeholder" ? finalMsg : m);
-                  }
-                  return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
+                  return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
               }
               if (requestSessionId) {
-                const doneSessionId = requestSessionId;
-                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 350);
-                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 1500);
+                mergeCooldownUntilRef.current = Date.now() + 5000;
               }
               break; // done 이벤트 수신 → for 루프 탈출
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -4166,15 +4175,10 @@ export default function ChatPage() {
                   tool_count: eventMessage.tool_count ?? accumulatedToolCalls.filter((toolEv) => toolEv.type === "tool_use").length,
                   tool_names: eventMessage.tool_names ?? Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
                 } as ChatMessage;
-                const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                if (hasPlaceholder) {
-                  return prev.map(m => m.intent === "streaming_placeholder" ? mergedMessage : m);
-                }
-                return [...prev.filter(m => m.intent !== "streaming_placeholder"), mergedMessage];
+                return replaceStreamingPlaceholderWithFinal(prev, mergedMessage);
               });
               if (requestSessionId) {
-                const doneSessionId = requestSessionId;
-                setTimeout(() => { void mergeLatestAssistantFromServer(doneSessionId); }, 350);
+                mergeCooldownUntilRef.current = Date.now() + 5000;
               }
               break; // done → for 루프 탈출
             } else if (ev.type === "yellow_limit") {
@@ -4251,11 +4255,8 @@ export default function ChatPage() {
         setStreamBuf("");
         // ★ in-place 업데이트
         setMessages((prev) => {
-          const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
           const finalMsg = {
-            id: hasPlaceholder
-              ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
-              : `ai-${Date.now()}`,
+            id: `ai-${Date.now()}`,
             session_id: requestSessionId!,
             execution_id: currentExecutionIdRef.current || undefined,
             role: "assistant" as const,
@@ -4265,13 +4266,10 @@ export default function ChatPage() {
             tool_count: accumulatedToolCalls.filter((toolEv) => toolEv.type === "tool_use").length,
             tool_names: Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
           };
-          if (hasPlaceholder) {
-            return prev.map(m => m.intent === "streaming_placeholder" ? finalMsg : m);
-          }
-          return [...prev.filter(m => m.intent !== "streaming_placeholder"), finalMsg];
+          return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
         });
         // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
-        if (sessionId) {
+        if (sessionId && !gotFinal) {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sessionId);
           setToolStatus("🔄 응답 확인 중...");
@@ -4417,23 +4415,15 @@ export default function ChatPage() {
                     setToolStatus(null);
                     if (full.trim()) {
                       // ★ in-place 업데이트: placeholder를 최종 응답으로 교체
-                      setMessages((prev) => {
-                        const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                        if (hasPlaceholder) {
-                          return prev.map(m => m.intent === "streaming_placeholder"
-                            ? { ...m, content: full, intent: undefined }
-                            : m
-                          );
-                        }
-                        const _ph = prev.find(m => m.id.startsWith("ai-partial-"));
-                        const _reuseId = _ph?.id || `ai-${Date.now()}`;
-                        const _reuseTime = _ph?.created_at || new Date().toISOString();
-                        return [
-                          ...prev.filter(m => !m.id.startsWith("ai-partial-")),
-                          { id: _reuseId, session_id: sessionId!, role: "assistant" as const, content: full, created_at: _reuseTime },
-                        ];
-                      });
-                      requestAnimationFrame(() => { setStreamBuf(""); setStreaming(false); });
+                      setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, {
+                        id: `ai-${Date.now()}`,
+                        session_id: sessionId!,
+                        role: "assistant" as const,
+                        content: full,
+                        created_at: new Date().toISOString(),
+                      }));
+                      setStreamBuf("");
+                      setStreaming(false);
                     } else {
                       setStreamBuf(""); setStreaming(false);
                     }
@@ -4524,21 +4514,12 @@ export default function ChatPage() {
                 if (!frozenContent || resp.message.content.length > frozenContent.length) {
                   // ★ in-place 업데이트
                   if (!isStale()) setStreamBuf(resp.message.content);
-                  setMessages((prev) => {
-                    const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                    if (hasPlaceholder) {
-                      return prev.map(m => m.intent === "streaming_placeholder"
-                        ? { ...resp.message!, intent: undefined }
-                        : m
-                      );
-                    }
-                    const filtered = prev.filter(m => !m.id.startsWith("ai-partial-") && m.intent !== "streaming_placeholder");
-                    return [...filtered, resp.message!];
-                  });
-                  requestAnimationFrame(() => {
-                    setStreaming(false);
-                    setStreamBuf("");
-                  });
+                  setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, {
+                    ...resp.message!,
+                    intent: undefined,
+                  }));
+                  setStreaming(false);
+                  setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
                   gotFinal = true;
                 }
@@ -4631,7 +4612,9 @@ export default function ChatPage() {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
                     setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-                    requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
+                    mergeCooldownUntilRef.current = Date.now() + 5000;
+                    setStreaming(false);
+                    setStreamBuf("");
                   }
                 }
                 void refreshTodos(_sid);
