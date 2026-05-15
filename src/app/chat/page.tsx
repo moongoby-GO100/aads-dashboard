@@ -665,6 +665,8 @@ const MessageItem = memo(function MessageItem({
 
   const [toolsOpen, setToolsOpen] = useState(false);
 
+  const [toolsOpen, setToolsOpen] = useState(false);
+
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
