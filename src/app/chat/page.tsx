@@ -665,7 +665,6 @@ const MessageItem = memo(function MessageItem({
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
   useEffect(() => { if (isLastAssistantMsg) { if (!isActiveStreaming) setToolsOpen(true); } }, [isLastAssistantMsg, isActiveStreaming]);
-
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
@@ -674,12 +673,11 @@ const MessageItem = memo(function MessageItem({
 
   // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
   useEffect(() => {
+  useEffect(() => {
     if (!isStreamingPlaceholder && msg.role === "assistant" && msg.content.length > 800) {
       setContentCollapsed(!isLastAssistantMsg);
     }
   }, [isLastAssistantMsg]);
-
-  return (
     <div
       className="ct-msg-enter group"
       style={{
