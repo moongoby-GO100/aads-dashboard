@@ -659,9 +659,11 @@ const MessageItem = memo(function MessageItem({
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
   const normalizedToolEvents = normalizeToolEventsForRender(msg.tools_called);
-  const hasToolSummary = msg.role === "assistant" && !isActiveStreaming && messageHasToolSummary(msg);
+  const hasToolSummary = msg.role === "assistant" && !isActiveStreaming && !streamingContent && messageHasToolSummary(msg);
   const toolEventsForRender = normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg);
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
+
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
@@ -948,7 +950,7 @@ const MessageItem = memo(function MessageItem({
                 </div>
               </details>
             ) : msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
-          ) : isActiveStreaming ? (
+          ) : (isActiveStreaming || Boolean(streamingContent)) ? (
             <>
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
                 <div style={{
@@ -1067,7 +1069,7 @@ const MessageItem = memo(function MessageItem({
                 const hydrateFailed = normalizedToolEvents.length === 0 && toolHydrationStatus === "error";
                 const needsHydrate = normalizedToolEvents.length === 0 && !toolHydrationStatus && Boolean(msg.has_tools);
                 return (
-                  <details style={{marginBottom: '8px'}}>
+                  <details open={toolsOpen} onToggle={(e) => setToolsOpen((e.target as HTMLDetailsElement).open)} style={{marginBottom: '8px'}}>
                     <summary style={{
                       cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
                       borderRadius: '8px', background: 'rgba(108,99,255,0.06)',
@@ -1451,7 +1453,8 @@ const MessageItem = memo(function MessageItem({
   prev.streamingContent === next.streamingContent &&
   prev.streamingThinking === next.streamingThinking &&
   prev.streamToolStatus === next.streamToolStatus &&
-  prev.streamToolLogs === next.streamToolLogs
+  prev.streamToolLogs?.length === next.streamToolLogs?.length &&
+  prev.streamToolLogs?.[prev.streamToolLogs.length - 1]?.text === next.streamToolLogs?.[next.streamToolLogs.length - 1]?.text
 );
 
 // Main component
@@ -2116,7 +2119,7 @@ export default function ChatPage() {
       return [
         ...merged,
         {
-          id: `ai-streaming-${Date.now()}`,
+          id: `ai-streaming-${continuationSessionId}`,
           session_id: continuationSessionId,
           execution_id: currentExecutionIdRef.current || undefined,
           role: "assistant" as const,
@@ -3052,9 +3055,13 @@ export default function ChatPage() {
     const syncTimer = setInterval(() => {
       const buf = streamBufRef.current;
       if (!buf) return;
-      setMessages(prev => prev.map(m =>
-        m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
-      ));
+      setMessages(prev => {
+        const ph = prev.find(m => m.intent === "streaming_placeholder");
+        if (!ph || ph.content === buf) return prev;
+        return prev.map(m =>
+          m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
+        );
+      });
     }, 2000);
     return () => {
       clearInterval(syncTimer);
@@ -3703,7 +3710,7 @@ export default function ChatPage() {
     currentExecutionIdRef.current = null;
     lastEventIdRef.current = "";
     // 스트리밍 placeholder ID 생성 (messages 추가는 userMsg 생성 후 단일 호출로 순서 보장)
-    const streamingPlaceholderId = `ai-streaming-${Date.now()}`;
+    const streamingPlaceholderId = `ai-streaming-${sessionId}`;
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
     // C-3: stale closure 방지 — state 초기화 전에 로컬 변수로 캡처
