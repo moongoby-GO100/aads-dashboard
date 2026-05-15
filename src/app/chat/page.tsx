@@ -462,7 +462,7 @@ function mergeServerMessagesPreservingLocal(
     };
   });
 
-  return [
+  const merged = [
     ...prev.filter((message) =>
       !incomingIds.has(message.id) &&
       !(message.intent === "streaming_placeholder" && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
@@ -476,6 +476,14 @@ function mergeServerMessagesPreservingLocal(
     ),
     ...mergedIncoming,
   ].sort((a, b) => messageTime(a) - messageTime(b));
+  // ★ DEDUP: streaming_placeholder 최대 1개만 유지 (마지막 것 우선)
+  let seenPh = false;
+  for (let i = merged.length - 1; i >= 0; i--) {
+    if (merged[i].intent === "streaming_placeholder" || isStreamingPlaceholderMessage(merged[i])) {
+      if (seenPh) { merged.splice(i, 1); } else { seenPh = true; }
+    }
+  }
+  return merged;
 }
 
 function getWorkspaceSettings(workspace?: Workspace | null): Record<string, unknown> {
@@ -3285,17 +3293,19 @@ export default function ChatPage() {
             }
             return;
           }
-          if (hasPlaceholder) {
+          if (hasPlaceholder && !_streaming) {
             const phMsg = rawLatest.find((m) => m.intent === "streaming_placeholder");
             if (phMsg) {
               setMessages(prev => {
                 const idx = prev.findIndex((m) => m.intent === "streaming_placeholder");
                 if (idx >= 0) {
+                  const existing = prev[idx];
                   const updated = [...prev];
-                  updated[idx] = { ...phMsg, content: phMsg.content || bgPartialContent || "⏳ 생성 중..." };
+                  // ★ FIX: 로컬 placeholder ID 보존 → React 리마운트 방지
+                  updated[idx] = { ...phMsg, id: existing.id, content: phMsg.content || existing.content || bgPartialContent || "⏳ 생성 중...", render_id: existing.render_id || existing.id, execution_id: phMsg.execution_id || existing.execution_id };
                   return updated;
                 }
-                return [...prev, { ...phMsg, content: phMsg.content || bgPartialContent || "⏳ 생성 중..." }];
+                return [...prev, { ...phMsg, content: phMsg.content || bgPartialContent || "⏳ 생성 중...", render_id: phMsg.render_id || phMsg.id }];
               });
               return;
             }
@@ -3304,6 +3314,8 @@ export default function ChatPage() {
         setMessages((prev) => {
           const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
           if (hasStoppedMsg && !_waitingBg) return prev;
+          // ★ FIX: active streaming 중 서버 메시지 병합 시 placeholder 중복 방지
+          if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
       } catch { /* 폴링 실패 무시 */ }
@@ -4021,11 +4033,13 @@ export default function ChatPage() {
               if (full.trim()) {
                 // ★ in-place 업데이트: placeholder를 최종 응답으로 교체 (새 버블 방지)
                 setMessages((prev) => {
-                  const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
+                  const existingPh = prev.find(m => m.intent === "streaming_placeholder");
+                  const hasPlaceholder = Boolean(existingPh);
                   const finalMsg = {
                     id: hasPlaceholder
-                      ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `ai-${Date.now()}`)
+                      ? (existingPh?.id || `ai-${Date.now()}`)
                       : `ai-${Date.now()}`,
+                    render_id: existingPh?.render_id || existingPh?.id,
                     session_id: requestSessionId!,
                     execution_id: currentExecutionIdRef.current || undefined,
                     role: "assistant" as const,
