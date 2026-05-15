@@ -1979,7 +1979,8 @@ export default function ChatPage() {
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
-  const rateLimitedPollRef = useRef(false);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
+  const rateLimitedPollRef = useRef(false);
+  const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
@@ -2283,7 +2284,7 @@ export default function ChatPage() {
                 .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full }).reverse());
               if (activeSessionRef.current !== attachSessionId) return;
               setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
-              void mergeLatestAssistantFromServer(attachSessionId);
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false);
               setWaitingBgResponse(false);
               setStreamBuf("");
@@ -3150,8 +3151,8 @@ export default function ChatPage() {
               const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiJc?.content) setStreamBuf(_lastAiJc.content);
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-              // ★ FIX: 다음 프레임에서 스트리밍 버블 제거 (깜빡임 방지)
-              requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
+              mergeCooldownUntilRef.current = Date.now() + 5000;
+              setStreaming(false); setStreamBuf("");
             } else {
               setStreaming(false); setStreamBuf("");
             }
@@ -3185,7 +3186,8 @@ export default function ChatPage() {
               const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
               if (_lastAiSse?.content) setStreamBuf(_lastAiSse.content);
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-              requestAnimationFrame(() => { setStreaming(false); setStreamBuf(""); });
+              mergeCooldownUntilRef.current = Date.now() + 5000;
+              setStreaming(false); setStreamBuf("");
             } else {
               setStreaming(false); setStreamBuf("");
             }
@@ -3250,6 +3252,7 @@ export default function ChatPage() {
       if (_ssLastMsgId) lastKnownMsgIdRef.current = _ssLastMsgId;
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
+      if (Date.now() < mergeCooldownUntilRef.current) return;
       try {
         const rawLatest = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal&include_streaming=true`
