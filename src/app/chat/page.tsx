@@ -672,17 +672,23 @@ const MessageItem = memo(function MessageItem({
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
-  useEffect(() => { if (isLastAssistantMsg) { if (!isActiveStreaming) setToolsOpen(true); } }, [isLastAssistantMsg, isActiveStreaming]);
+  const toolsOpenLockedRef = useRef(false);
+  useEffect(() => {
+    if (isLastAssistantMsg && !isActiveStreaming) {
+      setToolsOpen(true);
+      toolsOpenLockedRef.current = true;
+    }
+  }, [isLastAssistantMsg, isActiveStreaming]);
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
   );
   const effectiveContentCollapsed = isStreamingPlaceholder ? false : contentCollapsed;
 
-  // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
+  // 마지막 응답 자동 펼침: isLastAssistantMsg가 true가 되면 펼침 (false 전환 시 접지 않음 — merge 깜빡임 방지)
   useEffect(() => {
-    if (!isStreamingPlaceholder && msg.role === "assistant" && msg.content.length > 800) {
-      setContentCollapsed(!isLastAssistantMsg);
+    if (isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant") {
+      setContentCollapsed(false);
     }
   }, [isLastAssistantMsg]);
 
@@ -3147,9 +3153,6 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs;
             if (filtered.length > 0) {
-              // ★ FIX: 최종 AI 메시지를 streamBuf에 먼저 표시 (같은 버블에서 전환)
-              const _lastAiJc = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
-              if (_lastAiJc?.content) setStreamBuf(_lastAiJc.content);
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false); setStreamBuf("");
@@ -3182,9 +3185,6 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs;
             if (filtered.length > 0) {
-              // ★ FIX: 최종 AI 메시지를 streamBuf에 표시 후 전환
-              const _lastAiSse = filtered.filter((m: ChatMessage) => m.role === "assistant").pop();
-              if (_lastAiSse?.content) setStreamBuf(_lastAiSse.content);
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false); setStreamBuf("");
@@ -3273,6 +3273,8 @@ export default function ChatPage() {
             rateLimitedPollRef.current = false;  // 2번: rate_limited 해소 시 ref 초기화
             pendingResponseSessions.current.delete(sid);
             setWaitingBgResponse(false); setBgPartialContent("");
+            mergeCooldownUntilRef.current = Date.now() + 5000;
+            setStreaming(false); setStreamBuf("");
             try {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
                 .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
