@@ -663,9 +663,8 @@ const MessageItem = memo(function MessageItem({
   const toolEventsForRender = normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg);
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
-  const [toolsOpen, setToolsOpen] = useState(false);
-
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
+  useEffect(() => { if (isLastAssistantMsg) { if (!isActiveStreaming) setToolsOpen(true); } }, [isLastAssistantMsg, isActiveStreaming]);
 
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
@@ -676,10 +675,9 @@ const MessageItem = memo(function MessageItem({
   // 마지막 응답 자동 펼침/접힘: isLastAssistantMsg 변화 시 동기화
   useEffect(() => {
     if (!isStreamingPlaceholder && msg.role === "assistant" && msg.content.length > 800) {
-      const timer = window.setTimeout(() => setContentCollapsed(!isLastAssistantMsg), 0);
-      return () => window.clearTimeout(timer);
+      setContentCollapsed(!isLastAssistantMsg);
     }
-  }, [isLastAssistantMsg, isStreamingPlaceholder, msg.role, msg.content.length]);
+  }, [isLastAssistantMsg]);
 
   return (
     <div
