@@ -439,7 +439,7 @@ function mergeServerMessagesPreservingLocal(
     return incomingMessages.some((message) =>
       message.role === "assistant" &&
       message.intent !== "rate_limited" &&
-      messageTime(message) >= localTime - 1000
+      messageTime(message) >= localTime - 30000
     );
   };
   const mergedIncoming = incomingMessages.map((serverMessage) => {
@@ -6444,10 +6444,10 @@ export default function ChatPage() {
                 while (j < sorted.length && sorted[j].role === "assistant") {
                   const next = sorted[j];
                   const nextContent = normalizedMessageContent(next);
+                  const _prefixLen = Math.min(100, baseContent.length, nextContent.length);
                   const overlaps =
-                    baseContent.length > 30 &&
-                    nextContent.length > 30 &&
-                    (baseContent.startsWith(nextContent) || nextContent.startsWith(baseContent));
+                    _prefixLen >= 30 &&
+                    baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
                   if (!overlaps || (!isDraftLike(msg) && !isDraftLike(next))) break;
                   j++;
                 }
