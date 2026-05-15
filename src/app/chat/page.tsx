@@ -3219,7 +3219,7 @@ export default function ChatPage() {
         // STREAMING-STUCK 안전장치: 서버 is_streaming=true + 프론트 streaming=true 지속 시 카운터 증가
         if (ss.is_streaming && _streaming) {
           streamingStuckCount++;
-          if (streamingStuckCount >= 40) {
+          if (streamingStuckCount >= 20) {
             streamingSessionRef.current = null;
             setWaitingBgResponse(false); setBgPartialContent("");
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
@@ -4341,7 +4341,14 @@ export default function ChatPage() {
         const resumeStartTime = Date.now();
         const MAX_RESUME_DURATION = 300000; // 5분(300초)
 
+        let _resumeRetryCount = 0;
         while (!resumed && !gotFinal && !isStale() && !skipToPolling) {
+          // exponential backoff: 2s, 4s, 8s, 16s, max 30s
+          if (_resumeRetryCount > 0) {
+            const _backoffMs = Math.min(2000 * Math.pow(2, _resumeRetryCount - 1), 30000);
+            await new Promise(r => setTimeout(r, _backoffMs));
+          }
+          _resumeRetryCount++;
           // 5분 초과 시 안내 메시지 후 종료
           if (Date.now() - resumeStartTime > MAX_RESUME_DURATION) {
             if (!isStale()) {
