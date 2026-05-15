@@ -1442,6 +1442,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.intent === next.msg.intent &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
+  prev.isLastAssistantMsg === next.isLastAssistantMsg &&
   prev.editingMsgId === next.editingMsgId &&
   (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
   prev.msg.tools_called === next.msg.tools_called &&
