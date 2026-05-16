@@ -390,6 +390,16 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
   });
 
   if (replaced) return next;
+  // ★ DEDUP: placeholder 미존재 시 동일 메시지가 이미 있으면 append 차단 (다중 핸들러 경합 방지)
+  const _fc = (finalMessage.content || "").trim();
+  const _dupExists = prev.some((m) =>
+    m.role === "assistant" &&
+    !isStreamingPlaceholderMessage(m) && (
+      (finalMessage.execution_id && m.execution_id === finalMessage.execution_id && (m.content || "").trim()) ||
+      (_fc.length >= 20 && (m.content || "").trim() === _fc)
+    )
+  );
+  if (_dupExists) return prev.filter((message) => !message.id.startsWith("ai-partial-"));
   return [
     ...prev.filter((message) => !message.id.startsWith("ai-partial-")),
     messageWithStableRenderId,
@@ -507,6 +517,26 @@ function mergeServerMessagesPreservingLocal(
     if (merged[i].intent === "streaming_placeholder" || isStreamingPlaceholderMessage(merged[i])) {
       if (seenPh) { merged.splice(i, 1); } else { seenPh = true; }
     }
+  }
+  // ★ DEDUP: assistant 최종 메시지 중복 제거 — execution_id 또는 content 앞 300자 기준
+  const _seenExec = new Set<string>();
+  const _seenCont = new Set<string>();
+  for (let i = 0; i < merged.length; i++) {
+    const _m = merged[i];
+    if (_m.role !== "assistant" || isStreamingPlaceholderMessage(_m)) continue;
+    const _ct = (_m.content || "").trim();
+    if (!_ct) continue;
+    let _isDup = false;
+    if (_m.execution_id) {
+      if (_seenExec.has(_m.execution_id)) _isDup = true;
+      else _seenExec.add(_m.execution_id);
+    }
+    if (!_isDup && _ct.length >= 20) {
+      const _ck = _ct.slice(0, 300);
+      if (_seenCont.has(_ck)) _isDup = true;
+      else _seenCont.add(_ck);
+    }
+    if (_isDup) { merged.splice(i, 1); i--; }
   }
   return merged;
 }
