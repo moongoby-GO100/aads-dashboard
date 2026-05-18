@@ -3343,7 +3343,13 @@ export default function ChatPage() {
             }
             setMessages(prev => prev.map(m =>
               m.intent === "streaming_placeholder"
-                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
+                ? {
+                    ...m,
+                    content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
+                    intent: undefined,
+                    model_used: "interrupted",
+                    render_id: m.render_id || m.id,
+                  }
                 : m
             ));
             setStreaming(false); setStreamBuf("");
@@ -4589,7 +4595,13 @@ export default function ChatPage() {
             // ★ FIX: 타임아웃 시 버블 유지 — placeholder를 partial 메시지로 교체
             setMessages((prev) => prev.map(m =>
               m.intent === "streaming_placeholder"
-                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
+                ? {
+                    ...m,
+                    content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
+                    intent: undefined,
+                    model_used: "interrupted",
+                    render_id: m.render_id || m.id,
+                  }
                 : m
             ));
             setStreaming(false);
@@ -4667,7 +4679,13 @@ export default function ChatPage() {
               streamingSessionRef.current = null;
               setMessages((prev) => prev.map(m =>
                 m.intent === "streaming_placeholder"
-                  ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
+                  ? {
+                      ...m,
+                      content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
+                      intent: undefined,
+                      model_used: "interrupted",
+                      render_id: m.render_id || m.id,
+                    }
                   : m
               ));
               setStreaming(false);
