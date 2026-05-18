@@ -235,6 +235,16 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
   return message.intent === "streaming_placeholder" || message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-");
 }
 
+function isAssistantDraftMessage(message: ChatMessage): boolean {
+  if (message.role !== "assistant") return false;
+  return (
+    isStreamingPlaceholderMessage(message) ||
+    message.intent === "interrupted_partial" ||
+    message.model_used === "interrupted" ||
+    message.model_used === "recovered"
+  );
+}
+
 function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = ""): ChatMessage[] {
   return messages.map((message) => {
     if (message.intent !== "streaming_placeholder") return message;
@@ -503,7 +513,7 @@ function mergeServerMessagesPreservingLocal(
   const merged = [
     ...prev.filter((message) =>
       !incomingIds.has(message.id) &&
-      !(message.intent === "streaming_placeholder" && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
+      !(isAssistantDraftMessage(message) && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
       !(
         !options.preserveStreamingPlaceholders &&
         isLocalTransientMessage(message) &&
@@ -541,7 +551,48 @@ function mergeServerMessagesPreservingLocal(
     }
     if (_isDup) { merged.splice(i, 1); i--; }
   }
-  return merged;
+  const _finalExecIds = new Set(
+    merged
+      .filter((m) => m.role === "assistant" && !isAssistantDraftMessage(m) && Boolean(m.execution_id))
+      .map((m) => m.execution_id as string)
+  );
+  const _collapsed: ChatMessage[] = [];
+  const _draftByExec = new Map<string, number>();
+  const _draftPriority = (m: ChatMessage) => {
+    if (isStreamingPlaceholderMessage(m)) return 3;
+    if (isLocalTransientMessage(m)) return 2;
+    return 1;
+  };
+  for (const message of merged) {
+    if (!message.execution_id || !isAssistantDraftMessage(message)) {
+      _collapsed.push(message);
+      continue;
+    }
+    const executionId = message.execution_id;
+    if (_finalExecIds.has(executionId)) continue;
+    const existingIndex = _draftByExec.get(executionId);
+    if (existingIndex === undefined) {
+      _draftByExec.set(executionId, _collapsed.length);
+      _collapsed.push(message);
+      continue;
+    }
+    const existing = _collapsed[existingIndex];
+    const existingContent = existing.content || "";
+    const incomingContent = message.content || "";
+    const keepIncoming =
+      _draftPriority(message) > _draftPriority(existing) ||
+      (_draftPriority(message) === _draftPriority(existing) && incomingContent.length > existingContent.length);
+    const preferred = keepIncoming ? message : existing;
+    const fallback = keepIncoming ? existing : message;
+    _collapsed[existingIndex] = {
+      ...preferred,
+      content: incomingContent.length > existingContent.length ? incomingContent : existingContent,
+      render_id: existing.render_id || fallback.render_id || existing.id || fallback.id,
+      tools_called: preferred.tools_called || fallback.tools_called,
+      has_tools: Boolean(preferred.has_tools) || Boolean(fallback.has_tools),
+    };
+  }
+  return _collapsed;
 }
 
 function getWorkspaceSettings(workspace?: Workspace | null): Record<string, unknown> {
@@ -6479,11 +6530,15 @@ export default function ChatPage() {
                 while (j < sorted.length && sorted[j].role === "assistant") {
                   const next = sorted[j];
                   const nextContent = normalizedMessageContent(next);
+                  const sameExecutionDraft =
+                    Boolean(msg.execution_id) &&
+                    msg.execution_id === next.execution_id &&
+                    (isDraftLike(msg) || isDraftLike(next));
                   const _prefixLen = Math.min(100, baseContent.length, nextContent.length);
                   const overlaps =
                     _prefixLen >= 30 &&
                     baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
-                  if (!overlaps || (!isDraftLike(msg) && !isDraftLike(next))) break;
+                  if (!sameExecutionDraft && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
                   j++;
                 }
                 if (j > i + 1) {
