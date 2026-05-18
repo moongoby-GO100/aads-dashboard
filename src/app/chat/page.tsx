@@ -1340,17 +1340,22 @@ const MessageItem = memo(function MessageItem({
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
-        {isActiveStreaming && onStopStreaming && (
-          <button type="button" onClick={onStopStreaming} style={{
-            marginTop: "4px", marginLeft: "4px", padding: "2px 8px",
-            fontSize: "11px", fontWeight: 500,
-            background: "transparent", color: "var(--ct-muted)",
-            border: "1px solid var(--ct-border)", borderRadius: "10px",
-            cursor: "pointer", transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
-          >■ 중지</button>
+        {isActiveStreaming && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", marginLeft: "4px" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)", animation: "pulse 1.5s ease-in-out infinite" }}>🔄 생성 중...</span>
+            {onStopStreaming && (
+              <button type="button" onClick={onStopStreaming} style={{
+                padding: "2px 8px",
+                fontSize: "11px", fontWeight: 500,
+                background: "transparent", color: "var(--ct-muted)",
+                border: "1px solid var(--ct-border)", borderRadius: "10px",
+                cursor: "pointer", transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
+              >■ 중지</button>
+            )}
+          </div>
         )}
         {msg.role === "assistant" && !isActiveStreaming && (
           <div
@@ -1364,7 +1369,16 @@ const MessageItem = memo(function MessageItem({
               gap: "4px",
             }}
           >
-            <span>
+            <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
+              ) : msg.model_used === "recovered" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
+              ) : msg.model_used === "stopped" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>■ 사용자 중지</span>
+              ) : msg.model_used && !['streaming','semantic_cache'].includes(msg.model_used) ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.20)" }}>✅ 완료</span>
+              ) : null}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>[{msg.model_used}</span>}
               {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
               {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
