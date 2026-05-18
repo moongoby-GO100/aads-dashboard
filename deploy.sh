@@ -14,6 +14,7 @@ set -euo pipefail
 
 COMPOSE_DIR="/root/aads/aads-server"
 COMPOSE_FILE="docker-compose.prod.yml"
+COMPOSE_PROJECT="aads-server"
 BLUE_SERVICE="aads-dashboard"
 GREEN_SERVICE="aads-dashboard-green"
 BLUE_CONTAINER="aads-dashboard"
@@ -26,8 +27,28 @@ HEALTH_GREEN="http://127.0.0.1:${GREEN_PORT}/login"
 HEALTH_EXTERNAL="${DASHBOARD_EXTERNAL_HEALTH_URL:-https://aads.newtalk.kr/login}"
 NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
 MAX_WAIT=90
+LOCKFILE="/tmp/aads-dashboard-deploy.lock"
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
+
+if [ -f "$LOCKFILE" ]; then
+    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null || echo "")
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        log "FAIL: 대시보드 배포가 이미 진행 중입니다 (PID=$LOCK_PID)"
+        exit 1
+    fi
+    log "WARN: stale dashboard deploy lock 제거 (PID=${LOCK_PID:-unknown})"
+    rm -f "$LOCKFILE"
+fi
+echo $$ > "$LOCKFILE"
+trap 'rm -f "$LOCKFILE"' EXIT
+
+if git -C "$STATE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-$(git -C "$STATE_DIR" rev-parse --short=12 HEAD)}"
+else
+    export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-unknown}"
+fi
+log "릴리스 SHA: ${AADS_RELEASE_SHA}"
 
 write_active_state() {
     local container="$1"
@@ -83,6 +104,33 @@ wait_health() {
     return 1
 }
 
+container_compose_label() {
+    local container="$1" label="$2"
+    docker inspect "$container" --format "{{ index .Config.Labels \"$label\" }}" 2>/dev/null || true
+}
+
+remove_container_if_foreign() {
+    local container="$1" service="$2"
+    local project actual_service
+
+    if ! docker ps -a --format '{{.Names}}' | grep -Fx "$container" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    project=$(container_compose_label "$container" "com.docker.compose.project")
+    actual_service=$(container_compose_label "$container" "com.docker.compose.service")
+    if [ "$project" != "$COMPOSE_PROJECT" ] || [ "$actual_service" != "$service" ]; then
+        log "WARN: 외부 compose 잔여 컨테이너 정리 (${container}, project=${project:-none}, service=${actual_service:-none})"
+        docker rm -f "$container" >/dev/null 2>&1 || true
+    fi
+}
+
+container_release_sha() {
+    local container="$1"
+    docker inspect "$container" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | awk -F= '$1=="AADS_RELEASE_SHA"{print $2; exit}'
+}
+
 sync_dashboard_standby() {
     local slot="$1" service="$2" container="$3" health_url="$4"
     local args=(-f "$COMPOSE_FILE")
@@ -92,6 +140,7 @@ sync_dashboard_standby() {
     fi
 
     log "Step 5: 이전 슬롯 standby 동기화 (${container})"
+    remove_container_if_foreign "$container" "$service"
     docker compose "${args[@]}" up -d --build --no-deps "$service"
     if wait_health "$health_url" "$MAX_WAIT" "standby-${slot}"; then
         log "OK: 이전 슬롯 standby 동기화 완료 (${container})"
@@ -189,6 +238,7 @@ log "현재 활성 슬롯: $ACTIVE_SLOT"
 log "배포 대상 슬롯: $TARGET_SLOT"
 
 # Step 0.5: 대상 슬롯 잔여 컨테이너 정리
+remove_container_if_foreign "$TARGET_CONTAINER" "$TARGET_SERVICE"
 if docker ps -a --format '{{.Names}}' | grep -Fx "$TARGET_CONTAINER" >/dev/null 2>&1; then
     log "Step 0.5: 대상 슬롯 잔여 컨테이너 정리 (${TARGET_CONTAINER})"
     docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
@@ -236,6 +286,13 @@ fi
 
 # Step 6: 최종 확인
 STATUS=$(docker inspect "$TARGET_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "unknown")
+TARGET_RELEASE=$(container_release_sha "$TARGET_CONTAINER")
+PREV_RELEASE=$(container_release_sha "$PREV_CONTAINER")
+if [ -n "$PREV_RELEASE" ] && [ -n "$TARGET_RELEASE" ] && [ "$PREV_RELEASE" != "$TARGET_RELEASE" ]; then
+    log "WARN: standby release 불일치 감지 (active=${TARGET_RELEASE}, standby=${PREV_RELEASE})"
+elif [ -n "$TARGET_RELEASE" ]; then
+    log "OK: dashboard release 확인 (${TARGET_RELEASE})"
+fi
 log "배포 완료 — 활성 슬롯: ${TARGET_SLOT}, 상태: $STATUS"
 log "AADS Dashboard blue-green 배포 성공"
 
@@ -270,8 +327,11 @@ if [[ "$QA_RESULT" == *"FAIL"* ]]; then
                 -d parse_mode=HTML >/dev/null 2>&1 || true
         fi
     fi
-elif [[ "$QA_RESULT" == "ERROR" ]]; then
-    log "⚠️ Step 7: QA API 응답 파싱 실패 — 수동 확인 필요"
+elif [[ "$QA_RESULT" == "ERROR" || "$QA_RESULT" == "UNKNOWN" || -z "$QA_RESULT" ]]; then
+    log "⚠️ Step 7: QA 미확정 — $QA_RESULT (통과로 간주하지 않음, 수동 확인 필요)"
+    if [ "${AADS_DASHBOARD_QA_STRICT:-false}" = "true" ]; then
+        exit 1
+    fi
 else
     log "Step 7: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
 fi
