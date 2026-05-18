@@ -260,6 +260,9 @@ function surfaceDbSavedStreamingPlaceholders(
       if (message.intent !== "streaming_placeholder") return message;
       const persistedContent = (message.content || fallbackContent || "").trim();
       if (persistedContent.length > 10) {
+        if (options.keepEmpty) {
+          return { ...message, content: persistedContent };
+        }
         return {
           ...message,
           content: persistedContent,
@@ -2213,8 +2216,9 @@ export default function ChatPage() {
           m.intent === "streaming_placeholder" ? { ...m, execution_id: executionId } : m,
         );
       }
+      const cleaned = prev.filter((m) => m.intent !== "interrupted_partial");
       return [
-        ...prev,
+        ...cleaned,
         {
           id: `ai-execution-${executionId}`,
           session_id: attachSessionId,
@@ -2226,6 +2230,7 @@ export default function ChatPage() {
         },
       ];
     });
+    mergeCooldownUntilRef.current = Date.now() + 5000;
 
     try {
       const replayLastEventId = replayFromStart ? "0" : (lastEventIdRef.current || "0");
@@ -3273,7 +3278,7 @@ export default function ChatPage() {
             }
             setMessages(prev => prev.map(m =>
               m.intent === "streaming_placeholder"
-                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
+                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
                 : m
             ));
             setStreaming(false); setStreamBuf("");
@@ -3811,6 +3816,7 @@ export default function ChatPage() {
         { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     }
+    mergeCooldownUntilRef.current = Date.now() + 5000;
     refreshTodosSoon(sessionId);
 
     abortCtrl.current = new AbortController();
@@ -4518,7 +4524,7 @@ export default function ChatPage() {
             // ★ FIX: 타임아웃 시 버블 유지 — placeholder를 partial 메시지로 교체
             setMessages((prev) => prev.map(m =>
               m.intent === "streaming_placeholder"
-                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
+                ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
                 : m
             ));
             setStreaming(false);
@@ -4596,7 +4602,7 @@ export default function ChatPage() {
               streamingSessionRef.current = null;
               setMessages((prev) => prev.map(m =>
                 m.intent === "streaming_placeholder"
-                  ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: undefined }
+                  ? { ...m, content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._", intent: "interrupted_partial" as any }
                   : m
               ));
               setStreaming(false);
