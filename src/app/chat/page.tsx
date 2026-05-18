@@ -240,6 +240,7 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
   return (
     isStreamingPlaceholderMessage(message) ||
     message.intent === "interrupted_partial" ||
+    message.intent === "interruption_notice" ||
     message.model_used === "interrupted" ||
     message.model_used === "recovered"
   );
@@ -253,8 +254,8 @@ function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = 
     return {
       ...message,
       content: preservedContent,
-      intent: undefined,
-      model_used: message.model_used === "streaming" ? "interrupted" : message.model_used,
+      intent: "interrupted_partial",
+      model_used: "interrupted",
       render_id: message.render_id || message.id,
     };
   }).filter(Boolean) as ChatMessage[];
@@ -273,13 +274,7 @@ function surfaceDbSavedStreamingPlaceholders(
         if (options.keepEmpty) {
           return { ...message, content: persistedContent };
         }
-        return {
-          ...message,
-          content: persistedContent,
-          intent: undefined,
-          model_used: message.model_used === "streaming" ? "recovered" : message.model_used,
-          render_id: message.render_id || message.id,
-        };
+        return null;
       }
       if (options.keepEmpty) {
         return {
@@ -2214,18 +2209,12 @@ export default function ChatPage() {
   }, []);
 
   const preservePartialAndContinueStreaming = useCallback((message: ChatMessage, fallbackSessionId?: string | null) => {
-    const preservedMessage: ChatMessage = {
-      ...message,
-      intent: undefined,
-      model_used: message.model_used || "interrupted",
-      render_id: message.render_id || message.id,
-    };
-    const continuationSessionId = preservedMessage.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
+    const continuationSessionId = message.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
     const continuationCreatedAt = new Date(Date.now() + 1).toISOString();
     setMessages((prev) => {
       let hasPlaceholder = false;
       const resetPrev = prev
-        .filter((m) => m.id !== preservedMessage.id)
+        .filter((m) => m.id !== message.id && m.intent !== "interrupted_partial")
         .map((m) => {
           if (m.intent !== "streaming_placeholder") return m;
           hasPlaceholder = true;
@@ -2237,14 +2226,9 @@ export default function ChatPage() {
             render_id: m.render_id || m.id,
           };
         });
-      const merged = mergeServerMessagesPreservingLocal(
-        resetPrev,
-        [preservedMessage],
-        { preserveStreamingPlaceholders: true },
-      );
-      if (hasPlaceholder) return merged;
+      if (hasPlaceholder) return resetPrev;
       return [
-        ...merged,
+        ...resetPrev,
         {
           id: `ai-streaming-${continuationSessionId}`,
           session_id: continuationSessionId,
@@ -3346,7 +3330,7 @@ export default function ChatPage() {
                 ? {
                     ...m,
                     content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
-                    intent: undefined,
+                    intent: "interruption_notice",
                     model_used: "interrupted",
                     render_id: m.render_id || m.id,
                   }
@@ -4703,7 +4687,7 @@ export default function ChatPage() {
             if (m.intent !== "streaming_placeholder") return m;
             const preserved = capturedBuf || m.content || "";
             if (preserved.trim()) {
-              return { ...m, content: preserved, intent: undefined, model_used: "interrupted" };
+              return { ...m, content: preserved, intent: "interrupted_partial", model_used: "interrupted" };
             }
             return null;
           }).filter(Boolean) as ChatMessage[];
@@ -6514,7 +6498,11 @@ export default function ChatPage() {
           {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
           {(() => {
             const sorted = [...messages]
-              .filter(m => m.intent !== "ai_review_warning")
+              .filter(m =>
+                m.intent !== "ai_review_warning" &&
+                m.intent !== "interrupted_partial" &&
+                m.intent !== "interruption_notice"
+              )
               .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
             type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
             const display: DisplayItem[] = [];
@@ -6561,9 +6549,19 @@ export default function ChatPage() {
                 }
                 if (j > i + 1) {
                   const group = sorted.slice(i, j);
+                  const keeperPriority = (item: ChatMessage) => {
+                    if (streaming && item.intent === "streaming_placeholder") return 3;
+                    if (item.intent === "streaming_placeholder") return 2;
+                    if (item.model_used === "recovered") return 1;
+                    return 0;
+                  };
                   const keeper = group
                     .slice()
-                    .sort((a, b) => normalizedMessageContent(b).length - normalizedMessageContent(a).length)[0];
+                    .sort((a, b) => {
+                      const priorityDiff = keeperPriority(b) - keeperPriority(a);
+                      if (priorityDiff !== 0) return priorityDiff;
+                      return normalizedMessageContent(b).length - normalizedMessageContent(a).length;
+                    })[0];
                   display.push({ msg: keeper, idx: i, hiddenMsgs: group.filter((item) => item.id !== keeper.id) });
                   i = j;
                   continue;

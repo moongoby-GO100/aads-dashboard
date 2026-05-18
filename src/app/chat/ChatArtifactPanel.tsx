@@ -213,6 +213,47 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     return map[key] ?? map[d] ?? d;
   };
 
+  const openArtifactInNewTab = useCallback((artifact: Artifact) => {
+    const title = artifact.title || "AADS Artifact";
+    const content = artifact.content || "";
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    const windowRef = window.open("", "_blank", "noopener,noreferrer");
+    if (!windowRef) return;
+
+    if (artifact.artifact_type === "image" || artifact.artifact_type === "file") {
+      windowRef.location.href = content;
+      return;
+    }
+
+    windowRef.document.write(`<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e5e7eb; }
+    header { position: sticky; top: 0; padding: 14px 18px; background: rgba(15, 23, 42, 0.94); border-bottom: 1px solid rgba(148, 163, 184, 0.24); backdrop-filter: blur(10px); }
+    h1 { margin: 0; font-size: 15px; line-height: 1.35; }
+    main { padding: 18px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #020617; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 8px; padding: 16px; }
+  </style>
+</head>
+<body>
+  <header><h1>${escapeHtml(title)}</h1></header>
+  <main><pre>${escapeHtml(content)}</pre></main>
+</body>
+</html>`);
+    windowRef.document.close();
+  }, []);
+
   const elapsedStr = (start: string | null, end: string | null): string => {
     if (!start) return "";
     const s = new Date(start).getTime();
@@ -1115,21 +1156,34 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         >
                           {"📎 " + (displayArtifact.title || "파일 다운로드")}
                         </a>
-                      ) : displayArtifact.artifact_type === "chart" && displayArtifact.metadata?.subtype === "mermaid" ? (
-                        <pre
-                          style={{
-                            background: "var(--ct-code)",
-                            padding: "12px",
-                            borderRadius: "8px",
-                            overflowX: "auto", scrollbarWidth: "thin",
-                            fontFamily: "monospace",
-                            fontSize: "12px",
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          {displayArtifact.content}
-                        </pre>
+                      ) : displayArtifact.artifact_type === "chart" ? (
+                        displayArtifact.metadata?.subtype === "mermaid" ? (
+                          <pre
+                            onClick={() => openArtifactInNewTab(displayArtifact)}
+                            title="차트를 새 탭으로 열기"
+                            style={{
+                              background: "var(--ct-code)",
+                              padding: "12px",
+                              borderRadius: "8px",
+                              overflowX: "auto", scrollbarWidth: "thin",
+                              fontFamily: "monospace",
+                              fontSize: "12px",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {displayArtifact.content}
+                          </pre>
+                        ) : (
+                          <div
+                            onClick={() => openArtifactInNewTab(displayArtifact)}
+                            title="차트를 새 탭으로 열기"
+                            style={{ cursor: "pointer" }}
+                          >
+                            <MarkdownBlock text={displayArtifact.content} />
+                          </div>
+                        )
                       ) : displayArtifact.artifact_type === "code" ? (
                         <pre
                           style={{
@@ -1183,11 +1237,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   flexWrap: "wrap",
                 }}
               >
-                {[
-                  { icon: "📋", label: "복사", fn: () => copyArtifact(activeArtifact.content) },
-                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
-                  { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
-                ].map((btn) => (
+	                {[
+	                  { icon: "📋", label: "복사", fn: () => copyArtifact(activeArtifact.content) },
+	                  ...(activeArtifact.artifact_type === "chart"
+	                    ? [{ icon: "🔗", label: "새 탭", fn: () => openArtifactInNewTab(activeArtifact) }]
+	                    : []),
+	                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
+	                  { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
+	                ].map((btn) => (
                   <button
                     key={btn.label}
                     onClick={btn.fn}

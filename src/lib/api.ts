@@ -196,6 +196,7 @@ export const api = {
   getOpsDirectiveLifecycle: (limit = 20) => request<any>(`/ops/directive-lifecycle?limit=${limit}`),
   getOpsCostSummary: () => request<any>("/ops/cost/summary"),
   getOpsAccountUsage: () => request<any>("/ops/account-usage"),
+  getOpsCodexUsage: () => request<any>("/ops/codex-usage"),
   getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
   getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
 

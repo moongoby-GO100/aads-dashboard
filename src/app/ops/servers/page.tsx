@@ -1,6 +1,24 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
+import { api } from "@/lib/api";
+
+interface CodexUsageLimit {
+  limit_id: string;
+  plan_type?: string;
+  primary?: { used_percent?: number; window_minutes?: number; resets_at_iso?: string; resets_in_sec?: number };
+  secondary?: { used_percent?: number; window_minutes?: number; resets_at_iso?: string; resets_in_sec?: number };
+}
+
+interface CodexUsage {
+  ok?: boolean;
+  plan_type?: string;
+  limits?: CodexUsageLimit[];
+  fetched_at?: number;
+  cached?: boolean;
+  age_sec?: number;
+  error?: string;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +190,7 @@ export default function ServersPage() {
   const [servers, setServers] = useState<ServerHealth[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("-");
+  const [codexUsage, setCodexUsage] = useState<CodexUsage | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -179,6 +198,13 @@ export default function ServersPage() {
       SERVERS.map((s) => fetchServerHealth(s.id, s.ip, s.role))
     );
     setServers(results);
+    // AADS-193: Codex live rate-limit
+    try {
+      const cu = await api.getOpsCodexUsage();
+      setCodexUsage(cu as CodexUsage);
+    } catch (e) {
+      setCodexUsage({ ok: false, error: String(e).slice(0, 200) });
+    }
     setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
     setLoading(false);
   }, []);
@@ -213,6 +239,65 @@ export default function ServersPage() {
             </button>
           </div>
         </div>
+
+        {/* ─── 섹션 0: Codex Live Rate-Limit (AADS-193) ─── */}
+        <section style={{ marginBottom: 24 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+            ⚡ Codex CLI — 실시간 사용률 {codexUsage?.cached ? "(cached)" : ""}
+            {codexUsage?.plan_type && (
+              <span style={{ marginLeft: 8, fontSize: 11, padding: "2px 8px", borderRadius: 8, background: "rgba(34,197,94,0.1)", color: "var(--success)" }}>
+                {codexUsage.plan_type.toUpperCase()}
+              </span>
+            )}
+          </h3>
+          {!codexUsage && <div style={{ ...cardStyle, fontSize: 12, color: "var(--text-secondary)" }}>불러오는 중...</div>}
+          {codexUsage?.error && <div style={{ ...cardStyle, fontSize: 12, color: "var(--danger)" }}>오류: {codexUsage.error}</div>}
+          {codexUsage?.limits && codexUsage.limits.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 16 }}>
+              {codexUsage.limits.map((lim) => {
+                const fmtReset = (sec?: number) => {
+                  if (sec == null || sec <= 0) return "-";
+                  const h = Math.floor(sec / 3600);
+                  const m = Math.floor((sec % 3600) / 60);
+                  return h > 0 ? `${h}h ${m}m 후` : `${m}m 후`;
+                };
+                const bar = (used?: number) => {
+                  const u = Math.max(0, Math.min(100, used ?? 0));
+                  const color = u >= 90 ? "var(--danger)" : u >= 70 ? "var(--warning)" : "var(--success)";
+                  return (
+                    <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden", marginTop: 4 }}>
+                      <div style={{ width: `${u}%`, height: "100%", background: color, transition: "width 0.3s" }} />
+                    </div>
+                  );
+                };
+                return (
+                  <div key={lim.limit_id} style={cardStyle}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{lim.limit_id}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{lim.plan_type || "-"}</span>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-secondary)" }}>
+                        <span>5시간 윈도우</span>
+                        <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{lim.primary?.used_percent ?? 0}%</span>
+                      </div>
+                      {bar(lim.primary?.used_percent)}
+                      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 4 }}>리셋: {fmtReset(lim.primary?.resets_in_sec)}</div>
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-secondary)" }}>
+                        <span>7일 윈도우</span>
+                        <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{lim.secondary?.used_percent ?? 0}%</span>
+                      </div>
+                      {bar(lim.secondary?.used_percent)}
+                      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 4 }}>리셋: {fmtReset(lim.secondary?.resets_in_sec)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* ─── 섹션 1: 3서버 상태 카드 ─── */}
         <section style={{ marginBottom: 24 }}>
