@@ -2118,13 +2118,16 @@ export default function ChatPage() {
     };
     void load();
 
+    let _catalogDebounce: ReturnType<typeof setTimeout> | null = null;
+    const _debouncedRefresh = () => {
+      if (_catalogDebounce) clearTimeout(_catalogDebounce);
+      _catalogDebounce = setTimeout(() => { void refreshChatModelCatalog(); }, 300);
+    };
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void refreshChatModelCatalog();
-      }
+      if (document.visibilityState === "visible") _debouncedRefresh();
     };
     const handleFocus = () => {
-      void refreshChatModelCatalog();
+      _debouncedRefresh();
     };
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -2170,6 +2173,8 @@ export default function ChatPage() {
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
   const [bgPartialContent, setBgPartialContent] = useState("");
+  const bgPartialContentRef = useRef(bgPartialContent);
+  useEffect(() => { bgPartialContentRef.current = bgPartialContent; }, [bgPartialContent]);
   const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -2361,7 +2366,7 @@ export default function ChatPage() {
           session_id: attachSessionId,
           execution_id: executionId,
           role: "assistant",
-          content: bgPartialContent || "",
+          content: bgPartialContentRef.current || "",
           intent: "streaming_placeholder",
           created_at: new Date().toISOString(),
         },
@@ -2380,7 +2385,7 @@ export default function ChatPage() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      let full = streamBufRef.current || bgPartialContent || "";
+      let full = streamBufRef.current || bgPartialContentRef.current || "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -2468,7 +2473,7 @@ export default function ChatPage() {
               setToolStatus("🔄 서버 재시작 감지 — 자동으로 이어집니다...");
             } else if (ev.type === "resume_unavailable" || ev.type === "resume_timeout") {
               setWaitingBgResponse(true);
-              setBgPartialContent(full || bgPartialContent || "");
+              setBgPartialContent(full || bgPartialContentRef.current || "");
               setToolStatus("🔄 응답 복구 상태 확인 중...");
               return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
@@ -2497,7 +2502,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [bgPartialContent, mergeLatestAssistantFromServer, preservePartialAndContinueStreaming]);
+  }, [mergeLatestAssistantFromServer, preservePartialAndContinueStreaming]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -2980,11 +2985,12 @@ export default function ChatPage() {
             keepEmpty: !filterPlaceholder,
             fallbackContent: bgPartialContent,
           });
-          if (processed.length > 0 || msgs.length === 0) {
+          {
+            const finalMsgs = processed.length > 0 ? processed : msgs;
             setMessages((prev) => (
               prev.length > 0
-                ? mergeServerMessagesPreservingLocal(prev, processed)
-                : processed
+                ? mergeServerMessagesPreservingLocal(prev, finalMsgs)
+                : finalMsgs
             ));
             // 2번: rate_limited 메시지가 있으면 자동 폴링 활성화 (CEO 수동 재전송 불필요)
             if (processed.some(m => m.intent === "rate_limited") && !waitingBgRef.current) {
@@ -3930,6 +3936,10 @@ export default function ChatPage() {
     const _previewUrls = filesToSend
       .filter((f) => f.type.startsWith("image/"))
       .map((f) => URL.createObjectURL(f));
+    // P2-12: schedule Object URL cleanup (5min max — covers SSE lifetime)
+    if (_previewUrls.length > 0) {
+      setTimeout(() => { _previewUrls.forEach((u) => URL.revokeObjectURL(u)); }, 300_000);
+    }
 
     // 이 요청의 세션 ID 캡처 — 세션 전환 감지용
     const requestSessionId = sessionId;
