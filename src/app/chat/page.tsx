@@ -3863,12 +3863,12 @@ export default function ChatPage() {
       setMessages(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         userMsg,
-        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     } else {
       setMessages(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
-        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     }
     mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -4090,9 +4090,6 @@ export default function ChatPage() {
             } else if (ev.type === "done") {
               gotFinal = true;
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
-              setStreamBuf("");
-              setThinkingBuf("");
-              setStreaming(false);
               setToolStatus(null);
               setToolLogs([]);
               setYellowWarning(null);
@@ -4169,6 +4166,10 @@ export default function ChatPage() {
                   return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
               }
+              // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
+              setStreamBuf("");
+              setThinkingBuf("");
+              setStreaming(false);
               if (requestSessionId) {
                 mergeCooldownUntilRef.current = Date.now() + 5000;
               }
