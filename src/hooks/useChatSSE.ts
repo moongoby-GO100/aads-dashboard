@@ -87,6 +87,10 @@ const MAX_RETRY = 5;
 const MAX_RETRY_DELAY_MS = 30_000; // 최대 단일 대기 30초 캡
 const RENDER_INTERVAL_MS = 30; // 토큰 렌더 루프 간격
 
+function getReconnectDelayMs(attempt: number): number {
+  return Math.min(1000 * Math.pow(2, Math.max(attempt - 1, 0)), MAX_RETRY_DELAY_MS);
+}
+
 export function useChatSSE() {
   const [state, setState] = useState<StreamState>(INITIAL_STREAM);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -222,6 +226,57 @@ export function useChatSSE() {
       };
 
       let attempt = 0;
+      let fullText = "";
+      let thinkingText = "";
+      let thoughtSummary: string | null = null;
+      let sources: SourceItem[] = [];
+      const toolEvents: ToolUseEvent[] = [];
+
+      const flushBufferedText = (markDone = false): string => {
+        if (markDone) streamDoneRef.current = true;
+        if (tokenBufferRef.current.length > 0) {
+          displayTextRef.current += tokenBufferRef.current.join('');
+          tokenBufferRef.current = [];
+        }
+        stopRenderLoop();
+        return displayTextRef.current;
+      };
+
+      const finalizeStream = (chunk?: SSEChunk) => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const streamedText = flushBufferedText(true);
+        const meta: StreamMeta = {
+          modelUsed: chunk?.model_used || chunk?.model || null,
+          inputTokens: chunk?.input_tokens || null,
+          outputTokens: chunk?.output_tokens || null,
+          costUsd: chunk?.cost_usd || chunk?.cost || null,
+          sources,
+          thoughtSummary: thoughtSummary || (thinkingText ? thinkingText.slice(0, 300) : null),
+          thinkingText: thinkingText || null,
+          toolsUsed: [...toolEvents],
+        };
+        setState((s) => ({
+          ...s,
+          isStreaming: false,
+          isBuffering: false,
+          isResearching: false,
+          streamingText: streamedText,
+          messageId: chunk?.message_id || null,
+          modelUsed: meta.modelUsed,
+          inputTokens: meta.inputTokens,
+          outputTokens: meta.outputTokens,
+          costUsd: meta.costUsd,
+          sources,
+          toolEvents: [...toolEvents],
+          thoughtSummary: meta.thoughtSummary,
+          thinkingText: meta.thinkingText,
+          sessionCost: chunk?.session_cost || null,
+          sessionTurns: chunk?.session_turns || null,
+          yellowLimitWarning: null,
+        }));
+        completeStream(sessionId, fullText);
+        onDone?.(fullText, meta);
+      };
 
       const doStream = async (): Promise<void> => {
         // 이벤트(heartbeat 포함) 수신 시마다 리셋되는 inactivity 타임아웃
@@ -231,11 +286,6 @@ export function useChatSSE() {
         };
         resetInactivityTimeout();
 
-        let fullText = "";
-        let thinkingText = "";
-        let thoughtSummary: string | null = null;
-        let sources: SourceItem[] = [];
-        const toolEvents: ToolUseEvent[] = [];
         try {
           const reader = await chatApi.sendMessageStream(
             sessionId, content, modelOverride, abort.signal
@@ -244,11 +294,17 @@ export function useChatSSE() {
 
           const decoder = new TextDecoder();
           let buffer = "";
+          let sawTerminalEvent = false;
+          let receivedDataSinceConnect = false;
 
           while (true) {
             if (abort.signal.aborted) break;
             const { done, value } = await reader.read();
             if (done) break;
+            if (!receivedDataSinceConnect) {
+              receivedDataSinceConnect = true;
+              attempt = 0;
+            }
 
             // 데이터 수신 → inactivity 타이머 리셋
             resetInactivityTimeout();
@@ -343,69 +399,33 @@ export function useChatSSE() {
                   // Gemini 재시도 등으로 백엔드가 스트림을 리셋할 때
                   // 누적 텍스트·버퍼를 초기화하여 새 응답을 처음부터 수신
                   fullText = "";
+                  thinkingText = "";
+                  thoughtSummary = null;
+                  sources = [];
+                  toolEvents.length = 0;
                   tokenBufferRef.current = [];
                   displayTextRef.current = "";
                   setState((s) => ({
                     ...s,
                     streamingText: "",
+                    thinkingText: null,
+                    thoughtSummary: null,
+                    sources: [],
+                    toolEvents: [],
                     isResearching: false,
                     researchProgress: chunk.content ? String(chunk.content) : null,
                   }));
 
                 } else if (chunk.type === "done") {
-                  if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-                  // AADS-TOKEN-BUFFER: 버퍼에 남은 토큰 즉시 flush
-                  streamDoneRef.current = true;
-                  if (tokenBufferRef.current.length > 0) {
-                    displayTextRef.current += tokenBufferRef.current.join('');
-                    tokenBufferRef.current = [];
-                  }
-                  // 렌더 루프 정리 (버퍼 소진 감지로 자동 종료되기 전 명시적 정리)
-                  stopRenderLoop();
-
-                  const meta: StreamMeta = {
-                    modelUsed: chunk.model_used || chunk.model || null,
-                    inputTokens: chunk.input_tokens || null,
-                    outputTokens: chunk.output_tokens || null,
-                    costUsd: chunk.cost_usd || chunk.cost || null,
-                    sources,
-                    thoughtSummary: thoughtSummary || (thinkingText ? thinkingText.slice(0, 300) : null),
-                    thinkingText: thinkingText || null,
-                    toolsUsed: [...toolEvents],
-                  };
-                  setState((s) => ({
-                    ...s,
-                    isStreaming: false,
-                    isBuffering: false,
-                    isResearching: false,
-                    streamingText: displayTextRef.current,
-                    messageId: chunk.message_id || null,
-                    modelUsed: meta.modelUsed,
-                    inputTokens: meta.inputTokens,
-                    outputTokens: meta.outputTokens,
-                    costUsd: meta.costUsd,
-                    sources,
-                    toolEvents: [...toolEvents],
-                    thoughtSummary: meta.thoughtSummary,
-                    thinkingText: meta.thinkingText,
-                    sessionCost: chunk.session_cost || null,
-                    sessionTurns: chunk.session_turns || null,
-                    yellowLimitWarning: null,
-                  }));
-                  completeStream(sessionId, fullText);
-                  onDone?.(fullText, meta);
+                  sawTerminalEvent = true;
+                  finalizeStream(chunk);
                   return;
 
                 } else if (chunk.type === "error") {
                   // 서버 명시적 에러는 재시도하지 않고 즉시 종료
                   if (timeoutRef.current) clearTimeout(timeoutRef.current);
                   // AADS-TOKEN-BUFFER: 에러 시 버퍼 flush 후 정리
-                  stopRenderLoop();
-                  if (tokenBufferRef.current.length > 0) {
-                    displayTextRef.current += tokenBufferRef.current.join('');
-                    tokenBufferRef.current = [];
-                  }
+                  flushBufferedText();
                   const errMsg = chunk.content || "스트리밍 오류";
                   completeStream(sessionId, "", errMsg);
                   setState((s) => ({
@@ -425,26 +445,9 @@ export function useChatSSE() {
             }
           }
 
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          // AADS-TOKEN-BUFFER: 스트림 루프 종료 시 남은 버퍼 flush
-          stopRenderLoop();
-          if (tokenBufferRef.current.length > 0) {
-            displayTextRef.current += tokenBufferRef.current.join('');
-            tokenBufferRef.current = [];
+          if (!abort.signal.aborted && !sawTerminalEvent) {
+            throw new Error("Stream ended without terminal event");
           }
-          setState((s) => ({
-            ...s,
-            isStreaming: false,
-            isBuffering: false,
-            isResearching: false,
-            streamingText: displayTextRef.current,
-          }));
-          onDone?.(fullText, {
-            modelUsed: null, inputTokens: null, outputTokens: null, costUsd: null,
-            sources, thoughtSummary,
-            thinkingText: thinkingText || null,
-            toolsUsed: [...toolEvents],
-          });
         } catch (err) {
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           const isAborted = abort.signal.aborted;
@@ -464,10 +467,15 @@ export function useChatSSE() {
                 const resumeDecoder = new TextDecoder();
                 let resumeBuffer = "";
                 let resumeSawTerminalEvent = false;
+                let resumeReceivedData = false;
                 while (true) {
                   if (abort.signal.aborted) break;
                   const { done: rDone, value: rValue } = await resumeReader.read();
                   if (rDone) break;
+                  if (!resumeReceivedData) {
+                    resumeReceivedData = true;
+                    attempt = 0;
+                  }
                   resetInactivityTimeout();
                   resumeBuffer += resumeDecoder.decode(rValue, { stream: true });
                   const rEvents = resumeBuffer.split("\n\n");
@@ -491,15 +499,7 @@ export function useChatSSE() {
                       } else if (rChunk.type === "resume_done" || rChunk.type === "done") {
                         // resume 완료 — 정상 종료 처리
                         resumeSawTerminalEvent = true;
-                        streamDoneRef.current = true;
-                        if (tokenBufferRef.current.length > 0) {
-                          displayTextRef.current += tokenBufferRef.current.join('');
-                          tokenBufferRef.current = [];
-                        }
-                        stopRenderLoop();
-                        setState((s) => ({ ...s, isStreaming: false, isBuffering: false, streamingText: displayTextRef.current }));
-                        completeStream(sessionId, fullText);
-                        onDone?.(fullText, { modelUsed: null, inputTokens: null, outputTokens: null, costUsd: null, sources, thoughtSummary, thinkingText: thinkingText || null, toolsUsed: [...toolEvents] });
+                        finalizeStream(rChunk);
                         return;
                       }
                     }
@@ -513,9 +513,8 @@ export function useChatSSE() {
             } catch { /* resume failed, fall through to retry */ }
           }
 
-          if (attempt < MAX_RETRY && !isAborted) {
-            const jitter = Math.random() * 500;
-            const delay = Math.min(Math.pow(2, attempt) * 1000 + jitter, MAX_RETRY_DELAY_MS);
+          if (attempt <= MAX_RETRY && !isAborted) {
+            const delay = getReconnectDelayMs(attempt);
             await new Promise((r) => setTimeout(r, delay));
             return doStream();
           }
@@ -523,11 +522,7 @@ export function useChatSSE() {
           const recovered = await pollFallback();
           if (!recovered) {
             // AADS-TOKEN-BUFFER: 에러/재연결 실패 시 버퍼 flush 후 정리
-            stopRenderLoop();
-            if (tokenBufferRef.current.length > 0) {
-              displayTextRef.current += tokenBufferRef.current.join('');
-              tokenBufferRef.current = [];
-            }
+            flushBufferedText();
             const msg = err instanceof Error ? err.message : String(err);
             const errorType = isAborted ? "STREAM_TIMEOUT" : "SSE_DISCONNECT";
             // AADS-190: StreamManager에 에러 기록 + 백엔드 보고

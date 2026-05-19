@@ -392,34 +392,61 @@ function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serve
   };
 }
 
-function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage: ChatMessage): ChatMessage[] {
-  const replaceTarget = [...prev].reverse().find((message) => {
-    if (message.role !== "assistant" || !isAssistantDraftMessage(message)) return false;
-    if (finalMessage.execution_id && message.execution_id === finalMessage.execution_id) return true;
-    if (isStreamingPlaceholderMessage(message)) return true;
+function findAssistantMessageIndexForFinalization(messages: ChatMessage[], finalMessage: ChatMessage): number {
+  const finalContent = normalizedMessageContent(finalMessage);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant") continue;
+    if (finalMessage.id && message.id === finalMessage.id) return i;
+    if (finalMessage.render_id && (message.render_id === finalMessage.render_id || message.id === finalMessage.render_id)) return i;
+    if (finalMessage.execution_id && message.execution_id === finalMessage.execution_id) return i;
+    if (!isAssistantDraftMessage(message)) continue;
+    if (isStreamingPlaceholderMessage(message)) return i;
     const draftContent = normalizedMessageContent(message);
-    const finalContent = normalizedMessageContent(finalMessage);
-    if (!draftContent || !finalContent) return false;
+    if (!draftContent || !finalContent) continue;
     const overlapLen = Math.min(120, draftContent.length, finalContent.length);
-    return overlapLen >= 30 && draftContent.slice(0, overlapLen) === finalContent.slice(0, overlapLen);
-  });
-  const stableRenderId = replaceTarget?.render_id || replaceTarget?.id || finalMessage.render_id || finalMessage.id;
-  const messageWithStableRenderId: ChatMessage = {
-    ...finalMessage,
-    id: finalMessage.id || replaceTarget?.id || `ai-${Date.now()}`,
-    content: finalMessage.content || replaceTarget?.content || "",
-    render_id: stableRenderId,
+    if (overlapLen >= 30 && draftContent.slice(0, overlapLen) === finalContent.slice(0, overlapLen)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function finalizeAssistantMessage(existingMessage: ChatMessage, finalMessage: ChatMessage): ChatMessage {
+  const mergedMessage = mergeServerMessageWithExisting(existingMessage, finalMessage);
+  const nextIntent = finalMessage.intent === "streaming_placeholder"
+    ? undefined
+    : finalMessage.intent ?? (existingMessage.intent === "streaming_placeholder" ? undefined : existingMessage.intent);
+  return {
+    ...existingMessage,
+    ...mergedMessage,
+    id: finalMessage.id || mergedMessage.id || existingMessage.id,
+    session_id: finalMessage.session_id || mergedMessage.session_id || existingMessage.session_id,
+    execution_id: finalMessage.execution_id || existingMessage.execution_id,
+    role: "assistant",
+    content: finalMessage.content || mergedMessage.content || existingMessage.content || "",
+    intent: nextIntent,
+    render_id: existingMessage.render_id || finalMessage.render_id || mergedMessage.render_id || existingMessage.id || finalMessage.id,
+    created_at: existingMessage.created_at || finalMessage.created_at,
   };
+}
 
-  let replaced = false;
-  const next = prev.flatMap((message) => {
-    if (!replaceTarget || message.id !== replaceTarget.id) return [message];
-    if (replaced) return [];
-    replaced = true;
-    return [messageWithStableRenderId];
-  });
-
-  if (replaced) return next;
+function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage: ChatMessage): ChatMessage[] {
+  const replaceIndex = findAssistantMessageIndexForFinalization(prev, finalMessage);
+  if (replaceIndex >= 0) {
+    return prev.map((message, index) => (
+      index === replaceIndex ? finalizeAssistantMessage(message, finalMessage) : message
+    ));
+  }
+  const fallbackId = finalMessage.id || `ai-${Date.now()}`;
+  const appendedMessage: ChatMessage = {
+    ...finalMessage,
+    id: fallbackId,
+    role: "assistant",
+    content: finalMessage.content || "",
+    intent: finalMessage.intent === "streaming_placeholder" ? undefined : finalMessage.intent,
+    render_id: finalMessage.render_id || fallbackId,
+  };
   // ★ DEDUP: placeholder 미존재 시 동일 메시지가 이미 있으면 append 차단 (다중 핸들러 경합 방지)
   const _fc = (finalMessage.content || "").trim();
   const _dupExists = prev.some((m) =>
@@ -432,7 +459,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
   if (_dupExists) return prev.filter((message) => !message.id.startsWith("ai-partial-"));
   return [
     ...prev.filter((message) => !message.id.startsWith("ai-partial-")),
-    messageWithStableRenderId,
+    appendedMessage,
   ].sort((a, b) => messageTime(a) - messageTime(b));
 }
 
@@ -2219,7 +2246,7 @@ export default function ChatPage() {
         }
       }
       if (activeSessionRef.current !== sessionId || !finalMessage) return null;
-      setMessages((prev) => mergeServerMessagesPreservingLocal(prev, [finalMessage]));
+      setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, finalMessage));
       lastKnownMsgIdRef.current = finalMessage.id;
       pendingResponseSessions.current.delete(sessionId);
       setWaitingBgResponse(false);
@@ -4413,14 +4440,7 @@ export default function ChatPage() {
             ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
             const aiMsg = msgs.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (aiMsg) {
-              // ★ in-place 업데이트
-              setMessages((prev) => {
-                const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-                if (hasPlaceholder) {
-                  return prev.map(m => m.intent === "streaming_placeholder" ? aiMsg : m);
-                }
-                return [...prev.filter(m => m.intent !== "streaming_placeholder"), aiMsg];
-              });
+              setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
               break;
             }
           } catch { /* retry */ }
