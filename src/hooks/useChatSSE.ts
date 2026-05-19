@@ -182,6 +182,7 @@ export function useChatSSE() {
       tokenBufferRef.current = [];
       displayTextRef.current = '';
       streamDoneRef.current = false;
+      lastEventIdRef.current = "0";
 
       const abort = new AbortController();
       abortRef.current = abort;
@@ -231,6 +232,25 @@ export function useChatSSE() {
       let thoughtSummary: string | null = null;
       let sources: SourceItem[] = [];
       const toolEvents: ToolUseEvent[] = [];
+
+      const preserveVisibleStreamText = (statusMessage?: string | null) => {
+        const preservedText = displayTextRef.current || fullText;
+        stopRenderLoop();
+        tokenBufferRef.current = [];
+        displayTextRef.current = "";
+        streamDoneRef.current = false;
+        setState((s) => ({
+          ...s,
+          streamingText: s.streamingText || preservedText,
+          thinkingText: null,
+          thoughtSummary: null,
+          sources: [],
+          toolEvents: [],
+          isResearching: false,
+          researchProgress: statusMessage ? String(statusMessage) : null,
+          isBuffering: false,
+        }));
+      };
 
       const flushBufferedText = (markDone = false): string => {
         if (markDone) streamDoneRef.current = true;
@@ -397,24 +417,13 @@ export function useChatSSE() {
 
                 } else if (chunk.type === "stream_reset") {
                   // Gemini 재시도 등으로 백엔드가 스트림을 리셋할 때
-                  // 누적 텍스트·버퍼를 초기화하여 새 응답을 처음부터 수신
+                  // 이미 렌더된 텍스트는 유지하고, 다음 delta부터 같은 버블에서 다시 누적한다.
                   fullText = "";
                   thinkingText = "";
                   thoughtSummary = null;
                   sources = [];
                   toolEvents.length = 0;
-                  tokenBufferRef.current = [];
-                  displayTextRef.current = "";
-                  setState((s) => ({
-                    ...s,
-                    streamingText: "",
-                    thinkingText: null,
-                    thoughtSummary: null,
-                    sources: [],
-                    toolEvents: [],
-                    isResearching: false,
-                    researchProgress: chunk.content ? String(chunk.content) : null,
-                  }));
+                  preserveVisibleStreamText(chunk.content ? String(chunk.content) : null);
 
                 } else if (chunk.type === "done") {
                   sawTerminalEvent = true;

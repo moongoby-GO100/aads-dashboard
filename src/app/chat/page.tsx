@@ -412,6 +412,20 @@ function findAssistantMessageIndexForFinalization(messages: ChatMessage[], final
   return -1;
 }
 
+function findMessageIndexForUpsert(messages: ChatMessage[], nextMessage: ChatMessage): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== nextMessage.role) continue;
+    if (nextMessage.id && message.id === nextMessage.id) return i;
+    if (nextMessage.render_id && (message.render_id === nextMessage.render_id || message.id === nextMessage.render_id)) {
+      return i;
+    }
+    if (message.render_id && nextMessage.id && message.render_id === nextMessage.id) return i;
+    if (nextMessage.execution_id && message.execution_id === nextMessage.execution_id) return i;
+  }
+  return -1;
+}
+
 function finalizeAssistantMessage(existingMessage: ChatMessage, finalMessage: ChatMessage): ChatMessage {
   const mergedMessage = mergeServerMessageWithExisting(existingMessage, finalMessage);
   const nextIntent = finalMessage.intent === "streaming_placeholder"
@@ -438,6 +452,14 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
       index === replaceIndex ? finalizeAssistantMessage(message, finalMessage) : message
     ));
   }
+
+  const upsertIndex = findMessageIndexForUpsert(prev, finalMessage);
+  if (upsertIndex >= 0) {
+    return prev.map((message, index) => (
+      index === upsertIndex ? finalizeAssistantMessage(message, finalMessage) : message
+    ));
+  }
+
   const fallbackId = finalMessage.id || `ai-${Date.now()}`;
   const appendedMessage: ChatMessage = {
     ...finalMessage,
@@ -510,9 +532,23 @@ function mergeServerMessagesPreservingLocal(
 ): ChatMessage[] {
   if (incomingMessages.length === 0) return prev;
 
+  const incomingSessionId = incomingMessages[0]?.session_id;
+  const hasIncomingStreamingPlaceholder = incomingMessages.some((message) => isStreamingPlaceholderMessage(message));
+  const hasIncomingFinalAssistant = incomingMessages.some((message) =>
+    message.role === "assistant" &&
+    message.intent !== "rate_limited" &&
+    !isAssistantDraftMessage(message)
+  );
+  const preserveStreamingPlaceholders = options.preserveStreamingPlaceholders
+    || (
+      prev.some((message) => message.session_id === incomingSessionId && isStreamingPlaceholderMessage(message)) &&
+      !hasIncomingStreamingPlaceholder &&
+      !hasIncomingFinalAssistant
+    );
+
   const localMessages = prev.filter((message) =>
     isLocalTransientMessage(message) &&
-    !(options.preserveStreamingPlaceholders && isStreamingPlaceholderMessage(message))
+    (!incomingSessionId || message.session_id === incomingSessionId)
   );
   const matchedLocalIds = new Set<string>();
   const incomingIds = new Set(incomingMessages.map((message) => message.id));
@@ -559,7 +595,7 @@ function mergeServerMessagesPreservingLocal(
       !incomingIds.has(message.id) &&
       !(isAssistantDraftMessage(message) && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
       !(
-        !options.preserveStreamingPlaceholders &&
+        !preserveStreamingPlaceholders &&
         isLocalTransientMessage(message) &&
         isStreamingPlaceholderMessage(message) &&
         hasServerAssistantAtOrAfter(message)
@@ -816,6 +852,7 @@ const MessageItem = memo(function MessageItem({
     : null;
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
+  const assistantBubbleOpacity = msg.intent === "regenerated" ? 0.45 : isStreamingPlaceholder ? 0.92 : 1;
   const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -1039,8 +1076,8 @@ const MessageItem = memo(function MessageItem({
                     : msg.intent && ["pipeline_runner","agent_result","system_recovery"].includes(msg.intent)
                     ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
-                  
-                  ...(msg.intent === "regenerated" ? { opacity: 0.45 } : {}),
+                  opacity: assistantBubbleOpacity,
+                  transition: "opacity 100ms ease, background 100ms ease, border-color 100ms ease",
                   borderBottomLeftRadius: "4px",
                 }),
           }}
