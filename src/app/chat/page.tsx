@@ -249,16 +249,29 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
 function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = ""): ChatMessage[] {
   return messages.map((message) => {
     if (message.intent !== "streaming_placeholder") return message;
-    const preservedContent = (message.content || fallbackContent || "").trim();
-    if (!preservedContent) return null;
-    return {
-      ...message,
-      content: preservedContent,
-      intent: "interrupted_partial",
-      model_used: "interrupted",
-      render_id: message.render_id || message.id,
-    };
+    return convertDraftMessage(message, { fallbackContent });
   }).filter(Boolean) as ChatMessage[];
+}
+
+function convertDraftMessage(
+  message: ChatMessage,
+  options: {
+    fallbackContent?: string;
+    note?: string;
+    modelUsed?: string;
+  } = {},
+): ChatMessage | null {
+  const preservedContent = (message.content || options.fallbackContent || "").trim();
+  const note = (options.note || "").trim();
+  const nextContent = [preservedContent, note].filter(Boolean).join("\n\n").trim();
+  if (!nextContent) return null;
+  return {
+    ...message,
+    content: nextContent,
+    intent: "interrupted_partial",
+    model_used: options.modelUsed || message.model_used || "interrupted",
+    render_id: message.render_id || message.id,
+  };
 }
 
 function surfaceDbSavedStreamingPlaceholders(
@@ -380,18 +393,27 @@ function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serve
 }
 
 function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage: ChatMessage): ChatMessage[] {
-  const placeholder = prev.find((message) => isStreamingPlaceholderMessage(message));
-  const stableRenderId = placeholder?.render_id || placeholder?.id || finalMessage.render_id || finalMessage.id;
+  const replaceTarget = [...prev].reverse().find((message) => {
+    if (message.role !== "assistant" || !isAssistantDraftMessage(message)) return false;
+    if (finalMessage.execution_id && message.execution_id === finalMessage.execution_id) return true;
+    if (isStreamingPlaceholderMessage(message)) return true;
+    const draftContent = normalizedMessageContent(message);
+    const finalContent = normalizedMessageContent(finalMessage);
+    if (!draftContent || !finalContent) return false;
+    const overlapLen = Math.min(120, draftContent.length, finalContent.length);
+    return overlapLen >= 30 && draftContent.slice(0, overlapLen) === finalContent.slice(0, overlapLen);
+  });
+  const stableRenderId = replaceTarget?.render_id || replaceTarget?.id || finalMessage.render_id || finalMessage.id;
   const messageWithStableRenderId: ChatMessage = {
     ...finalMessage,
-    id: finalMessage.id || placeholder?.id || `ai-${Date.now()}`,
-    content: finalMessage.content || placeholder?.content || "",
+    id: finalMessage.id || replaceTarget?.id || `ai-${Date.now()}`,
+    content: finalMessage.content || replaceTarget?.content || "",
     render_id: stableRenderId,
   };
 
   let replaced = false;
   const next = prev.flatMap((message) => {
-    if (!isStreamingPlaceholderMessage(message)) return [message];
+    if (!replaceTarget || message.id !== replaceTarget.id) return [message];
     if (replaced) return [];
     replaced = true;
     return [messageWithStableRenderId];
@@ -2190,7 +2212,9 @@ export default function ChatPage() {
         );
         if (savedAssistant) {
           finalMessage = savedAssistant.intent === "streaming_placeholder"
-            ? { ...savedAssistant, intent: undefined, model_used: savedAssistant.model_used === "streaming" ? "recovered" : savedAssistant.model_used }
+            ? convertDraftMessage(savedAssistant, {
+              modelUsed: savedAssistant.model_used === "streaming" ? "recovered" : savedAssistant.model_used,
+            })
             : savedAssistant;
         }
       }
@@ -3756,7 +3780,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if (streamingRef.current && !queuedContent) {
+    if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
@@ -4366,6 +4390,7 @@ export default function ChatPage() {
         });
         // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
         if (sessionId && !gotFinal) {
+          _invisibleRecoveryActivated = true;
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sessionId);
           setToolStatus("🔄 응답 확인 중...");
@@ -4448,9 +4473,12 @@ export default function ChatPage() {
           // 5분 초과 시 안내 메시지 후 종료
           if (Date.now() - resumeStartTime > MAX_RESUME_DURATION) {
             if (!isStale()) {
-              setMessages(prev => prev.map(m =>
+              setMessages(prev => prev.map((m) =>
                 m.intent === "streaming_placeholder"
-                  ? { ...m, content: (frozenContent || "") + "\n\n🔧 서버 점검 중입니다. 잠시 후 새로고침해주세요.", intent: undefined }
+                  ? convertDraftMessage(m, {
+                    fallbackContent: frozenContent,
+                    note: "🔧 서버 점검 중입니다. 잠시 후 새로고침해주세요.",
+                  }) || m
                   : m
               ));
               setStreaming(false);
@@ -4582,15 +4610,11 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
             // ★ FIX: 타임아웃 시 버블 유지 — placeholder를 partial 메시지로 교체
-            setMessages((prev) => prev.map(m =>
+            setMessages((prev) => prev.map((m) =>
               m.intent === "streaming_placeholder"
-                ? {
-                    ...m,
-                    content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
-                    intent: undefined,
-                    model_used: "interrupted",
-                    render_id: m.render_id || m.id,
-                  }
+                ? convertDraftMessage(m, {
+                  note: "⏳ _응답 복구 대기 중..._",
+                }) || m
                 : m
             ));
             setStreaming(false);
@@ -4616,10 +4640,7 @@ export default function ChatPage() {
                 if (!frozenContent || resp.message.content.length > frozenContent.length) {
                   // ★ in-place 업데이트
                   if (!isStale()) setStreamBuf(resp.message.content);
-                  setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, {
-                    ...resp.message!,
-                    intent: undefined,
-                  }));
+                  setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, resp.message!));
                   setStreaming(false);
                   setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
@@ -4666,15 +4687,11 @@ export default function ChatPage() {
               setWaitingBgResponse(false);
               setBgPartialContent("");
               streamingSessionRef.current = null;
-              setMessages((prev) => prev.map(m =>
+              setMessages((prev) => prev.map((m) =>
                 m.intent === "streaming_placeholder"
-                  ? {
-                      ...m,
-                      content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
-                      intent: undefined,
-                      model_used: "interrupted",
-                      render_id: m.render_id || m.id,
-                    }
+                  ? convertDraftMessage(m, {
+                    note: "⏳ _응답 복구 대기 중..._",
+                  }) || m
                   : m
               ));
               setStreaming(false);
