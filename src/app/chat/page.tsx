@@ -4170,6 +4170,10 @@ export default function ChatPage() {
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
+              // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
+              setStreamBuf("");
+              setThinkingBuf("");
+              setStreaming(false);
               if (requestSessionId) {
                 mergeCooldownUntilRef.current = Date.now() + 5000;
               }
