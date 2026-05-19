@@ -11,6 +11,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   // -- 자동 라우팅 --
   { id: "mixture",                   name: "자동 라우팅 (혼합)",         provider: "auto",     cost: "자동" },
   // -- Anthropic Claude --
+  { id: "claude-opus-4-7",           name: "Claude Opus 4.7",           provider: "anthropic", cost: "$5/$25" },
   { id: "claude-opus-4-6",           name: "Claude Opus 4.6",           provider: "anthropic", cost: "$5/$25" },
   { id: "claude-sonnet-4-6",         name: "Claude Sonnet 4.6",         provider: "anthropic", cost: "$3/$15" },
   { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5",          provider: "anthropic", cost: "$0.80/$4" },
@@ -34,6 +35,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "o1",                        name: "o1",                        provider: "openai",   cost: "$15/$60" },
   { id: "o1-mini",                   name: "o1-mini",                   provider: "openai",   cost: "$3/$12" },
   { id: "o3-mini",                   name: "o3-mini",                   provider: "openai",   cost: "$1.10/$4.40" },
+  // -- Codex CLI (ChatGPT Plus OAuth) --
+  { id: "gpt-5.5",                   name: "GPT-5.5 (Codex)",           provider: "codex",    cost: "변동" },
+  { id: "gpt-5.4",                   name: "GPT-5.4 (Codex)",           provider: "codex",    cost: "$2.50/$15" },
+  { id: "gpt-5.4-mini",              name: "GPT-5.4 Mini (Codex)",      provider: "codex",    cost: "$0.75/$4.50" },
+  { id: "gpt-5.3-codex",             name: "GPT-5.3 Codex",             provider: "codex",    cost: "$1.75/$14" },
+  { id: "gpt-5.3-codex-spark",       name: "GPT-5.3 Codex Spark",       provider: "codex",    cost: "변동" },
+  { id: "gpt-5.2",                   name: "GPT-5.2 (Codex)",           provider: "codex",    cost: "변동" },
   // -- Google Gemini 3.1 --
   { id: "gemini-3.1-pro-preview",    name: "Gemini 3.1 Pro Preview",    provider: "google",   cost: "$2/$12" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash-Lite Preview", provider: "google", cost: "$0.02/$0.10" },
@@ -58,11 +66,9 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "deepseek-chat",             name: "DeepSeek V3",               provider: "deepseek",   cost: "$0.28/$0.42" },
   { id: "deepseek-reasoner",         name: "DeepSeek R1",               provider: "deepseek",   cost: "$0.55/$2.19" },
   // -- OpenRouter --
-  { id: "openrouter-grok-4-fast",    name: "Grok 4.1 Fast",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-deepseek-v3",    name: "DeepSeek V3.2",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-mistral-small",  name: "Mistral Small",             provider: "openrouter", cost: "변동" },
   { id: "openrouter-nemotron-free",  name: "Nemotron Free",             provider: "openrouter", cost: "무료" },
-  { id: "openrouter-minimax-m2",     name: "MiniMax M2.7",              provider: "openrouter", cost: "변동" },
   // -- Alibaba/Qwen (DashScope) — 플래그십 --
   { id: "qwen3-235b",              name: "Qwen3 235B",              provider: "alibaba", cost: "$0.60/$2.40" },
   { id: "qwen3-235b-instruct",     name: "Qwen3 235B Instruct",     provider: "alibaba", cost: "$0.60/$2.40" },
@@ -100,6 +106,15 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "qwen-omni-turbo",         name: "Qwen Omni Turbo",         provider: "alibaba", cost: "$0.02/$0.06" },
   // -- DashScope DeepSeek (Alibaba 호스팅) --
   { id: "dashscope-deepseek-v3.2", name: "DeepSeek V3.2 (DashScope)", provider: "alibaba", cost: "$0.28/$0.42" },
+  // -- Kimi (Moonshot AI) --
+  { id: "kimi-k2.5",              name: "Kimi K2.5",              provider: "kimi",    cost: "$0.60/$3" },
+  { id: "kimi-k2",                name: "Kimi K2",                provider: "kimi",    cost: "$0.50/$2" },
+  { id: "kimi-latest",            name: "Kimi Latest",            provider: "kimi",    cost: "변동" },
+  { id: "kimi-128k",              name: "Moonshot V1 128K",       provider: "kimi",    cost: "변동" },
+  { id: "kimi-8k",                name: "Moonshot V1 8K",         provider: "kimi",    cost: "변동" },
+  // -- MiniMax --
+  { id: "minimax-m2.7",           name: "MiniMax M2.7",           provider: "minimax", cost: "변동" },
+  { id: "minimax-m2.5",           name: "MiniMax M2.5",           provider: "minimax", cost: "변동" },
 ];
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -116,21 +131,21 @@ export interface ChatModelOption {
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "auto",                    label: "Auto",              cost: "자동",   description: "인텐트 기반 자동 라우팅" },
-  { id: "claude-sonnet-4-6",       label: "Sonnet 4.6",        cost: "$0.03",  description: "균형잡힌 성능" },
-  { id: "claude-opus-4-6",         label: "Opus 4.6",          cost: "$0.15",  description: "최고 성능" },
-  { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$0.02",  description: "최신 Gemini" },
-  { id: "gemini-2.5-flash",        label: "Flash 2.5",         cost: "$0.001", description: "빠름 · 저비용" },
+  { id: "deepseek-reasoner",       label: "DeepSeek R1",       cost: "$0.55/$2.19", description: "벤치마크 1위 · 추론 최강" },
+  { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$1/$4", description: "속도 1위 · 최신 Gemini" },
+  { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.60/$2.40", description: "한국어 1위 · Alibaba 최고" },
+  { id: "claude-sonnet-4-6",       label: "Sonnet 4.6",        cost: "$3/$15",  description: "안정성 1위 · 도구 활용" },
+  { id: "claude-opus-4-7",         label: "Opus 4.7",          cost: "$5/$25",  description: "최고 성능 · 복잡 작업" },
+  { id: "claude-opus-4-6",         label: "Opus 4.6",          cost: "$5/$25",  description: "안정 최상위 · 정밀 분석" },
+  { id: "gemini-2.5-flash",        label: "Flash 2.5",         cost: "$0.15/$0.60", description: "빠름 · 저비용" },
   { id: "groq-qwen3-32b",          label: "Qwen3 32B",         cost: "무료",   description: "Groq 초고속 · 무료" },
   { id: "groq-kimi-k2",            label: "Kimi K2",           cost: "무료",   description: "수학/금융 최강 · 무료" },
-  { id: "deepseek-chat",           label: "DeepSeek V3",       cost: "$0.001", description: "초저가 범용" },
-  { id: "openrouter-grok-4-fast",      label: "Grok 4.1 Fast",     cost: "변동",   description: "OpenRouter · Grok 최신" },
+  { id: "deepseek-chat",           label: "DeepSeek V3",       cost: "$0.28/$0.42", description: "초저가 범용" },
   { id: "openrouter-deepseek-v3",      label: "DeepSeek V3.2",     cost: "변동",   description: "OpenRouter · DeepSeek 최신" },
   { id: "openrouter-mistral-small",    label: "Mistral Small",     cost: "변동",   description: "OpenRouter · Mistral 경량" },
   { id: "openrouter-nemotron-free",    label: "Nemotron Free",     cost: "무료",   description: "OpenRouter · NVIDIA 무료" },
-  { id: "openrouter-minimax-m2",       label: "MiniMax M2.7",      cost: "변동",   description: "OpenRouter · MiniMax 최신" },
   // Alibaba/Qwen 대표 모델
-  { id: "qwen3-235b",              label: "Qwen3 235B",        cost: "$0.006", description: "Alibaba · 최고 성능" },
-  { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.006", description: "Alibaba · 추론 특화 최대" },
+  { id: "qwen3-235b",              label: "Qwen3 235B",        cost: "$0.60/$2.40", description: "Alibaba · 최고 성능" },
   { id: "qwen3-next-80b",          label: "Qwen3 Next 80B",    cost: "$0.003", description: "Alibaba · 차세대 80B" },
   { id: "qwen3-32b",               label: "Qwen3 32B",         cost: "$0.001", description: "Alibaba · 균형 성능" },
   { id: "qwen3-14b",               label: "Qwen3 14B",         cost: "$0.0004",description: "Alibaba · 경량 고성능" },
@@ -148,8 +163,19 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "qwq-plus",                label: "QwQ Plus",          cost: "$0.006", description: "Alibaba · 추론 특화" },
   { id: "qwen3-vl-235b",           label: "Qwen3 VL 235B",     cost: "$0.006", description: "Alibaba · 비전 최강" },
   { id: "qwen-omni-turbo",         label: "Qwen Omni Turbo",   cost: "$0.0002",description: "Alibaba · 멀티모달 경량" },
-  { id: "dashscope-deepseek-v3.2", label: "DS V3.2 (Ali)",     cost: "$0.003", description: "DashScope · DeepSeek V3.2" },
-  { id: "deep-research",               label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
+  { id: "dashscope-deepseek-v3.2", label: "DS V3.2 (Ali)",     cost: "$0.28/$0.42", description: "DashScope · DeepSeek V3.2" },
+  { id: "kimi-k2.5",               label: "Kimi K2.5",        cost: "$0.60/$3", description: "Moonshot AI · 멀티모달 최신" },
+  { id: "kimi-k2",                 label: "Kimi K2",          cost: "$0.50/$2", description: "Moonshot AI · 코딩 강자" },
+  { id: "minimax-m2.7",            label: "MiniMax M2.7",     cost: "변동",       description: "MiniMax · 에이전트 최신" },
+  { id: "minimax-m2.5",            label: "MiniMax M2.5",     cost: "변동",       description: "MiniMax · 코딩/도구 특화" },
+  { id: "deep-research",           label: "Deep Research",     cost: "~$3",    description: "심층 연구 모드", isDeepResearch: true },
+  // Codex CLI (ChatGPT Plus OAuth)
+  { id: "gpt-5.5",                 label: "GPT-5.5",          cost: "변동",         description: "Codex CLI · 최신 플래그십" },
+  { id: "gpt-5.4",                 label: "GPT-5.4 (Codex)",  cost: "$2.50/$15",    description: "Codex CLI · GPT-5.4 플래그십" },
+  { id: "gpt-5.4-mini",            label: "GPT-5.4 Mini",     cost: "$0.75/$4.50",  description: "Codex CLI · GPT-5.4 경량" },
+  { id: "gpt-5.3-codex",           label: "GPT-5.3 Codex",    cost: "$1.75/$14",    description: "Codex CLI · 코딩 특화" },
+  { id: "gpt-5.3-codex-spark",     label: "GPT-5.3 Spark",    cost: "변동",         description: "Codex CLI · 초고속 경량" },
+  { id: "gpt-5.2",                 label: "GPT-5.2",          cost: "변동",         description: "Codex CLI · 이전 세대 안정형" },
 ];
 
 export const DEFAULT_CHAT_MODEL = "claude-sonnet-4-6";
@@ -204,11 +230,14 @@ const PROVIDER_LABELS: Record<string, string> = {
   auto: "자동",
   anthropic: "Anthropic",
   openai: "OpenAI",
+  codex: "Codex CLI (GPT)",
   google: "Google",
   groq: "Groq (무료)",
   deepseek: "DeepSeek",
   openrouter: "OpenRouter",
   alibaba: "Alibaba/Qwen",
+  kimi: "Kimi (Moonshot)",
+  minimax: "MiniMax",
 };
 
 interface Props {
@@ -220,7 +249,7 @@ export default function ModelSelector({ value, onChange }: Props) {
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   // Group by provider for optgroup
-  const providers = ["auto", "anthropic", "openai", "google", "groq", "deepseek", "openrouter", "alibaba"];
+  const providers = ["auto", "deepseek", "anthropic", "openai", "codex", "google", "groq", "openrouter", "alibaba", "kimi", "minimax"];
 
   return (
     <div className="flex items-center gap-2 mb-2">
