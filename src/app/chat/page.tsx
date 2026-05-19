@@ -593,7 +593,7 @@ function mergeServerMessagesPreservingLocal(
   const merged = [
     ...prev.filter((message) =>
       !incomingIds.has(message.id) &&
-      !(isAssistantDraftMessage(message) && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
+      !((isAssistantDraftMessage(message) || (isLocalTransientMessage(message) && message.role === "assistant")) && message.execution_id && finalizedExecutionIds.has(message.execution_id)) &&
       !(
         !preserveStreamingPlaceholders &&
         isLocalTransientMessage(message) &&
