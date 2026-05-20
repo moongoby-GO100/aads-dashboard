@@ -2451,7 +2451,8 @@ export default function ChatPage() {
           m.intent === "streaming_placeholder" ? { ...m, execution_id: executionId } : m,
         );
       }
-      const cleaned = prev.filter((m) => m.intent !== "interrupted_partial");
+      // Keep DB-saved partial answers visible while replay attaches a continuation stream.
+      const cleaned = prev;
       return [
         ...cleaned,
         {
