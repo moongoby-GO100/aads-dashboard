@@ -425,6 +425,10 @@ export function useChatSSE() {
                   toolEvents.length = 0;
                   preserveVisibleStreamText(chunk.content ? String(chunk.content) : null);
 
+                } else if (chunk.type === "retry_progress") {
+                  // 429 재시도 — 인플레이스 카운트 업데이트 (delta 아님)
+                  setState((s) => ({ ...s, researchProgress: chunk.content || "⏳ 재시도 중..." }));
+
                 } else if (chunk.type === "done") {
                   sawTerminalEvent = true;
                   finalizeStream(chunk);

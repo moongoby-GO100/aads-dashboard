@@ -13,6 +13,14 @@ interface DocFile {
   base_path: string;
   label: string;
   full_path?: string;
+  format?: string;
+}
+
+interface DocContentResponse {
+  content: string;
+  encoding?: "text" | "base64";
+  mime_type?: string;
+  is_binary?: boolean;
 }
 
 interface ListedDocFile extends DocFile {
@@ -91,6 +99,75 @@ const TYPE_COLORS: Record<string, string> = {
   script: "bg-orange-800 text-orange-100",
   config: "bg-slate-700 text-slate-200",
 };
+
+const FORMAT_LABELS: Record<string, string> = {
+  markdown: "Markdown",
+  html: "HTML",
+  text: "텍스트",
+  pdf: "PDF",
+  image: "이미지",
+  word: "Word",
+  excel: "Excel",
+  powerpoint: "PowerPoint",
+  json: "JSON",
+  yaml: "YAML",
+  toml: "TOML",
+  xml: "XML",
+  csv: "CSV",
+  python: "Python",
+  shell: "Shell",
+  sql: "SQL",
+  javascript: "JavaScript",
+  typescript: "TypeScript",
+  css: "CSS",
+  config: "설정파일",
+  log: "로그",
+  rst: "reStructuredText",
+  other: "기타",
+};
+
+const FORMAT_COLORS: Record<string, string> = {
+  markdown: "bg-blue-800 text-blue-100",
+  html: "bg-orange-800 text-orange-100",
+  text: "bg-gray-600 text-gray-100",
+  pdf: "bg-red-900 text-red-100",
+  image: "bg-purple-800 text-purple-100",
+  word: "bg-blue-900 text-blue-100",
+  excel: "bg-green-900 text-green-100",
+  powerpoint: "bg-orange-900 text-orange-100",
+  json: "bg-yellow-800 text-yellow-100",
+  yaml: "bg-green-800 text-green-100",
+  toml: "bg-teal-800 text-teal-100",
+  xml: "bg-indigo-800 text-indigo-100",
+  csv: "bg-emerald-800 text-emerald-100",
+  python: "bg-sky-800 text-sky-100",
+  shell: "bg-lime-800 text-lime-100",
+  sql: "bg-violet-800 text-violet-100",
+  javascript: "bg-amber-800 text-amber-100",
+  typescript: "bg-blue-700 text-blue-100",
+  css: "bg-pink-800 text-pink-100",
+  config: "bg-slate-600 text-slate-100",
+  log: "bg-red-800 text-red-100",
+  rst: "bg-cyan-800 text-cyan-100",
+  other: "bg-gray-700 text-gray-200",
+};
+
+function detectFormat(name: string): string {
+  const ext = name.includes(".") ? name.split(".").pop()?.toLowerCase() || "" : "";
+  const map: Record<string, string> = {
+    md: "markdown", txt: "text", html: "html", htm: "html", rst: "rst", pdf: "pdf",
+    json: "json", yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", csv: "csv",
+    py: "python", sh: "shell", sql: "sql",
+    js: "javascript", ts: "typescript", tsx: "typescript", jsx: "javascript",
+    css: "css", ini: "config", cfg: "config", conf: "config", log: "log",
+    png: "image", jpg: "image", jpeg: "image", gif: "image",
+    svg: "image", webp: "image", bmp: "image", ico: "image",
+    docx: "word", odt: "word",
+    xlsx: "excel", ods: "excel",
+    pptx: "powerpoint", odp: "powerpoint",
+  };
+  return map[ext] || "other";
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -171,10 +248,12 @@ export default function DocsPage() {
   const [search, setSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<ListedDocFile | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileMeta, setFileMeta] = useState<{ encoding: string; mime_type: string; is_binary: boolean } | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "modified" | "size">("modified");
   const [listPaneWidth, setListPaneWidth] = useState(420);
   const [isResizing, setIsResizing] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [isDesktop, setIsDesktop] = useState(false);
 
   const fetchDocs = useCallback(async (force = false) => {
@@ -252,12 +331,19 @@ export default function DocsPage() {
     setSelectedFile(file);
     setContentLoading(true);
     setFileContent(null);
+    setFileMeta(null);
     try {
-      const r = await api.getProjectDocContent(project, file.base_path, file.path);
+      const r = (await api.getProjectDocContent(project, file.base_path, file.path)) as DocContentResponse;
       setFileContent(r.content || "");
+      setFileMeta({
+        encoding: r.encoding || "text",
+        mime_type: r.mime_type || "text/plain",
+        is_binary: !!r.is_binary,
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "알 수 없는 오류";
       setFileContent(`⚠️ 파일을 불러올 수 없습니다: ${message}`);
+      setFileMeta(null);
     } finally {
       setContentLoading(false);
     }
@@ -282,7 +368,21 @@ export default function DocsPage() {
     return acc;
   }, {});
 
-  const allFiles = matchingFiles.filter((file) => selectedType === "all" || file.type === selectedType);
+  const formatCounts = matchingFiles.reduce<Record<string, number>>((acc, file) => {
+    const fmt = file.format || detectFormat(file.name);
+    acc[fmt] = (acc[fmt] || 0) + 1;
+    return acc;
+  }, {});
+
+  const availableFormats = Object.keys(formatCounts).sort((a, b) => {
+    const labelA = FORMAT_LABELS[a] || a;
+    const labelB = FORMAT_LABELS[b] || b;
+    return labelA.localeCompare(labelB, "ko");
+  });
+
+  const allFiles = matchingFiles
+    .filter((file) => selectedType === "all" || file.type === selectedType)
+    .filter((file) => selectedFormat === "all" || (file.format || detectFormat(file.name)) === selectedFormat);
 
   allFiles.sort((a, b) => {
     if (sortBy === "modified") return b.modified - a.modified;
@@ -402,6 +502,34 @@ export default function DocsPage() {
                   </button>
                 ))}
               </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedFormat("all")}
+                  className="px-2.5 py-1 text-xs rounded-lg transition-colors"
+                  style={
+                    selectedFormat === "all"
+                      ? { background: "var(--accent)", color: "#fff" }
+                      : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
+                  }
+                >
+                  전체 포맷
+                </button>
+                {availableFormats.map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => setSelectedFormat(fmt)}
+                    className="px-2.5 py-1 text-xs rounded-lg transition-colors"
+                    style={
+                      selectedFormat === fmt
+                        ? { background: "var(--accent)", color: "#fff" }
+                        : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
+                    }
+                  >
+                    {FORMAT_LABELS[fmt] || fmt} {formatCounts[fmt] || 0}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex-1 overflow-auto p-2 space-y-1">
@@ -444,6 +572,9 @@ export default function DocsPage() {
                         </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
                           {TYPE_LABELS[file.type] || file.type}
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[file.format || detectFormat(file.name)] || "bg-gray-700 text-gray-200"}`}>
+                          {FORMAT_LABELS[file.format || detectFormat(file.name)] || detectFormat(file.name)}
                         </span>
                         <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: isSelected ? "rgba(255,255,255,0.3)" : "var(--border)" }}>
                           {file.label}
@@ -500,6 +631,9 @@ export default function DocsPage() {
                   <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[selectedFile.type] || "bg-gray-700 text-gray-200"}`}>
                     {TYPE_LABELS[selectedFile.type] || selectedFile.type}
                   </span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[selectedFile.format || detectFormat(selectedFile.name)] || "bg-gray-700 text-gray-200"}`}>
+                    {FORMAT_LABELS[selectedFile.format || detectFormat(selectedFile.name)] || detectFormat(selectedFile.name)}
+                  </span>
                   <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
                     {selectedFile.label}
                   </span>
@@ -522,17 +656,107 @@ export default function DocsPage() {
                     로딩 중...
                   </div>
                 ) : fileContent !== null ? (
-                  selectedFile.name.endsWith(".md") ? (
-                    <div
-                      className="prose prose-invert max-w-none text-sm leading-relaxed"
-                      style={{ color: "var(--text-primary)" }}
-                      dangerouslySetInnerHTML={{ __html: renderMarkdown(fileContent) }}
-                    />
-                  ) : (
-                    <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-                      {fileContent}
-                    </pre>
-                  )
+                  (() => {
+                    const fmt = selectedFile.format || detectFormat(selectedFile.name);
+                    const lowerName = selectedFile.name.toLowerCase();
+                    const isBinary = fileMeta?.is_binary || fileMeta?.encoding === "base64";
+                    const mime = fileMeta?.mime_type || "application/octet-stream";
+
+                    // 이미지: data URL로 직접 표시
+                    if (fmt === "image") {
+                      const src = isBinary
+                        ? `data:${mime};base64,${fileContent}`
+                        : `data:${mime || "image/svg+xml"};utf8,${encodeURIComponent(fileContent)}`;
+                      return (
+                        <div className="flex items-center justify-center bg-gray-900/40 rounded-lg p-4">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={selectedFile.name}
+                            className="max-w-full max-h-[calc(100vh-220px)] object-contain rounded"
+                          />
+                        </div>
+                      );
+                    }
+
+                    // PDF: base64 data URL로 iframe 표시
+                    if (fmt === "pdf") {
+                      const src = `data:application/pdf;base64,${fileContent}`;
+                      return (
+                        <iframe
+                          src={src}
+                          className="w-full border-0 rounded-lg bg-white"
+                          style={{ height: "calc(100vh - 200px)" }}
+                          title={selectedFile.name}
+                        />
+                      );
+                    }
+
+                    // 오피스 문서: 미리보기 불가, 다운로드 안내
+                    if (fmt === "word" || fmt === "excel" || fmt === "powerpoint") {
+                      const downloadHref = `data:${mime};base64,${fileContent}`;
+                      const officeLabel = fmt === "word" ? "Word" : fmt === "excel" ? "Excel" : "PowerPoint";
+                      return (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="text-5xl mb-4">📎</div>
+                          <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                            {officeLabel} 문서는 브라우저에서 미리보기를 지원하지 않습니다
+                          </p>
+                          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+                            {selectedFile.name} · {formatSize(selectedFile.size)}
+                          </p>
+                          <a
+                            href={downloadHref}
+                            download={selectedFile.name}
+                            className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
+                            style={{ background: "var(--accent)", color: "#fff" }}
+                          >
+                            ⬇️ 다운로드
+                          </a>
+                        </div>
+                      );
+                    }
+
+                    // Markdown
+                    if (lowerName.endsWith(".md")) {
+                      return (
+                        <div
+                          className="prose prose-invert max-w-none text-sm leading-relaxed"
+                          style={{ color: "var(--text-primary)" }}
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(fileContent) }}
+                        />
+                      );
+                    }
+
+                    // HTML
+                    if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
+                      return (
+                        <iframe
+                          srcDoc={fileContent}
+                          className="w-full border-0 rounded-lg"
+                          style={{ background: "#fff", height: "calc(100vh - 200px)" }}
+                          title={selectedFile.name}
+                          sandbox="allow-same-origin allow-popups"
+                        />
+                      );
+                    }
+
+                    // JSON
+                    if (lowerName.endsWith(".json")) {
+                      return (
+                        <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+                          {(() => { try { return JSON.stringify(JSON.parse(fileContent), null, 2); } catch { return fileContent; } })()}
+                        </pre>
+                      );
+                    }
+
+                    // 기본: 텍스트
+                    return (
+                      <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+                        {fileContent}
+                      </pre>
+                    );
+                  })()
                 ) : null}
               </div>
             </>

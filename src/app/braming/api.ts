@@ -96,3 +96,14 @@ export async function expandNode(sessionId: string, nodeId: string): Promise<{ n
 export async function synthesizeSession(sessionId: string): Promise<{ node: BramingNodeData; summary: string }> {
   return req(`/sessions/${sessionId}/synthesize`, { method: "POST" });
 }
+
+export async function updateNodeContent(
+  sessionId: string,
+  nodeId: string,
+  data: { label?: string; content?: string },
+): Promise<{ node: BramingNodeData }> {
+  return req(`/sessions/${sessionId}/nodes/${nodeId}/content`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}

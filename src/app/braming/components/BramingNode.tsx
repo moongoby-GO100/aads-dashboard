@@ -17,6 +17,10 @@ function BramingNodeComponent({ data, selected }: NodeProps) {
   const style = TYPE_STYLES[nodeType] || TYPE_STYLES.idea;
   const isCeoPick = nodeType === "ceo_pick";
   const isTopic = nodeType === "topic";
+  const childCount = (data.childCount as number) || 0;
+  const collapsed = data.collapsed as boolean;
+  const onToggleCollapse = data.onToggleCollapse as ((nodeId: string) => void) | undefined;
+  const nodeId = data.nodeId as string;
 
   return (
     <div
@@ -35,6 +39,7 @@ function BramingNodeComponent({ data, selected }: NodeProps) {
           ? "0 0 12px rgba(255,255,255,0.3)"
           : "0 2px 8px rgba(0,0,0,0.3)",
         transition: "all 0.2s ease",
+        position: "relative",
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: style.border, width: 8, height: 8 }} />
@@ -57,6 +62,37 @@ function BramingNodeComponent({ data, selected }: NodeProps) {
         </div>
       )}
       <Handle type="source" position={Position.Bottom} style={{ background: style.border, width: 8, height: 8 }} />
+      {childCount > 0 && onToggleCollapse && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCollapse(nodeId);
+          }}
+          style={{
+            position: "absolute",
+            bottom: "-12px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "24px",
+            height: "24px",
+            borderRadius: "50%",
+            border: "2px solid " + style.border,
+            background: style.bg,
+            color: "#fff",
+            fontSize: "12px",
+            lineHeight: "18px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+            padding: 0,
+          }}
+          title={collapsed ? `펼치기 (${childCount}개)` : `접기 (${childCount}개)`}
+        >
+          {collapsed ? `+${childCount}` : "−"}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import type { Node, Edge } from "@xyflow/react";
 import SessionSidebar from "./components/SessionSidebar";
@@ -12,6 +12,7 @@ import {
   generateCounter,
   expandNode,
   synthesizeSession,
+  updateNodeContent,
   type BramingSession,
 } from "./api";
 
@@ -36,6 +37,9 @@ export default function BramingPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [showNewModal, setShowNewModal] = useState(false);
   const [newTopic, setNewTopic] = useState("");
+
+  const nodesRef = useRef<Node[]>([]);
+  nodesRef.current = nodes;
 
   const loadGraph = useCallback(async (sessionId: string) => {
     try {
@@ -75,14 +79,16 @@ export default function BramingPage() {
   }, [loadGraph]);
 
   const handleNodeClick = useCallback((_nodeId: string, data: Record<string, unknown>) => {
+    const pageNode = nodesRef.current.find(n => n.id === _nodeId);
+    const src = (pageNode?.data ?? data) as Record<string, unknown>;
     setSelectedNode({
       id: _nodeId,
-      label: (data.label as string) || "",
-      content: (data.content as string) || "",
-      nodeType: (data.nodeType as string) || "idea",
-      agentRole: (data.agentRole as string) || null,
-      cost: (data.cost as number) || 0,
-      createdAt: (data.createdAt as string) || "",
+      label: (src.label as string) || "",
+      content: (src.content as string) || "",
+      nodeType: (src.nodeType as string) || "idea",
+      agentRole: (src.agentRole as string) || null,
+      cost: (src.cost as number) || 0,
+      createdAt: (src.createdAt as string) || "",
     });
   }, []);
 
@@ -151,6 +157,24 @@ export default function BramingPage() {
     }
   }, [session, loadGraph]);
 
+  const handleUpdateContent = useCallback(async (nodeId: string, label: string, content: string) => {
+    if (!session) return;
+    setLoading(true);
+    try {
+      await updateNodeContent(session.id, nodeId, { label, content });
+      setSelectedNode((prev) => prev ? { ...prev, label, content } : null);
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, label, content } } : n,
+        ),
+      );
+    } catch (e) {
+      console.error("노드 수정 실패:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg, #0a0a1a)" }}>
       {/* Header */}
@@ -217,6 +241,7 @@ export default function BramingPage() {
                 onGenerateIdeas={handleGenerateIdeas}
                 onGenerateCounter={handleGenerateCounter}
                 onExpandNode={handleExpandNode}
+                onUpdateContent={handleUpdateContent}
               />
             </>
           )}
