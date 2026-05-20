@@ -4147,11 +4147,12 @@ export default function ChatPage() {
         if (_drainTimer) return;
         _drainTimer = setInterval(() => {
           if (_tokenQueue.length > 0) {
-            _displayedText += _tokenQueue.shift()!;
+            while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
             if (!isStale()) setStreamBuf(_displayedText);
           }
-        }, 30);
+        }, 16);
       };
+
       const _stopDrain = () => {
         if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
         while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
