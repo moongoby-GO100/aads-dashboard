@@ -514,6 +514,12 @@ function findLocalMatchForServerMessage(
   serverMessage: ChatMessage,
   incomingMessages: ChatMessage[],
 ): ChatMessage | undefined {
+  if (serverMessage.execution_id) {
+    const execMatch = localMessages.find((m) =>
+      m.role === serverMessage.role && m.execution_id === serverMessage.execution_id
+    );
+    if (execMatch) return execMatch;
+  }
   const serverContent = normalizedMessageContent(serverMessage);
   const exactContentMatch = localMessages.find((localMessage) =>
     localMessage.role === serverMessage.role &&
@@ -1976,6 +1982,7 @@ export default function ChatPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
   const isNearBottomRef = useRef(true);
+  const prevMessagesCountRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2272,9 +2279,10 @@ export default function ChatPage() {
           fallbackContent: bgPartialContentRef.current || "",
         });
         const finalMsgs = processed.length > 0 ? processed : result.messages;
-        setMessages((prev) =>
-          prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs
-        );
+        setMessages((prev) => {
+          if (Date.now() < mergeCooldownUntilRef.current) return prev;
+          return prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs;
+        });
       }).catch(() => {});
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
@@ -3330,6 +3338,7 @@ export default function ChatPage() {
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
+    const _grew = messages.length > prevMessagesCountRef.current; prevMessagesCountRef.current = messages.length;
     if (!container) return;
     if (isInitialLoadRef.current) {
       if (messages.length === 0) return; // FIX-2: 빈 DOM에서 stabilizer 낭비 방지
@@ -3346,7 +3355,7 @@ export default function ChatPage() {
         isNearBottomRef.current = true;
       }, 3000);
       return () => { observer.disconnect(); clearTimeout(timeout); };
-    } else if (isNearBottomRef.current) {
+    } else if (isNearBottomRef.current && _grew) {
       // near-bottom일 때만 instant 스크롤 (smooth는 이전 위치에서 애니메이션 → 튀어감 방지)
       const container2 = messagesContainerRef.current;
       if (container2) container2.scrollTop = container2.scrollHeight;
@@ -3461,7 +3470,7 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs;
             if (filtered.length > 0) {
-              setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+              if (Date.now() >= mergeCooldownUntilRef.current) setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false); setStreamBuf("");
             } else {
@@ -3493,7 +3502,7 @@ export default function ChatPage() {
           if (freshMsgs) {
             const filtered = freshMsgs;
             if (filtered.length > 0) {
-              setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+              if (Date.now() >= mergeCooldownUntilRef.current) setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false); setStreamBuf("");
             } else {
@@ -3533,7 +3542,7 @@ export default function ChatPage() {
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
               .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
-              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
+              if (Date.now() >= mergeCooldownUntilRef.current) { setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
             }
             setMessages(prev => prev.map(m =>
               m.intent === "streaming_placeholder"
@@ -3631,9 +3640,9 @@ export default function ChatPage() {
           }
         }
         setMessages((prev) => {
+          if (Date.now() < mergeCooldownUntilRef.current) return prev;
           const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
           if (hasStoppedMsg && !_waitingBg) return prev;
-          // ★ FIX: active streaming 중 서버 메시지 병합 시 placeholder 중복 방지
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
@@ -6602,7 +6611,7 @@ export default function ChatPage() {
           className="ct-messages-scroll"
           style={{
             flex: 1,
-            overflowY: "auto",
+            overflowY: "auto", overflowAnchor: "auto" as never,
             padding: screenSize === "mobile" ? "12px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
@@ -8193,7 +8202,7 @@ export default function ChatPage() {
               ))}
             </div>
             {/* 템플릿 목록 */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+            <div style={{ flex: 1, overflowY: "auto", overflowAnchor: "auto" as never, padding: "8px 12px" }}>
               {templates
                 .filter((t) => templateTab === "전체" || t.category === templateTab)
                 .map((tpl) => (
