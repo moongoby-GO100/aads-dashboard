@@ -2183,6 +2183,34 @@ export default function ChatPage() {
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
+
+  // 탭 복귀 시 DB에서 메시지 재조회 — 백그라운드 저장된 응답을 화면에 반영
+  useEffect(() => {
+    let lastRefetch = 0;
+    const handleTabFocusRefetch = () => {
+      if (document.visibilityState !== "visible") return;
+      const sid = activeSessionRef.current;
+      if (!sid) return;
+      const now = Date.now();
+      if (now - lastRefetch < 3000) return;
+      lastRefetch = now;
+      chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+        `/chat/messages?session_id=${sid}&limit=40&include_streaming=true`
+      ).then((result) => {
+        if (activeSessionRef.current !== sid) return;
+        const processed = surfaceDbSavedStreamingPlaceholders(result.messages, {
+          keepEmpty: false,
+          fallbackContent: bgPartialContentRef.current || "",
+        });
+        const finalMsgs = processed.length > 0 ? processed : result.messages;
+        setMessages((prev) =>
+          prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs
+        );
+      }).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", handleTabFocusRefetch);
+    return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
+  }, []);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
