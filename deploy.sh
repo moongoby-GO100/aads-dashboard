@@ -45,6 +45,15 @@ fi
 echo $$ > "$LOCKFILE"
 trap 'rm -f "$LOCKFILE"' EXIT
 
+# nginx upstream is shared by backend and dashboard blue-green deploys.
+# Hold a common lock for the whole deployment to prevent concurrent rewrites.
+NGINX_SWITCH_LOCK="/tmp/aads-nginx-upstream.lock"
+exec 8>"$NGINX_SWITCH_LOCK"
+if ! flock -w 300 8; then
+    log "FAIL: nginx upstream 공통 락 획득 실패. 다른 배포가 진행 중입니다."
+    exit 1
+fi
+
 if git -C "$STATE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-$(git -C "$STATE_DIR" rev-parse --short=12 HEAD)}"
 else
