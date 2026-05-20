@@ -11,6 +11,7 @@
 #   5. 실패 시 upstream 롤백
 
 set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 COMPOSE_DIR="/root/aads/aads-server"
 COMPOSE_FILE="docker-compose.prod.yml"
@@ -26,6 +27,7 @@ HEALTH_BLUE="http://127.0.0.1:${BLUE_PORT}/login"
 HEALTH_GREEN="http://127.0.0.1:${GREEN_PORT}/login"
 HEALTH_EXTERNAL="${DASHBOARD_EXTERNAL_HEALTH_URL:-https://aads.newtalk.kr/login}"
 NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
+NGINX_UPSTREAM_SOURCE="/root/aads/aads-server/nginx-aads-upstream.conf"
 MAX_WAIT=90
 LOCKFILE="/tmp/aads-dashboard-deploy.lock"
 
@@ -164,35 +166,64 @@ switch_dashboard_upstream() {
     tmp=$(mktemp)
     python3 - "$NGINX_UPSTREAM" "$tmp" "$target" <<'PY'
 import sys
+import re
 
 src, dst, target = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(src, "r", encoding="utf-8").read()
-blue_active = "server 127.0.0.1:3100 max_fails=3 fail_timeout=30s;"
-blue_active_legacy = "server 127.0.0.1:3100 max_fails=0;"
-blue_backup = "server 127.0.0.1:3100 max_fails=3 fail_timeout=30s backup;"
-green_active = "server 127.0.0.1:3101 max_fails=3 fail_timeout=30s;"
-green_backup = "server 127.0.0.1:3101 max_fails=3 fail_timeout=30s backup;"
-
-text = text.replace(blue_active, "__BLUE_ACTIVE__")
-text = text.replace(blue_active_legacy, "__BLUE_ACTIVE__")
-text = text.replace(blue_backup, "__BLUE_BACKUP__")
-text = text.replace(green_active, "__GREEN_ACTIVE__")
-text = text.replace(green_backup, "__GREEN_BACKUP__")
 
 if target == "green":
-    text = text.replace("__BLUE_ACTIVE__", blue_backup)
-    text = text.replace("__BLUE_BACKUP__", blue_backup)
-    text = text.replace("__GREEN_ACTIVE__", green_active)
-    text = text.replace("__GREEN_BACKUP__", green_active)
+    blue_line = "    server 127.0.0.1:3100 max_fails=3 fail_timeout=30s backup;"
+    green_line = "    server 127.0.0.1:3101 max_fails=3 fail_timeout=30s;"
 else:
-    text = text.replace("__BLUE_ACTIVE__", blue_active)
-    text = text.replace("__BLUE_BACKUP__", blue_active)
-    text = text.replace("__GREEN_ACTIVE__", green_backup)
-    text = text.replace("__GREEN_BACKUP__", green_backup)
+    blue_line = "    server 127.0.0.1:3100 max_fails=3 fail_timeout=30s;"
+    green_line = "    server 127.0.0.1:3101 max_fails=3 fail_timeout=30s backup;"
+
+dashboard_block = (
+    "upstream aads_dashboard {\n"
+    "    zone aads_dashboard 64k;\n"
+    "    least_conn;\n"
+    "    # Active slot is the non-backup line. dashboard deploy.sh rewrites 3100/3101.\n"
+    f"{blue_line}\n"
+    f"{green_line}\n"
+    "    keepalive 16;\n"
+    "}"
+)
+
+text, count = re.subn(
+    r"upstream\s+aads_dashboard\s*\{.*?\n\}",
+    dashboard_block,
+    text,
+    count=1,
+    flags=re.S,
+)
+if count != 1:
+    raise SystemExit("aads_dashboard upstream block not found")
 
 open(dst, "w", encoding="utf-8").write(text)
 PY
     mv "$tmp" "$NGINX_UPSTREAM"
+}
+
+backup_upstream() {
+    cp "$NGINX_UPSTREAM" "${NGINX_UPSTREAM}.dashboard.bak"
+    if [ -f "$NGINX_UPSTREAM_SOURCE" ]; then
+        cp "$NGINX_UPSTREAM_SOURCE" "${NGINX_UPSTREAM_SOURCE}.dashboard.bak"
+    fi
+}
+
+rollback_upstream() {
+    if [ -f "${NGINX_UPSTREAM}.dashboard.bak" ]; then
+        mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
+    fi
+    if [ -f "${NGINX_UPSTREAM_SOURCE}.dashboard.bak" ]; then
+        mv "${NGINX_UPSTREAM_SOURCE}.dashboard.bak" "$NGINX_UPSTREAM_SOURCE"
+    fi
+}
+
+sync_upstream_source() {
+    if [ -f "$NGINX_UPSTREAM_SOURCE" ]; then
+        cp "$NGINX_UPSTREAM" "$NGINX_UPSTREAM_SOURCE"
+    fi
 }
 
 verify_upstream_shape() {
@@ -257,20 +288,21 @@ fi
 
 # Step 3: upstream 전환
 log "Step 3: nginx upstream → ${TARGET_SLOT}"
-cp "$NGINX_UPSTREAM" "${NGINX_UPSTREAM}.dashboard.bak"
+backup_upstream
 switch_dashboard_upstream "$TARGET_SLOT"
 if ! verify_upstream_shape || ! nginx_test; then
     log "FAIL: nginx 설정 검증 실패 — upstream 롤백"
-    mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
+    rollback_upstream
     exit 1
 fi
 nginx_reload
+sync_upstream_source
 log "OK: nginx reload 완료"
 
 # Step 4: 외부 헬스체크
 if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     log "FAIL: 외부 헬스체크 실패 — upstream 롤백"
-    mv "${NGINX_UPSTREAM}.dashboard.bak" "$NGINX_UPSTREAM"
+    rollback_upstream
     nginx_test && nginx_reload
     exit 1
 fi
