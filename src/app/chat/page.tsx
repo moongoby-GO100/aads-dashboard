@@ -478,7 +478,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
       (_fc.length >= 20 && (m.content || "").trim() === _fc)
     )
   );
-  if (_dupExists) return prev.filter((message) => !message.id.startsWith("ai-partial-"));
+  if (_dupExists) return prev;
   return [
     ...prev.filter((message) => !message.id.startsWith("ai-partial-")),
     appendedMessage,
@@ -4264,10 +4264,6 @@ export default function ChatPage() {
                   return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
               }
-              // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
-              setStreamBuf("");
-              setThinkingBuf("");
-              setStreaming(false);
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
               setStreamBuf("");
               setThinkingBuf("");
