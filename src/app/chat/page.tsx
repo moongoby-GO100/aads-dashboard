@@ -4268,10 +4268,6 @@ export default function ChatPage() {
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
-              if (requestSessionId) {
-                mergeCooldownUntilRef.current = Date.now() + 5000;
-              }
-              break; // done 이벤트 수신 → for 루프 탈출
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
