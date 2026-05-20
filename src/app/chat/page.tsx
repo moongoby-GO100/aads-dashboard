@@ -284,11 +284,13 @@ function surfaceDbSavedStreamingPlaceholders(
     .map((message) => {
       if (message.intent !== "streaming_placeholder") return message;
       const persistedContent = (message.content || fallbackContent || "").trim();
-      if (persistedContent.length > 10) {
+      if (persistedContent.length > 0) {
         if (options.keepEmpty) {
           return { ...message, content: persistedContent };
         }
-        return null;
+        return convertDraftMessage({ ...message, content: persistedContent }, {
+          modelUsed: message.model_used === "streaming" ? "recovered" : message.model_used,
+        });
       }
       if (options.keepEmpty) {
         return {
@@ -1693,6 +1695,10 @@ export default function ChatPage() {
   const [todoCollapsed, setTodoCollapsed] = useState(false);
   const [showAllTodos, setShowAllTodos] = useState(false);
   const [todoActionLoading, setTodoActionLoading] = useState<string | null>(null);
+  const [todoAdding, setTodoAdding] = useState(false);
+  const [todoAddTitle, setTodoAddTitle] = useState("");
+  const [todoEditingId, setTodoEditingId] = useState<string | null>(null);
+  const [todoEditTitle, setTodoEditTitle] = useState("");
   const activeWsObj = useMemo(
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
@@ -1713,6 +1719,7 @@ export default function ChatPage() {
   const [streamBuf, setStreamBuf] = useState("");
   const [thinkingBuf, setThinkingBuf] = useState("");
   const streamBufRef = useRef("");
+  const thinkingBufRef = useRef("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
   // AADS-190: 세션 비용/턴 + Yellow 경고 + 도구턴 한도
@@ -2078,6 +2085,51 @@ export default function ChatPage() {
       sid,
     );
   }, [runTodoAction]);
+
+  const createTodoItem = useCallback(async (title: string) => {
+    const sid = activeSessionRef.current;
+    if (!sid || !title.trim()) return;
+    setTodoActionLoading("create");
+    try {
+      await chatApi(`/chat/sessions/${sid}/todos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      await refreshTodos(sid);
+    } catch (err) {
+      console.error("TODO create failed", err);
+    } finally {
+      setTodoActionLoading(null);
+      setTodoAdding(false);
+      setTodoAddTitle("");
+    }
+  }, [refreshTodos]);
+
+  const saveTodoTitle = useCallback(async (item: ChatTodoItem, newTitle: string) => {
+    const sid = activeSessionRef.current;
+    if (!sid || !newTitle.trim() || newTitle.trim() === item.title) {
+      setTodoEditingId(null);
+      setTodoEditTitle("");
+      return;
+    }
+    setTodoActionLoading("edit-" + item.id);
+    try {
+      await chatApi(`/chat/sessions/${sid}/todos/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+      await refreshTodos(sid);
+    } catch (err) {
+      console.error("TODO title edit failed", err);
+    } finally {
+      setTodoActionLoading(null);
+      setTodoEditingId(null);
+      setTodoEditTitle("");
+    }
+  }, [refreshTodos]);
+
   // BUG-2 FIX: 초기 로드와 워크스페이스 전환 구분
   const initialWsLoadRef = useRef(true);
   // BUG-REFRESH FIX: 초기 마운트 시 hash 삭제 방지
@@ -2333,10 +2385,21 @@ export default function ChatPage() {
   const preservePartialAndContinueStreaming = useCallback((message: ChatMessage, fallbackSessionId?: string | null) => {
     const continuationSessionId = message.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
     const continuationCreatedAt = new Date(Date.now() + 1).toISOString();
+    const savedPartial = convertDraftMessage(message, {
+      modelUsed: message.model_used === "streaming" ? "interrupted" : message.model_used,
+    });
     setMessages((prev) => {
       let hasPlaceholder = false;
       const resetPrev = prev
-        .filter((m) => m.id !== message.id && m.intent !== "interrupted_partial")
+        .filter((m) => {
+          if (m.id === message.id) return false;
+          if (
+            message.execution_id &&
+            m.execution_id === message.execution_id &&
+            m.intent === "streaming_placeholder"
+          ) return false;
+          return true;
+        })
         .map((m) => {
           if (m.intent !== "streaming_placeholder") return m;
           hasPlaceholder = true;
@@ -2348,9 +2411,10 @@ export default function ChatPage() {
             render_id: m.render_id || m.id,
           };
         });
-      if (hasPlaceholder) return resetPrev;
+      const base = savedPartial ? [...resetPrev, savedPartial] : resetPrev;
+      if (hasPlaceholder) return base.sort((a, b) => messageTime(a) - messageTime(b));
       return [
-        ...resetPrev,
+        ...base,
         {
           id: `ai-streaming-${continuationSessionId}`,
           session_id: continuationSessionId,
@@ -3285,6 +3349,7 @@ export default function ChatPage() {
 
   // ★ streamBufRef 동기화 — SSE finally에서 streamBuf 값 참조용
   useEffect(() => { streamBufRef.current = streamBuf; }, [streamBuf]);
+  useEffect(() => { thinkingBufRef.current = thinkingBuf; }, [thinkingBuf]);
 
 
   // PERSIST-FIX: streaming 중 2초마다 streamBuf를 message.content에 동기화
@@ -3293,12 +3358,13 @@ export default function ChatPage() {
     if (!streaming) return;
     const syncTimer = setInterval(() => {
       const buf = streamBufRef.current;
-      if (!buf) return;
+      const thinking = thinkingBufRef.current;
+      if (!buf && !thinking) return;
       setMessages(prev => {
         const ph = prev.find(m => m.intent === "streaming_placeholder");
-        if (!ph || ph.content === buf) return prev;
+        if (!ph || (ph.content === buf && (ph.thinking_summary || "") === thinking)) return prev;
         return prev.map(m =>
-          m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
+          m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
         );
       });
     }, 2000);
@@ -3306,9 +3372,10 @@ export default function ChatPage() {
       clearInterval(syncTimer);
       // cleanup: streaming 종료 시 마지막 한번 동기화
       const buf = streamBufRef.current;
-      if (buf) {
+      const thinking = thinkingBufRef.current;
+      if (buf || thinking) {
         setMessages(prev => prev.map(m =>
-          m.intent === "streaming_placeholder" ? { ...m, content: buf } : m
+          m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
         ));
       }
     };
@@ -4008,11 +4075,23 @@ export default function ChatPage() {
     };
     // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
     if (_optimisticPending) {
-      setMessages(prev => freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent).map(m => {
-        if (m.session_id === sessionId && m.role === "user" && m.id.startsWith("tmp-")) return { ...userMsg };
-        if (m.id === streamingPlaceholderId) return { ...m };
-        return m;
-      }));
+      setMessages(prev => {
+        const currentPlaceholder = prev.find((m) => m.id === streamingPlaceholderId);
+        const frozen = freezeStreamingPlaceholders(
+          prev.filter((m) => m.id !== streamingPlaceholderId),
+          streamBufRef.current || bgPartialContent,
+        ).map((m) => (
+          m.session_id === sessionId && m.role === "user" && m.id.startsWith("tmp-")
+            ? { ...userMsg }
+            : m
+        ));
+        return [
+          ...frozen,
+          currentPlaceholder
+            ? { ...currentPlaceholder, session_id: sessionId!, content: "\u23F3 분석 중...", intent: "streaming_placeholder" }
+            : { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() },
+        ].sort((a, b) => messageTime(a) - messageTime(b));
+      });
     } else if (!_existingMsgId) {
       setMessages(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
@@ -4824,11 +4903,19 @@ export default function ChatPage() {
         // streaming_placeholder 잔여물 정리 — 내용 있으면 버블 유지 (사라짐 방지)
         setMessages((prev) => {
           const capturedBuf = streamBufRef.current;
+          const capturedThinking = thinkingBufRef.current;
           return prev.map((m) => {
             if (m.intent !== "streaming_placeholder") return m;
             const preserved = capturedBuf || m.content || "";
-            if (preserved.trim()) {
-              return { ...m, content: preserved, intent: "interrupted_partial", model_used: "interrupted" };
+            const preservedThinking = capturedThinking || m.thinking_summary || "";
+            if (preserved.trim() || preservedThinking.trim()) {
+              return {
+                ...m,
+                content: preserved,
+                thinking_summary: preservedThinking || m.thinking_summary,
+                intent: "interrupted_partial",
+                model_used: "interrupted",
+              };
             }
             return null;
           }).filter(Boolean) as ChatMessage[];
@@ -6914,6 +7001,18 @@ export default function ChatPage() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: !todoCollapsed && (visibleTodos.length || todoError) ? "6px" : 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
                   <span style={{ fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}>TODO</span>
+                  {!todoCollapsed && (
+                    <button
+                      onClick={() => { setTodoAdding(true); setTodoAddTitle(""); }}
+                      disabled={!!todoActionLoading}
+                      title="\uc0c8 TODO \ucd94\uac00"
+                      style={{
+                        background: "none", border: "none", cursor: todoActionLoading ? "default" : "pointer",
+                        fontSize: "14px", lineHeight: 1, padding: "0 2px", color: "var(--ct-accent)",
+                        opacity: todoActionLoading ? 0.6 : 1,
+                      }}
+                    >+</button>
+                  )}
                   <span style={{ fontSize: "11px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
                     진행 {todoCounts.active} · 완료 {todoCounts.completed}{todoCounts.failed ? ` · 실패 ${todoCounts.failed}` : ""}
                   </span>
@@ -7075,6 +7174,41 @@ export default function ChatPage() {
                 <div style={{ fontSize: "12px", color: "#ef4444" }}>{todoError}</div>
               ) : !todoCollapsed ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {todoAdding && (
+                    <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
+                      <input
+                        autoFocus
+                        value={todoAddTitle}
+                        onChange={(e) => setTodoAddTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && todoAddTitle.trim()) createTodoItem(todoAddTitle);
+                          if (e.key === "Escape") { setTodoAdding(false); setTodoAddTitle(""); }
+                        }}
+                        placeholder="\uc791\uc5c5 \uc81c\ubaa9 \uc785\ub825..."
+                        style={{
+                          flex: 1, fontSize: "11px", padding: "3px 6px", borderRadius: "4px",
+                          border: "1px solid var(--ct-border)", background: "var(--ct-input)",
+                          color: "var(--ct-text)", outline: "none", minWidth: 0,
+                        }}
+                      />
+                      <button
+                        onClick={() => todoAddTitle.trim() && createTodoItem(todoAddTitle)}
+                        disabled={!todoAddTitle.trim() || !!todoActionLoading}
+                        style={{
+                          fontSize: "11px", padding: "2px 8px", borderRadius: "4px", border: "none",
+                          background: todoAddTitle.trim() ? "var(--ct-accent)" : "var(--ct-hover)",
+                          color: todoAddTitle.trim() ? "#fff" : "var(--ct-text2)", cursor: "pointer",
+                        }}
+                      >\ucd94\uac00</button>
+                      <button
+                        onClick={() => { setTodoAdding(false); setTodoAddTitle(""); }}
+                        style={{
+                          fontSize: "11px", padding: "2px 6px", borderRadius: "4px", border: "none",
+                          background: "var(--ct-hover)", color: "var(--ct-text2)", cursor: "pointer",
+                        }}
+                      >\ucde8\uc18c</button>
+                    </div>
+                  )}
                   {visibleTodos.length === 0 ? (
                     <div style={{ fontSize: "12px", color: "var(--ct-text2)" }}>
                       진행/대기 TODO 없음{hiddenDoneTodoCount > 0 ? " · 전체 보기로 완료 항목 확인 가능" : ""}
@@ -7095,21 +7229,37 @@ export default function ChatPage() {
                             background: isDone ? "#22c55e" : isFailed ? "#ef4444" : isActive ? "var(--ct-accent)" : "var(--ct-text2)",
                           }}
                         />
-                        <span
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            fontSize: "12px",
-                            color: isDone ? "var(--ct-text2)" : "var(--ct-text)",
-                            textDecoration: isDone ? "line-through" : "none",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={item.title}
-                        >
-                          {item.title}
-                        </span>
+                        {todoEditingId === item.id ? (
+                          <input
+                            autoFocus
+                            value={todoEditTitle}
+                            onChange={(e) => setTodoEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveTodoTitle(item, todoEditTitle);
+                              if (e.key === "Escape") { setTodoEditingId(null); setTodoEditTitle(""); }
+                            }}
+                            onBlur={() => saveTodoTitle(item, todoEditTitle)}
+                            style={{
+                              flex: 1, minWidth: 0, fontSize: "12px", padding: "1px 4px", borderRadius: "3px",
+                              border: "1px solid var(--ct-accent)", background: "var(--ct-input)",
+                              color: "var(--ct-text)", outline: "none",
+                            }}
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => { setTodoEditingId(item.id); setTodoEditTitle(item.title); }}
+                            title={item.title + " (\ub354\ube14\ud074\ub9ad\uc73c\ub85c \uc218\uc815)"}
+                            style={{
+                              flex: 1, minWidth: 0, fontSize: "12px",
+                              color: isDone ? "var(--ct-text2)" : "var(--ct-text)",
+                              textDecoration: isDone ? "line-through" : "none",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              cursor: "text",
+                            }}
+                          >
+                            {item.title}
+                          </span>
+                        )}
                         <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
                           {item.status === "in_progress" ? "진행" : item.status === "pending" ? "대기" : item.status === "completed" ? "완료" : item.status === "failed" ? "실패" : "제외"}
                         </span>
