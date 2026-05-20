@@ -2281,8 +2281,10 @@ export default function ChatPage() {
         const finalMsgs = processed.length > 0 ? processed : result.messages;
         setMessages((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
+          if (streamingRef.current) return prev;
           return prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs;
         });
+        requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
       }).catch(() => {});
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
@@ -3462,23 +3464,20 @@ export default function ChatPage() {
         if (ss.just_completed) {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
-          // ★ FIX: streaming 버블 유지 — 메시지 교체 후 부드럽게 전환 (새 버블 방지)
           streamingSessionRef.current = null;
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
-          if (freshMsgs) {
-            const filtered = freshMsgs;
-            if (filtered.length > 0) {
-              if (Date.now() >= mergeCooldownUntilRef.current) setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-              mergeCooldownUntilRef.current = Date.now() + 5000;
-              setStreaming(false); setStreamBuf("");
+          mergeCooldownUntilRef.current = Date.now() + 8000;
+          if (freshMsgs && freshMsgs.length > 0) {
+            const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
+            if (latestAi) {
+              setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
-              setStreaming(false); setStreamBuf("");
+              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
-          } else {
-            setStreaming(false); setStreamBuf("");
           }
+          setStreaming(false); setStreamBuf("");
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -3491,26 +3490,23 @@ export default function ChatPage() {
           }
           return;
         }
-        // 서버에서 스트리밍 아님 + 프론트 streaming=true → SSE 끊김 감지
+        // SSE 끊김 감지: 서버 is_streaming=false + 프론트 streaming=true
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
-          // FIX: 서버가 is_streaming=false 확인 시 streamingSessionRef 강제 해제 (고착 방지)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
-          if (freshMsgs) {
-            const filtered = freshMsgs;
-            if (filtered.length > 0) {
-              if (Date.now() >= mergeCooldownUntilRef.current) setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-              mergeCooldownUntilRef.current = Date.now() + 5000;
-              setStreaming(false); setStreamBuf("");
+          mergeCooldownUntilRef.current = Date.now() + 8000;
+          if (freshMsgs && freshMsgs.length > 0) {
+            const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
+            if (latestAi) {
+              setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
-              setStreaming(false); setStreamBuf("");
+              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
-          } else {
-            setStreaming(false); setStreamBuf("");
           }
+          setStreaming(false); setStreamBuf("");
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -3602,11 +3598,15 @@ export default function ChatPage() {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
                 .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
               if (cancelled) return;
-              if (allMsgs) {
-                const filtered = allMsgs;
-                if (filtered.length > 0) {
-                  setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+              mergeCooldownUntilRef.current = Date.now() + 8000;
+              if (allMsgs && allMsgs.length > 0) {
+                const latestAi2 = allMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
+                if (latestAi2) {
+                  setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
+                } else {
+                  setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
+                requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -3646,8 +3646,9 @@ export default function ChatPage() {
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
+        requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
       } catch { /* 폴링 실패 무시 */ }
-    }, 3000); // 3초 간격: waitingBg=true 3초, 아닐 때 15초 폴링 (성능 최적화)
+    }, 5000); // 5초 간격: 브라우저 부하 감소
     return () => { cancelled = true; clearInterval(iv); };
   }, [activeSession?.id]); // PERF: 의존성을 세션 ID만으로 축소
 
