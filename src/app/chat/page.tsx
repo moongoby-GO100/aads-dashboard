@@ -247,6 +247,20 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
   );
 }
 
+function isPlaceholderOnlyContent(content?: string | null): boolean {
+  const normalized = String(content || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return true;
+  return [
+    "⏳ 세션 생성 중...",
+    "⏳ 분석 중...",
+    "분석 중...",
+    "⏳ AI가 응답을 생성 중입니다...",
+    "AI가 응답을 생성 중입니다...",
+  ].includes(normalized);
+}
+
 function freezeStreamingPlaceholders(messages: ChatMessage[], fallbackContent = ""): ChatMessage[] {
   return messages.map((message) => {
     if (message.intent !== "streaming_placeholder") return message;
@@ -262,7 +276,8 @@ function convertDraftMessage(
     modelUsed?: string;
   } = {},
 ): ChatMessage | null {
-  const preservedContent = (message.content || options.fallbackContent || "").trim();
+  const rawContent = (message.content || options.fallbackContent || "").trim();
+  const preservedContent = isPlaceholderOnlyContent(rawContent) ? "" : rawContent;
   const note = (options.note || "").trim();
   const nextContent = [preservedContent, note].filter(Boolean).join("\n\n").trim();
   if (!nextContent) return null;
@@ -284,7 +299,7 @@ function surfaceDbSavedStreamingPlaceholders(
     .map((message) => {
       if (message.intent !== "streaming_placeholder") return message;
       const persistedContent = (message.content || fallbackContent || "").trim();
-      if (persistedContent.length > 0) {
+      if (persistedContent.length > 0 && !isPlaceholderOnlyContent(persistedContent)) {
         if (options.keepEmpty) {
           return { ...message, content: persistedContent };
         }
@@ -855,6 +870,7 @@ const MessageItem = memo(function MessageItem({
     : null;
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
+  const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
   const assistantBubbleOpacity = msg.intent === "regenerated" ? 0.45 : isStreamingPlaceholder ? 0.92 : 1;
   const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
@@ -1342,7 +1358,7 @@ const MessageItem = memo(function MessageItem({
                 );
               })()}
               {finalThinkingSummary && (
-                <details style={{marginBottom: '8px'}}>
+                <details open={isInterruptedAssistant} style={{marginBottom: '8px'}}>
                   <summary style={{
                     cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
                     borderRadius: '8px', background: 'rgba(255,200,100,0.06)',
@@ -1352,8 +1368,8 @@ const MessageItem = memo(function MessageItem({
                     color: '#f4b557',
                   }}>
                     <span style={{fontSize: '10px', opacity: 0.65}}>▶</span>
-                    <span style={{fontWeight: 500}}>사고 과정</span>
-                    <span style={{opacity: 0.6, fontSize: '11px'}}>— 요약 {finalThinkingSummary.length.toLocaleString()}자</span>
+                    <span style={{fontWeight: 500}}>{isInterruptedAssistant ? "사고 과정 (중단 전)" : "사고 과정"}</span>
+                    <span style={{opacity: 0.6, fontSize: '11px'}}>— {finalThinkingSummary.length.toLocaleString()}자</span>
                   </summary>
                   <div style={{
                     padding: '8px 10px', marginTop: '4px',
@@ -1551,7 +1567,7 @@ const MessageItem = memo(function MessageItem({
             {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
               <button
                 onClick={() => onRegenerate(msg.id)}
-                title="다시 생성"
+                title={isInterruptedAssistant ? "중단 지점부터 이어서 생성" : "다시 생성"}
                 style={{
                   width: "28px", height: "28px", borderRadius: "6px",
                   background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
@@ -1562,7 +1578,7 @@ const MessageItem = memo(function MessageItem({
                 }}
                 onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; (e.target as HTMLElement).style.borderColor = "#22c55e"; }}
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
-              >🔄</button>
+              >{isInterruptedAssistant ? "▶" : "🔄"}</button>
             )}
             <button
               onClick={() => handleDeleteMessage(msg.id, "assistant")}
@@ -5138,6 +5154,7 @@ export default function ChatPage() {
   const handleRegenerate = useCallback(async (msgId: string) => {
     if (!activeSessionObjRef.current || streaming) return;
     const sessionId = activeSessionObjRef.current.id;
+    const regenPlaceholderId = `ai-streaming-regen-${msgId}`;
 
     setRegeneratingId(msgId);
     setStreaming(true);
@@ -5145,6 +5162,23 @@ export default function ChatPage() {
     setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === regenPlaceholderId)) return prev;
+      const placeholder: ChatMessage = {
+        id: regenPlaceholderId,
+        render_id: regenPlaceholderId,
+        session_id: sessionId,
+        role: "assistant",
+        content: "⏳ 이어서 생성 중...",
+        intent: "streaming_placeholder",
+        created_at: new Date(Date.now() + 1).toISOString(),
+      };
+      const idx = prev.findIndex((m) => m.id === msgId);
+      if (idx < 0) return [...prev, placeholder];
+      const next = [...prev];
+      next.splice(idx + 1, 0, placeholder);
+      return next;
+    });
 
     const requestSessionId = sessionId;
     const isStale = () => activeSessionRef.current !== requestSessionId;
@@ -5155,6 +5189,7 @@ export default function ChatPage() {
     const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 3600000);
 
     let full = "";
+    let gotFinal = false;
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate`, {
         method: "POST",
@@ -5199,6 +5234,7 @@ export default function ChatPage() {
               full += ev.text;
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
+              gotFinal = true;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
@@ -5223,13 +5259,10 @@ export default function ChatPage() {
                 const updated = prev.map((m) =>
                   m.id === msgId ? { ...m, intent: "regenerated" } : m
                 );
-                // 새 메시지 추가 (기존 메시지 바로 뒤에)
-                const idx = updated.findIndex((m) => m.id === msgId);
-                if (idx >= 0) {
-                  updated.splice(idx + 1, 0, finalMsg);
-                  return [...updated];
-                }
-                return [...updated, finalMsg];
+                return replaceStreamingPlaceholderWithFinal(updated, {
+                  ...finalMsg,
+                  render_id: regenPlaceholderId,
+                });
               });
               break;
             }
@@ -5242,6 +5275,15 @@ export default function ChatPage() {
     } finally {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
+      if (!gotFinal) {
+        setMessages((prev) => prev.map((m) => {
+          if (m.id !== regenPlaceholderId) return m;
+          return convertDraftMessage(m, {
+            fallbackContent: full,
+            note: full.trim() ? "⏳ _응답 복구 대기 중..._" : "",
+          });
+        }).filter(Boolean) as ChatMessage[]);
+      }
       setStreaming(false);
       setStreamBuf("");
       setRegeneratingId(null);
