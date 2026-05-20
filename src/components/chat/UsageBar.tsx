@@ -106,7 +106,7 @@ export default function UsageBar() {
 
   useEffect(() => {
     fetchUsage();
-    const iv = setInterval(fetchUsage, 60_000);
+    const iv = setInterval(fetchUsage, 30_000);
     return () => clearInterval(iv);
   }, [fetchUsage]);
 
@@ -114,7 +114,8 @@ export default function UsageBar() {
 
   const cm = claude?.claude_max;
   const cx = codex?.ok ? codex.limits?.[0] : null;
-  const isLive = cm?.source === "claude_ai_api";
+  const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
+  const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
 
   return (
     <div style={{
@@ -125,7 +126,7 @@ export default function UsageBar() {
       {cm && (
         <>
           <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>
-            Claude{isLive ? "" : " (est)"}
+            Claude{isLive ? sourceLabel : " (est)"}
           </span>
           <MiniBar
             pct={cm.primary.used_percent}
