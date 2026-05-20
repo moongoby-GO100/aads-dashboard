@@ -3318,7 +3318,7 @@ export default function ChatPage() {
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 150;
       // 맨 위 근접 시 이전 메시지 자동 로드
-      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current) {
+      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && Date.now() >= mergeCooldownUntilRef.current) {
         loadingOlderRef.current = true;
         loadOlderMessages().finally(() => { loadingOlderRef.current = false; });
       }
@@ -4421,6 +4421,7 @@ export default function ChatPage() {
                 });
               }
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
@@ -4610,6 +4611,7 @@ export default function ChatPage() {
           };
           return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
         });
+        mergeCooldownUntilRef.current = Date.now() + 5000;
         // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
         if (sessionId && !gotFinal) {
           _invisibleRecoveryActivated = true;
@@ -4636,6 +4638,7 @@ export default function ChatPage() {
             const aiMsg = msgs.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
             if (aiMsg) {
               setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               break;
             }
           } catch { /* retry */ }
@@ -4761,6 +4764,7 @@ export default function ChatPage() {
                         content: full,
                         created_at: new Date().toISOString(),
                       }));
+                      mergeCooldownUntilRef.current = Date.now() + 5000;
                       setStreamBuf("");
                       setStreaming(false);
                     } else {
@@ -4856,6 +4860,7 @@ export default function ChatPage() {
                   // ★ in-place 업데이트
                   if (!isStale()) setStreamBuf(resp.message.content);
                   setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, resp.message!));
+                  mergeCooldownUntilRef.current = Date.now() + 5000;
                   setStreaming(false);
                   setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
@@ -4995,7 +5000,7 @@ export default function ChatPage() {
     setToolStatus(null);
     setYellowWarning(null);
     setToolTurnInfo(null);
-    isNearBottomRef.current = false;
+    isNearBottomRef.current = true;
     if (buf && activeSession) {
       // ★ in-place 업데이트: placeholder를 stopped 메시지로 교체
       setMessages((prev) => {
@@ -6818,7 +6823,8 @@ export default function ChatPage() {
                   const overlaps =
                     _prefixLen >= 30 &&
                     baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
-                  if (!sameExecutionDraft && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
+                  const eitherInterrupted = (msg.intent === "interrupted_partial" || msg.intent === "interruption_notice" || next.intent === "interrupted_partial" || next.intent === "interruption_notice");
+                  if (!sameExecutionDraft && !eitherInterrupted && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
                   j++;
                 }
                 if (j > i + 1) {
@@ -6827,6 +6833,7 @@ export default function ChatPage() {
                     if (streaming && item.intent === "streaming_placeholder") return 3;
                     if (item.intent === "streaming_placeholder") return 2;
                     if (item.model_used === "recovered") return 1;
+                    if (item.intent === "interrupted_partial" || item.intent === "interruption_notice") return -1;
                     return 0;
                   };
                   const keeper = group
