@@ -14,6 +14,7 @@ import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
+import UsageBar from "@/components/chat/UsageBar";
 import DiscussionPanel from "@/components/chat/DiscussionPanel";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
@@ -2445,6 +2446,9 @@ export default function ChatPage() {
               full = "";
               setStreamBuf("");
               setToolStatus("🔄 응답 재검증 중...");
+            } else if (ev.type === "retry_progress") {
+              if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
+              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
@@ -3932,14 +3936,32 @@ export default function ChatPage() {
 
     // Auto-create session if none active
     let sessionId = activeSessionObjRef.current?.id;
+    if (!_existingMsgId) { setInput(""); chatInputRef.current?.clear(); }
+    let _optimisticPending: string | null = null;
     if (!sessionId) {
       if (!activeWsRef.current) return;
+      setStreaming(true);
+      _optimisticPending = `pending-${Date.now()}`;
+      const _optPhId = `ai-streaming-${_optimisticPending}`;
+      if (!_existingMsgId) {
+        setMessages(prev => [...prev,
+          { id: `tmp-${Date.now()}`, session_id: _optimisticPending!, role: "user" as const, content, created_at: new Date().toISOString() },
+          { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+        ]);
+      } else {
+        setMessages(prev => [...prev,
+          { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+        ]);
+      }
       const s = await createSession();
-      if (!s) return;
+      if (!s) { setStreaming(false); setMessages(prev => prev.filter(m => m.session_id !== _optimisticPending)); return; }
       sessionId = s.id;
+      setMessages(prev => prev.map(m => m.session_id === _optimisticPending
+        ? { ...m, session_id: sessionId!, ...(m.role === "assistant" ? { id: `ai-streaming-${sessionId}` } : {}) }
+        : m
+      ));
     }
 
-    if (!_existingMsgId) { if (!_existingMsgId) { setInput(""); chatInputRef.current?.clear(); } }
     setEditMode(null);
     setReplyToMessage(null);
     // P2-2: 분기 모드 캡처 후 초기화
@@ -3985,7 +4007,13 @@ export default function ChatPage() {
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
     // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
-    if (!_existingMsgId) {
+    if (_optimisticPending) {
+      setMessages(prev => freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent).map(m => {
+        if (m.session_id === sessionId && m.role === "user" && m.id.startsWith("tmp-")) return { ...userMsg };
+        if (m.id === streamingPlaceholderId) return { ...m };
+        return m;
+      }));
+    } else if (!_existingMsgId) {
       setMessages(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         userMsg,
@@ -4193,6 +4221,9 @@ export default function ChatPage() {
               if (ev.reason === "llm_retry") accumulatedToolCalls = [];
               setStreamBuf("");
               setToolStatus(ev.reason === "interrupt_applied" ? "🔄 추가 지시 반영 중..." : "🔄 응답 재검증 중...");
+              continue;
+            } else if (ev.type === "retry_progress") {
+              if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
@@ -6428,6 +6459,7 @@ export default function ChatPage() {
           </button>
         </div>
 
+        <UsageBar />
         {/* Messages */}
         <div
           ref={messagesContainerRef}
@@ -6607,11 +6639,13 @@ export default function ChatPage() {
           {/* 4번: 중복 user 메시지 압축 렌더링 — UI 레벨만, DB 수정 없음 */}
           {(() => {
             const sorted = [...messages]
-              .filter(m =>
-                m.intent !== "ai_review_warning" &&
-                m.intent !== "interrupted_partial" &&
-                m.intent !== "interruption_notice"
-              )
+              .filter(m => {
+                if (m.intent === "ai_review_warning") return false;
+                if (m.intent === "interrupted_partial" || m.intent === "interruption_notice") {
+                  return (m.content || "").length > 30;
+                }
+                return true;
+              })
               .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
             type DisplayItem = { msg: typeof sorted[0]; idx: number; hiddenMsgs?: typeof sorted };
             const display: DisplayItem[] = [];
