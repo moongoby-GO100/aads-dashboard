@@ -2540,6 +2540,9 @@ export default function ChatPage() {
             } else if (ev.type === "retry_progress") {
               if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
               continue;
+            } else if (ev.type === "model_fallback") {
+              if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
+              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
@@ -4331,6 +4334,9 @@ export default function ChatPage() {
               continue;
             } else if (ev.type === "retry_progress") {
               if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
+              continue;
+            } else if (ev.type === "model_fallback") {
+              if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
