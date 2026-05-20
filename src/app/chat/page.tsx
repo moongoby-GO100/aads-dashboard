@@ -6643,7 +6643,7 @@ export default function ChatPage() {
               .filter(m => {
                 if (m.intent === "ai_review_warning") return false;
                 if (m.intent === "interrupted_partial" || m.intent === "interruption_notice") {
-                  return (m.content || "").length > 30;
+                  return (m.content || "").length > 0;
                 }
                 return true;
               })
