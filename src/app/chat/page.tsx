@@ -3426,7 +3426,7 @@ export default function ChatPage() {
     if (!sid) return;
     const timer = setTimeout(async () => {
       if (activeSessionRef.current !== sid || streamingRef.current) return;
-      if (Date.now() < mergeCooldownUntilRef.current) return;
+      // safety-net은 cooldown 무시 — placeholder 잔류 시 반드시 복구
       try {
         const msgs = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`
@@ -3621,7 +3621,7 @@ export default function ChatPage() {
       if (_ssLastMsgId) lastKnownMsgIdRef.current = _ssLastMsgId;
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
-      if (Date.now() < mergeCooldownUntilRef.current) return;
+      // safety-net은 cooldown 무시 — placeholder 잔류 시 반드시 복구
       try {
         const rawLatest = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal&include_streaming=true`
