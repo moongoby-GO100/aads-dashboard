@@ -2265,13 +2265,22 @@ export default function ChatPage() {
   // 탭 복귀 시 DB에서 메시지 재조회 — 백그라운드 저장된 응답을 화면에 반영
   useEffect(() => {
     let lastRefetch = 0;
-    const handleTabFocusRefetch = () => {
+    const handleTabFocusRefetch = async () => {
       if (document.visibilityState !== "visible") return;
       const sid = activeSessionRef.current;
       if (!sid) return;
       const now = Date.now();
       if (now - lastRefetch < 3000) return;
       lastRefetch = now;
+      // P1-c: streaming-status check on tab return
+      try {
+        const status = await chatApi<{ is_streaming: boolean; just_completed: boolean }>(`/chat/streaming-status?session_id=${sid}`);
+        if (activeSessionRef.current !== sid) return;
+        if (status.just_completed || !status.is_streaming) {
+          streamingRef.current = false;
+          finalizingRef.current = false;
+        }
+      } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
         `/chat/messages?session_id=${sid}&limit=40&include_streaming=true`
       ).then((result) => {
