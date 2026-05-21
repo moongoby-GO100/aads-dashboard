@@ -3381,16 +3381,16 @@ export default function ChatPage() {
     }
   }, [messages]); // streamBuf 의존성 제거!
 
-  // 스트리밍 중 스크롤 (200ms throttle, near-bottom일 때만)
+  // 스트리밍 중 스크롤 (200ms interval, near-bottom일 때만, streamBuf 의존성 제거로 렌더 감소)
   useEffect(() => {
-    if (!streaming || !streamBuf || !isNearBottomRef.current) return;
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const timer = setTimeout(() => {
-      container.scrollTop = container.scrollHeight;
+    if (!streaming) return;
+    const iv = setInterval(() => {
+      if (!isNearBottomRef.current) return;
+      const container = messagesContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
     }, 200);
-    return () => clearTimeout(timer);
-  }, [streaming, streamBuf]);
+    return () => clearInterval(iv);
+  }, [streaming]);
 
   // ★ streamBufRef 동기화 — SSE finally에서 streamBuf 값 참조용
   useEffect(() => { streamBufRef.current = streamBuf; }, [streamBuf]);
@@ -4322,7 +4322,7 @@ export default function ChatPage() {
             while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
             if (!isStale()) setStreamBuf(_displayedText);
           }
-        }, 16);
+        }, 50);
       };
 
       const _stopDrain = () => {
