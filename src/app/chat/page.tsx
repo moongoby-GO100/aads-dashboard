@@ -2614,6 +2614,8 @@ export default function ChatPage() {
               setThinkingBuf("");
               setToolStatus(null);
               setToolLogs([]);
+              isNearBottomRef.current = true;
+              requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
               return;
             }
           } catch {
@@ -3412,6 +3414,44 @@ export default function ChatPage() {
     };
   }, [streaming]);
 
+  // ── SAFETY-NET: streaming→false 전환 후 placeholder 잔류 방지 + 스크롤 복구 ──
+  const prevStreamingForSafetyRef = useRef(false);
+  useEffect(() => {
+    const wasStreaming = prevStreamingForSafetyRef.current;
+    prevStreamingForSafetyRef.current = streaming;
+    if (!wasStreaming || streaming) return;
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    const timer = setTimeout(async () => {
+      if (activeSessionRef.current !== sid || streamingRef.current) return;
+      try {
+        const msgs = await chatApi<ChatMessage[]>(
+          `/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`
+        );
+        if (activeSessionRef.current !== sid || streamingRef.current) return;
+        const processed = surfaceDbSavedStreamingPlaceholders(msgs, {}).reverse();
+        const latestAi = processed.filter(
+          (m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited"
+        ).pop();
+        if (latestAi) {
+          setMessages(prev => {
+            const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
+            if (hasPlaceholder) return replaceStreamingPlaceholderWithFinal(prev, latestAi);
+            const alreadyHas = prev.some(m => m.id === latestAi.id);
+            if (alreadyHas) return prev;
+            return mergeServerMessagesPreservingLocal(prev, processed);
+          });
+        }
+      } catch { /* polling fallback */ }
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => {
+        const c = messagesContainerRef.current;
+        if (c) c.scrollTop = c.scrollHeight;
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [streaming]);
+
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
     if (!briefing || isInitialLoadRef.current) return;
@@ -3481,6 +3521,8 @@ export default function ChatPage() {
             }
           }
           setStreaming(false); setStreamBuf("");
+          isNearBottomRef.current = true;
+          requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -3510,6 +3552,8 @@ export default function ChatPage() {
             }
           }
           setStreaming(false); setStreamBuf("");
+          isNearBottomRef.current = true;
+          requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -3609,7 +3653,8 @@ export default function ChatPage() {
                 } else {
                   setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
-                requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
+                isNearBottomRef.current = true;
+                requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -4441,6 +4486,8 @@ export default function ChatPage() {
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
+              isNearBottomRef.current = true;
+              requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
