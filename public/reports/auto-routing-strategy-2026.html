@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AADS Auto-Routing Strategy 2026.05.20</title>
+<style>
+:root{--bg:#0d1117;--sf:#161b22;--sf2:#21262d;--bd:#30363d;--tx:#e6edf3;--tx2:#8b949e;--ac:#58a6ff;--gn:#3fb950;--yw:#d29922;--rd:#f85149;--pp:#bc8cff;--og:#f0883e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--tx);line-height:1.7}
+.ctn{max-width:1200px;margin:0 auto;padding:40px 24px}
+.hero{text-align:center;padding:60px 0 40px;border-bottom:1px solid var(--bd);margin-bottom:48px}
+.hero h1{font-size:2.4rem;font-weight:800;background:linear-gradient(135deg,var(--ac),var(--pp));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:12px}
+.hero .sub{font-size:1.1rem;color:var(--tx2)}
+.hero .meta{margin-top:16px;display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+.hero .meta span{background:var(--sf);border:1px solid var(--bd);padding:4px 14px;border-radius:20px;font-size:.85rem;color:var(--tx2)}
+.toc{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:28px 32px;margin-bottom:48px}
+.toc h2{font-size:1.2rem;color:var(--ac);margin-bottom:16px}
+.toc ol{padding-left:20px}.toc li{margin-bottom:6px}
+.toc a{color:var(--tx);text-decoration:none;border-bottom:1px dashed var(--bd)}
+.toc a:hover{color:var(--ac);border-color:var(--ac)}
+.sec{margin-bottom:56px}
+.sec h2{font-size:1.6rem;font-weight:700;color:var(--ac);margin-bottom:8px;padding-bottom:8px;border-bottom:2px solid var(--ac)}
+.sec h3{font-size:1.2rem;font-weight:600;color:var(--pp);margin:24px 0 12px}
+.sec h4{font-size:1.05rem;font-weight:600;color:var(--og);margin:16px 0 8px}
+.sec p,.sec li{font-size:.95rem;color:var(--tx)}.sec ul,.sec ol{padding-left:20px;margin:8px 0}.sec li{margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+th{background:var(--sf2);color:var(--ac);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--bd);white-space:nowrap}
+td{padding:8px 12px;border:1px solid var(--bd);color:var(--tx);vertical-align:top}
+tr:nth-child(even) td{background:rgba(22,27,34,.5)}tr:hover td{background:rgba(88,166,255,.06)}
+code{background:var(--sf2);padding:2px 6px;border-radius:4px;font-size:.85rem;color:var(--gn);font-family:"JetBrains Mono","Fira Code",monospace}
+pre{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px 20px;overflow-x:auto;margin:12px 0;font-size:.85rem;line-height:1.6}
+pre code{background:none;padding:0}
+.fw{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:20px 0;justify-content:center}
+.fs{background:var(--sf);border:2px solid var(--bd);border-radius:10px;padding:12px 18px;text-align:center;min-width:140px}
+.fs.on{border-color:var(--ac);box-shadow:0 0 12px rgba(88,166,255,.2)}
+.fs .n{font-size:.75rem;color:var(--tx2)}.fs .l{font-weight:600;font-size:.9rem;margin-top:2px}.fs .d{font-size:.75rem;color:var(--tx2);margin-top:4px}
+.fa{font-size:1.4rem;color:var(--tx2);padding:0 6px}
+.cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:16px 0}
+.cd{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:20px}
+.cd .ct{font-weight:700;font-size:1rem;color:var(--ac);margin-bottom:8px}.cd .cb{font-size:.9rem;color:var(--tx2)}
+.bg{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:600}
+.bg-s{background:rgba(188,140,255,.15);color:var(--pp);border:1px solid rgba(188,140,255,.3)}
+.bg-a{background:rgba(88,166,255,.15);color:var(--ac);border:1px solid rgba(88,166,255,.3)}
+.bg-b{background:rgba(63,185,80,.15);color:var(--gn);border:1px solid rgba(63,185,80,.3)}
+.bg-c{background:rgba(210,153,34,.15);color:var(--yw);border:1px solid rgba(210,153,34,.3)}
+.bg-f{background:rgba(63,185,80,.15);color:var(--gn);border:1px solid rgba(63,185,80,.3)}
+.bg-cr{background:rgba(248,81,73,.15);color:var(--rd);border:1px solid rgba(248,81,73,.3)}
+.bg-w{background:rgba(240,136,62,.15);color:var(--og);border:1px solid rgba(240,136,62,.3)}
+.bg-ok{background:rgba(63,185,80,.15);color:var(--gn);border:1px solid rgba(63,185,80,.3)}
+.pr{display:inline-block;padding:3px 10px;border-radius:4px;font-weight:700;font-size:.8rem;margin-right:8px}
+.p0{background:var(--rd);color:#fff}.p1{background:var(--og);color:#fff}.p2{background:var(--yw);color:#000}.p3{background:var(--gn);color:#000}
+.fc{display:flex;flex-direction:column;gap:4px;margin:12px 0}
+.fr{display:flex;align-items:center;gap:8px}
+.ft{background:var(--sf2);border:1px solid var(--bd);border-radius:6px;padding:6px 14px;font-size:.85rem;min-width:200px;text-align:center}
+.ft.p1t{border-color:var(--gn);background:rgba(63,185,80,.08)}.ft.p2t{border-color:var(--yw);background:rgba(210,153,34,.08)}
+.ft.p3t{border-color:var(--og);background:rgba(240,136,62,.08)}.ft.p4t{border-color:var(--rd);background:rgba(248,81,73,.08)}
+.fad{text-align:center;color:var(--tx2);font-size:1.2rem;padding-left:80px}
+.sr{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}
+.sb{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px 24px;text-align:center;flex:1;min-width:150px}
+.sb .nm{font-size:2rem;font-weight:800;color:var(--ac)}.sb .lb{font-size:.8rem;color:var(--tx2);margin-top:4px}
+.al{border-radius:8px;padding:16px 20px;margin:16px 0;font-size:.9rem}
+.al-d{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--rd)}
+.al-w{background:rgba(240,136,62,.1);border:1px solid rgba(240,136,62,.3);color:var(--og)}
+.al-i{background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);color:var(--ac)}
+.ft2{text-align:center;padding:40px 0 20px;border-top:1px solid var(--bd);margin-top:60px;color:var(--tx2);font-size:.85rem}
+@media(max-width:768px){.hero h1{font-size:1.6rem}.fw{flex-direction:column}.fa{transform:rotate(90deg)}.cg{grid-template-columns:1fr}table{font-size:.8rem}th,td{padding:6px 8px}}
+</style>
+</head>
+<body>
+<div class="ctn">
+<div class="hero">
+<h1>AADS &#52292;&#54021; &#51088;&#46041;&#46972;&#50864;&#54021; &#50868;&#50689; &#51204;&#47029; &#44592;&#54925;&#49436;</h1>
+<p class="sub">6-Layer Intelligent Routing Architecture &middot; 103 Models &middot; 70 Intents &middot; Multi-Fallback Chain</p>
+<div class="meta"><span>2026-05-20</span><span>AADS v2.0 Server 68</span><span>Phase 2 Operation</span><span>FastAPI 0.115 + Next.js 16</span></div>
+</div>
+
+<div class="toc"><h2>&#128203; &#47785;&#52264;</h2>
+<ol>
+<li><a href="#s1">&#49884;&#49828;&#53596; &#44060;&#50836; &#48143; &#54645;&#49900; &#51648;&#54364;</a></li>
+<li><a href="#s2">6&#44228;&#52789; &#46972;&#50864;&#54021; &#50500;&#53412;&#53581;&#52376;</a></li>
+<li><a href="#s3">&#51064;&#53584;&#53944; &#48516;&#47448; &#49884;&#49828;&#53596; (70&#44060; &#51064;&#53584;&#53944;)</a></li>
+<li><a href="#s4">&#47784;&#45944; &#51064;&#48292;&#53664;&#47532; (103&#44060; &#54876;&#49457; &#47784;&#45944;)</a></li>
+<li><a href="#s5">&#46972;&#50864;&#54021; &#50864;&#49440;&#49692;&#50948; &#48143; &#44592;&#48376; &#47784;&#45944; &#44208;&#51221;</a></li>
+<li><a href="#s6">&#54260;&#48177; &#52404;&#51064; &#51204;&#52404; &#44396;&#51312;</a></li>
+<li><a href="#s7">&#51064;&#53584;&#53944; &#44144;&#48260;&#45324;&#49828; &#51221;&#52293;</a></li>
+<li><a href="#s8">&#48708;&#50857; &#52572;&#51201;&#54868; &#51204;&#47029;</a></li>
+<li><a href="#s9">&#54532;&#47200;&#53944;&#50644;&#46300; &#47784;&#45944; &#49472;&#47113;&#53552;</a></li>
+<li><a href="#s10">&#49836;&#47215; &#44288;&#47532; &#48143; &#53216;&#45796;&#50868; &#49884;&#49828;&#53596;</a></li>
+<li><a href="#s11">&#54788;&#54889; &#51652;&#45800;: &#47928;&#51228;&#51216; &#48143; &#47532;&#49828;&#53356;</a></li>
+<li><a href="#s12">&#44060;&#49440; &#47196;&#46300;&#47605; (&#50864;&#49440;&#49692;&#50948;&#48324;)</a></li>
+<li><a href="#s13">&#44396;&#54788; &#44228;&#54925; &#48143; &#53440;&#51076;&#46972;&#51064;</a></li>
+</ol></div>
+
+<!-- S1 -->
+<div class="sec" id="s1">
+<h2>1. &#49884;&#49828;&#53596; &#44060;&#50836; &#48143; &#54645;&#49900; &#51648;&#54364;</h2>
+<div class="sr">
+<div class="sb"><div class="nm">103</div><div class="lb">Active Models</div></div>
+<div class="sb"><div class="nm">70</div><div class="lb">Intents</div></div>
+<div class="sb"><div class="nm">11</div><div class="lb">Providers</div></div>
+<div class="sb"><div class="nm">6</div><div class="lb">Routing Layers</div></div>
+<div class="sb"><div class="nm">45</div><div class="lb">Routing Rules (DB)</div></div>
+</div>
+<h3>Provider Distribution</h3>
+<table>
+<tr><th>Provider</th><th>Models</th><th>Tier</th><th>Billing</th><th>Primary Use</th></tr>
+<tr><td><strong>Qwen (Alibaba)</strong></td><td>29</td><td>S~C</td><td>DashScope / LiteLLM</td><td>Background LLM, Intent Classification</td></tr>
+<tr><td><strong>Gemini (Google)</strong></td><td>24</td><td>S~M</td><td>LiteLLM Proxy</td><td>Search/Grounding, Vision, Image Gen</td></tr>
+<tr><td><strong>Anthropic (Claude)</strong></td><td>17</td><td>S~B</td><td>OAuth Relay / Agent SDK</td><td>Core Coding, Strategy, Analysis</td></tr>
+<tr><td><strong>Groq</strong></td><td>7</td><td>Free</td><td>Free API</td><td>Fast Response, Free Tier</td></tr>
+<tr><td><strong>Kimi (Moonshot)</strong></td><td>6</td><td>A~B</td><td>LiteLLM</td><td>Long Context, Coding</td></tr>
+<tr><td><strong>PC Ollama</strong></td><td>5</td><td>C</td><td>Local Free</td><td>CEO PC Local Inference</td></tr>
+<tr><td><strong>Codex (OpenAI)</strong></td><td>4</td><td>A~B</td><td>Codex CLI Relay</td><td>GPT-5.x Series, Default LLM</td></tr>
+<tr><td><strong>DeepSeek</strong></td><td>4</td><td>A~B</td><td>LiteLLM</td><td>High-Efficiency Coding</td></tr>
+<tr><td><strong>Google Imagen</strong></td><td>3</td><td>M</td><td>Vertex AI</td><td>Image Generation</td></tr>
+<tr><td><strong>MiniMax</strong></td><td>2</td><td>A</td><td>LiteLLM</td><td>General Conversation</td></tr>
+<tr><td><strong>OpenRouter</strong></td><td>5</td><td>A~B</td><td>OpenRouter</td><td>Grok, Mistral External Access</td></tr>
+</table>
+</div>
+
+<!-- S2 -->
+<div class="sec" id="s2">
+<h2>2. 6&#44228;&#52789; &#46972;&#50864;&#54021; &#50500;&#53412;&#53581;&#52376;</h2>
+<div class="fw">
+<div class="fs on"><div class="n">Layer 1</div><div class="l">Frontend</div><div class="d">Model Selection UI<br>ChatModelSelector</div></div>
+<div class="fa">&rarr;</div>
+<div class="fs on"><div class="n">Layer 2</div><div class="l">Intent Classification</div><div class="d">qwen-turbo LLM<br>+ Keyword Fallback</div></div>
+<div class="fa">&rarr;</div>
+<div class="fs on"><div class="n">Layer 3</div><div class="l">Model Decision</div><div class="d">DB Default + Governance<br>Intent Downgrade</div></div>
+<div class="fa">&rarr;</div>
+<div class="fs on"><div class="n">Layer 4</div><div class="l">Provider Selection</div><div class="d">Execution Backend<br>relay/litellm/ollama</div></div>
+<div class="fa">&rarr;</div>
+<div class="fs on"><div class="n">Layer 5</div><div class="l">Fallback Chain</div><div class="d">Slot Cross &rarr; SDK<br>&rarr; LiteLLM &rarr; External</div></div>
+<div class="fa">&rarr;</div>
+<div class="fs on"><div class="n">Layer 6</div><div class="l">Streaming Response</div><div class="d">SSE Delivery<br>Usage Logging</div></div>
+</div>
+
+<h3>Layer 1: Frontend Model Selection</h3>
+<ul>
+<li><strong>auto/mixture</strong>: Intent Classification &rarr; Auto Model Decision (Layer 2~3)</li>
+<li><strong>Specific Model</strong>: <code>model_override</code> &rarr; Governance Bypass &rarr; Layer 4 Direct</li>
+<li>Sort: mixture top &rarr; pinned &rarr; favorite &rarr; display_order</li>
+</ul>
+
+<h3>Layer 2: Intent Classification</h3>
+<ul>
+<li><strong>Primary</strong>: qwen-turbo (LiteLLM), temperature 0.1, 5s timeout</li>
+<li><strong>Redis Cache</strong>: TTL 60s, SHA256(workspace + msg[:100] + context)[:16]</li>
+<li><strong>Correction 4-Step</strong>: PC followup &rarr; casual/greeting command fix &rarr; tool history &rarr; discussion guard</li>
+<li><strong>Keyword Fallback</strong>: 42 rules on LLM failure (HEAD &rarr; SEARCH &rarr; TAIL priority)</li>
+</ul>
+
+<h3>Layer 3: Model Decision (Dynamic Cascading)</h3>
+<pre><code>1. model_override normalize ("mixture"/"auto"/empty &rarr; None)
+2. model = override || intent_result.model
+3. empty model &rarr; _get_default_llm_model_from_db() &rarr; Current: codex:gpt-5.5
+4. provider:model split &rarr; alias resolve &rarr; registered model alias mapping
+5. Dynamic Cascading (model_locked=False):
+   &rarr; _resolve_governed_intent_model()
+   &rarr; greeting/casual &rarr; claude-haiku downgrade
+   &rarr; search/browser &rarr; claude-sonnet downgrade
+6. Per-intent temperature (0.1~0.25)</code></pre>
+
+<h3>Layer 4: Provider Selection</h3>
+<table>
+<tr><th>execution_backend</th><th>Target Models</th><th>Execution Method</th></tr>
+<tr><td><code>codex_cli</code></td><td>gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex</td><td>Codex CLI Relay</td></tr>
+<tr><td><code>openai_compatible_direct</code></td><td>DashScope Qwen, DeepSeek</td><td>OpenAI Compatible Direct API</td></tr>
+<tr><td><code>litellm_proxy</code></td><td>Gemini, Groq, Kimi, MiniMax, OpenRouter</td><td>LiteLLM Proxy (aads-litellm:4000)</td></tr>
+<tr><td><code>pc_ollama</code></td><td>gemma4, qwen3 local</td><td>CEO PC Ollama Server</td></tr>
+<tr><td><strong>Claude Dedicated</strong></td><td>claude-opus, sonnet, haiku</td><td>CLI Relay &rarr; Agent SDK &rarr; LiteLLM &rarr; External</td></tr>
+</table>
+</div>
+
+<!-- S3 -->
+<div class="sec" id="s3">
+<h2>3. &#51064;&#53584;&#53944; &#48516;&#47448; &#49884;&#49828;&#53596; (70&#44060;)</h2>
+<h3>3.1 Classification Pipeline</h3>
+<div class="cg">
+<div class="cd"><div class="ct">&#129504; Primary: qwen-turbo</div><div class="cb">LiteLLM Proxy<br>Temperature: 0.1 / Max tokens: 80<br>Timeout: 5s<br>Response: {"intent":"...", "confidence":0.0~1.0}</div></div>
+<div class="cd"><div class="ct">&#128190; Redis Cache</div><div class="cb">TTL: 60s<br>Key: SHA256(workspace + msg[:100] + ctx)[:16]<br>Context-dependent (50 chars or less) includes last 4 turns</div></div>
+<div class="cd"><div class="ct">&#128295; Misclassification Correction</div><div class="cb">1. PC agent followup detect<br>2. casual &rarr; command pattern fix<br>3. Tool history &rarr; status_check<br>4. Discussion guard fallback</div></div>
+<div class="cd"><div class="ct">&#128221; Keyword Fallback</div><div class="cb">42 rules on LLM failure<br>Priority: HEAD &rarr; SEARCH &rarr; TAIL<br>min_hits support (e.g. task_query &ge;2)</div></div>
+</div>
+
+<h3>3.2 Full Intent Mapping</h3>
+<h4>&#128308; Opus-Grade Intents (High-Cost, High-Performance) &mdash; 28</h4>
+<table>
+<tr><th>Intent</th><th>Default Model</th><th>Thinking</th><th>Tools</th><th>Temp</th><th>Purpose</th></tr>
+<tr><td>strategy</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.15</td><td>Strategy Planning</td></tr>
+<tr><td>discussion</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.15</td><td>Discussion/Opinion</td></tr>
+<tr><td>planning</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.15</td><td>Planning</td></tr>
+<tr><td>decision</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.15</td><td>Decision Making</td></tr>
+<tr><td>image_analyze</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.15</td><td>Image Analysis</td></tr>
+<tr><td>cto_strategy</td><td>claude-opus</td><td>&#10004;</td><td>&#10060;</td><td>0.1</td><td>CTO Strategy</td></tr>
+<tr><td>design / design_fix</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.25/0.15</td><td>Design/Fix</td></tr>
+<tr><td>diagnosis</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15</td><td>Diagnosis</td></tr>
+<tr><td>code_task / code_exec</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15/0.1</td><td>Coding/Execution</td></tr>
+<tr><td>complex_analysis / architect</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15</td><td>Complex Analysis/Architecture</td></tr>
+<tr><td>directive / directive_gen</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15</td><td>Directive/Generation</td></tr>
+<tr><td>qa / execution_verify</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>QA/Verification</td></tr>
+<tr><td>browser / server_file</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.2/0.15</td><td>Browser/Server File</td></tr>
+<tr><td>url_analyze / url_read</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15/0.2</td><td>URL Analysis/Read</td></tr>
+<tr><td>deep_crawl / code_explorer</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.25/0.2</td><td>Deep Crawl/Code Explore</td></tr>
+<tr><td>analyze_changes</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15</td><td>Change Analysis</td></tr>
+<tr><td>service_inspection</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.15</td><td>Service Inspection</td></tr>
+<tr><td>execute / code_modify</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.1/0.2</td><td>Autonomous Execution</td></tr>
+<tr><td>pipeline_runner</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>Pipeline Runner</td></tr>
+<tr><td>search_all_projects</td><td>claude-opus</td><td>&#10004;</td><td>&#10004;</td><td>0.2</td><td>Cross-Project Search</td></tr>
+</table>
+
+<h4>&#128309; CTO Mode Intents &mdash; 5</h4>
+<table>
+<tr><th>Intent</th><th>Model</th><th>Thinking</th><th>Temp</th><th>Purpose</th></tr>
+<tr><td>cto_code_analysis</td><td>claude-opus</td><td>&#10004;</td><td>0.1</td><td>Code Analysis</td></tr>
+<tr><td>cto_directive</td><td>claude-opus</td><td>&#10004;</td><td>0.15</td><td>Tech Directive</td></tr>
+<tr><td>cto_verify</td><td>claude-opus</td><td>&#10004;</td><td>0.1</td><td>Tech Verification</td></tr>
+<tr><td>cto_impact</td><td>claude-opus</td><td>&#10004;</td><td>0.15</td><td>Impact Analysis</td></tr>
+<tr><td>cto_tech_debt</td><td>claude-opus</td><td>&#10004;</td><td>0.15</td><td>Tech Debt</td></tr>
+</table>
+
+<h4>&#128309; Sonnet-Grade Intents (Balanced) &mdash; 15</h4>
+<table>
+<tr><th>Intent</th><th>Model</th><th>Thinking</th><th>Tools</th><th>Temp</th><th>Purpose</th></tr>
+<tr><td>system_status / health_check</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>Status Check</td></tr>
+<tr><td>dashboard</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>Dashboard</td></tr>
+<tr><td>memory_recall / task_history</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.2/0.1</td><td>Memory/History</td></tr>
+<tr><td>cost_report</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>Cost Report</td></tr>
+<tr><td>auto_reaction / file_read</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.2</td><td>Auto Reaction/File</td></tr>
+<tr><td>task_query / status_check</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>Task/Status Query</td></tr>
+<tr><td>all_service_status</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.1</td><td>All Services</td></tr>
+<tr><td>pc_control / pc_screenshot</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.15/0.1</td><td>PC Control</td></tr>
+<tr><td>agenda_manage / agenda_decide</td><td>claude-sonnet</td><td>&#10004;</td><td>&#10004;</td><td>0.15/0.1</td><td>Agenda</td></tr>
+</table>
+
+<h4>&#128994; Lightweight Intents (Low-Cost) &mdash; 2</h4>
+<table>
+<tr><th>Intent</th><th>Model</th><th>Thinking</th><th>Tools</th><th>Temp</th></tr>
+<tr><td>casual</td><td>qwen-turbo</td><td>&#10060;</td><td>&#10060;</td><td>0.2</td></tr>
+<tr><td>greeting</td><td>qwen-turbo</td><td>&#10060;</td><td>&#10060;</td><td>0.1</td></tr>
+</table>
+
+<h4>&#128269; Search/Grounding Intents (Gemini) &mdash; 10</h4>
+<table>
+<tr><th>Intent</th><th>Model</th><th>Gemini Direct</th><th>Naver Type</th></tr>
+<tr><td>search</td><td>gemini-3-flash-preview</td><td>search</td><td>&mdash;</td></tr>
+<tr><td>deep_research</td><td>gemini-pro</td><td>deep_research</td><td>&mdash;</td></tr>
+<tr><td>news_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>news</td></tr>
+<tr><td>blog_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>blog</td></tr>
+<tr><td>shop_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>shop</td></tr>
+<tr><td>local_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>local</td></tr>
+<tr><td>book_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>book</td></tr>
+<tr><td>image_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>image</td></tr>
+<tr><td>encyclopedia_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>encyc</td></tr>
+<tr><td>knowledge_search</td><td>gemini-3-flash-preview</td><td>grounding</td><td>kin</td></tr>
+</table>
+
+<h3>3.3 Temperature Policy</h3>
+<table>
+<tr><th>Range</th><th>Applied Intents</th><th>Purpose</th></tr>
+<tr><td><strong>0.10</strong></td><td>greeting, code_exec, qa, pipeline_runner, status_check etc. (21)</td><td>Deterministic &mdash; Max reproducibility</td></tr>
+<tr><td><strong>0.15</strong></td><td>strategy, diagnosis, code_task, architect etc. (19)</td><td>Analytical &mdash; Slight creativity</td></tr>
+<tr><td><strong>0.20</strong></td><td>search, url_read, casual, memory_recall etc. (23)</td><td>Exploratory &mdash; Diverse expression</td></tr>
+<tr><td><strong>0.25</strong></td><td>design, deep_crawl (2)</td><td>Creative &mdash; Rich ideas</td></tr>
+</table>
+</div>
+
+<!-- S4 -->
+<div class="sec" id="s4">
+<h2>4. &#47784;&#45944; &#51064;&#48292;&#53664;&#47532; (103&#44060; &#54876;&#49457; &#47784;&#45944;)</h2>
+<h3>4.1 Anthropic Claude (17)</h3>
+<table>
+<tr><th>Model ID</th><th>Alias</th><th>Tier</th><th>Thinking</th><th>Note</th></tr>
+<tr><td>claude-opus-4-7</td><td>claude-opus</td><td><span class="bg bg-s">S</span></td><td>&#10004;</td><td>Top Performance, Default runner_llm</td></tr>
+<tr><td>claude-opus-4-6</td><td>claude-opus-46</td><td><span class="bg bg-s">S</span></td><td>&#10004;</td><td>Previous Gen Opus</td></tr>
+<tr><td>claude-sonnet-4-6</td><td>claude-sonnet</td><td><span class="bg bg-a">A</span></td><td>&#10004;</td><td>Balanced, Primary Sonnet</td></tr>
+<tr><td>claude-haiku-4-5-20251001</td><td>claude-haiku</td><td><span class="bg bg-b">B</span></td><td>&#10060;</td><td>Lightweight Low-Cost</td></tr>
+</table>
+
+<h3>4.2 Codex / OpenAI (4)</h3>
+<table>
+<tr><th>Model ID</th><th>Tier</th><th>Route</th><th>Note</th></tr>
+<tr><td>gpt-5.5</td><td><span class="bg bg-a">A</span></td><td>Codex CLI Relay</td><td><strong>Current Default LLM</strong></td></tr>
+<tr><td>gpt-5.4</td><td><span class="bg bg-a">A</span></td><td>Codex CLI Relay</td><td>General Purpose</td></tr>
+<tr><td>gpt-5.4-mini</td><td><span class="bg bg-b">B</span></td><td>Codex CLI Relay</td><td>Lightweight</td></tr>
+<tr><td>gpt-5.3-codex</td><td><span class="bg bg-b">B</span></td><td>Codex CLI Relay</td><td>Coding Specialized</td></tr>
+</table>
+
+<h3>4.3 Other Providers</h3>
+<table>
+<tr><th>Provider</th><th>Key Models</th><th>Features</th></tr>
+<tr><td><strong>Gemini</strong> (24)</td><td>gemini-3.1-pro <span class="bg bg-s">S</span>, gemini-2.5-flash <span class="bg bg-b">B</span></td><td>Thinking, Grounding, Image Gen</td></tr>
+<tr><td><strong>DeepSeek</strong> (4)</td><td>deepseek-v4-pro <span class="bg bg-a">A</span>, v4-flash <span class="bg bg-b">B</span></td><td>Ultra Low-Cost, Thinking Support</td></tr>
+<tr><td><strong>Groq</strong> (7)</td><td>groq-qwen3-32b, groq-kimi-k2</td><td><span class="bg bg-f">FREE</span> Ultra-Fast Inference</td></tr>
+<tr><td><strong>Kimi</strong> (6)</td><td>kimi-k2.6, kimi-k2.5, kimi-k2</td><td>128K Context, Coding</td></tr>
+<tr><td><strong>Qwen</strong> (29)</td><td>qwen3-235b, qwen3-coder-480b</td><td>Background LLM Primary</td></tr>
+<tr><td><strong>MiniMax</strong> (2)</td><td>minimax-m2.7, m2.5</td><td>General Conversation</td></tr>
+<tr><td><strong>OpenRouter</strong> (5)</td><td>grok-4-fast, mistral-small</td><td>External Model Gateway</td></tr>
+</table>
+
+<h3>4.4 Cost Map (USD per 1M Tokens)</h3>
+<table>
+<tr><th>Model</th><th>Input</th><th>Output</th><th>Cost Rating</th></tr>
+<tr><td>claude-opus</td><td>$5.00</td><td>$25.00</td><td><span class="bg bg-cr">Highest</span></td></tr>
+<tr><td>claude-sonnet</td><td>$3.00</td><td>$15.00</td><td><span class="bg bg-w">High</span></td></tr>
+<tr><td>claude-haiku</td><td>$1.00</td><td>$5.00</td><td><span class="bg bg-ok">Good</span></td></tr>
+<tr><td>gpt-5.5</td><td>$2.50</td><td>$15.00</td><td><span class="bg bg-w">High</span></td></tr>
+<tr><td>gemini-3.1-pro</td><td>$2.00</td><td>$12.00</td><td><span class="bg bg-w">Mid-High</span></td></tr>
+<tr><td>gemini-2.5-flash</td><td>$0.15</td><td>$0.60</td><td><span class="bg bg-ok">Lowest</span></td></tr>
+<tr><td>deepseek-v4-flash</td><td>$0.28</td><td>$0.42</td><td><span class="bg bg-ok">Lowest</span></td></tr>
+<tr><td>deepseek-v4-pro</td><td>$0.55</td><td>$2.19</td><td><span class="bg bg-ok">Low</span></td></tr>
+<tr><td>qwen-turbo</td><td>$0.02</td><td>$0.06</td><td><span class="bg bg-f">Near Free</span></td></tr>
+<tr><td>groq (all)</td><td>$0.00</td><td>$0.00</td><td><span class="bg bg-f">FREE</span></td></tr>
+</table>
+</div>
+
+<!-- S5 -->
+<div class="sec" id="s5">
+<h2>5. &#46972;&#50864;&#54021; &#50864;&#49440;&#49692;&#50948; &#48143; &#44592;&#48376; &#47784;&#45944; &#44208;&#51221;</h2>
+<h3>5.1 DB Default Model (model_routing_preferences)</h3>
+<div class="al al-i"><strong>Current Default LLM:</strong> <code>codex:gpt-5.5</code> (route_key=llm, is_default=true, display_order=10)</div>
+
+<h4>route_key = llm (Chat Default)</h4>
+<table>
+<tr><th>Order</th><th>Provider</th><th>Model</th><th>Default</th><th>Enabled</th><th>Role</th></tr>
+<tr><td>10</td><td>codex</td><td>gpt-5.5</td><td>&#10004; <strong>Default</strong></td><td>&#10004;</td><td>Primary Model</td></tr>
+<tr><td>20</td><td>anthropic</td><td>claude-opus-4-7</td><td>&mdash;</td><td>&#10004;</td><td>2nd High Performance</td></tr>
+<tr><td>30</td><td>gemini</td><td>gemini-3.1-pro-preview</td><td>&mdash;</td><td>&#10004;</td><td>3rd General</td></tr>
+</table>
+
+<h4>route_key = runner_llm (Pipeline Runner)</h4>
+<table>
+<tr><th>Order</th><th>Provider</th><th>Model</th><th>Default</th></tr>
+<tr><td>10</td><td>anthropic</td><td>claude-opus-4-7</td><td>&#10004; <strong>Default</strong></td></tr>
+<tr><td>20</td><td>codex</td><td>gpt-5.5</td><td>&mdash;</td></tr>
+<tr><td>30</td><td>gemini</td><td>gemini-2.5-pro</td><td>&mdash;</td></tr>
+</table>
+
+<h4>Other Route Keys</h4>
+<table>
+<tr><th>Route Key</th><th>Default</th><th>2nd</th><th>3rd</th></tr>
+<tr><td>image</td><td>imagen-4.0-generate-001</td><td>gemini-2.5-flash-image</td><td>gemini-3.1-flash-image</td></tr>
+<tr><td>video</td><td>sora-2</td><td>gen-4-turbo</td><td>sora-2-pro</td></tr>
+<tr><td>audio</td><td>eleven-v3</td><td>tts-1-hd</td><td>&mdash;</td></tr>
+<tr><td>music</td><td>suno-v4</td><td>udio-3.0</td><td>&mdash;</td></tr>
+</table>
+
+<h3>5.2 Model Decision Flow</h3>
+<pre><code>1. User selected model?
+   YES &rarr; model_override (governance bypass)
+   NO  &rarr; "auto/mixture" mode
+
+2. auto mode &rarr; intent classification model
+   has model &rarr; use it
+   empty &rarr; DB default (codex:gpt-5.5)
+      DB fail &rarr; "claude-sonnet" hardcoded fallback
+
+3. provider:model split &rarr; alias resolve
+   claude-opus &rarr; claude-opus-4-7
+   claude-sonnet &rarr; claude-sonnet-4-6
+   claude-haiku &rarr; claude-haiku-4-5-20251001
+
+4. Dynamic Cascading (model_locked=False)
+   &rarr; _resolve_governed_intent_model()
+   &rarr; greeting/casual &rarr; claude-haiku downgrade
+   &rarr; search/browser &rarr; claude-sonnet downgrade
+
+5. Temperature set (per-intent 0.1~0.25)
+6. Available model check &rarr; unavailable &rarr; fallback
+7. execution_backend routing</code></pre>
+</div>
+
+<!-- S6 -->
+<div class="sec" id="s6">
+<h2>6. &#54260;&#48177; &#52404;&#51064; &#51204;&#52404; &#44396;&#51312;</h2>
+<h3>6.1 Claude Model Fallback (4-Tier)</h3>
+<h4>claude-opus Fallback</h4>
+<div class="fc">
+<div class="fr"><div class="ft p1t"><strong>Tier 1</strong> CLI Relay<br>slot1(Naver) &harr; slot2(Gmail) Cross</div></div>
+<div class="fad">&darr; 429/Failure</div>
+<div class="fr"><div class="ft p2t"><strong>Tier 2</strong> Agent SDK<br>First account (slot1) only</div></div>
+<div class="fad">&darr; Failure</div>
+<div class="fr"><div class="ft p3t"><strong>Tier 3</strong> LiteLLM Direct<br>Original model name</div></div>
+<div class="fad">&darr; Failure</div>
+<div class="fr"><div class="ft p4t"><strong>Tier 4</strong> Same-Grade External<br>gpt-5.5 &rarr; gemini-3.1-pro-preview</div></div>
+</div>
+
+<h4>claude-sonnet Fallback</h4>
+<div class="fc">
+<div class="fr"><div class="ft p1t"><strong>Tier 1</strong> CLI Relay (slot cross)</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p2t"><strong>Tier 2</strong> Agent SDK</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p3t"><strong>Tier 3</strong> LiteLLM Direct</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p4t"><strong>Tier 4</strong> deepseek-v4-flash &rarr; gemini-2.5-flash</div></div>
+</div>
+
+<h4>claude-haiku Fallback</h4>
+<div class="fc">
+<div class="fr"><div class="ft p1t"><strong>Tier 1</strong> CLI Relay (slot cross)</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p2t"><strong>Tier 2</strong> Agent SDK</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p3t"><strong>Tier 3</strong> LiteLLM Direct</div></div>
+<div class="fad">&darr;</div>
+<div class="fr"><div class="ft p4t"><strong>Tier 4</strong> gpt-5.4-mini &rarr; deepseek-v4-flash &rarr; gemini-3.1-flash-lite</div></div>
+</div>
+
+<h3>6.2 Codex CLI Fallback</h3>
+<table>
+<tr><th>Original</th><th>1st Fallback</th><th>2nd Fallback</th></tr>
+<tr><td>gpt-5.5</td><td>claude-opus</td><td>gemini-3.1-pro-preview</td></tr>
+<tr><td>gpt-5.4</td><td>claude-sonnet</td><td>gemini-2.5-flash</td></tr>
+<tr><td>gpt-5.4-mini</td><td>claude-haiku</td><td>gemini-3.1-flash-lite</td></tr>
+</table>
+
+<h3>6.3 Background LLM Fallback (call_llm_with_fallback)</h3>
+<div class="fc">
+<div class="fr"><div class="ft p1t"><strong>1st</strong> Claude OAuth<br>ANTHROPIC_AUTH_TOKEN &rarr; ANTHROPIC_AUTH_TOKEN_2</div></div>
+<div class="fad">&darr; Token exhausted</div>
+<div class="fr"><div class="ft p2t"><strong>2nd</strong> Gemini 2.5 Flash<br>LiteLLM Proxy</div></div>
+<div class="fad">&darr; Failure</div>
+<div class="fr"><div class="ft p3t"><strong>3rd</strong> qwen3-235b<br>DashScope Direct</div></div>
+</div>
+
+<h3>6.4 Retry Policy</h3>
+<table>
+<tr><th>Error Type</th><th>Max Retry</th><th>Delay</th><th>Note</th></tr>
+<tr><td>429 (Rate Limit)</td><td>30</td><td>Fixed 3.0s</td><td>Claude Only</td></tr>
+<tr><td>5xx / Timeout</td><td>60</td><td>Exponential backoff<br>min(2&times;2^min(n,6), 30s) + rand(0,1.5s)</td><td>Claude Only</td></tr>
+<tr><td>Retry Codes</td><td colspan="3"><code>408, 409, 429, 500, 502, 503, 504, 529</code></td></tr>
+</table>
+</div>
+
+<!-- S7 -->
+<div class="sec" id="s7">
+<h2>7. &#51064;&#53584;&#53944; &#44144;&#48260;&#45324;&#49828; &#51221;&#52293;</h2>
+<h3>7.1 Current Status</h3>
+<div class="al al-w"><strong>&#9888; Shadow Mode Active</strong> &mdash; <code>intent_policies_db_primary=False</code><br>DB 7 policies record audit logs only. Actual routing uses legacy hardcoded rules.</div>
+
+<h3>7.2 Legacy Hardcoded Rules (Currently Active)</h3>
+<table>
+<tr><th>Rule</th><th>Target Intents</th><th>Action</th></tr>
+<tr><td><code>_HAIKU_FALLBACK_INTENTS</code></td><td>greeting, casual</td><td>claude-sonnet/opus &rarr; <strong>claude-haiku</strong> downgrade</td></tr>
+<tr><td><code>_SONNET_INTENTS</code></td><td>search, url_read, browser, task_query, service_inspection, code_explorer, analyze_changes</td><td>claude-opus &rarr; <strong>claude-sonnet</strong> downgrade</td></tr>
+</table>
+<p><strong>Model Rank:</strong> claude-haiku=0, claude-sonnet=1, claude-opus=2 (upgrade prohibited)</p>
+
+<h3>7.3 DB Intent Policies (Shadow Mode)</h3>
+<table>
+<tr><th>Intent</th><th>Default Model</th><th>Cascade</th><th>Allowed Models</th><th>Temp</th></tr>
+<tr><td>casual</td><td>claude-haiku-4-5-20251001</td><td>&#10004;</td><td>sonnet-4-6, haiku-4-5, gemini-2.5-flash</td><td>0.10</td></tr>
+<tr><td>greeting</td><td>claude-haiku-4-5-20251001</td><td>&#10004;</td><td>sonnet-4-6, haiku-4-5, gemini-2.5-flash</td><td>0.10</td></tr>
+<tr><td>status_check</td><td>claude-sonnet-4-6</td><td>&#10060;</td><td>sonnet-4-6, haiku-4-5, gemini-2.5-flash</td><td>0.10</td></tr>
+<tr><td>task_query</td><td>claude-sonnet-4-6</td><td>&#10060;</td><td>sonnet-4-6, haiku-4-5, gemini-2.5-flash</td><td>0.10</td></tr>
+<tr><td>code_modify</td><td>claude-sonnet-4-6</td><td>&#10060;</td><td>sonnet-4-6, opus-4-6, gemini-2.5-flash</td><td>0.20</td></tr>
+<tr><td>dashboard</td><td>claude-sonnet-4-6</td><td>&#10060;</td><td>sonnet-4-6, opus-4-6, gemini-2.5-flash</td><td>&mdash;</td></tr>
+<tr><td>report</td><td>claude-sonnet-4-6</td><td>&#10060;</td><td>sonnet-4-6, opus-4-6, gemini-2.5-flash</td><td>0.50</td></tr>
+</table>
+
+<h3>7.4 Governance Audit Flow</h3>
+<pre><code>Intent Classification Complete
+  &darr;
+_resolve_governed_intent_model()
+  &darr;
+&#9484; Legacy rules &rarr; model decision (ACTIVE)
+&#9474;
+&#9500; DB policies &rarr; model decision (SHADOW)
+&#9474;
+&#9500; Compare both results
+&#9474;   match &rarr; log only
+&#9474;   mismatch &rarr; governance_audit_log record
+&#9474;       (legacy result is applied)
+&#9474;
+&#9492; Return legacy result</code></pre>
+</div>
+
+<!-- S8 -->
+<div class="sec" id="s8">
+<h2>8. &#48708;&#50857; &#52572;&#51201;&#54868; &#51204;&#47029;</h2>
+<h3>8.1 Current Cost Reduction Mechanisms</h3>
+<div class="cg">
+<div class="cd"><div class="ct">&#127919; Intent Downgrade</div><div class="cb">greeting/casual &rarr; haiku ($5&rarr;$1/M)<br>search/browser/url_read &rarr; sonnet ($5&rarr;$3)<br><strong>Est. Savings: ~40-60%</strong> (affected intents)</div></div>
+<div class="cd"><div class="ct">&#128176; Free Tier Utilization</div><div class="cb">Groq 7 models: Completely Free<br>qwen-turbo: Intent classification ($0.02/$0.06)<br>PC Ollama: Local free inference</div></div>
+<div class="cd"><div class="ct">&#128260; OAuth Subscription</div><div class="cb">Claude Max: Monthly subscription<br>Codex CLI: Monthly subscription<br>5h/1week usage limit based operation</div></div>
+<div class="cd"><div class="ct">&#128202; Smart Slot Crossing</div><div class="cb">2 OAuth accounts cross-use<br>Cooldown-based auto slot switch<br>Usage distribution for limit avoidance</div></div>
+</div>
+
+<h3>8.2 Additional Optimization Opportunities</h3>
+<table>
+<tr><th>Strategy</th><th>Current</th><th>Improvement</th><th>Est. Savings</th></tr>
+<tr><td>Expand intent downgrade</td><td>9 intents only</td><td>Add task_history, cost_report, file_read etc. (+15)</td><td>20~30%</td></tr>
+<tr><td>Expand Gemini usage</td><td>Search/grounding only</td><td>Route non-coding general chat to gemini-2.5-flash</td><td>40~50%</td></tr>
+<tr><td>Strategic DeepSeek</td><td>Fallback only</td><td>Route coding tasks to deepseek-v4-pro (1/10 cost)</td><td>60~70%</td></tr>
+<tr><td>Auto Groq routing</td><td>User selection only</td><td>Auto-route simple questions to Groq</td><td>100% (Free)</td></tr>
+</table>
+</div>
+
+<!-- S9 -->
+<div class="sec" id="s9">
+<h2>9. &#54532;&#47200;&#53944;&#50644;&#46300; &#47784;&#45944; &#49472;&#47113;&#53552;</h2>
+<h3>9.1 ChatModelSelector Structure</h3>
+<p>Location: <code>aads-dashboard/src/components/chat/ModelSelector.tsx</code></p>
+<h4>API Call</h4>
+<pre><code>GET /api/v1/llm-models/chat-preferences
+Authorization: Bearer {localStorage.aads_token}
+Response: { preferences: ChatModelPreference[] }</code></pre>
+
+<h4>Sort Algorithm (applyPreferences)</h4>
+<pre><code>1. mixture/auto &rarr; Always top fixed
+2. is_hidden=true &rarr; Remove (keep if currently selected)
+3. Sort: is_pinned DESC &rarr; is_favorite DESC &rarr; display_order ASC &rarr; original index ASC
+4. Unregistered items &rarr; display_order=1000+index (pushed to bottom)</code></pre>
+
+<h3>9.2 Current Model List (Top 12)</h3>
+<table>
+<tr><th>#</th><th>Model</th><th>Pin</th><th>Fav</th><th>Order</th><th>Note</th></tr>
+<tr><td>1</td><td><strong>auto (Intent Auto)</strong></td><td>&#10004;</td><td>&mdash;</td><td>0</td><td>Always Top</td></tr>
+<tr><td>2</td><td>codex:gpt-5.5</td><td>&#10004;</td><td>&#10004;</td><td>20</td><td>Current Default</td></tr>
+<tr><td>3</td><td>anthropic:claude-opus</td><td>&#10004;</td><td>&mdash;</td><td>20</td><td>Top Performance</td></tr>
+<tr><td>4</td><td>anthropic:claude-sonnet</td><td>&#10004;</td><td>&mdash;</td><td>30</td><td>Balanced</td></tr>
+<tr><td>5</td><td>codex:gpt-5.4</td><td>&#10004;</td><td>&mdash;</td><td>30</td><td>General</td></tr>
+<tr><td>6</td><td>legacy:gpt-5.4</td><td>&#10004;</td><td>&mdash;</td><td>50</td><td>Legacy</td></tr>
+<tr><td>7</td><td>legacy:gpt-5.5</td><td>&#10004;</td><td>&mdash;</td><td>70</td><td>Legacy</td></tr>
+<tr><td>8</td><td>anthropic:claude-opus-4-7</td><td>&mdash;</td><td>&#10004;</td><td>20</td><td>Specific Version</td></tr>
+<tr><td>9</td><td>gemini:gemini-3.1-pro-preview</td><td>&mdash;</td><td>&#10004;</td><td>40</td><td>Latest Gemini</td></tr>
+<tr><td>10</td><td>kimi:kimi-k2.6</td><td>&mdash;</td><td>&#10004;</td><td>45</td><td>Long Context</td></tr>
+<tr><td>11</td><td>deepseek:deepseek-v4-pro</td><td>&mdash;</td><td>&#10004;</td><td>50</td><td>High-Efficiency</td></tr>
+<tr><td>12</td><td>litellm:pc-gemma4-e4b</td><td>&mdash;</td><td>&#10004;</td><td>80</td><td>Local Inference</td></tr>
+</table>
+</div>
+
+<!-- S10 -->
+<div class="sec" id="s10">
+<h2>10. &#49836;&#47215; &#44288;&#47532; &#48143; &#53216;&#45796;&#50868;</h2>
+<h3>10.1 OAuth Slot Structure</h3>
+<table>
+<tr><th>Slot</th><th>Account</th><th>Usage</th><th>Agent SDK</th></tr>
+<tr><td>Slot 1 (Naver)</td><td>ANTHROPIC_AUTH_TOKEN</td><td>Primary</td><td>&#10004;</td></tr>
+<tr><td>Slot 2 (Gmail)</td><td>ANTHROPIC_AUTH_TOKEN_2</td><td>Secondary Cross</td><td>&#10060;</td></tr>
+</table>
+
+<h3>10.2 Smart Slot Sorting</h3>
+<pre><code>Slot Classification:
+  _avail     = No cooldown (immediately available)
+  _db_limited = DB-based rate limited
+  _cooled    = In cooldown
+
+Priority: _avail &rarr; _db_limited &rarr; _cooled
+  Random shuffle within same group (load balancing)</code></pre>
+
+<h3>10.3 Cooldown Parsing Rules</h3>
+<table>
+<tr><th>Error Message Pattern</th><th>Cooldown Duration</th></tr>
+<tr><td><code>resets in N hours</code></td><td>N hours</td></tr>
+<tr><td><code>resets in N days</code></td><td>N &times; 24 hours</td></tr>
+<tr><td><code>resets in N weeks</code></td><td>N &times; 7 &times; 24 hours</td></tr>
+<tr><td><code>exceeded your current quota</code></td><td>24 hours</td></tr>
+<tr><td><code>resets 3am Asia/Seoul</code></td><td>Calculated to that time</td></tr>
+<tr><td>Other 429</td><td>Default 5 min (300s)</td></tr>
+</table>
+
+<h3>10.4 UsageBar (Real-time Display)</h3>
+<table>
+<tr><th>Item</th><th>Data Source</th><th>Refresh</th><th>DB Storage</th></tr>
+<tr><td>Claude Max 5h/1w</td><td>claude.ai API &rarr; DB</td><td>60s polling</td><td><code>claude_max_usage_snapshot</code></td></tr>
+<tr><td>Codex Relay</td><td>Claude Relay Proxy</td><td>30s polling</td><td>&mdash;</td></tr>
+</table>
+<p>Color: <span style="color:#3fb950">&#9632; &lt;50% Safe</span> &middot; <span style="color:#d29922">&#9632; 50-80% Caution</span> &middot; <span style="color:#f85149">&#9632; &gt;80% Danger</span></p>
+</div>
+
+<!-- S11 -->
+<div class="sec" id="s11">
+<h2>11. &#54788;&#54889; &#51652;&#45800;: &#47928;&#51228;&#51216; &#48143; &#47532;&#49828;&#53356;</h2>
+
+<h3>&#128308; Critical</h3>
+<div class="al al-d"><strong>C-1. Governance DB Primary Disabled</strong><br><code>intent_policies_db_primary=False</code> &mdash; 7 DB policies in Shadow Mode only. Actual routing uses hardcoded legacy rules. DB policy changes not reflected in real-time, limiting operational flexibility.</div>
+<div class="al al-d"><strong>C-2. Insufficient Intent Downgrade Coverage</strong><br>Only 9 intents downgraded by legacy rules. Remaining 61 intents use default high-cost models. Simple query intents like task_history, cost_report, file_read still use claude-opus.</div>
+
+<h3>&#128992; Warning</h3>
+<div class="al al-w"><strong>W-1. Model Set Hardcoding</strong><br><code>_GEMINI_MODELS</code>, <code>_GROQ_MODELS</code>, <code>_CODEX_MODELS</code> etc. hardcoded in model_selector.py. New model add/remove requires code deployment. Manual sync with DB llm_models table only.</div>
+<div class="al al-w"><strong>W-2. Intent Classifier Single Point of Failure</strong><br>Intent classification depends on qwen-turbo (LiteLLM) single model. On LiteLLM failure, only keyword fallback available &mdash; 42 rules cover only 42 of 70 intents (28 uncovered).</div>
+<div class="al al-w"><strong>W-3. Legacy/DB Rule Duplication</strong><br><code>_resolve_governed_intent_model()</code> runs both legacy and DB in parallel for comparison. Unintended mismatches accumulate in <code>governance_audit_log</code>, increasing management complexity.</div>
+<div class="al al-w"><strong>W-4. Rigid Same-Grade Fallback</strong><br><code>_SAMEGRADE_FALLBACK</code> dict hardcoded. New competitive models (kimi-k2.6, minimax-m2.7) not auto-reflected.</div>
+
+<h3>&#128993; Notice</h3>
+<div class="al al-i"><strong>N-1. No Proactive Usage-Based Routing</strong><br>No auto-switch to alternative models when Claude Max 5h/1w usage exceeds 80%. Currently relies on 429 error then fallback chain, causing user experience delay.</div>
+<div class="al al-i"><strong>N-2. No Governance Audit Dashboard</strong><br><code>governance_audit_log</code> data accumulates but no visualization UI. Difficult to identify legacy-DB mismatch patterns.</div>
+<div class="al al-i"><strong>N-3. No Intent Classification Accuracy Metrics</strong><br>Redis caching and 4-step correction exist, but no quantitative accuracy measurement. Cannot track misclassification rate.</div>
+</div>
+
+<!-- S12 -->
+<div class="sec" id="s12">
+<h2>12. &#44060;&#49440; &#47196;&#46300;&#47605;</h2>
+
+<h3><span class="pr p0">P0</span> Immediate (1~3 Days)</h3>
+<table>
+<tr><th>#</th><th>Task</th><th>Current</th><th>Action</th><th>Impact</th></tr>
+<tr><td>P0-1</td><td><strong>Governance DB Primary Switch</strong></td><td>db_primary=False</td><td>Shadow&rarr;Primary. 1-week audit verification then remove legacy code</td><td>Real-time DB policy changes</td></tr>
+<tr><td>P0-2</td><td><strong>Expand Intent Policies</strong></td><td>7 intents in DB</td><td>Add 15 intents: task_history, cost_report, file_read, memory_recall etc.</td><td>20~30% cost reduction</td></tr>
+<tr><td>P0-3</td><td><strong>Proactive Usage-Based Routing</strong></td><td>Fallback after 429 only</td><td>Check claude_max_usage_snapshot &rarr; 80% auto-switch to Gemini/DeepSeek</td><td>Zero 429 errors, UX improvement</td></tr>
+</table>
+
+<h3><span class="pr p1">P1</span> Short-Term (1~2 Weeks)</h3>
+<table>
+<tr><th>#</th><th>Task</th><th>Current</th><th>Action</th><th>Impact</th></tr>
+<tr><td>P1-1</td><td><strong>Model Set DB Migration</strong></td><td>Hardcoded sets</td><td>Add execution_backend column to llm_models, dynamic load</td><td>No-deploy model management</td></tr>
+<tr><td>P1-2</td><td><strong>Classifier Redundancy</strong></td><td>qwen-turbo only</td><td>1st qwen-turbo &rarr; 2nd gemini-2.5-flash-lite &rarr; 3rd keyword</td><td>99.9%+ classifier availability</td></tr>
+<tr><td>P1-3</td><td><strong>Fallback Chain DB Migration</strong></td><td>_SAMEGRADE_FALLBACK hardcoded</td><td>New model_fallback_chains table</td><td>Maximum operational flexibility</td></tr>
+<tr><td>P1-4</td><td><strong>Classification Metrics</strong></td><td>No accuracy tracking</td><td>intent_classification_log table, confidence distribution tracking</td><td>Data-driven classifier improvement</td></tr>
+</table>
+
+<h3><span class="pr p2">P2</span> Mid-Term (1 Month)</h3>
+<table>
+<tr><th>#</th><th>Task</th><th>Action</th><th>Impact</th></tr>
+<tr><td>P2-1</td><td><strong>Governance Audit Dashboard</strong></td><td>Dashboard governance tab: mismatch, intent distribution, cost analysis</td><td>Operational transparency</td></tr>
+<tr><td>P2-2</td><td><strong>Cost Budget System</strong></td><td>Daily/weekly/monthly budget &rarr; force lightweight model on exceed</td><td>Cost predictability</td></tr>
+<tr><td>P2-3</td><td><strong>A/B Testing Framework</strong></td><td>Parallel 2-model execution on same intent &rarr; quality/speed/cost comparison</td><td>Data-driven model selection</td></tr>
+</table>
+
+<h3><span class="pr p3">P3</span> Long-Term Vision (Quarter)</h3>
+<table>
+<tr><th>#</th><th>Task</th><th>Action</th><th>Impact</th></tr>
+<tr><td>P3-1</td><td><strong>ML-Based Autonomous Routing</strong></td><td>Train ML model optimizing satisfaction + cost + speed</td><td>Fully autonomous routing</td></tr>
+<tr><td>P3-2</td><td><strong>Multimodal Routing</strong></td><td>Auto-route by input type (text/image/voice/video)</td><td>Unified UX</td></tr>
+<tr><td>P3-3</td><td><strong>Federation Architecture</strong></td><td>Multi-server model load balancing, global routing</td><td>Infinite scalability</td></tr>
+</table>
+</div>
+
+<!-- S13 -->
+<div class="sec" id="s13">
+<h2>13. &#44396;&#54788; &#44228;&#54925; &#48143; &#53440;&#51076;&#46972;&#51064;</h2>
+
+<h3>Phase 1: Governance Switch (Week 1)</h3>
+<table>
+<tr><th>Day</th><th>Task</th><th>Files</th><th>Verification</th></tr>
+<tr><td>Day 1</td><td>Add 15 intents to intent_policies (DB INSERT)</td><td><code>scripts/add_intent_policies.sql</code></td><td>SELECT COUNT(*) &ge; 22</td></tr>
+<tr><td>Day 2</td><td>intent_policies_db_primary=True + monitoring</td><td><code>model_selector.py</code></td><td>0 mismatches (24h)</td></tr>
+<tr><td>Day 3</td><td>Deprecate legacy hardcoded rules + hot-reload</td><td><code>model_selector.py</code></td><td>All intent functional test</td></tr>
+</table>
+
+<h3>Phase 2: Proactive Routing (Week 2)</h3>
+<table>
+<tr><th>Day</th><th>Task</th><th>Files</th><th>Verification</th></tr>
+<tr><td>Day 4</td><td>Insert usage check in call_stream() (80% auto-switch)</td><td><code>model_selector.py</code>, <code>oauth_usage_tracker.py</code></td><td>80% simulation</td></tr>
+<tr><td>Day 5</td><td>Integrate slot cooldown + usage composite judgment</td><td><code>model_selector.py</code></td><td>429 error rate tracking</td></tr>
+</table>
+
+<h3>Phase 3: Model DB Migration (Week 3~4)</h3>
+<table>
+<tr><th>Day</th><th>Task</th><th>Files</th><th>Verification</th></tr>
+<tr><td>Day 6~7</td><td>Add execution_backend, fallback_chain columns to llm_models</td><td><code>migrations/</code></td><td>ALTER TABLE success</td></tr>
+<tr><td>Day 8~9</td><td>Replace hardcoded sets with DB cache</td><td><code>model_selector.py</code></td><td>All intents route correctly</td></tr>
+<tr><td>Day 10</td><td>New model_fallback_chains table + _SAMEGRADE_FALLBACK DB migration</td><td><code>model_selector.py</code></td><td>Fallback chain verification</td></tr>
+</table>
+
+<h3>Phase 4: Classifier Redundancy + Metrics (Week 4)</h3>
+<table>
+<tr><th>Day</th><th>Task</th><th>Files</th><th>Verification</th></tr>
+<tr><td>Day 11</td><td>Add 2nd classifier (gemini-2.5-flash-lite)</td><td><code>intent_router.py</code></td><td>qwen-turbo block simulation</td></tr>
+<tr><td>Day 12</td><td>Create intent_classification_log table + metrics</td><td><code>intent_router.py</code></td><td>Log accumulation check</td></tr>
+<tr><td>Day 13~14</td><td>Governance audit dashboard UI</td><td><code>aads-dashboard/</code></td><td>UI rendering</td></tr>
+</table>
+
+<h3>Risk Management</h3>
+<table>
+<tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr>
+<tr><td>Post DB-Primary misclassification increase</td><td>Wrong model, cost increase</td><td>1-week shadow comparison before switch. Feature flag instant rollback</td></tr>
+<tr><td>Model DB migration failure</td><td>Service disruption</td><td>ALTER TABLE during maintenance window. Keep hardcoded as deprecated fallback</td></tr>
+<tr><td>Usage-based switch malfunction</td><td>Claude unavailable</td><td>Threshold (80%) managed via DB config. Telegram alert integration</td></tr>
+<tr><td>Classifier redundancy latency</td><td>Response speed degradation</td><td>Primary 5s timeout &rarr; Secondary 3s &rarr; Total max 8s</td></tr>
+</table>
+</div>
+
+<!-- FOOTER -->
+<div class="ft2">
+<p><strong>AADS Auto-Routing Strategy Document</strong></p>
+<p>Generated: AADS AI System &middot; Last Updated: 2026-05-20 &middot; Version 1.0</p>
+<p>Server 68 (68.183.183.11) &middot; <code>reports/auto-routing-strategy-2026.html</code></p>
+</div>
+
+</div>
+</body>
+</html>

@@ -492,10 +492,8 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
   const _dupExists = prev.some((m) =>
     m.role === "assistant" &&
     !isStreamingPlaceholderMessage(m) && (
-      (m.id === finalMessage.id) ||
-      (finalMessage.render_id && m.render_id && m.render_id === finalMessage.render_id) ||
       (finalMessage.execution_id && m.execution_id === finalMessage.execution_id && (m.content || "").trim()) ||
-      (_fc.length >= 10 && (m.content || "").trim() === _fc)
+      (_fc.length >= 20 && (m.content || "").trim() === _fc)
     )
   );
   if (_dupExists) return prev;
@@ -2294,7 +2292,6 @@ export default function ChatPage() {
   }, []);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
-  const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
@@ -2543,9 +2540,6 @@ export default function ChatPage() {
             } else if (ev.type === "retry_progress") {
               if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
               continue;
-            } else if (ev.type === "model_fallback") {
-              if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
-              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
@@ -2617,8 +2611,6 @@ export default function ChatPage() {
               setThinkingBuf("");
               setToolStatus(null);
               setToolLogs([]);
-              isNearBottomRef.current = true;
-              requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
               return;
             }
           } catch {
@@ -3334,7 +3326,7 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     if (!container) return;
     const handleScroll = () => {
-      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 150;
       // 맨 위 근접 시 이전 메시지 자동 로드
       if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && Date.now() >= mergeCooldownUntilRef.current) {
         loadingOlderRef.current = true;
@@ -3417,46 +3409,6 @@ export default function ChatPage() {
     };
   }, [streaming]);
 
-  // ── SAFETY-NET: streaming→false 전환 후 placeholder 잔류 방지 + 스크롤 복구 ──
-  const prevStreamingForSafetyRef = useRef(false);
-  useEffect(() => {
-    const wasStreaming = prevStreamingForSafetyRef.current;
-    prevStreamingForSafetyRef.current = streaming;
-    if (!wasStreaming || streaming) return;
-    const sid = activeSessionRef.current;
-    if (!sid) return;
-    const timer = setTimeout(async () => {
-      if (activeSessionRef.current !== sid || streamingRef.current) return;
-      // safety-net은 cooldown 무시 — placeholder 잔류 시 반드시 복구
-      try {
-        const msgs = await chatApi<ChatMessage[]>(
-          `/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`
-        );
-        if (activeSessionRef.current !== sid || streamingRef.current) return;
-        const processed = surfaceDbSavedStreamingPlaceholders(msgs, {}).reverse();
-        const latestAi = processed.filter(
-          (m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited"
-        ).pop();
-        if (latestAi) {
-          setMessages(prev => {
-            const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-            if (hasPlaceholder) return replaceStreamingPlaceholderWithFinal(prev, latestAi);
-            const alreadyHas = prev.some(m => m.id === latestAi.id || (latestAi.execution_id && m.execution_id === latestAi.execution_id));
-            if (alreadyHas) return prev;
-            return mergeServerMessagesPreservingLocal(prev, processed);
-          });
-        }
-      } catch { /* polling fallback */ }
-      if (isNearBottomRef.current) {
-      requestAnimationFrame(() => {
-        const c = messagesContainerRef.current;
-        if (c) c.scrollTop = c.scrollHeight;
-      });}
-
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [streaming]);
-
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
     if (!briefing || isInitialLoadRef.current) return;
@@ -3510,8 +3462,6 @@ export default function ChatPage() {
           }
         }
         if (ss.just_completed) {
-          if (finalizingRef.current) return;  // SSE done이 이미 처리 중이면 skip
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
           streamingSessionRef.current = null;
@@ -3528,8 +3478,6 @@ export default function ChatPage() {
             }
           }
           setStreaming(false); setStreamBuf("");
-          // scroll: isNearBottomRef preserved — user scroll position respected
-          if (isNearBottomRef.current) { requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; }); }
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -3544,8 +3492,6 @@ export default function ChatPage() {
         }
         // SSE 끊김 감지: 서버 is_streaming=false + 프론트 streaming=true
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
-          if (finalizingRef.current) return;  // 이미 finalization 진행 중이면 skip
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
@@ -3561,8 +3507,6 @@ export default function ChatPage() {
             }
           }
           setStreaming(false); setStreamBuf("");
-          // scroll: preserve user position
-          if (isNearBottomRef.current) { requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; }); }
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -3627,7 +3571,7 @@ export default function ChatPage() {
       if (_ssLastMsgId) lastKnownMsgIdRef.current = _ssLastMsgId;
       // 메시지 폴링은 스트리밍 중이면 생략 (SSE로 수신 중)
       if (_streaming && !_waitingBg) return;
-      // safety-net은 cooldown 무시 — placeholder 잔류 시 반드시 복구
+      if (Date.now() < mergeCooldownUntilRef.current) return;
       try {
         const rawLatest = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sid}&limit=5&sort=desc&fields=minimal&include_streaming=true`
@@ -3662,8 +3606,7 @@ export default function ChatPage() {
                 } else {
                   setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
-                // scroll: preserve user position
-                if (isNearBottomRef.current) { requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; }); }
+                requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -4389,9 +4332,6 @@ export default function ChatPage() {
             } else if (ev.type === "retry_progress") {
               if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
               continue;
-            } else if (ev.type === "model_fallback") {
-              if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
-              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
               if (isProviderCapacityOrLimitText(deltaContent)) {
@@ -4413,7 +4353,6 @@ export default function ChatPage() {
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               gotFinal = true;
-              finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
               setToolLogs([]);
@@ -4490,17 +4429,12 @@ export default function ChatPage() {
                   };
                   return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
-              } else {
-                // P0-FIX: tools-only → DB에서 최종 메시지 fetch
-                mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
               }
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
-              mergeCooldownUntilRef.current = Date.now() + 8000;
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
-              isNearBottomRef.current = true;
-              requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
