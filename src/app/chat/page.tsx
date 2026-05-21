@@ -492,8 +492,10 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
   const _dupExists = prev.some((m) =>
     m.role === "assistant" &&
     !isStreamingPlaceholderMessage(m) && (
+      (m.id === finalMessage.id) ||
+      (finalMessage.render_id && m.render_id && m.render_id === finalMessage.render_id) ||
       (finalMessage.execution_id && m.execution_id === finalMessage.execution_id && (m.content || "").trim()) ||
-      (_fc.length >= 20 && (m.content || "").trim() === _fc)
+      (_fc.length >= 10 && (m.content || "").trim() === _fc)
     )
   );
   if (_dupExists) return prev;
@@ -3331,7 +3333,7 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     if (!container) return;
     const handleScroll = () => {
-      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 150;
+      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       // 맨 위 근접 시 이전 메시지 자동 로드
       if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && Date.now() >= mergeCooldownUntilRef.current) {
         loadingOlderRef.current = true;
@@ -3424,6 +3426,7 @@ export default function ChatPage() {
     if (!sid) return;
     const timer = setTimeout(async () => {
       if (activeSessionRef.current !== sid || streamingRef.current) return;
+      if (Date.now() < mergeCooldownUntilRef.current) return;
       try {
         const msgs = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`
@@ -3437,7 +3440,7 @@ export default function ChatPage() {
           setMessages(prev => {
             const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
             if (hasPlaceholder) return replaceStreamingPlaceholderWithFinal(prev, latestAi);
-            const alreadyHas = prev.some(m => m.id === latestAi.id);
+            const alreadyHas = prev.some(m => m.id === latestAi.id || (latestAi.execution_id && m.execution_id === latestAi.execution_id));
             if (alreadyHas) return prev;
             return mergeServerMessagesPreservingLocal(prev, processed);
           });
@@ -4480,9 +4483,12 @@ export default function ChatPage() {
                   };
                   return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
+              } else {
+                // P0-FIX: tools-only → DB에서 최종 메시지 fetch
+                mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
               }
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
-              mergeCooldownUntilRef.current = Date.now() + 5000;
+              mergeCooldownUntilRef.current = Date.now() + 8000;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
