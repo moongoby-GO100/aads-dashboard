@@ -851,7 +851,7 @@ interface MessageItemProps {
   onRegenerate?: (msgId: string) => void;
   onReplyTo?: (msg: ChatMessage) => void;
   onBranch?: (msg: ChatMessage) => void;
-  allMessages?: ChatMessage[];
+  replyTarget?: ChatMessage | null;
   isActiveStreaming?: boolean;
   streamingContent?: string;
   streamingThinking?: string;
@@ -868,14 +868,11 @@ interface MessageItemProps {
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
-  onRegenerate, onReplyTo, onBranch, allMessages,
+  onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
-  const replyTarget = msg.reply_to_id && allMessages
-    ? allMessages.find((m) => m.id === msg.reply_to_id)
-    : null;
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
@@ -3397,7 +3394,7 @@ export default function ChatPage() {
   useEffect(() => { thinkingBufRef.current = thinkingBuf; }, [thinkingBuf]);
 
 
-  // PERSIST-FIX: streaming 중 2초마다 streamBuf를 message.content에 동기화
+  // PERSIST-FIX: streaming 중 4초마다 streamBuf를 message.content에 동기화 (PERF: 2s→4s)
   // SSE 끊김/streaming 해제 시에도 버블에 텍스트가 남아있게 보장
   useEffect(() => {
     if (!streaming) return;
@@ -3412,7 +3409,7 @@ export default function ChatPage() {
           m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
         );
       });
-    }, 2000);
+    }, 4000);
     return () => {
       clearInterval(syncTimer);
       // cleanup: streaming 종료 시 마지막 한번 동기화
@@ -5665,6 +5662,24 @@ export default function ChatPage() {
   });
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
 
+  // PERF: React.memo 안정화 — 인라인 화살표 함수 제거로 MessageItem 불필요 재렌더 방지
+  const filteredArtifactsRef = useRef(filteredArtifacts);
+  useEffect(() => { filteredArtifactsRef.current = filteredArtifacts; }, [filteredArtifacts]);
+  const handleViewArtifactStable = useCallback((artifactId: string) => {
+    const idx = filteredArtifactsRef.current.findIndex((a: { id: string }) => a.id === artifactId);
+    if (idx >= 0) setSelectedArtifactIdx(idx);
+    setArtifactMode("full");
+    setArtifactTab("report");
+  }, []);
+  const handleOpenLightboxStable = useCallback((srcs: string[], i: number) => {
+    setLightboxSrcs(srcs);
+    setLightboxIdx(i);
+  }, []);
+  const handleViewReportStable = useCallback(() => {
+    setArtifactMode("full");
+    setArtifactTab("report");
+  }, []);
+
   useEffect(() => {
     if (!activeWs || activeSession) return;
     const savedRole = localStorage.getItem(`aads-chat-role-${activeWs}`);
@@ -6963,7 +6978,7 @@ export default function ChatPage() {
                     onRegenerate={handleRegenerate}
                     onReplyTo={setReplyToMessage}
                     onBranch={setBranchPoint}
-                    allMessages={messages}
+                    replyTarget={msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null}
                     isActiveStreaming={
                       msg.intent === "streaming_placeholder" &&
                       streaming &&
@@ -6984,15 +6999,10 @@ export default function ChatPage() {
                     onStopStreaming={
                       msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
                     }
-                    onViewReport={msg.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
+                    onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                     linkedArtifact={msg.artifact_id ? artifacts.find(a => a.id === msg.artifact_id) : undefined}
-                    onViewArtifact={(artifactId) => {
-                      const idx = filteredArtifacts.findIndex(a => a.id === artifactId);
-                      if (idx >= 0) setSelectedArtifactIdx(idx);
-                      setArtifactMode("full");
-                      setArtifactTab("report");
-                    }}
-                    onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
+                    onViewArtifact={handleViewArtifactStable}
+                    onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
@@ -7019,17 +7029,12 @@ export default function ChatPage() {
                       onRegenerate={handleRegenerate}
                       onReplyTo={setReplyToMessage}
                       onBranch={setBranchPoint}
-                      allMessages={messages}
+                      replyTarget={msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null}
                       isActiveStreaming={false}
-                      onViewReport={hm.intent === "pipeline_runner" ? () => { setArtifactMode("full"); setArtifactTab("report"); } : undefined}
+                      onViewReport={hm.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                       linkedArtifact={hm.artifact_id ? artifacts.find(a => a.id === hm.artifact_id) : undefined}
-                      onViewArtifact={(artifactId) => {
-                        const idx = filteredArtifacts.findIndex(a => a.id === artifactId);
-                        if (idx >= 0) setSelectedArtifactIdx(idx);
-                        setArtifactMode("full");
-                        setArtifactTab("report");
-                      }}
-                      onOpenLightbox={(srcs, i) => { setLightboxSrcs(srcs); setLightboxIdx(i); }}
+                      onViewArtifact={handleViewArtifactStable}
+                      onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
                     />
                   ))}
