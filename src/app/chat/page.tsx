@@ -211,6 +211,19 @@ function splitDesignLines(text: string): string[] {
   return text.split("\n").map((line) => line.trim()).filter(Boolean);
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("file read failed"));
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function projectKeyFromWorkspace(workspace?: Workspace | null): string {
   const settings = getWorkspaceSettings(workspace);
   const configured = String(settings.project_key || settings.active_project || settings.project || "").trim().toUpperCase();
@@ -4244,8 +4257,7 @@ export default function ChatPage() {
         const screenFile = screenContextRef.current;
         screenContextRef.current = null;
         try {
-          const arrBuf = await screenFile.arrayBuffer();
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+          const b64 = await fileToBase64(screenFile);
           pendingAttachments.current.push({ type: "image", name: screenFile.name, media_type: "image/png", base64: b64, _hidden: true });
         } catch {}
       }
@@ -4331,24 +4343,34 @@ export default function ChatPage() {
       const _tokenQueue: string[] = [];
       let _displayedText = "";
       let _drainTimer: ReturnType<typeof setInterval> | null = null;
+      let _lastDrainFlushAt = 0;
+      const _flushDrain = (force = false) => {
+        if (_tokenQueue.length === 0) return;
+        const now = Date.now();
+        const minInterval = _displayedText.length > 12000 ? 900 : 450;
+        if (!force && now - _lastDrainFlushAt < minInterval) return;
+        while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
+        _lastDrainFlushAt = now;
+        if (!isStale()) {
+          startTransition(() => setStreamBuf(_displayedText));
+        }
+      };
       const _startDrain = () => {
         if (_drainTimer) return;
         _drainTimer = setInterval(() => {
-          if (_tokenQueue.length > 0) {
-            while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
-            if (!isStale()) setStreamBuf(_displayedText);
-          }
-        }, 150);
+          _flushDrain();
+        }, 250);
       };
 
       const _stopDrain = () => {
         if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
-        while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
+        _flushDrain(true);
       };
       const _resetDrain = () => {
         if (_drainTimer) { clearInterval(_drainTimer); _drainTimer = null; }
         _tokenQueue.length = 0;
         _displayedText = "";
+        _lastDrainFlushAt = 0;
       };
 
       while (true) {
@@ -4704,8 +4726,7 @@ export default function ChatPage() {
           screenContextRef.current = null;
           setTimeout(async () => {
             try {
-              const arrBuf = await captureFile.arrayBuffer();
-              const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+              const b64 = await fileToBase64(captureFile);
               pendingAttachments.current.push({ type: "image", name: captureFile.name, media_type: "image/png", base64: b64 });
               sendMessage("[AI 요청 화면 캡처]");
             } catch { /* ignore */ }
@@ -4718,8 +4739,7 @@ export default function ChatPage() {
             if (f) {
               screenContextRef.current = null;
               try {
-                const arrBuf = await f.arrayBuffer();
-                const b64 = btoa(String.fromCharCode(...new Uint8Array(arrBuf)));
+                const b64 = await fileToBase64(f);
                 pendingAttachments.current.push({ type: "image", name: f.name, media_type: "image/png", base64: b64 });
                 sendMessage("[AI 요청 화면 캡처]");
               } catch { /* ignore */ }
