@@ -3402,7 +3402,7 @@ export default function ChatPage() {
       if (!isNearBottomRef.current) return;
       const container = messagesContainerRef.current;
       if (container) container.scrollTop = container.scrollHeight;
-    }, 200);
+    }, 300);
     return () => clearInterval(iv);
   }, [streaming]);
 
@@ -3419,6 +3419,7 @@ export default function ChatPage() {
       const buf = streamBufRef.current;
       const thinking = thinkingBufRef.current;
       if (!buf && !thinking) return;
+      startTransition(() => {
       setMessages(prev => {
         const ph = prev.find(m => m.intent === "streaming_placeholder");
         if (!ph || (ph.content === buf && (ph.thinking_summary || "") === thinking)) return prev;
@@ -3426,7 +3427,8 @@ export default function ChatPage() {
           m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
         );
       });
-    }, 4000);
+      });
+    }, 10000);
     return () => {
       clearInterval(syncTimer);
       // cleanup: streaming 종료 시 마지막 한번 동기화
@@ -4336,7 +4338,7 @@ export default function ChatPage() {
             while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
             if (!isStale()) setStreamBuf(_displayedText);
           }
-        }, 50);
+        }, 150);
       };
 
       const _stopDrain = () => {
@@ -5941,6 +5943,18 @@ export default function ChatPage() {
     return { display: capped, lastAssistantId, totalCount: display.length };
   }, [messages]);
 
+  // PERF: O(1) lookup maps
+  const messageByIdMap = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) map.set(m.id, m);
+    return map;
+  }, [messages]);
+
+  const artifactByIdMap = useMemo(() => {
+    const map = new Map<string, Artifact>();
+    for (const a of artifacts) map.set(a.id, a);
+    return map;
+  }, [artifacts]);
 
   // ══════════════════════════════════════════════════════════════════
   // Render
@@ -7041,7 +7055,7 @@ export default function ChatPage() {
                     onRegenerate={handleRegenerate}
                     onReplyTo={setReplyToMessage}
                     onBranch={setBranchPoint}
-                    replyTarget={msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null}
+                    replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
                     isActiveStreaming={
                       msg.intent === "streaming_placeholder" &&
                       streaming &&
@@ -7063,7 +7077,7 @@ export default function ChatPage() {
                       msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
                     }
                     onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
-                    linkedArtifact={msg.artifact_id ? artifacts.find(a => a.id === msg.artifact_id) : undefined}
+                    linkedArtifact={msg.artifact_id ? artifactByIdMap.get(msg.artifact_id) : undefined}
                     onViewArtifact={handleViewArtifactStable}
                     onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
@@ -7092,10 +7106,10 @@ export default function ChatPage() {
                       onRegenerate={handleRegenerate}
                       onReplyTo={setReplyToMessage}
                       onBranch={setBranchPoint}
-                      replyTarget={msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null}
+                      replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
                       isActiveStreaming={false}
                       onViewReport={hm.intent === "pipeline_runner" ? handleViewReportStable : undefined}
-                      linkedArtifact={hm.artifact_id ? artifacts.find(a => a.id === hm.artifact_id) : undefined}
+                      linkedArtifact={hm.artifact_id ? artifactByIdMap.get(hm.artifact_id) : undefined}
                       onViewArtifact={handleViewArtifactStable}
                       onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
