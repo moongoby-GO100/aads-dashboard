@@ -4102,12 +4102,20 @@ export default function ChatPage() {
             const idx = msgQueueRef.current.indexOf(interruptContent);
             if (idx !== -1) msgQueueRef.current.splice(idx, 1);
             setQueueCount(msgQueueRef.current.length);
-            // FIX: streaming stuck 해제 + 입력 복원 (메시지 유실 방지)
+            // Stale streaming runtime: DB에는 실행이 없으므로 추가 지시를 일반 메시지로 즉시 재전송한다.
             streamingSessionRef.current = null;
-            setStreaming(false); setStreamBuf("");
-            setInput(interruptContent);
+            streamingRef.current = false;
+            waitingBgRef.current = false;
+            finalizingRef.current = false;
+            currentExecutionIdRef.current = null;
+            setStreaming(false);
+            setWaitingBgResponse(false);
+            setStreamBuf("");
             setMessages(prev => prev.filter(m => !m.id.startsWith("interrupt-")));
-            setYellowWarning("스트리밍이 종료되어 입력을 복원했습니다. 다시 전송해 주세요.");
+            setYellowWarning("이전 응답 상태를 정리하고 일반 메시지로 즉시 재전송합니다.");
+            window.setTimeout(() => {
+              void sendMessage(interruptContent);
+            }, 0);
             return;
           }
           // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
