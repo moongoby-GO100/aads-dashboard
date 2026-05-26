@@ -412,6 +412,7 @@ function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serve
 
 function findAssistantMessageIndexForFinalization(messages: ChatMessage[], finalMessage: ChatMessage): number {
   const finalContent = normalizedMessageContent(finalMessage);
+  // P0-FIX (2026-05-26): 1차 패스 — ID/render_id/execution_id 정확 매치 + draft 매치
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role !== "assistant") continue;
@@ -425,6 +426,22 @@ function findAssistantMessageIndexForFinalization(messages: ChatMessage[], final
     const overlapLen = Math.min(120, draftContent.length, finalContent.length);
     if (overlapLen >= 30 && draftContent.slice(0, overlapLen) === finalContent.slice(0, overlapLen)) {
       return i;
+    }
+  }
+  // P0-FIX (2026-05-26): 2차 패스 — pure content prefix match (finalized 메시지도 매칭)
+  // 이유: SSE done 후 local 메시지는 ai-* ID로 finalized됨. 폴링이 DB UUID 메시지를 fetch 시
+  //       ID/execution_id/render_id 모두 불일치 → 중복 버블 생성됨. content prefix로 dedup.
+  if (finalContent && finalContent.length >= 30) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role !== "assistant") continue;
+      if (message.intent === "streaming_placeholder" || message.intent === "rate_limited") continue;
+      const msgContent = normalizedMessageContent(message);
+      if (!msgContent || msgContent.length < 30) continue;
+      const overlapLen = Math.min(200, msgContent.length, finalContent.length);
+      if (overlapLen >= 30 && msgContent.slice(0, overlapLen) === finalContent.slice(0, overlapLen)) {
+        return i;
+      }
     }
   }
   return -1;
@@ -3517,7 +3534,7 @@ export default function ChatPage() {
         }
         if (ss.just_completed) {
           if (finalizingRef.current) return;  // SSE done이 이미 처리 중이면 skip
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
+          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
           streamingSessionRef.current = null;
@@ -3551,7 +3568,7 @@ export default function ChatPage() {
         // SSE 끊김 감지: 서버 is_streaming=false + 프론트 streaming=true
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
           if (finalizingRef.current) return;  // 이미 finalization 진행 중이면 skip
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
+          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
@@ -4419,7 +4436,7 @@ export default function ChatPage() {
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               gotFinal = true;
-              finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);
+              finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
               setToolLogs([]);
@@ -4513,11 +4530,34 @@ export default function ChatPage() {
               setStreaming(false);
               isNearBottomRef.current = true;
               requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
-              // POST-DONE-VERIFY: DB에서 최종 메시지 확인 — replaceStreamingPlaceholderWithFinal 실패 시 복구
+              // POST-DONE-VERIFY (2026-05-26 강화): placeholder 잔존 검사 + 2단계 복구
+              // 1차 (500ms): placeholder가 남아있으면 즉시 DB fetch + 강제 교체
+              setTimeout(() => {
+                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
+                setMessages((prev) => {
+                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
+                  if (!hasStalePh) return prev;
+                  // placeholder 잔존 시 async fetch trigger
+                  mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
+                  return prev;
+                });
+              }, 500);
+              // 2차 (1500ms): 모든 케이스에 대해 DB 정합성 보장
               setTimeout(() => {
                 if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
                 mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
               }, 1500);
+              // 3차 (3500ms): 마지막 안전망 — 여전히 placeholder 잔존 시 복구
+              setTimeout(() => {
+                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
+                setMessages((prev) => {
+                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
+                  if (hasStalePh) {
+                    mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
+                  }
+                  return prev;
+                });
+              }, 3500);
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
