@@ -5854,6 +5854,94 @@ export default function ChatPage() {
       .slice(0, 8)
   ), [showAllTodos, todoItems]);
 
+  type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[] };
+  const displayData = useMemo(() => {
+    const sorted = [...messages]
+      .filter(m => {
+        if (m.intent === "ai_review_warning") return false;
+        if (m.intent === "interrupted_partial" || m.intent === "interruption_notice") {
+          return (m.content || "").length > 0;
+        }
+        return true;
+      })
+      .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
+    const display: DisplayItem[] = [];
+    let i = 0;
+    while (i < sorted.length) {
+      const msg = sorted[i];
+      if (msg.role === "user" && !msg.content?.includes("[시스템]")) {
+        const baseContent = msg.content || "";
+        let j = i + 1;
+        while (j < sorted.length &&
+          sorted[j].role === "user" &&
+          (sorted[j].content === baseContent ||
+           (baseContent.length > 0 && sorted[j].content?.startsWith(baseContent)))) {
+          j++;
+        }
+        if (j > i + 1) {
+          display.push({ msg, idx: i, hiddenMsgs: sorted.slice(i + 1, j) });
+          i = j;
+          continue;
+        }
+      }
+      if (msg.role === "assistant" && msg.intent !== "rate_limited") {
+        const baseContent = normalizedMessageContent(msg);
+        const isDraftLike = (item: ChatMessage) =>
+          item.intent === "streaming_placeholder" ||
+          isLocalTransientMessage(item) ||
+          item.model_used === "interrupted" ||
+          item.model_used === "recovered";
+        let j = i + 1;
+        while (j < sorted.length && sorted[j].role === "assistant") {
+          const next = sorted[j];
+          const nextContent = normalizedMessageContent(next);
+          const sameExecutionDraft =
+            Boolean(msg.execution_id) &&
+            msg.execution_id === next.execution_id &&
+            (isDraftLike(msg) || isDraftLike(next));
+          const _prefixLen = Math.min(100, baseContent.length, nextContent.length);
+          const overlaps =
+            _prefixLen >= 30 &&
+            baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
+          const eitherInterrupted = (msg.intent === "interrupted_partial" || msg.intent === "interruption_notice" || next.intent === "interrupted_partial" || next.intent === "interruption_notice");
+          if (!sameExecutionDraft && !eitherInterrupted && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
+          j++;
+        }
+        if (j > i + 1) {
+          const group = sorted.slice(i, j);
+          const keeperPriority = (item: ChatMessage) => {
+            if (item.intent !== "streaming_placeholder" && !isLocalTransientMessage(item) && item.model_used !== "interrupted") return 2;
+            if (item.model_used === "recovered") return 1;
+            if (item.intent === "interrupted_partial" || item.intent === "interruption_notice") return -1;
+            return 0;
+          };
+          const keeper = group
+            .slice()
+            .sort((a, b) => {
+              const priorityDiff = keeperPriority(b) - keeperPriority(a);
+              if (priorityDiff !== 0) return priorityDiff;
+              return normalizedMessageContent(b).length - normalizedMessageContent(a).length;
+            })[0];
+          display.push({ msg: keeper, idx: i, hiddenMsgs: group.filter((item) => item.id !== keeper.id) });
+          i = j;
+          continue;
+        }
+      }
+      display.push({ msg, idx: i });
+      i++;
+    }
+    // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
+    const MAX_RENDER = 150;
+    const capped = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
+    const lastAssistantId = capped.slice().reverse().find(d => {
+      const m = d.msg;
+      const isSystemMsg = m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
+      return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
+    })?.msg.id;
+    return { display: capped, lastAssistantId, totalCount: display.length };
+  }, [messages]);
+
+
   // ══════════════════════════════════════════════════════════════════
   // Render
   // ══════════════════════════════════════════════════════════════════
