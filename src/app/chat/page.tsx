@@ -5890,6 +5890,7 @@ export default function ChatPage() {
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "interrupted_partial") return false;
+        if (m.intent === "recovered_interrupt") return false;
         if (m.intent === "interruption_notice") {
           return (m.content || "").length > 0;
         }
