@@ -878,7 +878,7 @@ interface MessageItemProps {
   handleDeleteMessage: (id: string, role: string) => void;
   handleCopyToInput: (content: string) => void;
   handleEditResend: (msgId: string, newContent: string) => void;
-  onRegenerate?: (msgId: string) => void;
+  onRegenerate?: (msgId: string, mode?: "regenerate" | "continue") => void;
   onReplyTo?: (msg: ChatMessage) => void;
   onBranch?: (msg: ChatMessage) => void;
   replyTarget?: ChatMessage | null;
@@ -906,7 +906,7 @@ const MessageItem = memo(function MessageItem({
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
-  const assistantBubbleOpacity = msg.intent === "regenerated" ? 0.45 : isStreamingPlaceholder ? 0.92 : 1;
+  const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? 0.45 : isStreamingPlaceholder ? 0.92 : 1;
   const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -1027,6 +1027,7 @@ const MessageItem = memo(function MessageItem({
             agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
             system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
             regenerated: { icon: "🔄", label: "이전 응답", color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
+            continued: { icon: "▶", label: "이어서 생성됨", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
           };
           const badge = msg.intent ? badgeMap[msg.intent] : null;
           return badge ? (
@@ -1600,20 +1601,38 @@ const MessageItem = memo(function MessageItem({
               >↩</button>
             )}
             {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
-              <button
-                onClick={() => onRegenerate(msg.id)}
-                title={isInterruptedAssistant ? "중단 지점부터 이어서 생성" : "다시 생성"}
-                style={{
-                  width: "28px", height: "28px", borderRadius: "6px",
-                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
-                  color: "#22c55e", fontSize: "14px",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
-                  marginLeft: "4px",
-                }}
-                onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; (e.target as HTMLElement).style.borderColor = "#22c55e"; }}
-                onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
-              >{isInterruptedAssistant ? "▶" : "🔄"}</button>
+              <>
+                {isInterruptedAssistant && (
+                  <button
+                    onClick={() => onRegenerate(msg.id, "continue")}
+                    title="중단 지점부터 이어서 생성"
+                    style={{
+                      height: "24px", borderRadius: "6px", padding: "0 8px",
+                      background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.25)",
+                      color: "#f59e0b", fontSize: "11px", fontWeight: 600,
+                      display: "inline-flex", alignItems: "center", gap: "3px",
+                      cursor: "pointer", opacity: 0.8, transition: "all 0.2s",
+                      marginLeft: "4px",
+                    }}
+                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(245,158,11,0.20)"; }}
+                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.8"; (e.target as HTMLElement).style.background = "rgba(245,158,11,0.10)"; }}
+                  >▶ 이어서</button>
+                )}
+                <button
+                  onClick={() => onRegenerate(msg.id, "regenerate")}
+                  title="다시 생성"
+                  style={{
+                    width: "28px", height: "28px", borderRadius: "6px",
+                    background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+                    color: "#22c55e", fontSize: "14px",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+                    marginLeft: "4px",
+                  }}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; (e.target as HTMLElement).style.borderColor = "#22c55e"; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
+                >🔄</button>
+              </>
             )}
             <button
               onClick={() => handleDeleteMessage(msg.id, "assistant")}
@@ -5333,7 +5352,7 @@ export default function ChatPage() {
 
   // ── AI 응답 재생성 (Regenerate) ──
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const handleRegenerate = useCallback(async (msgId: string) => {
+  const handleRegenerate = useCallback(async (msgId: string, mode: "regenerate" | "continue" = "regenerate") => {
     if (!activeSessionObjRef.current || streaming) return;
     const sessionId = activeSessionObjRef.current.id;
     const regenPlaceholderId = `ai-streaming-regen-${msgId}`;
@@ -5439,7 +5458,7 @@ export default function ChatPage() {
               setMessages((prev) => {
                 // 기존 메시지의 intent를 regenerated로 변경
                 const updated = prev.map((m) =>
-                  m.id === msgId ? { ...m, intent: "regenerated" } : m
+                  m.id === msgId ? { ...m, intent: mode === "continue" ? "continued" : "regenerated" } : m
                 );
                 return replaceStreamingPlaceholderWithFinal(updated, {
                   ...finalMsg,
