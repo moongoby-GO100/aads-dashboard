@@ -3556,7 +3556,7 @@ export default function ChatPage() {
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
-          mergeCooldownUntilRef.current = Date.now() + 8000;
+          mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
             const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
             if (latestAi) {
@@ -3589,7 +3589,7 @@ export default function ChatPage() {
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
-          mergeCooldownUntilRef.current = Date.now() + 8000;
+          mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
             const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
             if (latestAi) {
@@ -3692,7 +3692,7 @@ export default function ChatPage() {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
                 .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
               if (cancelled) return;
-              mergeCooldownUntilRef.current = Date.now() + 8000;
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               if (allMsgs && allMsgs.length > 0) {
                 const latestAi2 = allMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
                 if (latestAi2) {
@@ -4556,10 +4556,12 @@ export default function ChatPage() {
                 })().catch(() => {});
               }
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
-              mergeCooldownUntilRef.current = Date.now() + 8000;
+              mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
+              // P0-FIX: SSE done 경로에도 완료 토스트 표시
+              showCompletionToast("응답이 완료되었습니다");
               isNearBottomRef.current = true;
               requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
               // POST-DONE-VERIFY (2026-05-26 강화): placeholder 잔존 검사 + 2단계 복구
@@ -4590,6 +4592,18 @@ export default function ChatPage() {
                   return prev;
                 });
               }, 3500);
+              // 4차 (5000ms): 최종 안전망 — 완료 메시지가 화면에 없으면 강제 fetch
+              setTimeout(() => {
+                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
+                setMessages((prev) => {
+                  const hasAnyFinal = prev.some(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited" && (m.content || "").trim().length > 0);
+                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
+                  if (hasStalePh || !hasAnyFinal) {
+                    mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
+                  }
+                  return prev;
+                });
+              }, 5000);
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
