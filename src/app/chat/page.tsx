@@ -5889,7 +5889,8 @@ export default function ChatPage() {
     const sorted = [...messages]
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
-        if (m.intent === "interrupted_partial" || m.intent === "interruption_notice") {
+        if (m.intent === "interrupted_partial") return false;
+        if (m.intent === "interruption_notice") {
           return (m.content || "").length > 0;
         }
         return true;
