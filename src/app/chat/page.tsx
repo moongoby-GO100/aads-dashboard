@@ -5957,6 +5957,7 @@ export default function ChatPage() {
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") return false;
+        if (isShortInterruptionPlaceholder(m)) return false;
         if (isInterruptedLikeMessage(m)) {
           return hasMeaningfulDisplayContent(m);
         }
