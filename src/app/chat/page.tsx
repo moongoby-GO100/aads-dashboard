@@ -251,7 +251,11 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
 
 function isAssistantDraftMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
-  if (isStreamingPlaceholderMessage(message)) return true;
+  if (message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-")) return true;
+  if (message.intent === "streaming_placeholder") {
+    const content = normalizedMessageContent(message);
+    return content.length <= 200 || isPlaceholderOnlyContent(content);
+  }
   const isInterruptedType =
     message.intent === "interrupted_partial" ||
     message.intent === "interruption_notice" ||
