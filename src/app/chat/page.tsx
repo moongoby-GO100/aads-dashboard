@@ -5968,7 +5968,7 @@ export default function ChatPage() {
           const overlaps =
             _prefixLen >= 30 &&
             baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
-          const eitherInterrupted = (msg.intent === "interrupted_partial" || msg.intent === "interruption_notice" || next.intent === "interrupted_partial" || next.intent === "interruption_notice");
+          const eitherInterrupted = ((msg.intent === "interrupted_partial" || msg.intent === "interruption_notice") && (msg.content || "").length < 200) || ((next.intent === "interrupted_partial" || next.intent === "interruption_notice") && (next.content || "").length < 200);
           if (!sameExecutionDraft && !eitherInterrupted && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
           j++;
         }
@@ -5977,6 +5977,7 @@ export default function ChatPage() {
           const keeperPriority = (item: ChatMessage) => {
             if (item.intent !== "streaming_placeholder" && !isLocalTransientMessage(item) && item.model_used !== "interrupted") return 2;
             if (item.model_used === "recovered") return 1;
+            if ((item.intent === "interrupted_partial" || item.intent === "interruption_notice") && (item.content || "").length >= 500) return 1;
             if ((item.intent === "interrupted_partial" || item.intent === "interruption_notice") && (item.content || "").length < 200) return -1;
             return 0;
           };
