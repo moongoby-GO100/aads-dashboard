@@ -251,13 +251,14 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
 
 function isAssistantDraftMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
-  return (
-    isStreamingPlaceholderMessage(message) ||
+  if (isStreamingPlaceholderMessage(message)) return true;
+  const isInterruptedType =
     message.intent === "interrupted_partial" ||
     message.intent === "interruption_notice" ||
     message.model_used === "interrupted" ||
-    message.model_used === "recovered"
-  );
+    message.model_used === "recovered";
+  if (!isInterruptedType) return false;
+  return (message.content || "").trim().length <= 200;
 }
 
 function hasMeaningfulDisplayContent(message: ChatMessage): boolean {
@@ -553,7 +554,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
     !isStreamingPlaceholderMessage(m) && (
       (m.id === finalMessage.id) ||
       (finalMessage.render_id && m.render_id && m.render_id === finalMessage.render_id) ||
-      (finalMessage.execution_id && m.execution_id === finalMessage.execution_id && (m.content || "").trim()) ||
+      (finalMessage.execution_id && m.execution_id === finalMessage.execution_id && (m.content || "").trim() && !isInterruptedLikeMessage(m)) ||
       (_fc.length >= 10 && (m.content || "").trim() === _fc)
     )
   );
