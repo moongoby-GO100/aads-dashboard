@@ -3275,6 +3275,8 @@ export default function ChatPage() {
             loadMessages(true).then((retryMsgs) => {
               if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
                 setWaitingBgResponse(false); setBgPartialContent("");
+                // B1-FIX: 폴링 완료 감지 시 streaming 인디케이터 + sessionRef 즉시 해제 (30s 타이머 오버라이드 방지)
+                if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
               }
               // 여전히 없으면 폴링이 계속 잡아줌 (60초 타임아웃)
             });
@@ -3283,6 +3285,8 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => { setWaitingBgResponse(false); setBgPartialContent(""); }, 60000);
         } else {
           setWaitingBgResponse(false); setBgPartialContent("");
+          // B1-FIX: 즉시 완료 경로에서도 streaming 해제
+          if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
         }
       } else {
         // 스트리밍 아님 → 일반 로드
@@ -4613,6 +4617,7 @@ export default function ChatPage() {
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
+              streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
               // P0-FIX: SSE done 경로에도 완료 토스트 표시
               showCompletionToast("응답이 완료되었습니다");
               isNearBottomRef.current = true;
@@ -4997,8 +5002,10 @@ export default function ChatPage() {
                       mergeCooldownUntilRef.current = Date.now() + 5000;
                       setStreamBuf("");
                       setStreaming(false);
+                      streamingSessionRef.current = null;  // B4-FIX: resume 성공 시 sessionRef 정리
                     } else {
                       setStreamBuf(""); setStreaming(false);
+                      streamingSessionRef.current = null;  // B4-FIX: resume 성공 시 sessionRef 정리
                     }
                     resumed = true;
                     break;
@@ -5122,7 +5129,7 @@ export default function ChatPage() {
       clearTimeout(maxStreamTimeout);
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
-      const _isInvisibleRecovery = _invisibleRecoveryActivated || waitingBgRef.current;
+      const _isInvisibleRecovery = !gotFinal && (_invisibleRecoveryActivated || waitingBgRef.current);  // B3-FIX: gotFinal=true면 항상 cleanup
       if (streamingSessionRef.current === sessionId) {
         if (!_isInvisibleRecovery) streamingSessionRef.current = null;  // invisible recovery 시 유지
         if (!_isInvisibleRecovery) {
