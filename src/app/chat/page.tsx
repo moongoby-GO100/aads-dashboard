@@ -260,6 +260,35 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
   );
 }
 
+function hasMeaningfulDisplayContent(message: ChatMessage): boolean {
+  const content = normalizedMessageContent(message);
+  return content.length > 0 && !isPlaceholderOnlyContent(content);
+}
+
+function isInterruptedLikeMessage(message: ChatMessage): boolean {
+  return (
+    message.intent === "interrupted_partial" ||
+    message.intent === "interruption_notice" ||
+    message.intent === "_archived_partial" ||
+    message.intent === "regenerated" ||
+    message.model_used === "interrupted" ||
+    message.model_used === "recovered"
+  );
+}
+
+function isShortInterruptionPlaceholder(message: ChatMessage): boolean {
+  if (!isInterruptedLikeMessage(message)) return false;
+  const content = normalizedMessageContent(message);
+  if (!content || content.length >= 200) return false;
+  return (
+    content.includes("_응답 생성이 중단") ||
+    content.includes("응답 생성이 중단") ||
+    content.includes("복구 응답을 만들지 못했습니다") ||
+    content.includes("최신 지시를 다시 처리할 수 있습니다") ||
+    content.includes("같은 질문으로 다시 이어서 처리")
+  );
+}
+
 function isPlaceholderOnlyContent(content?: string | null): boolean {
   const normalized = String(content || "")
     .replace(/\s+/g, " ")
@@ -5922,10 +5951,9 @@ export default function ChatPage() {
     const sorted = [...messages]
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
-        if (m.intent === "interrupted_partial") { return (m.content || "").length > 100; }
         if (m.intent === "recovered_interrupt") return false;
-        if (m.intent === "interruption_notice") {
-          return (m.content || "").length > 0;
+        if (isInterruptedLikeMessage(m)) {
+          return hasMeaningfulDisplayContent(m);
         }
         return true;
       })
@@ -5954,8 +5982,7 @@ export default function ChatPage() {
         const isDraftLike = (item: ChatMessage) =>
           item.intent === "streaming_placeholder" ||
           isLocalTransientMessage(item) ||
-          item.model_used === "interrupted" ||
-          item.model_used === "recovered";
+          isShortInterruptionPlaceholder(item);
         let j = i + 1;
         while (j < sorted.length && sorted[j].role === "assistant") {
           const next = sorted[j];
@@ -5968,7 +5995,9 @@ export default function ChatPage() {
           const overlaps =
             _prefixLen >= 30 &&
             baseContent.substring(0, _prefixLen) === nextContent.substring(0, _prefixLen);
-          const eitherInterrupted = ((msg.intent === "interrupted_partial" || msg.intent === "interruption_notice") && (msg.content || "").length < 200) || ((next.intent === "interrupted_partial" || next.intent === "interruption_notice") && (next.content || "").length < 200);
+          const eitherInterrupted =
+            isShortInterruptionPlaceholder(msg) ||
+            isShortInterruptionPlaceholder(next);
           if (!sameExecutionDraft && !eitherInterrupted && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
           j++;
         }
@@ -5977,8 +6006,8 @@ export default function ChatPage() {
           const keeperPriority = (item: ChatMessage) => {
             if (item.intent !== "streaming_placeholder" && !isLocalTransientMessage(item) && item.model_used !== "interrupted") return 2;
             if (item.model_used === "recovered") return 1;
-            if ((item.intent === "interrupted_partial" || item.intent === "interruption_notice") && (item.content || "").length >= 500) return 1;
-            if ((item.intent === "interrupted_partial" || item.intent === "interruption_notice") && (item.content || "").length < 200) return -1;
+            if (isShortInterruptionPlaceholder(item)) return -1;
+            if (isInterruptedLikeMessage(item) && hasMeaningfulDisplayContent(item)) return 1;
             return 0;
           };
           const keeper = group
