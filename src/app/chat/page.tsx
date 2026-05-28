@@ -906,7 +906,7 @@ const MessageItem = memo(function MessageItem({
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
-  const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? 0.45 : isStreamingPlaceholder ? 0.92 : 1;
+  const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
   const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -5922,7 +5922,7 @@ export default function ChatPage() {
     const sorted = [...messages]
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
-        if (m.intent === "interrupted_partial") return false;
+        if (m.intent === "interrupted_partial") { return (m.content || "").length > 100; }
         if (m.intent === "recovered_interrupt") return false;
         if (m.intent === "interruption_notice") {
           return (m.content || "").length > 0;
@@ -5977,7 +5977,7 @@ export default function ChatPage() {
           const keeperPriority = (item: ChatMessage) => {
             if (item.intent !== "streaming_placeholder" && !isLocalTransientMessage(item) && item.model_used !== "interrupted") return 2;
             if (item.model_used === "recovered") return 1;
-            if (item.intent === "interrupted_partial" || item.intent === "interruption_notice") return -1;
+            if ((item.intent === "interrupted_partial" || item.intent === "interruption_notice") && (item.content || "").length < 200) return -1;
             return 0;
           };
           const keeper = group
