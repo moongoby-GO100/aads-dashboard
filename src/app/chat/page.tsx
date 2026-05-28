@@ -5181,7 +5181,7 @@ export default function ChatPage() {
         });
 
         // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
-        // 백그라운드 완료 메시지를 놓치지 않도록 500ms/2s/5s 3회 원샷 체크
+        // 백그라운드 완료 메시지를 놓치지 않도록 300ms/2s/5s 3회 원샷 체크
         if (sessionId) {
           const _sid = sessionId;
           const _checkCompletion = async (delay: number) => {
@@ -5207,6 +5207,9 @@ export default function ChatPage() {
                     setStreamBuf("");
                   }
                 }
+                if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
+                setStreaming(false);
+                setStreamBuf("");
                 void refreshTodos(_sid);
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -5220,7 +5223,9 @@ export default function ChatPage() {
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
           };
-          _checkCompletion(300);
+          void _checkCompletion(300);
+          void _checkCompletion(2000);
+          void _checkCompletion(5000);
         }
 
         setQueueCount(msgQueueRef.current.length);
