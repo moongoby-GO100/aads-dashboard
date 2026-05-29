@@ -2390,14 +2390,17 @@ export default function ChatPage() {
         `/chat/messages?session_id=${sid}&limit=40&include_streaming=true`
       ).then((result) => {
         if (activeSessionRef.current !== sid) return;
+        const shouldKeepPlaceholder = streamingRef.current || waitingBgRef.current || Boolean(bgPartialContentRef.current);
         const processed = surfaceDbSavedStreamingPlaceholders(result.messages, {
-          keepEmpty: false,
+          keepEmpty: shouldKeepPlaceholder,
           fallbackContent: bgPartialContentRef.current || "",
         });
         const finalMsgs = processed.length > 0 ? processed : result.messages;
         setMessages((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
-          const hasServerDraft = finalMsgs.some((m) =>
+          const hasServerDraft = result.messages.some((m) =>
+            m.intent === "streaming_placeholder" && hasMeaningfulDisplayContent(m)
+          ) || finalMsgs.some((m) =>
             m.intent === "streaming_placeholder" && hasMeaningfulDisplayContent(m)
           );
           if (streamingRef.current && !hasServerDraft) return prev;
@@ -3231,7 +3234,7 @@ export default function ChatPage() {
           setNextCursor(result.next_cursor);
           const processed = surfaceDbSavedStreamingPlaceholders(msgs, {
             keepEmpty: !filterPlaceholder,
-            fallbackContent: bgPartialContent,
+            fallbackContent: bgPartialContentRef.current || bgPartialContent,
           });
           {
             const finalMsgs = processed.length > 0 ? processed : msgs;
@@ -4372,7 +4375,7 @@ export default function ChatPage() {
 
     let full = "";
     let _invisibleRecoveryActivated = false;
-    let gotFinal = false;
+    let streamGotFinal = false;
     try {
       // 히든 스크린 컨텍스트: 화면 관련 키워드 있을 때 첨부
       const SCREEN_KEYWORDS = ["화면", "보이지", "버튼", "UI", "여기", "이거", "이것", "클릭", "탭", "창", "팝업", "오른쪽", "왼쪽"];
@@ -4582,7 +4585,7 @@ export default function ChatPage() {
               full += ev.text;
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
-              gotFinal = true;
+              streamGotFinal = true;
               finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
@@ -4797,7 +4800,7 @@ export default function ChatPage() {
               });
             } else if (ev.type === "message_done" && ev.message) {
               // legacy fallback
-              gotFinal = true;
+              streamGotFinal = true;
               setStreamBuf("");
               setStreaming(false);
               setToolStatus(null);
@@ -4852,11 +4855,11 @@ export default function ChatPage() {
           // SSE error 이벤트는 outer catch로 전파
           if (sseError) throw sseError;
         }
-        if (gotFinal) break; // done 이벤트 수신 → while 루프 탈출
+        if (streamGotFinal) break; // done 이벤트 수신 → while 루프 탈출
       }
 
       // AI 트리거 캡처: AI가 [SCREEN_CAPTURE_REQUEST]를 응답에 포함한 경우 자동 캡처 + 재전송
-      if (gotFinal && aiCaptureRequestedRef.current && !isStale()) {
+      if (streamGotFinal && aiCaptureRequestedRef.current && !isStale()) {
         aiCaptureRequestedRef.current = false;
         const captureFile = screenContextRef.current;
         if (captureFile) {
@@ -4887,7 +4890,7 @@ export default function ChatPage() {
       }
 
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
-      else if (!gotFinal && full) {
+      else if (!streamGotFinal && full) {
         setStreamBuf("");
         // ★ in-place 업데이트
         setMessages((prev) => {
@@ -4906,7 +4909,7 @@ export default function ChatPage() {
         });
         mergeCooldownUntilRef.current = Date.now() + 5000;
         // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
-        if (sessionId && !gotFinal) {
+        if (sessionId && !streamGotFinal) {
           _invisibleRecoveryActivated = true;
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sessionId);
@@ -4918,7 +4921,7 @@ export default function ChatPage() {
             setToolStatus(null);
           }, 60000);  // 1분 후 자동 해제
         }
-      } else if (!gotFinal && !full) {
+      } else if (!streamGotFinal && !full) {
         // 도구만 실행되고 텍스트 없이 스트림 종료 — DB에서 응답 복구 시도
         setStreamBuf("");
         setToolStatus("⏳ 응답 확인 중...");
@@ -4939,7 +4942,7 @@ export default function ChatPage() {
         setToolStatus(null);
       }
     } catch (e: unknown) {
-      gotFinal = false;
+      streamGotFinal = false;
       const err = e as Error;
       const isAbort = err.name === "AbortError";
       const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed") || err.message === "SSE_SERVER_RESTART";
@@ -4974,7 +4977,7 @@ export default function ChatPage() {
         const MAX_RESUME_DURATION = 300000; // 5분(300초)
 
         let _resumeRetryCount = 0;
-        while (!resumed && !gotFinal && !isStale() && !skipToPolling) {
+        while (!resumed && !streamGotFinal && !isStale() && !skipToPolling) {
           // exponential backoff: 2s, 4s, 8s, 16s, max 30s
           if (_resumeRetryCount > 0) {
             const _backoffMs = Math.min(2000 * Math.pow(2, _resumeRetryCount - 1), 30000);
@@ -5046,7 +5049,7 @@ export default function ChatPage() {
                     }
                     resumed = true;
                   } else if (rev.type === "resume_done") {
-                    gotFinal = true;
+                    streamGotFinal = true;
                     setToolStatus(null);
                     if (full.trim()) {
                       // ★ in-place 업데이트: placeholder를 최종 응답으로 교체
@@ -5081,7 +5084,7 @@ export default function ChatPage() {
                   }
                 } catch { /* skip malformed */ }
               }
-              if (gotFinal) break;
+              if (streamGotFinal) break;
             }
             if (resumed) break;
           } catch {
@@ -5110,7 +5113,7 @@ export default function ChatPage() {
         }
 
         // resume 실패 → polling 모드 전환 (Invisible: 같은 버블에서 partial_content 이어쓰기)
-        if (!resumed && !gotFinal) {
+        if (!resumed && !streamGotFinal) {
           // A-3: frozenContent를 streamBuf에 유지 (버블 사라짐 방지)
           // 드레인 타이머는 try 스코프에서 종료되었으므로 직접 설정
           if (!isStale()) setStreamBuf(frozenContent);
@@ -5159,14 +5162,14 @@ export default function ChatPage() {
                   setStreaming(false);
                   setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
-                  gotFinal = true;
+                  streamGotFinal = true;
                 }
                 break;
               }
             } catch { /* retry */ }
           }
           // 최종 폴백 실패 시에도 버블 유지 — 폴링(streaming-status)이 partial_content/just_completed 감지
-          if (!gotFinal && frozenContent) {
+          if (!streamGotFinal && frozenContent) {
             // 부분 텍스트를 ai-partial 메시지로 저장 (streaming 종료 후에도 보이도록)
             // streaming은 유지 → 폴링에서 just_completed 감지 시 최종 교체
           }
@@ -5187,7 +5190,7 @@ export default function ChatPage() {
       clearTimeout(maxStreamTimeout);
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
-      const _isInvisibleRecovery = !gotFinal && (_invisibleRecoveryActivated || waitingBgRef.current);  // B3-FIX: gotFinal=true면 항상 cleanup
+      const _isInvisibleRecovery = !streamGotFinal && (_invisibleRecoveryActivated || waitingBgRef.current);  // B3-FIX: 완료 시 항상 cleanup
       if (streamingSessionRef.current === sessionId) {
         if (!_isInvisibleRecovery) streamingSessionRef.current = null;  // invisible recovery 시 유지
         if (!_isInvisibleRecovery) {
@@ -5494,7 +5497,7 @@ export default function ChatPage() {
     const maxStreamTimeout = setTimeout(() => { abortCtrl.current?.abort(); }, 3600000);
 
     let full = "";
-    let gotFinal = false;
+    let regenGotFinal = false;
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate`, {
         method: "POST",
@@ -5539,7 +5542,7 @@ export default function ChatPage() {
               full += ev.text;
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
-              gotFinal = true;
+              regenGotFinal = true;
               setStreamBuf("");
               setThinkingBuf("");
               setStreaming(false);
@@ -5580,7 +5583,7 @@ export default function ChatPage() {
     } finally {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
-      if (!gotFinal) {
+      if (!regenGotFinal) {
         setMessages((prev) => prev.map((m) => {
           if (m.id !== regenPlaceholderId) return m;
           return convertDraftMessage(m, {
