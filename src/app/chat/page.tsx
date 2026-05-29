@@ -4349,6 +4349,7 @@ export default function ChatPage() {
 
     let full = "";
     let _invisibleRecoveryActivated = false;
+    let gotFinal = false;
     try {
       // 히든 스크린 컨텍스트: 화면 관련 키워드 있을 때 첨부
       const SCREEN_KEYWORDS = ["화면", "보이지", "버튼", "UI", "여기", "이거", "이것", "클릭", "탭", "창", "팝업", "오른쪽", "왼쪽"];
@@ -4436,7 +4437,6 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let buf = "";
-      let gotFinal = false;
       let accumulatedToolCalls: ChatToolEvent[] = [];
 
       // Phase4: 토큰 버퍼링 — SSE 끊김 시에도 표시 지속 (2초 분량 선행 버퍼)
@@ -4916,7 +4916,7 @@ export default function ChatPage() {
         setToolStatus(null);
       }
     } catch (e: unknown) {
-      let gotFinal = false;
+      gotFinal = false;
       const err = e as Error;
       const isAbort = err.name === "AbortError";
       const isNetwork = err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed") || err.message === "SSE_SERVER_RESTART";
