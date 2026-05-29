@@ -2359,11 +2359,28 @@ export default function ChatPage() {
       lastRefetch = now;
       // P1-c: streaming-status check on tab return
       try {
-        const status = await chatApi<{ is_streaming: boolean; just_completed: boolean }>(`/chat/streaming-status?session_id=${sid}`);
+        const status = await chatApi<{
+          is_streaming: boolean;
+          just_completed: boolean;
+          partial_content?: string;
+          execution_id?: string | null;
+          last_event_id?: string | null;
+        }>(`/chat/sessions/${sid}/streaming-status`);
         if (activeSessionRef.current !== sid) return;
         if (status.just_completed || !status.is_streaming) {
           streamingRef.current = false;
           finalizingRef.current = false;
+        } else {
+          streamingSessionRef.current = sid;
+          setStreaming(true);
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(sid);
+          if (status.execution_id) currentExecutionIdRef.current = status.execution_id;
+          if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
+          if (status.partial_content) {
+            setBgPartialContent(status.partial_content);
+            setStreamBuf(status.partial_content);
+          }
         }
       } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
@@ -2377,7 +2394,10 @@ export default function ChatPage() {
         const finalMsgs = processed.length > 0 ? processed : result.messages;
         setMessages((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
-          if (streamingRef.current) return prev;
+          const hasServerDraft = finalMsgs.some((m) =>
+            m.intent === "streaming_placeholder" && hasMeaningfulDisplayContent(m)
+          );
+          if (streamingRef.current && !hasServerDraft) return prev;
           return prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs;
         });
         requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c && isNearBottomRef.current) c.scrollTop = c.scrollHeight; });
