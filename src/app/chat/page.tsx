@@ -259,6 +259,9 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
   if (message.intent === "interrupted_partial" && hasMeaningfulDisplayContent(message)) {
     return false;
   }
+  if (isInterruptedLikeMessage(message) && hasMeaningfulDisplayContent(message) && !isShortInterruptionPlaceholder(message)) {
+    return false;
+  }
   const isInterruptedType =
     message.intent === "interruption_notice" ||
     message.model_used === "interrupted" ||
