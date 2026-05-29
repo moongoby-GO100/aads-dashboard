@@ -256,8 +256,10 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
     const content = normalizedMessageContent(message);
     return content.length <= 200 || isPlaceholderOnlyContent(content);
   }
+  if (message.intent === "interrupted_partial" && hasMeaningfulDisplayContent(message)) {
+    return false;
+  }
   const isInterruptedType =
-    message.intent === "interrupted_partial" ||
     message.intent === "interruption_notice" ||
     message.model_used === "interrupted" ||
     message.model_used === "recovered";
@@ -283,6 +285,9 @@ function isInterruptedLikeMessage(message: ChatMessage): boolean {
 
 function isShortInterruptionPlaceholder(message: ChatMessage): boolean {
   if (!isInterruptedLikeMessage(message)) return false;
+  if (message.intent === "interrupted_partial" && hasMeaningfulDisplayContent(message)) {
+    return false;
+  }
   const content = normalizedMessageContent(message);
   if (!content || content.length >= 200) return false;
   return (
@@ -3669,8 +3674,38 @@ export default function ChatPage() {
         }
         // 스트리밍 중인데 waitingBgResponse가 꺼져 있으면 활성화 (세션 복귀 시)
         if (ss.is_streaming && !_waitingBg && !_streaming) {
+          streamingSessionRef.current = sid;
+          setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
+          if (ss.partial_content) {
+            setStreamBuf(ss.partial_content);
+            setMessages(prev => {
+              const placeholderIndex = prev.findIndex((m) => m.intent === "streaming_placeholder");
+              const placeholder: ChatMessage = {
+                id: placeholderIndex >= 0 ? prev[placeholderIndex].id : `ai-streaming-${Date.now()}`,
+                session_id: sid,
+                role: "assistant",
+                content: ss.partial_content || "⏳ 생성 중...",
+                intent: "streaming_placeholder",
+                model_used: "streaming",
+                execution_id: ss.execution_id || prev[placeholderIndex]?.execution_id,
+                created_at: prev[placeholderIndex]?.created_at || new Date(Date.now() + 1).toISOString(),
+                render_id: prev[placeholderIndex]?.render_id || prev[placeholderIndex]?.id || `ai-streaming-${Date.now()}`,
+              };
+              if (placeholderIndex >= 0) {
+                const updated = [...prev];
+                updated[placeholderIndex] = {
+                  ...prev[placeholderIndex],
+                  ...placeholder,
+                  id: prev[placeholderIndex].id,
+                  render_id: prev[placeholderIndex].render_id || prev[placeholderIndex].id,
+                };
+                return updated;
+              }
+              return [...prev, placeholder];
+            });
+          }
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
           const _exec_id_for_attach = ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null);
