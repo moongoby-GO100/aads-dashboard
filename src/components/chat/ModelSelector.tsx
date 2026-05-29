@@ -170,6 +170,9 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "gpt-5.3-codex",           label: "GPT-5.3 Codex",     cost: "$1.75/$14",   description: "Codex CLI · 코딩 특화" },
   { id: "gpt-5.3-codex-spark",     label: "GPT-5.3 Spark",     cost: "변동",        description: "Codex CLI · 초고속 경량" },
   { id: "gpt-5.2",                 label: "GPT-5.2",           cost: "변동",        description: "Codex CLI · 이전 세대 안정형" },
+  { id: "antigravity",             label: "Antigravity",        cost: "무료",        description: "Google Pro · Gemini 3.5 Flash" },
+  { id: "antigravity-pro",         label: "Antigravity Pro",    cost: "무료",        description: "Google Pro · Gemini 3.1 Pro" },
+  { id: "antigravity-flash",       label: "Antigravity Flash",  cost: "무료",        description: "Google Pro · Gemini 3.5 Flash 경량" },
 ];
 
 export const DEFAULT_CHAT_MODEL = "claude-sonnet-4-6";
