@@ -302,6 +302,14 @@ function isShortInterruptionPlaceholder(message: ChatMessage): boolean {
   );
 }
 
+function assistantMergePriority(message: ChatMessage): number {
+  if (message.role !== "assistant") return 0;
+  if (isStreamingPlaceholderMessage(message) || isLocalTransientMessage(message)) return 1;
+  if (isShortInterruptionPlaceholder(message)) return 1;
+  if (isInterruptedLikeMessage(message)) return hasMeaningfulDisplayContent(message) ? 2 : 1;
+  return hasMeaningfulDisplayContent(message) ? 3 : 1;
+}
+
 function isPlaceholderOnlyContent(content?: string | null): boolean {
   const normalized = String(content || "")
     .replace(/\s+/g, " ")
@@ -709,25 +717,54 @@ function mergeServerMessagesPreservingLocal(
       if (seenPh) { merged.splice(i, 1); } else { seenPh = true; }
     }
   }
-  // ★ DEDUP: assistant 최종 메시지 중복 제거 — execution_id 또는 content 앞 300자 기준
-  const _seenExec = new Set<string>();
-  const _seenCont = new Set<string>();
+  // ★ DEDUP: assistant 중복 제거 — 최종 응답을 partial/interrupted보다 우선 보존
+  // 기존 로직은 ASC 순회 중 partial이 먼저 나오면 같은 execution_id의 최종 응답을 제거할 수 있었다.
+  const _seenExec = new Map<string, number>();
+  const _seenCont = new Map<string, number>();
   for (let i = 0; i < merged.length; i++) {
     const _m = merged[i];
     if (_m.role !== "assistant" || isStreamingPlaceholderMessage(_m)) continue;
     const _ct = (_m.content || "").trim();
     if (!_ct) continue;
-    let _isDup = false;
-    if (_m.execution_id) {
-      if (_seenExec.has(_m.execution_id)) _isDup = true;
-      else _seenExec.add(_m.execution_id);
+    let _dupIndex: number | undefined;
+    let _dupKey: { type: "exec" | "content"; value: string } | null = null;
+    if (_m.execution_id && _seenExec.has(_m.execution_id)) {
+      _dupIndex = _seenExec.get(_m.execution_id);
+      _dupKey = { type: "exec", value: _m.execution_id };
     }
-    if (!_isDup && _ct.length >= 20) {
+    if (_dupIndex === undefined && _ct.length >= 20) {
       const _ck = _ct.slice(0, 300);
-      if (_seenCont.has(_ck)) _isDup = true;
-      else _seenCont.add(_ck);
+      if (_seenCont.has(_ck)) {
+        _dupIndex = _seenCont.get(_ck);
+        _dupKey = { type: "content", value: _ck };
+      } else {
+        _seenCont.set(_ck, i);
+      }
     }
-    if (_isDup) { merged.splice(i, 1); i--; }
+    if (_dupIndex === undefined) {
+      if (_m.execution_id) _seenExec.set(_m.execution_id, i);
+      continue;
+    }
+
+    const _existing = merged[_dupIndex];
+    const _mPriority = assistantMergePriority(_m);
+    const _existingPriority = assistantMergePriority(_existing);
+    const _mLen = normalizedMessageContent(_m).length;
+    const _existingLen = normalizedMessageContent(_existing).length;
+    const _keepIncoming = _mPriority > _existingPriority || (_mPriority === _existingPriority && _mLen > _existingLen);
+    if (_keepIncoming) {
+      merged[_dupIndex] = {
+        ..._existing,
+        ..._m,
+        render_id: _existing.render_id || _m.render_id || _existing.id || _m.id,
+        tools_called: _m.tools_called || _existing.tools_called,
+        has_tools: Boolean(_m.has_tools) || Boolean(_existing.has_tools),
+      };
+      if (_dupKey?.type === "exec") _seenExec.set(_dupKey.value, _dupIndex);
+      if (_dupKey?.type === "content") _seenCont.set(_dupKey.value, _dupIndex);
+    }
+    merged.splice(i, 1);
+    i--;
   }
   const _finalExecIds = new Set(
     merged
