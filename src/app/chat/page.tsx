@@ -5012,6 +5012,7 @@ export default function ChatPage() {
         // SSE resume 시도 — 서버 UP까지 무한 재시도 (최대 5분)
         let resumed = false;
         let skipToPolling = false;
+        let resumeReceivedDelta = false;
         const resumeStartTime = Date.now();
         const MAX_RESUME_DURATION = 300000; // 5분(300초)
 
@@ -5086,7 +5087,7 @@ export default function ChatPage() {
                       setStreamBuf(full);
                       setToolStatus(null); // 재연결 성공 — 인디케이터 제거
                     }
-                    resumed = true;
+                    resumeReceivedDelta = true;
                   } else if (rev.type === "resume_done") {
                     streamGotFinal = true;
                     setToolStatus(null);
@@ -5114,6 +5115,7 @@ export default function ChatPage() {
                     skipToPolling = true;
                     break;
                   } else if (rev.type === "resume_unavailable" || rev.type === "resume_timeout") {
+                    skipToPolling = true;
                     break;
                   } else if (rev.type === "heartbeat") {
                     // heartbeat 수신 = 서버 생존 확인, 무음 유지
@@ -5124,6 +5126,9 @@ export default function ChatPage() {
                 } catch { /* skip malformed */ }
               }
               if (streamGotFinal) break;
+            }
+            if (resumeReceivedDelta && !streamGotFinal) {
+              skipToPolling = true;
             }
             if (resumed) break;
           } catch {
@@ -5161,6 +5166,19 @@ export default function ChatPage() {
           setWaitingBgResponse(true);
           _invisibleRecoveryActivated = true;
           setBgPartialContent(frozenContent);  // 폴링에서 비교 기준점
+          if (sessionId && !isStale()) {
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/resume`, {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` },
+            })
+              .then((r) => r.ok ? r.json() : null)
+              .then((r) => {
+                if (r?.resumed && !isStale()) {
+                  setToolStatus("🔄 중단 지점부터 이어서 생성 중...");
+                }
+              })
+              .catch(() => {});
+          }
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);

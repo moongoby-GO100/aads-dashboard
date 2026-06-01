@@ -8,6 +8,7 @@ page.tsx.bak_refactor
 # BG runtime markers
 .active_container
 .active_port
+deploy-logs/
 
 # Build cache
 tsconfig.tsbuildinfo

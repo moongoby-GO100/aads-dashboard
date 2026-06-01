@@ -30,20 +30,85 @@ NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
 NGINX_UPSTREAM_SOURCE="/root/aads/aads-server/nginx-aads-upstream.conf"
 MAX_WAIT=90
 LOCKFILE="/tmp/aads-dashboard-deploy.lock"
+DEPLOY_LOG_DIR="${STATE_DIR}/deploy-logs"
+DEPLOY_LOG_FILE="${DEPLOY_LOG_DIR}/dashboard-deploy-$(date '+%Y%m%d-%H%M%S').log"
 
-log() { echo "[$(date '+%H:%M:%S')] $1"; }
+mkdir -p "$DEPLOY_LOG_DIR"
+
+log() {
+    local line
+    line="[$(date '+%H:%M:%S')] $1"
+    echo "$line"
+    printf '%s\n' "$line" >> "$DEPLOY_LOG_FILE"
+}
+
+lock_value() {
+    local key="$1"
+    awk -F= -v key="$key" '$1 == key {print $2; exit}' "$LOCKFILE" 2>/dev/null || true
+}
+
+lock_pid() {
+    local pid
+    pid=$(lock_value "pid")
+    if [ -z "$pid" ]; then
+        pid=$(head -n 1 "$LOCKFILE" 2>/dev/null || true)
+    fi
+    case "$pid" in
+        ''|*[!0-9]*) echo "" ;;
+        *) echo "$pid" ;;
+    esac
+}
+
+pid_cmdline() {
+    local pid="$1"
+    if [ -r "/proc/${pid}/cmdline" ]; then
+        tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true
+    fi
+}
+
+pid_is_dashboard_deploy() {
+    local pid="$1" cmdline
+    cmdline=$(pid_cmdline "$pid")
+    [[ "$cmdline" == *"deploy.sh"* && "$cmdline" == *"bash"* ]]
+}
+
+write_lock() {
+    {
+        printf 'pid=%s\n' "$$"
+        printf 'started_at=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')"
+        printf 'host=%s\n' "$(hostname 2>/dev/null || echo unknown)"
+        printf 'cwd=%s\n' "$(pwd)"
+        printf 'script=%s\n' "$0"
+        printf 'log=%s\n' "$DEPLOY_LOG_FILE"
+    } > "$LOCKFILE"
+}
+
+cleanup_lock() {
+    local owner_pid
+    owner_pid=$(lock_pid)
+    if [ "$owner_pid" = "$$" ]; then
+        rm -f "$LOCKFILE"
+    fi
+}
 
 if [ -f "$LOCKFILE" ]; then
-    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        log "FAIL: 대시보드 배포가 이미 진행 중입니다 (PID=$LOCK_PID)"
+    LOCK_PID=$(lock_pid)
+    LOCK_STARTED_AT=$(lock_value "started_at")
+    LOCK_LOG=$(lock_value "log")
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null && pid_is_dashboard_deploy "$LOCK_PID"; then
+        log "FAIL: 대시보드 배포가 이미 진행 중입니다 (PID=${LOCK_PID}, started_at=${LOCK_STARTED_AT:-unknown}, log=${LOCK_LOG:-unknown})"
         exit 1
     fi
-    log "WARN: stale dashboard deploy lock 제거 (PID=${LOCK_PID:-unknown})"
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        log "WARN: deploy.sh가 아닌 살아있는 PID의 stale lock 제거 (PID=${LOCK_PID}, cmdline=$(pid_cmdline "$LOCK_PID"))"
+    else
+        log "WARN: 종료된 PID의 stale dashboard deploy lock 제거 (PID=${LOCK_PID:-unknown}, started_at=${LOCK_STARTED_AT:-unknown}, log=${LOCK_LOG:-unknown})"
+    fi
     rm -f "$LOCKFILE"
 fi
-echo $$ > "$LOCKFILE"
-trap 'rm -f "$LOCKFILE"' EXIT
+write_lock
+trap cleanup_lock EXIT INT TERM
+log "배포 로그: ${DEPLOY_LOG_FILE}"
 
 # nginx upstream is shared by backend and dashboard blue-green deploys.
 # Hold a common lock for the whole deployment to prevent concurrent rewrites.
