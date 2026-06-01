@@ -267,7 +267,7 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
     message.model_used === "interrupted" ||
     message.model_used === "recovered";
   if (!isInterruptedType) return false;
-  return (message.content || "").trim().length <= 200;
+  return isShortInterruptionPlaceholder(message) || (message.content || "").trim().length === 0;
 }
 
 function hasMeaningfulDisplayContent(message: ChatMessage): boolean {
@@ -1632,7 +1632,7 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 300) ? (
+              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
               ) : msg.model_used === "recovered" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
