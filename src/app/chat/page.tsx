@@ -3493,7 +3493,7 @@ export default function ChatPage() {
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       // 맨 위 근접 시 이전 메시지 자동 로드
-      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && Date.now() >= mergeCooldownUntilRef.current) {
+      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && !streamingRef.current && !finalizingRef.current && Date.now() >= mergeCooldownUntilRef.current) {
         loadingOlderRef.current = true;
         loadOlderMessages().finally(() => { loadingOlderRef.current = false; });
       }
@@ -3522,10 +3522,9 @@ export default function ChatPage() {
         isNearBottomRef.current = true;
       }, 3000);
       return () => { observer.disconnect(); clearTimeout(timeout); };
-    } else if (isNearBottomRef.current && _grew) {
-      // near-bottom일 때만 instant 스크롤 (smooth는 이전 위치에서 애니메이션 → 튀어감 방지)
-      const container2 = messagesContainerRef.current;
-      if (container2) container2.scrollTop = container2.scrollHeight;
+    } else if (isNearBottomRef.current) {
+      // near-bottom이면 메시지 교체(merge/replace) 시에도 하단 고정 (DOM 재배치 스크롤 점프 방지)
+      container.scrollTop = container.scrollHeight;
     }
   }, [messages]); // streamBuf 의존성 제거!
 
