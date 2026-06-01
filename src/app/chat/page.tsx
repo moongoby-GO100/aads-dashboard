@@ -1638,7 +1638,7 @@ const MessageItem = memo(function MessageItem({
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
               ) : msg.model_used === "stopped" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>■ 사용자 중지</span>
-              ) : msg.model_used && !['streaming','semantic_cache'].includes(msg.model_used) ? (
+              ) : msg.intent !== "rate_limited" && msg.intent !== "streaming_placeholder" && hasMeaningfulDisplayContent(msg) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.20)" }}>✅ 완료</span>
               ) : null}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>[{msg.model_used}</span>}
@@ -3574,7 +3574,7 @@ export default function ChatPage() {
         ));
       }
     };
-  }, [streaming]);
+  }, [streaming, mergeLatestAssistantFromServer]);
 
   // ── SAFETY-NET: streaming→false 전환 후 placeholder 잔류 방지 + 스크롤 복구 ──
   const prevStreamingForSafetyRef = useRef(false);
@@ -3669,7 +3669,10 @@ export default function ChatPage() {
           }
         }
         if (ss.just_completed) {
-          if (finalizingRef.current) return;  // SSE done이 이미 처리 중이면 skip
+          if (finalizingRef.current) {
+            void mergeLatestAssistantFromServer(sid);
+            return;
+          }
           finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
@@ -3703,7 +3706,10 @@ export default function ChatPage() {
         }
         // SSE 끊김 감지: 서버 is_streaming=false + 프론트 streaming=true
         if (!ss.is_streaming && !ss.just_completed && _streaming) {
-          if (finalizingRef.current) return;  // 이미 finalization 진행 중이면 skip
+          if (finalizingRef.current) {
+            void mergeLatestAssistantFromServer(sid);
+            return;
+          }
           finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
@@ -5532,7 +5538,7 @@ export default function ChatPage() {
     let full = "";
     let regenGotFinal = false;
     try {
-      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate`, {
+      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate?mode=${encodeURIComponent(mode)}`, {
         method: "POST",
         headers: { ...authHdrs() },
         signal: abortCtrl.current.signal,
@@ -5617,13 +5623,16 @@ export default function ChatPage() {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
       if (!regenGotFinal) {
-        setMessages((prev) => prev.map((m) => {
-          if (m.id !== regenPlaceholderId) return m;
-          return convertDraftMessage(m, {
-            fallbackContent: full,
-            note: full.trim() ? "⏳ _응답 복구 대기 중..._" : "",
-          });
-        }).filter(Boolean) as ChatMessage[]);
+        const recovered = await mergeLatestAssistantFromServer(sessionId);
+        if (!recovered) {
+          setMessages((prev) => prev.map((m) => {
+            if (m.id !== regenPlaceholderId) return m;
+            return convertDraftMessage(m, {
+              fallbackContent: full,
+              note: full.trim() ? "⏳ _응답 복구 대기 중..._" : "",
+            });
+          }).filter(Boolean) as ChatMessage[]);
+        }
       }
       setStreaming(false);
       setStreamBuf("");
