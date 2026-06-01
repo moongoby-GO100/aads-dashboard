@@ -363,12 +363,8 @@ function surfaceDbSavedStreamingPlaceholders(
       if (message.intent !== "streaming_placeholder") return message;
       const persistedContent = (message.content || fallbackContent || "").trim();
       if (persistedContent.length > 0 && !isPlaceholderOnlyContent(persistedContent)) {
-        if (options.keepEmpty) {
-          return { ...message, content: persistedContent };
-        }
-        return convertDraftMessage({ ...message, content: persistedContent }, {
-          modelUsed: message.model_used === "streaming" ? "recovered" : message.model_used,
-        });
+        // 내용 있는 placeholder는 intent 유지 → SSE 재연결이 앵커를 찾아 이어쓸 수 있음
+        return { ...message, content: persistedContent };
       }
       if (options.keepEmpty) {
         return {
@@ -1636,7 +1632,7 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" ? (
+              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 300) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
               ) : msg.model_used === "recovered" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
