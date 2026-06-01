@@ -3640,6 +3640,7 @@ export default function ChatPage() {
     let tickCount = 0;
     let prevWaitingBg = false; // waitingBg 전환 감지용
     let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
+    let lastStreamingProgressKey = ""; // 진행 변화가 없을 때만 stuck으로 본다.
     const iv = setInterval(async () => {
       if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
@@ -3744,17 +3745,19 @@ export default function ChatPage() {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
           if (ss.partial_content) {
-            setStreamBuf(ss.partial_content);
+            const statusPartialContent = ss.partial_content;
+            const statusExecutionId = ss.execution_id;
+            setStreamBuf(statusPartialContent);
             setMessages(prev => {
               const placeholderIndex = prev.findIndex((m) => m.intent === "streaming_placeholder");
               const placeholder: ChatMessage = {
                 id: placeholderIndex >= 0 ? prev[placeholderIndex].id : `ai-streaming-${Date.now()}`,
                 session_id: sid,
                 role: "assistant",
-                content: ss.partial_content || "⏳ 생성 중...",
+                content: statusPartialContent || "⏳ 생성 중...",
                 intent: "streaming_placeholder",
                 model_used: "streaming",
-                execution_id: ss.execution_id || prev[placeholderIndex]?.execution_id,
+                execution_id: statusExecutionId || prev[placeholderIndex]?.execution_id,
                 created_at: prev[placeholderIndex]?.created_at || new Date(Date.now() + 1).toISOString(),
                 render_id: prev[placeholderIndex]?.render_id || prev[placeholderIndex]?.id || `ai-streaming-${Date.now()}`,
               };
@@ -3780,10 +3783,23 @@ export default function ChatPage() {
             attachExecutionReplay(sid, _exec_id_for_attach, shouldReplayFromStart);
           }
         }
-        // STREAMING-STUCK 안전장치: 서버 is_streaming=true + 프론트 streaming=true 지속 시 카운터 증가
+        // STREAMING-STUCK 안전장치: 서버/프론트가 streaming이어도 토큰/이벤트/placeholder
+        // 진행 변화가 있으면 정상 장시간 응답으로 보고 카운터를 리셋한다.
         if (ss.is_streaming && _streaming) {
-          streamingStuckCount++;
-          if (streamingStuckCount >= 20) {
+          const streamingProgressKey = [
+            ss.execution_id || "",
+            ss.last_event_id || "",
+            ss.placeholder_revision || "",
+            ss.message_revision || "",
+            String((ss.partial_content || "").length),
+          ].join("|");
+          if (streamingProgressKey && streamingProgressKey !== lastStreamingProgressKey) {
+            lastStreamingProgressKey = streamingProgressKey;
+            streamingStuckCount = 0;
+          } else {
+            streamingStuckCount++;
+          }
+          if (streamingStuckCount >= 150) {
             streamingSessionRef.current = null;
             setWaitingBgResponse(false); setBgPartialContent("");
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
