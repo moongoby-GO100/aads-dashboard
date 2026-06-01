@@ -3566,7 +3566,7 @@ export default function ChatPage() {
         );
       });
       });
-    }, 10000);
+    }, 4000);
     return () => {
       clearInterval(syncTimer);
       // cleanup: streaming 종료 시 마지막 한번 동기화
