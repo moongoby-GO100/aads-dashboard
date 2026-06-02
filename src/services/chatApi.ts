@@ -64,6 +64,8 @@ export interface ChatMessage {
   tokens_in?: number | null;
   tokens_out?: number | null;
   cost?: string | null;
+  quality_score?: number | null;
+  quality_details?: Record<string, unknown> | null;
   bookmarked: boolean;
   attachments: unknown[];
   sources: SourceItem[] | null;

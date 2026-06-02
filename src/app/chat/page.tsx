@@ -275,6 +275,30 @@ function hasMeaningfulDisplayContent(message: ChatMessage): boolean {
   return content.length > 0 && !isPlaceholderOnlyContent(content);
 }
 
+function endsWithProgressOnlyStatement(message: ChatMessage): boolean {
+  const tail = normalizedMessageContent(message).slice(-500);
+  return /(?:이제|먼저|다음으로|추가로|바로|곧)?\s*.{0,80}(?:확인|조회|점검|분석|파악|조사|검토|진행|실행|처리|수정|패치|적용|반영|준비)(?:하겠습니다|합니다)\.?\s*$/.test(tail);
+}
+
+function hasIncompleteQualityFlag(message: ChatMessage): boolean {
+  const details = message.quality_details || {};
+  const violations = Array.isArray(details.completion_contract_violations)
+    ? details.completion_contract_violations
+    : [];
+  return (
+    details.completion_gate_missing === true ||
+    details.completion_contract_adjusted === true ||
+    violations.includes("final_report_missing")
+  );
+}
+
+function shouldShowCompletedBadge(message: ChatMessage): boolean {
+  if (!hasMeaningfulDisplayContent(message)) return false;
+  if (message.intent === "rate_limited" || message.intent === "streaming_placeholder") return false;
+  if (endsWithProgressOnlyStatement(message) || hasIncompleteQualityFlag(message)) return false;
+  return message.status === undefined || message.status === "completed";
+}
+
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
   return (
     message.intent === "interrupted_partial" ||
@@ -1638,7 +1662,9 @@ const MessageItem = memo(function MessageItem({
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
               ) : msg.model_used === "stopped" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>■ 사용자 중지</span>
-              ) : msg.intent !== "rate_limited" && msg.intent !== "streaming_placeholder" && hasMeaningfulDisplayContent(msg) ? (
+              ) : endsWithProgressOnlyStatement(msg) || hasIncompleteQualityFlag(msg) ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 완료 전 중단</span>
+              ) : shouldShowCompletedBadge(msg) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.20)" }}>✅ 완료</span>
               ) : null}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>[{msg.model_used}</span>}

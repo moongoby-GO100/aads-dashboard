@@ -42,6 +42,8 @@ export interface ChatMessage {
   tokens_in?: number;
   tokens_out?: number;
   cost?: string | number;
+  quality_score?: number | null;
+  quality_details?: Record<string, unknown> | null;
   created_at?: string;
   edited_at?: string;
   reply_to_id?: string;
