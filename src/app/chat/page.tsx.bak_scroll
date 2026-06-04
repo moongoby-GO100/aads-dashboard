@@ -241,32 +241,16 @@ function normalizedMessageContent(message: ChatMessage): string {
   return (message.content || "").trim();
 }
 
-function isFinalizedSyntheticAssistantMessage(message: ChatMessage): boolean {
-  if (message.role !== "assistant") return false;
-  if (!message.id.startsWith("ai-")) return false;
-  if (message.intent === "streaming_placeholder" || message.intent === "rate_limited") return false;
-  if (message.intent?.startsWith("streaming")) return false;
-  const content = normalizedMessageContent(message);
-  return content.length > 0 && !isPlaceholderOnlyContent(content);
-}
-
 function isLocalTransientMessage(message: ChatMessage): boolean {
-  if (!LOCAL_MESSAGE_PREFIXES.some((prefix) => message.id.startsWith(prefix))) return false;
-  // SSE done 직후 DB UUID가 오기 전까지는 client synthetic ai-* ID를 유지한다.
-  // 이 상태의 최종 assistant 응답을 transient/draft로 재분류하면 후속 병합에서 사라질 수 있다.
-  if (isFinalizedSyntheticAssistantMessage(message)) return false;
-  return true;
+  return LOCAL_MESSAGE_PREFIXES.some((prefix) => message.id.startsWith(prefix));
 }
 
 function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
-  if (message.intent === "streaming_placeholder") return true;
-  if (!(message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-"))) return false;
-  return !isFinalizedSyntheticAssistantMessage(message);
+  return message.intent === "streaming_placeholder" || message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-");
 }
 
 function isAssistantDraftMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
-  if (isFinalizedSyntheticAssistantMessage(message)) return false;
   if (message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-")) return true;
   if (message.intent === "streaming_placeholder") {
     const content = normalizedMessageContent(message);
@@ -289,30 +273,6 @@ function isAssistantDraftMessage(message: ChatMessage): boolean {
 function hasMeaningfulDisplayContent(message: ChatMessage): boolean {
   const content = normalizedMessageContent(message);
   return content.length > 0 && !isPlaceholderOnlyContent(content);
-}
-
-function endsWithProgressOnlyStatement(message: ChatMessage): boolean {
-  const tail = normalizedMessageContent(message).slice(-500);
-  return /(?:이제|먼저|다음으로|추가로|바로|곧)?\s*.{0,80}(?:확인|조회|점검|분석|파악|조사|검토|진행|실행|처리|수정|패치|적용|반영|준비)(?:하겠습니다|합니다)\.?\s*$/.test(tail);
-}
-
-function hasIncompleteQualityFlag(message: ChatMessage): boolean {
-  const details = message.quality_details || {};
-  const violations = Array.isArray(details.completion_contract_violations)
-    ? details.completion_contract_violations
-    : [];
-  return (
-    details.completion_gate_missing === true ||
-    details.completion_contract_adjusted === true ||
-    violations.includes("final_report_missing")
-  );
-}
-
-function shouldShowCompletedBadge(message: ChatMessage): boolean {
-  if (!hasMeaningfulDisplayContent(message)) return false;
-  if (message.intent === "rate_limited" || message.intent === "streaming_placeholder") return false;
-  if (endsWithProgressOnlyStatement(message) || hasIncompleteQualityFlag(message)) return false;
-  return message.status === undefined || message.status === "completed";
 }
 
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
@@ -625,31 +585,6 @@ function getLatestFinalAssistantId(messages: ChatMessage[]): string | null {
   return messages
     .filter((message) => message.role === "assistant" && message.intent !== "streaming_placeholder" && message.intent !== "rate_limited")
     .sort((a, b) => messageTime(b) - messageTime(a))[0]?.id || null;
-}
-
-function isFinalAssistantMessage(message: ChatMessage): boolean {
-  return (
-    message.role === "assistant" &&
-    message.intent !== "streaming_placeholder" &&
-    message.intent !== "rate_limited" &&
-    Boolean((message.content || "").trim())
-  );
-}
-
-function latestFinalAssistantForExecution(messages: ChatMessage[], executionId?: string | null): ChatMessage | undefined {
-  const finals = messages.filter(isFinalAssistantMessage);
-  if (executionId) {
-    return finals
-      .filter((message) => message.execution_id === executionId)
-      .sort((a, b) => messageTime(b) - messageTime(a))[0];
-  }
-  return finals
-    .sort((a, b) => messageTime(b) - messageTime(a))[0];
-}
-
-function hasFinalAssistantForExecution(messages: ChatMessage[], executionId?: string | null): boolean {
-  if (!executionId) return Boolean(latestFinalAssistantForExecution(messages));
-  return messages.some((message) => isFinalAssistantMessage(message) && message.execution_id === executionId);
 }
 
 function findLocalMatchForServerMessage(
@@ -1703,9 +1638,7 @@ const MessageItem = memo(function MessageItem({
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
               ) : msg.model_used === "stopped" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>■ 사용자 중지</span>
-              ) : endsWithProgressOnlyStatement(msg) || hasIncompleteQualityFlag(msg) ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 완료 전 중단</span>
-              ) : shouldShowCompletedBadge(msg) ? (
+              ) : msg.intent !== "rate_limited" && msg.intent !== "streaming_placeholder" && hasMeaningfulDisplayContent(msg) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.20)" }}>✅ 완료</span>
               ) : null}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>[{msg.model_used}</span>}
@@ -2593,41 +2526,22 @@ export default function ChatPage() {
   const mergeLatestAssistantFromServer = useCallback(async (sessionId: string): Promise<ChatMessage | null> => {
     if (!sessionId) return null;
     try {
-      const expectedExecutionId = currentExecutionIdRef.current;
       const resp = await chatApi<{ found: boolean; generating?: boolean; message?: ChatMessage }>(
         `/chat/sessions/${sessionId}/last-response`
       );
       let finalMessage = resp.found && resp.message ? resp.message : null;
-      if (
-        finalMessage &&
-        expectedExecutionId &&
-        finalMessage.execution_id &&
-        finalMessage.execution_id !== expectedExecutionId
-      ) {
-        finalMessage = null;
-      }
       if (!finalMessage) {
         const latest = await chatApi<ChatMessage[]>(
           `/chat/messages?session_id=${sessionId}&limit=8&sort=desc&include_streaming=true`
         ).catch(() => [] as ChatMessage[]);
-        const savedAssistant = (expectedExecutionId
-          ? latest.find((m) =>
-            m.execution_id === expectedExecutionId &&
-            m.role === "assistant" &&
-            m.intent !== "rate_limited" &&
-            (
-              m.intent !== "streaming_placeholder" ||
-              Boolean(m.content && m.content.trim().length > 10)
-            )
+        const savedAssistant = latest.find((m) =>
+          m.role === "assistant" &&
+          m.intent !== "rate_limited" &&
+          (
+            m.intent !== "streaming_placeholder" ||
+            Boolean(m.content && m.content.trim().length > 10)
           )
-          : null) || latest.find((m) =>
-            m.role === "assistant" &&
-            m.intent !== "rate_limited" &&
-            (
-              m.intent !== "streaming_placeholder" ||
-              Boolean(m.content && m.content.trim().length > 10)
-            )
-          );
+        );
         if (savedAssistant) {
           finalMessage = savedAssistant.intent === "streaming_placeholder"
             ? convertDraftMessage(savedAssistant, {
@@ -3579,7 +3493,7 @@ export default function ChatPage() {
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       // 맨 위 근접 시 이전 메시지 자동 로드
-      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && !streamingRef.current && !finalizingRef.current && Date.now() >= mergeCooldownUntilRef.current) {
+      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && Date.now() >= mergeCooldownUntilRef.current) {
         loadingOlderRef.current = true;
         loadOlderMessages().finally(() => { loadingOlderRef.current = false; });
       }
@@ -3608,9 +3522,10 @@ export default function ChatPage() {
         isNearBottomRef.current = true;
       }, 3000);
       return () => { observer.disconnect(); clearTimeout(timeout); };
-    } else if (isNearBottomRef.current) {
-      // near-bottom이면 메시지 교체(merge/replace) 시에도 하단 고정 (DOM 재배치 스크롤 점프 방지)
-      container.scrollTop = container.scrollHeight;
+    } else if (isNearBottomRef.current && _grew) {
+      // near-bottom일 때만 instant 스크롤 (smooth는 이전 위치에서 애니메이션 → 튀어감 방지)
+      const container2 = messagesContainerRef.current;
+      if (container2) container2.scrollTop = container2.scrollHeight;
     }
   }, [messages]); // streamBuf 의존성 제거!
 
@@ -3678,7 +3593,9 @@ export default function ChatPage() {
         );
         if (activeSessionRef.current !== sid || streamingRef.current) return;
         const processed = surfaceDbSavedStreamingPlaceholders(msgs, {}).reverse();
-        const latestAi = latestFinalAssistantForExecution(processed, currentExecutionIdRef.current);
+        const latestAi = processed.filter(
+          (m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited"
+        ).pop();
         if (latestAi) {
           setMessages(prev => {
             const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
@@ -3724,7 +3641,6 @@ export default function ChatPage() {
     let prevWaitingBg = false; // waitingBg 전환 감지용
     let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
     let lastStreamingProgressKey = ""; // 진행 변화가 없을 때만 stuck으로 본다.
-    let stuckCooldownUntil = 0;
     const iv = setInterval(async () => {
       if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
@@ -3767,7 +3683,7 @@ export default function ChatPage() {
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
-            const latestAi = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+            const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
             if (latestAi) {
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
@@ -3803,7 +3719,7 @@ export default function ChatPage() {
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
-            const latestAi = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+            const latestAi = freshMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
             if (latestAi) {
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
@@ -3823,7 +3739,7 @@ export default function ChatPage() {
           if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
         }
         // 스트리밍 중인데 waitingBgResponse가 꺼져 있으면 활성화 (세션 복귀 시)
-        if (ss.is_streaming && !_waitingBg && !_streaming && Date.now() >= stuckCooldownUntil) {
+        if (ss.is_streaming && !_waitingBg && !_streaming) {
           streamingSessionRef.current = sid;
           setStreaming(true);
           setWaitingBgResponse(true);
@@ -3904,7 +3820,6 @@ export default function ChatPage() {
             ));
             setStreaming(false); setStreamBuf("");
             streamingStuckCount = 0;
-            stuckCooldownUntil = Date.now() + 90000;
           }
         } else {
           streamingStuckCount = 0;
@@ -3952,7 +3867,7 @@ export default function ChatPage() {
               if (cancelled) return;
               mergeCooldownUntilRef.current = Date.now() + 5000;
               if (allMsgs && allMsgs.length > 0) {
-                const latestAi2 = latestFinalAssistantForExecution(allMsgs, ss?.execution_id || currentExecutionIdRef.current);
+                const latestAi2 = allMsgs.filter(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited").pop();
                 if (latestAi2) {
                   setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
                 } else {
@@ -4855,8 +4770,7 @@ export default function ChatPage() {
               setTimeout(() => {
                 if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
                 setMessages((prev) => {
-                  const expectedExecutionId = currentExecutionIdRef.current || undefined;
-                  const hasAnyFinal = hasFinalAssistantForExecution(prev, expectedExecutionId);
+                  const hasAnyFinal = prev.some(m => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited" && (m.content || "").trim().length > 0);
                   const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
                   if (hasStalePh || !hasAnyFinal) {
                     mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
