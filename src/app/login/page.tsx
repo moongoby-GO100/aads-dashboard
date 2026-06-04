@@ -35,10 +35,10 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
     }
   };
 
-  const inputClass = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2";
+  const inputClass = "w-full border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2";
   const inputStyle = isKakaobot
     ? { borderColor: "#E5E7EB", color: "#1A1A1A" }
-    : {};
+    : { color: "#111827", backgroundColor: "#fff" };
   const focusRingClass = isKakaobot ? "focus:ring-yellow-400" : "focus:ring-blue-500 border-gray-300";
 
   return (
