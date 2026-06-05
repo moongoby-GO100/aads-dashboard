@@ -1042,16 +1042,17 @@ const MessageItem = memo(function MessageItem({
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
-  const finalThinkingSummary = msg.role === "assistant" && !isActiveStreaming
+  const isVisiblyStreaming = Boolean(isActiveStreaming || isStreamingPlaceholder);
+  const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
   const normalizedToolEvents = normalizeToolEventsForRender(msg.tools_called);
-  const hasToolSummary = msg.role === "assistant" && !isActiveStreaming && !streamingContent && messageHasToolSummary(msg);
+  const hasToolSummary = msg.role === "assistant" && !isVisiblyStreaming && !streamingContent && messageHasToolSummary(msg);
   const toolEventsForRender = normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg);
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
-  const forceToolsOpen = Boolean(isLastAssistantMsg && !isActiveStreaming);
+  const forceToolsOpen = Boolean(isLastAssistantMsg && !isVisiblyStreaming);
   const effectiveToolsOpen = forceToolsOpen || toolsOpen;
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
@@ -1664,7 +1665,7 @@ const MessageItem = memo(function MessageItem({
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
-        {isActiveStreaming && (
+        {isVisiblyStreaming && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", marginLeft: "4px" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)", animation: "pulse 1.5s ease-in-out infinite" }}>🔄 생성 중...</span>
             {onStopStreaming && (
@@ -1681,7 +1682,7 @@ const MessageItem = memo(function MessageItem({
             )}
           </div>
         )}
-        {msg.role === "assistant" && !isActiveStreaming && (
+        {msg.role === "assistant" && !isVisiblyStreaming && (
           <div
             style={{
               fontSize: "11px",
