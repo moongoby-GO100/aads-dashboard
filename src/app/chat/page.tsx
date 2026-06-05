@@ -1228,7 +1228,6 @@ const MessageItem = memo(function MessageItem({
           style={{
             padding: "12px 16px",
             borderRadius: "18px",
-            fontSize: "14px",
             lineHeight: "1.6",
             ...(msg.role === "user"
               ? msg.is_system_group
@@ -1246,6 +1245,7 @@ const MessageItem = memo(function MessageItem({
                     color: "var(--ct-text)",
                     border: "1px solid #3b82f644",
                     borderBottomRightRadius: "4px",
+                    fontSize: "14px",
                     whiteSpace: "pre-wrap" as const,
                     fontStyle: "italic" as const,
                   }
@@ -1253,6 +1253,7 @@ const MessageItem = memo(function MessageItem({
                     background: "var(--ct-user)",
                     color: "#fff",
                     borderBottomRightRadius: "4px",
+                    fontSize: "14px",
                     whiteSpace: "pre-wrap",
                   }
               : {
@@ -1272,6 +1273,7 @@ const MessageItem = memo(function MessageItem({
                     ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
                   opacity: assistantBubbleOpacity,
+                  fontSize: "14px",
                   transition: "opacity 100ms ease, background 100ms ease, border-color 100ms ease",
                   borderBottomLeftRadius: "4px",
                 }),
@@ -2780,10 +2782,10 @@ export default function ChatPage() {
               setStreamBuf("");
               setToolStatus("🔄 응답 재검증 중...");
             } else if (ev.type === "retry_progress") {
-              if (!isStale()) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
+              if (activeSessionRef.current === attachSessionId) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
               continue;
             } else if (ev.type === "model_fallback") {
-              if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
+              if (activeSessionRef.current === attachSessionId) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
               continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
@@ -3884,25 +3886,21 @@ export default function ChatPage() {
             streamingStuckCount++;
           }
           if (streamingStuckCount >= 150) {
-            streamingSessionRef.current = null;
-            setWaitingBgResponse(false); setBgPartialContent("");
+            // 서버가 아직 is_streaming=true라고 보고하면 중단으로 바꾸지 않는다.
+            // 긴 도구 실행/LLM 지연 중 placeholder를 interruption_notice로 전환하면
+            // 하단에 "응답 중단" 배지가 생기고, 이후 재연결이 다시 붙으면서
+            // 중단/재실행이 반복되는 것처럼 보인다.
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
               .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
               if (Date.now() >= mergeCooldownUntilRef.current) { setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
             }
-            setMessages(prev => prev.map(m =>
-              m.intent === "streaming_placeholder"
-                ? {
-                    ...m,
-                    content: (m.content || "") + "\n\n⏳ _응답 복구 대기 중..._",
-                    intent: "interruption_notice",
-                    model_used: "interrupted",
-                    render_id: m.render_id || m.id,
-                  }
-                : m
-            ));
-            setStreaming(false); setStreamBuf("");
+            setWaitingBgResponse(true);
+            pendingResponseSessions.current.add(sid);
+            setToolStatus("⏳ 응답 지연 감지 — 서버 생성 상태를 유지하며 계속 대기 중...");
+            if (ss.execution_id) {
+              attachExecutionReplay(sid, ss.execution_id, false);
+            }
             streamingStuckCount = 0;
             stuckCooldownUntil = Date.now() + 90000;
           }

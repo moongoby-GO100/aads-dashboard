@@ -101,7 +101,9 @@ export interface SSEChunk {
     // Partial response preservation before stream reset
     | "partial_preserved"
     // Gemini 재시도 등 스트림 초기화
-    | "stream_reset";
+    | "stream_reset"
+    // LLM/provider retry progress updates
+    | "retry_progress";
   content?: string;
   message?: ChatMessage;
   summary?: string;
@@ -130,6 +132,8 @@ export interface SSEChunk {
   session_cost?: string;
   session_turns?: number;
   consecutive_count?: number;
+  attempt?: number;
+  max_attempts?: number;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
