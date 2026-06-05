@@ -197,7 +197,12 @@ export function useChatSSE() {
         try {
           await new Promise((r) => setTimeout(r, 3000));
           const msgs = await chatApi.getMessages(sessionId, 20, 0);
-          const lastAI = [...msgs].reverse().find((m) => m.role === "assistant");
+          const lastAI = [...msgs].reverse().find((m) =>
+            m.role === "assistant" &&
+            m.intent !== "streaming_placeholder" &&
+            m.intent !== "rate_limited" &&
+            Boolean(m.content && m.content.trim())
+          );
           if (lastAI) {
             // 폴백 복구 시 버퍼 정리 후 즉시 표시
             stopRenderLoop();
@@ -237,7 +242,7 @@ export function useChatSSE() {
         const preservedText = displayTextRef.current || fullText;
         stopRenderLoop();
         tokenBufferRef.current = [];
-        displayTextRef.current = "";
+        displayTextRef.current = preservedText;
         streamDoneRef.current = false;
         setState((s) => ({
           ...s,
@@ -265,6 +270,11 @@ export function useChatSSE() {
       const finalizeStream = (chunk?: SSEChunk) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         const streamedText = flushBufferedText(true);
+        const finalText =
+          (chunk?.content && String(chunk.content)) ||
+          streamedText ||
+          fullText ||
+          "";
         const meta: StreamMeta = {
           modelUsed: chunk?.model_used || chunk?.model || null,
           inputTokens: chunk?.input_tokens || null,
@@ -280,7 +290,7 @@ export function useChatSSE() {
           isStreaming: false,
           isBuffering: false,
           isResearching: false,
-          streamingText: streamedText,
+          streamingText: finalText,
           messageId: chunk?.message_id || null,
           modelUsed: meta.modelUsed,
           inputTokens: meta.inputTokens,
@@ -294,8 +304,8 @@ export function useChatSSE() {
           sessionTurns: chunk?.session_turns || null,
           yellowLimitWarning: null,
         }));
-        completeStream(sessionId, fullText);
-        onDone?.(fullText, meta);
+        completeStream(sessionId, finalText);
+        onDone?.(finalText, meta);
       };
 
       const doStream = async (): Promise<void> => {

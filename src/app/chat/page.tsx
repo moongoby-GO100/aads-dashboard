@@ -647,11 +647,6 @@ function latestFinalAssistantForExecution(messages: ChatMessage[], executionId?:
     .sort((a, b) => messageTime(b) - messageTime(a))[0];
 }
 
-function hasFinalAssistantForExecution(messages: ChatMessage[], executionId?: string | null): boolean {
-  if (!executionId) return Boolean(latestFinalAssistantForExecution(messages));
-  return messages.some((message) => isFinalAssistantMessage(message) && message.execution_id === executionId);
-}
-
 function findLocalMatchForServerMessage(
   localMessages: ChatMessage[],
   serverMessage: ChatMessage,
@@ -2652,6 +2647,27 @@ export default function ChatPage() {
     }
   }, []);
 
+  const requestServerFinalization = useCallback((sessionId: string, delays: number[] = [0, 500, 1500, 3500, 5000]) => {
+    for (const delay of delays) {
+      setTimeout(() => {
+        if (activeSessionRef.current !== sessionId) return;
+        void mergeLatestAssistantFromServer(sessionId)
+          .then((message) => {
+            if (!message || activeSessionRef.current !== sessionId) return;
+            mergeCooldownUntilRef.current = Date.now() + 5000;
+            pendingResponseSessions.current.delete(sessionId);
+            setWaitingBgResponse(false);
+            setBgPartialContent("");
+            if (streamingSessionRef.current === sessionId) streamingSessionRef.current = null;
+            setStreaming(false);
+            setStreamBuf("");
+            void refreshTodos(sessionId);
+          })
+          .catch(() => {});
+      }, delay);
+    }
+  }, [mergeLatestAssistantFromServer, refreshTodos]);
+
   const preservePartialAndContinueStreaming = useCallback((message: ChatMessage, fallbackSessionId?: string | null) => {
     const continuationSessionId = message.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
     const continuationCreatedAt = new Date(Date.now() + 1).toISOString();
@@ -2778,8 +2794,10 @@ export default function ChatPage() {
               setStreamBuf("");
               setToolStatus("🔄 최신 지시를 이어서 처리 중...");
             } else if (ev.type === "stream_reset") {
+              const visibleDraft = full || streamBufRef.current || bgPartialContentRef.current || "";
               full = "";
-              setStreamBuf("");
+              setStreamBuf(visibleDraft);
+              setBgPartialContent(visibleDraft);
               setToolStatus("🔄 응답 재검증 중...");
             } else if (ev.type === "retry_progress") {
               if (activeSessionRef.current === attachSessionId) setToolStatus(ev.content || `⏳ 재시도 중 (${ev.attempt}/${ev.max_attempts})...`);
@@ -4691,10 +4709,12 @@ export default function ChatPage() {
             }
             if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
+              const visibleDraft = full || streamBufRef.current || bgPartialContentRef.current || "";
               _resetDrain();
               full = "";
               if (ev.reason === "llm_retry") accumulatedToolCalls = [];
-              setStreamBuf("");
+              setStreamBuf(visibleDraft);
+              setBgPartialContent(visibleDraft);
               setToolStatus(ev.reason === "interrupt_applied" ? "🔄 추가 지시 반영 중..." : "🔄 응답 재검증 중...");
               continue;
             } else if (ev.type === "retry_progress") {
@@ -4801,15 +4821,10 @@ export default function ChatPage() {
                   };
                   return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
                 });
+                requestServerFinalization(requestSessionId!);
               } else {
                 // P0-FIX: tools-only → DB에서 최종 메시지 fetch (retry with backoff)
-                (async () => {
-                  for (let _ri = 0; _ri < 3; _ri++) {
-                    const _fr = await mergeLatestAssistantFromServer(requestSessionId!);
-                    if (_fr) return;
-                    await new Promise(r => setTimeout(r, 1500 * (_ri + 1)));
-                  }
-                })().catch(() => {});
+                requestServerFinalization(requestSessionId!, [0, 1500, 3000, 6000]);
               }
               // P0-FIX: setMessages 후 스트리밍 상태 클리어 (깜빡임 방지)
               mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -4821,47 +4836,6 @@ export default function ChatPage() {
               showCompletionToast("응답이 완료되었습니다");
               isNearBottomRef.current = true;
               requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; });
-              // POST-DONE-VERIFY (2026-05-26 강화): placeholder 잔존 검사 + 2단계 복구
-              // 1차 (500ms): placeholder가 남아있으면 즉시 DB fetch + 강제 교체
-              setTimeout(() => {
-                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
-                setMessages((prev) => {
-                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
-                  if (!hasStalePh) return prev;
-                  // placeholder 잔존 시 async fetch trigger
-                  mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
-                  return prev;
-                });
-              }, 500);
-              // 2차 (1500ms): 모든 케이스에 대해 DB 정합성 보장
-              setTimeout(() => {
-                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
-                mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
-              }, 1500);
-              // 3차 (3500ms): 마지막 안전망 — 여전히 placeholder 잔존 시 복구
-              setTimeout(() => {
-                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
-                setMessages((prev) => {
-                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
-                  if (hasStalePh) {
-                    mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
-                  }
-                  return prev;
-                });
-              }, 3500);
-              // 4차 (5000ms): 최종 안전망 — 완료 메시지가 화면에 없으면 강제 fetch
-              setTimeout(() => {
-                if (activeSessionRef.current !== requestSessionId || streamingRef.current) return;
-                setMessages((prev) => {
-                  const expectedExecutionId = currentExecutionIdRef.current || undefined;
-                  const hasAnyFinal = hasFinalAssistantForExecution(prev, expectedExecutionId);
-                  const hasStalePh = prev.some(m => m.intent === "streaming_placeholder");
-                  if (hasStalePh || !hasAnyFinal) {
-                    mergeLatestAssistantFromServer(requestSessionId!).catch(() => {});
-                  }
-                  return prev;
-                });
-              }, 5000);
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
@@ -4959,6 +4933,7 @@ export default function ChatPage() {
               });
               if (requestSessionId) {
                 mergeCooldownUntilRef.current = Date.now() + 5000;
+                requestServerFinalization(requestSessionId, [0, 500, 1500, 3500]);
               }
               break; // done → for 루프 탈출
             } else if (ev.type === "yellow_limit") {
@@ -5307,7 +5282,7 @@ export default function ChatPage() {
               // placeholder with content. Try the same DB merge fallback used
               // by the completion path before giving polling control back.
               if (resp.generating) {
-                await mergeLatestAssistantFromServer(sessionId);
+                requestServerFinalization(sessionId, [0, 1500, 3500]);
                 break;
               }
               if (resp.found && resp.message) {
@@ -5316,6 +5291,7 @@ export default function ChatPage() {
                   if (!isStale()) setStreamBuf(resp.message.content);
                   setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, resp.message!));
                   mergeCooldownUntilRef.current = Date.now() + 5000;
+                  requestServerFinalization(sessionId, [0, 1500]);
                   setStreaming(false);
                   setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
@@ -5419,10 +5395,10 @@ export default function ChatPage() {
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
-                    setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
-                    mergeCooldownUntilRef.current = Date.now() + 5000;
-                    setStreaming(false);
-                    setStreamBuf("");
+                    const latestAi = latestFinalAssistantForExecution(filtered, ss.execution_id || currentExecutionIdRef.current);
+                    if (latestAi) setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
+                    else setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+                    requestServerFinalization(_sid, [0, 1500]);
                   }
                 }
                 if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
@@ -5450,7 +5426,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, mergeLatestAssistantFromServer, showCompletionToast]);
+  }, [createSession, mergeLatestAssistantFromServer, requestServerFinalization, showCompletionToast]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
