@@ -308,14 +308,20 @@ function hasIncompleteQualityFlag(message: ChatMessage): boolean {
   );
 }
 
+function isContinuedMessage(message: ChatMessage): boolean {
+  return message.intent === "continued";
+}
+
 function shouldShowCompletedBadge(message: ChatMessage): boolean {
   if (!hasMeaningfulDisplayContent(message)) return false;
   if (message.intent === "rate_limited" || message.intent === "streaming_placeholder") return false;
+  if (isContinuedMessage(message) || message.intent === "regenerated" || message.intent === "_archived_partial") return false;
   if (endsWithProgressOnlyStatement(message) || hasIncompleteQualityFlag(message)) return false;
   return message.status === undefined || message.status === "completed";
 }
 
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
+  if (isContinuedMessage(message)) return false;
   return (
     message.intent === "interrupted_partial" ||
     message.intent === "interruption_notice" ||
@@ -1695,7 +1701,7 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-              {msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50) ? (
+              {!isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
               ) : msg.model_used === "recovered" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
