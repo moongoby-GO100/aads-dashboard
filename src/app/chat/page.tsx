@@ -312,11 +312,24 @@ function isContinuedMessage(message: ChatMessage): boolean {
   return message.intent === "continued";
 }
 
+function isTerminalIncompleteAssistantMessage(message: ChatMessage): boolean {
+  if (message.role !== "assistant") return false;
+  return (
+    message.intent === "interrupted_partial" ||
+    message.intent === "interruption_notice" ||
+    message.intent === "_archived_partial" ||
+    message.model_used === "interrupted" ||
+    message.model_used === "stopped" ||
+    endsWithProgressOnlyStatement(message) ||
+    hasIncompleteQualityFlag(message)
+  );
+}
+
 function shouldShowCompletedBadge(message: ChatMessage): boolean {
   if (!hasMeaningfulDisplayContent(message)) return false;
   if (message.intent === "rate_limited" || message.intent === "streaming_placeholder") return false;
   if (isContinuedMessage(message) || message.intent === "regenerated" || message.intent === "_archived_partial") return false;
-  if (endsWithProgressOnlyStatement(message) || hasIncompleteQualityFlag(message)) return false;
+  if (isTerminalIncompleteAssistantMessage(message)) return false;
   return message.status === undefined || message.status === "completed";
 }
 
@@ -629,7 +642,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
 
 function getLatestFinalAssistantId(messages: ChatMessage[]): string | null {
   return messages
-    .filter((message) => message.role === "assistant" && message.intent !== "streaming_placeholder" && message.intent !== "rate_limited")
+    .filter((message) => isFinalAssistantMessage(message))
     .sort((a, b) => messageTime(b) - messageTime(a))[0]?.id || null;
 }
 
@@ -638,6 +651,7 @@ function isFinalAssistantMessage(message: ChatMessage): boolean {
     message.role === "assistant" &&
     message.intent !== "streaming_placeholder" &&
     message.intent !== "rate_limited" &&
+    !isTerminalIncompleteAssistantMessage(message) &&
     Boolean((message.content || "").trim())
   );
 }
@@ -2523,6 +2537,8 @@ export default function ChatPage() {
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
   const executionAttachAbortRef = useRef<AbortController | null>(null);
+  const resumeRequestInFlightRef = useRef<Set<string>>(new Set());
+  const resumeRequestLastAtRef = useRef<Map<string, number>>(new Map());
   const completionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const yellowWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [artifactToast, setArtifactToast] = useState<string | null>(null);
@@ -2674,6 +2690,28 @@ export default function ChatPage() {
       }, delay);
     }
   }, [mergeLatestAssistantFromServer, refreshTodos]);
+
+  const requestResumeOnce = useCallback((sessionId: string, options: { cooldownMs?: number } = {}) => {
+    if (!sessionId) return Promise.resolve(null);
+    const executionId = currentExecutionIdRef.current || "session";
+    const key = `${sessionId}:${executionId}`;
+    const now = Date.now();
+    const cooldownMs = options.cooldownMs ?? 60000;
+    const lastRequestedAt = resumeRequestLastAtRef.current.get(key) || 0;
+    if (resumeRequestInFlightRef.current.has(key) || now - lastRequestedAt < cooldownMs) {
+      return Promise.resolve(null);
+    }
+    resumeRequestInFlightRef.current.add(key);
+    resumeRequestLastAtRef.current.set(key, now);
+    return fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/resume`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .finally(() => {
+        resumeRequestInFlightRef.current.delete(key);
+      });
+  }, []);
 
   const preservePartialAndContinueStreaming = useCallback((message: ChatMessage, fallbackSessionId?: string | null) => {
     const continuationSessionId = message.session_id || fallbackSessionId || activeSessionRef.current || activeSession?.id || "";
@@ -3798,6 +3836,28 @@ export default function ChatPage() {
             if (latestAi) {
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
+              const recoverablePartial = freshMsgs
+                .slice()
+                .reverse()
+                .find((m) =>
+                  m.role === "assistant" &&
+                  hasMeaningfulDisplayContent(m) &&
+                  (
+                    isTerminalIncompleteAssistantMessage(m) ||
+                    isStreamingPlaceholderMessage(m)
+                  )
+                );
+              if (recoverablePartial) {
+                setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs, { preserveStreamingPlaceholders: true }));
+                pendingResponseSessions.current.add(sid);
+                setWaitingBgResponse(true);
+                setBgPartialContent(recoverablePartial.content || bgPartialContent);
+                setStreaming(true);
+                setStreamBuf(recoverablePartial.content || bgPartialContent || "");
+                setToolStatus("🔄 중단 지점부터 이어서 생성 중...");
+                void requestResumeOnce(sid);
+                return;
+              }
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
           }
@@ -3807,7 +3867,7 @@ export default function ChatPage() {
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => isFinalAssistantMessage(m));
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
             if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
             showCompletionToast("응답이 완료되었습니다");
@@ -3960,7 +4020,7 @@ export default function ChatPage() {
         if (latest.length === 0) return;
         if (_waitingBg) {
           const hasPlaceholder = rawLatest.some((m) => m.intent === "streaming_placeholder");
-          const _latestFinalAi = rawLatest.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+          const _latestFinalAi = rawLatest.find((m) => isFinalAssistantMessage(m));
           const hasNewFinalAi = _latestFinalAi && _latestFinalAi.id !== lastToastedAiIdRef.current;
           // PERF: AI 메시지 도착 즉시 waitingBgResponse 해제 (placeholder 잔존 여부 무관)
           if (hasNewFinalAi) {
@@ -3988,7 +4048,7 @@ export default function ChatPage() {
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
             // rawLatest는 이미 DESC(최신순) — .reverse() 제거하여 최신 user 메시지 기준 판단
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
-            const _lastAi1029 = rawLatest?.find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+            const _lastAi1029 = rawLatest?.find((m: ChatMessage) => isFinalAssistantMessage(m));
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
               if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
               showCompletionToast("응답이 완료되었습니다");
@@ -5052,7 +5112,7 @@ export default function ChatPage() {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc&include_streaming=true`
             ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
-            const aiMsg = msgs.find((m) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+            const aiMsg = msgs.find((m) => isFinalAssistantMessage(m));
             if (aiMsg) {
               setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
               mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -5249,11 +5309,7 @@ export default function ChatPage() {
           _invisibleRecoveryActivated = true;
           setBgPartialContent(frozenContent);  // 폴링에서 비교 기준점
           if (sessionId && !isStale()) {
-            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/resume`, {
-              method: "POST",
-              headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` },
-            })
-              .then((r) => r.ok ? r.json() : null)
+            requestResumeOnce(sessionId)
               .then((r) => {
                 if (r?.resumed && !isStale()) {
                   setToolStatus("🔄 중단 지점부터 이어서 생성 중...");
@@ -5414,7 +5470,7 @@ export default function ChatPage() {
                 void refreshTodos(_sid);
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "assistant" && m.intent !== "streaming_placeholder" && m.intent !== "rate_limited");
+                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => isFinalAssistantMessage(m));
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
                   if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
                   showCompletionToast("응답이 완료되었습니다");
@@ -5433,7 +5489,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, mergeLatestAssistantFromServer, requestServerFinalization, showCompletionToast]);
+  }, [createSession, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToast]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
