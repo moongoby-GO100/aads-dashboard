@@ -5073,20 +5073,39 @@ export default function ChatPage() {
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
       else if (!streamGotFinal && full) {
         setStreamBuf("");
-        // ★ in-place 업데이트
         setMessages((prev) => {
-          const finalMsg = {
-            id: `ai-${Date.now()}`,
-            session_id: requestSessionId!,
-            execution_id: currentExecutionIdRef.current || undefined,
-            role: "assistant" as const,
-            content: full,
-            tools_called: accumulatedToolCalls as ChatMessage["tools_called"],
-            has_tools: accumulatedToolCalls.length > 0,
-            tool_count: accumulatedToolCalls.filter((toolEv) => toolEv.type === "tool_use").length,
-            tool_names: Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
-          };
-          return replaceStreamingPlaceholderWithFinal(prev, finalMsg);
+          const hasPlaceholder = prev.some((message) => message.intent === "streaming_placeholder");
+          if (hasPlaceholder) {
+            return prev.map((message) => (
+              message.intent === "streaming_placeholder"
+                ? {
+                  ...message,
+                  execution_id: message.execution_id || currentExecutionIdRef.current || undefined,
+                  content: full || message.content,
+                  tools_called: (accumulatedToolCalls.length > 0 ? accumulatedToolCalls : message.tools_called) as ChatMessage["tools_called"],
+                  has_tools: Boolean(message.has_tools) || accumulatedToolCalls.length > 0,
+                  tool_count: message.tool_count ?? accumulatedToolCalls.filter((toolEv) => toolEv.type === "tool_use").length,
+                  tool_names: message.tool_names ?? Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
+                }
+                : message
+            ));
+          }
+          return [
+            ...prev,
+            {
+              id: `ai-streaming-recovery-${Date.now()}`,
+              session_id: requestSessionId!,
+              execution_id: currentExecutionIdRef.current || undefined,
+              role: "assistant" as const,
+              content: full,
+              intent: "streaming_placeholder",
+              tools_called: accumulatedToolCalls as ChatMessage["tools_called"],
+              has_tools: accumulatedToolCalls.length > 0,
+              tool_count: accumulatedToolCalls.filter((toolEv) => toolEv.type === "tool_use").length,
+              tool_names: Array.from(new Set(accumulatedToolCalls.map((toolEv) => String(toolEv.tool_name || "")).filter(Boolean))),
+              created_at: new Date().toISOString(),
+            },
+          ].sort((a, b) => messageTime(a) - messageTime(b));
         });
         mergeCooldownUntilRef.current = Date.now() + 5000;
         // SSE 무음 종료 — 서버가 응답을 이어서 생성 중일 수 있으므로 폴링 활성화
