@@ -6,15 +6,17 @@ import { initGlobalErrorHandlers } from "@/services/errorReporter";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isKakaobot, setIsKakaobot] = useState(false);
+  const [isKakaobot] = useState(() =>
+    typeof window !== "undefined" && window.location.hostname.includes("kakaobot"),
+  );
   const pathname = usePathname();
 
   useEffect(() => { initGlobalErrorHandlers(); }, []);
-  useEffect(() => { setIsKakaobot(window.location.hostname.includes("kakaobot")); }, []);
 
   const hideSidebar =
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||
     pathname.startsWith("/kakaobot") ||
     isKakaobot;

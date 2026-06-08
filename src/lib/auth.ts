@@ -5,6 +5,18 @@ const API_BASE = typeof window !== "undefined"
 export const TOKEN_KEY = "aads_token";
 const COOKIE_MAX_AGE = 24 * 7 * 3600; // 7일로 변경
 
+export type TeamInviteRole = "admin" | "member" | "viewer";
+
+export interface TeamInviteInput {
+  email: string;
+  role: TeamInviteRole;
+}
+
+export interface RegisterOptions {
+  organizationName?: string;
+  teamInvites?: TeamInviteInput[];
+}
+
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
@@ -53,11 +65,25 @@ export function logout() {
   }
 }
 
-export async function register(email: string, password: string, name: string): Promise<string> {
+export async function register(
+  email: string,
+  password: string,
+  name: string,
+  options: RegisterOptions = {},
+): Promise<string> {
+  const teamInvites = (options.teamInvites || [])
+    .map((invite) => ({ email: invite.email.trim(), role: invite.role }))
+    .filter((invite) => invite.email);
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({
+      email,
+      password,
+      name,
+      organization_name: options.organizationName?.trim() || undefined,
+      team_invites: teamInvites,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "회원가입 실패" }));
@@ -69,6 +95,41 @@ export async function register(email: string, password: string, name: string): P
     setTokenCookie(data.token);
   }
   return data.token;
+}
+
+export async function completeOnboarding(
+  organizationName: string,
+  teamInvites: TeamInviteInput[],
+): Promise<string> {
+  const token = getToken();
+  if (!token) {
+    throw new Error("로그인이 필요합니다.");
+  }
+
+  const res = await fetch(`${API_BASE}/auth/onboarding`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      organization_name: organizationName,
+      team_invites: teamInvites
+        .map((invite) => ({ email: invite.email.trim(), role: invite.role }))
+        .filter((invite) => invite.email),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "온보딩 저장 실패" }));
+    throw new Error(err.detail || "온보딩 저장 실패");
+  }
+
+  const data = await res.json();
+  if (typeof window !== "undefined" && data.token) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setTokenCookie(data.token);
+  }
+  return data.token || token;
 }
 
 export function getToken(): string | null {

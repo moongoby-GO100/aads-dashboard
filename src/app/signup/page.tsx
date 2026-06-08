@@ -32,12 +32,10 @@ export default function SignupPage() {
       setError("비밀번호는 6자 이상이어야 합니다.");
       return;
     }
-
     setLoading(true);
     try {
-      const token = await register(email, password, name);
-      document.cookie = `aads_token=${token}; path=/; max-age=${24 * 3600}; SameSite=Lax`;
-      router.push("/kakaobot");
+      await register(email, password, name);
+      router.push(isKakaobot ? "/kakaobot" : "/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "회원가입 실패");
     } finally {
