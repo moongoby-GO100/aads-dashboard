@@ -333,6 +333,51 @@ function shouldShowCompletedBadge(message: ChatMessage): boolean {
   return message.status === undefined || message.status === "completed";
 }
 
+function streamingPlaceholderStatus(
+  message: ChatMessage,
+  isActive: boolean,
+): { label: string; color: string; bg: string; border: string; recoverable: boolean } | null {
+  if (message.intent !== "streaming_placeholder" && !message.intent?.startsWith("streaming")) return null;
+  if (isActive) {
+    return {
+      label: "생성 중",
+      color: "#3b82f6",
+      bg: "rgba(59,130,246,0.12)",
+      border: "rgba(59,130,246,0.25)",
+      recoverable: false,
+    };
+  }
+  const details = message.quality_details || {};
+  const reason = String(details.interruption_reason || details.interrupt_reason || "");
+  const content = normalizedMessageContent(message);
+  const hasContent = content.length > 0 && !isPlaceholderOnlyContent(content);
+  if (reason === "orphan_placeholder_no_execution") {
+    return {
+      label: "상태 확인 필요",
+      color: "#ef4444",
+      bg: "rgba(239,68,68,0.10)",
+      border: "rgba(239,68,68,0.25)",
+      recoverable: hasContent,
+    };
+  }
+  if (/재시도|retry|rate/i.test(content)) {
+    return {
+      label: "재시도 대기",
+      color: "#f59e0b",
+      bg: "rgba(245,158,11,0.12)",
+      border: "rgba(245,158,11,0.25)",
+      recoverable: hasContent,
+    };
+  }
+  return {
+    label: hasContent ? "이어쓰기 가능" : "중단됨",
+    color: "#f59e0b",
+    bg: "rgba(245,158,11,0.12)",
+    border: "rgba(245,158,11,0.25)",
+    recoverable: hasContent,
+  };
+}
+
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
   if (isContinuedMessage(message)) return false;
   return (
@@ -1061,8 +1106,12 @@ const MessageItem = memo(function MessageItem({
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
+  const hasLiveStreamingContent = Boolean(streamingContent && isStreamingPlaceholder);
+  const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent);
+  const placeholderStatus = streamingPlaceholderStatus(msg, isActiveStreamingPlaceholder);
+  const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
-  const isVisiblyStreaming = Boolean(isActiveStreaming || isStreamingPlaceholder);
+  const isVisiblyStreaming = isActiveStreamingPlaceholder;
   const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -1685,10 +1734,22 @@ const MessageItem = memo(function MessageItem({
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
-        {isVisiblyStreaming && (
+        {placeholderStatus && isActiveStreamingPlaceholder && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", marginLeft: "4px" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)", animation: "pulse 1.5s ease-in-out infinite" }}>🔄 생성 중...</span>
-            {onStopStreaming && (
+            <span style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "3px",
+              padding: "1px 6px",
+              borderRadius: "8px",
+              fontSize: "10px",
+              fontWeight: 600,
+              background: placeholderStatus.bg,
+              color: placeholderStatus.color,
+              border: `1px solid ${placeholderStatus.border}`,
+              animation: isActiveStreamingPlaceholder ? "pulse 1.5s ease-in-out infinite" : undefined,
+            }}>{isActiveStreamingPlaceholder ? "🔄" : "⚠️"} {placeholderStatus.label}</span>
+            {isActiveStreamingPlaceholder && onStopStreaming && (
               <button type="button" onClick={onStopStreaming} style={{
                 padding: "2px 8px",
                 fontSize: "11px", fontWeight: 500,
@@ -1715,7 +1776,9 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-              {!isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
+              {placeholderStatus ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: placeholderStatus.bg, color: placeholderStatus.color, border: `1px solid ${placeholderStatus.border}` }}>⚠️ {placeholderStatus.label}</span>
+              ) : !isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
               ) : msg.model_used === "recovered" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
@@ -1760,9 +1823,9 @@ const MessageItem = memo(function MessageItem({
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
-            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
+            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
               <>
-                {isInterruptedAssistant && (
+                {(isInterruptedAssistant || isRecoverablePlaceholder) && (
                   <button
                     onClick={() => onRegenerate(msg.id, "continue")}
                     title="중단 지점부터 이어서 생성"
