@@ -205,6 +205,7 @@ export const chatApi = {
     modelOverride?: string,
     signal?: AbortSignal,
     attachments?: Array<{ name: string; path: string }>,
+    responseMode: "quality" | "fast" = "quality",
   ): Promise<ReadableStreamDefaultReader<Uint8Array>> => {
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
@@ -217,6 +218,7 @@ export const chatApi = {
         session_id: sessionId,
         content,
         model_override: modelOverride || null,
+        response_mode: responseMode,
         attachments: attachments || [],
       }),
     });

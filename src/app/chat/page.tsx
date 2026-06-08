@@ -2002,12 +2002,19 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_RUNTIME_MODEL);
+  const [responseMode, setResponseMode] = useState<"quality" | "fast">("quality");
   const [roleKey, setRoleKey] = useState("CEO");
   const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
   const roleLabels = useMemo(() => new Map(roleOptions.map((role) => [role.id, role.label])), [roleOptions]);
   const roleIds = useMemo(() => roleOptions.map((role) => role.id), [roleOptions]);
   const [runtimeModels, setRuntimeModels] = useState<LlmRegistryModel[] | null>(null);
   const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
+  useEffect(() => {
+    const savedMode = localStorage.getItem("aads-chat-response-mode");
+    if (savedMode === "fast" || savedMode === "quality") {
+      setResponseMode(savedMode);
+    }
+  }, []);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const [thinkingBuf, setThinkingBuf] = useState("");
@@ -3017,6 +3024,7 @@ export default function ChatPage() {
   // ── H-3: sendMessage useCallback 안정화용 ref ──
   const activeSessionObjRef = useRef(activeSession);
   const modelRef = useRef(model);
+  const responseModeRef = useRef(responseMode);
   const roleKeyRef = useRef(roleKey);
   const activeWsRef = useRef(activeWs);
   const pendingPreviewFilesRef = useRef(pendingPreviewFiles);
@@ -3028,6 +3036,7 @@ export default function ChatPage() {
   const queueCountRef = useRef(queueCount);
   useEffect(() => { activeSessionObjRef.current = activeSession; }, [activeSession]);
   useEffect(() => { modelRef.current = model; }, [model]);
+  useEffect(() => { responseModeRef.current = responseMode; }, [responseMode]);
   useEffect(() => { roleKeyRef.current = roleKey; }, [roleKey]);
   useEffect(() => { activeWsRef.current = activeWs; }, [activeWs]);
   useEffect(() => { pendingPreviewFilesRef.current = pendingPreviewFiles; }, [pendingPreviewFiles]);
@@ -4689,7 +4698,7 @@ export default function ChatPage() {
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey });
+        fetchBody = JSON.stringify({ content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
       } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
@@ -4697,6 +4706,7 @@ export default function ChatPage() {
         formData.append("session_id", sessionId!);
         formData.append("content", content);
         if (modelRef.current) formData.append("model_override", modelRef.current);
+        formData.append("response_mode", responseModeRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
         if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
         formData.append("idempotency_key", _idempotencyKey);
@@ -4704,7 +4714,7 @@ export default function ChatPage() {
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, attachments, idempotency_key: _idempotencyKey, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(fetchUrl, {
@@ -7247,6 +7257,30 @@ export default function ChatPage() {
                 {m.name} ({["자동", "무료", "변동"].includes(m.cost) ? m.cost : `${m.cost}/M`})
               </option>
             ))}
+          </select>
+
+          <select
+            value={responseMode}
+            onChange={(e) => {
+              const nextMode = e.target.value === "fast" ? "fast" : "quality";
+              setResponseMode(nextMode);
+              localStorage.setItem("aads-chat-response-mode", nextMode);
+            }}
+            title="응답 모드"
+            style={{
+              fontSize: "12px",
+              padding: "5px 8px",
+              background: "var(--ct-card)",
+              color: "var(--ct-text)",
+              border: "1px solid var(--ct-border)",
+              borderRadius: "6px",
+              cursor: "pointer",
+              maxWidth: "128px",
+              outline: "none",
+            }}
+          >
+            <option value="quality">완성 우선</option>
+            <option value="fast">빠른 완료</option>
           </select>
 
           {/* Export session */}
