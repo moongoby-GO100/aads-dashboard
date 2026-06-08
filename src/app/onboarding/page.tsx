@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { completeOnboarding, type TeamInviteInput, type TeamInviteRole } from "@/lib/auth";
 
 const ROLE_OPTIONS: { value: TeamInviteRole; label: string }[] = [
-  { value: "member", label: "멤버" },
-  { value: "admin", label: "관리자" },
-  { value: "viewer", label: "뷰어" },
+  { value: "member", label: "멤버 - 실행 가능" },
+  { value: "admin", label: "관리자 - 설정 가능" },
+  { value: "viewer", label: "뷰어 - 읽기 전용" },
 ];
 
 function emptyInvite(): TeamInviteInput {
@@ -42,7 +42,10 @@ export default function OnboardingPage() {
 
     setLoading(true);
     try {
-      await completeOnboarding(organizationName, teamInvites);
+      const normalizedInvites = teamInvites
+        .map((invite) => ({ email: invite.email.trim(), role: invite.role }))
+        .filter((invite) => invite.email);
+      await completeOnboarding(organizationName.trim(), normalizedInvites);
       router.push("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "온보딩 저장 실패");
@@ -52,11 +55,14 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <main className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-lg sm:p-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <main className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-lg sm:p-8">
         <header className="mb-6">
           <p className="text-sm font-medium text-blue-600">AADS 온보딩</p>
           <h1 className="mt-1 text-2xl font-bold text-gray-950">조직과 팀 권한 설정</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            채팅 워크스페이스는 이 조직의 tenant membership 역할을 기준으로 접근 권한이 결정됩니다.
+          </p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -74,7 +80,12 @@ export default function OnboardingPage() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-gray-800">팀원 초대</h2>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">팀원 초대와 권한 역할</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  초대하지 않아도 시작할 수 있으며, 팀원은 선택한 역할로 이 조직에만 추가됩니다.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setTeamInvites((current) => [...current, emptyInvite()])}
