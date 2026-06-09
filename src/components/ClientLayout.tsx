@@ -16,6 +16,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const hideSidebar =
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname.startsWith("/invite/accept") ||
     pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||
     pathname.startsWith("/kakaobot") ||

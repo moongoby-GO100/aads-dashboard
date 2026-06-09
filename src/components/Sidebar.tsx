@@ -11,6 +11,7 @@ const navItems = [
   { href: "/conversations", label: "Conversations", icon: "🗨️" },
   { href: "/channels", label: "대화창 관리", icon: "📌" },
   { href: "/managers", label: "Managers", icon: "👥" },
+  { href: "/team", label: "Team", icon: "👥" },
   { href: "/agenda", label: "아젠다", icon: "📌" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
   { href: "/tasks", label: "Tasks", icon: "📋" },

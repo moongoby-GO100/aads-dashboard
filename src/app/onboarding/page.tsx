@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeOnboarding, type TeamInviteInput, type TeamInviteRole } from "@/lib/auth";
+import { completeOnboarding, type TeamInviteInput, type TeamInviteRole, type TenantInvite } from "@/lib/auth";
 
 const ROLE_OPTIONS: { value: TeamInviteRole; label: string }[] = [
   { value: "member", label: "멤버 - 실행 가능" },
@@ -18,8 +18,23 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [organizationName, setOrganizationName] = useState("");
   const [teamInvites, setTeamInvites] = useState<TeamInviteInput[]>([emptyInvite()]);
+  const [createdInvites, setCreatedInvites] = useState<TenantInvite[]>([]);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const buildInviteLink = (token?: string) => {
+    if (!token || typeof window === "undefined") return "";
+    return `${window.location.origin}/invite/accept?token=${encodeURIComponent(token)}`;
+  };
+
+  const copyInviteLink = async (invite: TenantInvite) => {
+    const link = buildInviteLink(invite.token);
+    if (!link) return;
+    await navigator.clipboard.writeText(link);
+    setCopiedInviteId(invite.invite_id);
+    window.setTimeout(() => setCopiedInviteId(null), 1600);
+  };
 
   const updateInvite = (index: number, patch: Partial<TeamInviteInput>) => {
     setTeamInvites((current) =>
@@ -45,7 +60,11 @@ export default function OnboardingPage() {
       const normalizedInvites = teamInvites
         .map((invite) => ({ email: invite.email.trim(), role: invite.role }))
         .filter((invite) => invite.email);
-      await completeOnboarding(organizationName.trim(), normalizedInvites);
+      const result = await completeOnboarding(organizationName.trim(), normalizedInvites);
+      if (result.invites.length > 0) {
+        setCreatedInvites(result.invites);
+        return;
+      }
       router.push("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "온보딩 저장 실패");
@@ -141,6 +160,47 @@ export default function OnboardingPage() {
             </button>
           </div>
         </form>
+
+        {createdInvites.length > 0 && (
+          <section className="mt-6 rounded-lg border border-blue-100 bg-blue-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-950">초대 링크 생성 완료</h2>
+                <p className="mt-1 text-xs text-gray-600">링크는 지금 화면에서만 전체 token을 확인할 수 있습니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push("/chat")}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                채팅으로 이동
+              </button>
+            </div>
+            <div className="mt-4 space-y-2">
+              {createdInvites.map((invite) => {
+                const link = buildInviteLink(invite.token);
+                return (
+                  <div key={invite.invite_id} className="rounded-lg border border-blue-100 bg-white p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-950">{invite.email}</p>
+                        <p className="text-xs text-gray-500">{invite.role} · {invite.expires_at ? new Date(invite.expires_at).toLocaleString("ko-KR") : "만료일 없음"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyInviteLink(invite)}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        {copiedInviteId === invite.invite_id ? "복사됨" : "링크 복사"}
+                      </button>
+                    </div>
+                    <p className="mt-2 break-all rounded bg-gray-50 px-2 py-1 text-xs text-gray-600">{link}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );

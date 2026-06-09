@@ -17,6 +17,46 @@ export interface RegisterOptions {
   teamInvites?: TeamInviteInput[];
 }
 
+export interface TenantSummary {
+  tenant_id: string;
+  slug: string;
+  name: string;
+  kind: string;
+  status: string;
+  role: TeamInviteRole | "owner";
+  membership_status: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TenantInvite {
+  invite_id: string;
+  tenant_id: string;
+  email: string;
+  role: TeamInviteRole;
+  status: string;
+  expires_at?: string;
+  created_at?: string;
+  token?: string;
+  invited_by_email?: string;
+}
+
+export interface TenantMember {
+  membership_id: string;
+  tenant_id: string;
+  user_id: string;
+  email: string;
+  name?: string | null;
+  role: TeamInviteRole | "owner";
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TenantListResponse {
+  current_tenant_id: string;
+  tenants: TenantSummary[];
+}
+
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
@@ -100,7 +140,7 @@ export async function register(
 export async function completeOnboarding(
   organizationName: string,
   teamInvites: TeamInviteInput[],
-): Promise<string> {
+): Promise<{ token: string; tenant?: TenantSummary; invites: TenantInvite[] }> {
   const token = getToken();
   if (!token) {
     throw new Error("로그인이 필요합니다.");
@@ -129,10 +169,89 @@ export async function completeOnboarding(
     localStorage.setItem(TOKEN_KEY, data.token);
     setTokenCookie(data.token);
   }
-  return data.token || token;
+  return { token: data.token || token, tenant: data.tenant, invites: data.invites || [] };
 }
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
+}
+
+function requireToken(): string {
+  const token = getToken();
+  if (!token) throw new Error("로그인이 필요합니다.");
+  return token;
+}
+
+async function authRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = requireToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `API error ${res.status}` }));
+    throw new Error(err.detail || `API error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function listTenants(): Promise<TenantListResponse> {
+  return authRequest<TenantListResponse>("/auth/tenants");
+}
+
+export async function listTenantMembers(tenantId: string): Promise<TenantMember[]> {
+  const data = await authRequest<{ members: TenantMember[] }>(`/auth/tenants/${tenantId}/members`);
+  return data.members || [];
+}
+
+export async function listTenantInvites(tenantId: string): Promise<TenantInvite[]> {
+  const data = await authRequest<{ invites: TenantInvite[] }>(`/auth/tenants/${tenantId}/invites`);
+  return data.invites || [];
+}
+
+export async function createTenantInvite(
+  tenantId: string,
+  invite: TeamInviteInput,
+  expiresInHours = 24 * 7,
+): Promise<TenantInvite> {
+  return authRequest<TenantInvite>(`/auth/tenants/${tenantId}/invites`, {
+    method: "POST",
+    body: JSON.stringify({
+      email: invite.email.trim(),
+      role: invite.role,
+      expires_in_hours: expiresInHours,
+    }),
+  });
+}
+
+export async function switchTenant(tenantId: string): Promise<string> {
+  const data = await authRequest<{ token: string }>(`/auth/tenants/${tenantId}/switch`, { method: "POST" });
+  if (typeof window !== "undefined" && data.token) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setTokenCookie(data.token);
+  }
+  return data.token;
+}
+
+export async function acceptInvite(token: string, password: string, name: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/auth/invites/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password, name: name.trim() || undefined }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "초대 수락 실패" }));
+    throw new Error(err.detail || "초대 수락 실패");
+  }
+  const data = await res.json();
+  if (typeof window !== "undefined" && data.token) {
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setTokenCookie(data.token);
+  }
+  return data.token;
 }
