@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeOnboarding, type TeamInviteInput, type TeamInviteRole, type TenantInvite } from "@/lib/auth";
 
@@ -20,12 +20,17 @@ export default function OnboardingPage() {
   const [teamInvites, setTeamInvites] = useState<TeamInviteInput[]>([emptyInvite()]);
   const [createdInvites, setCreatedInvites] = useState<TenantInvite[]>([]);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
   const buildInviteLink = (token?: string) => {
-    if (!token || typeof window === "undefined") return "";
-    return `${window.location.origin}/invite/accept?token=${encodeURIComponent(token)}`;
+    if (!token || !origin) return "";
+    return `${origin}/invite/accept?token=${encodeURIComponent(token)}`;
   };
 
   const copyInviteLink = async (invite: TenantInvite) => {

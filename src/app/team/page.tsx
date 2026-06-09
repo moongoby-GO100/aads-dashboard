@@ -49,6 +49,7 @@ export default function TeamPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
 
   const currentTenant = useMemo(
     () => tenants.find((tenant) => tenant.tenant_id === currentTenantId),
@@ -57,9 +58,9 @@ export default function TeamPage() {
   const inviteAllowed = canInvite(currentTenant?.role) && currentTenant?.kind !== "internal";
 
   const buildInviteLink = useCallback((token?: string) => {
-    if (!token || typeof window === "undefined") return "";
-    return `${window.location.origin}/invite/accept?token=${encodeURIComponent(token)}`;
-  }, []);
+    if (!token || !origin) return "";
+    return `${origin}/invite/accept?token=${encodeURIComponent(token)}`;
+  }, [origin]);
 
   const copyInviteLink = async (item: TenantInvite) => {
     const link = buildInviteLink(item.token);
@@ -101,6 +102,7 @@ export default function TeamPage() {
   }, []);
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     void loadTeam();
   }, [loadTeam]);
 
