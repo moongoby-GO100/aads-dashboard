@@ -3626,7 +3626,7 @@ export default function ChatPage() {
       // streaming-status API 실패 시 폴백: 일반 메시지 로드
       loadMessages(isPending ? false : true);
     });
-    chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${activeWs}`)
+    chatApi<Artifact[]>(`/chat/artifacts?session_id=${fetchSid}`)
       .then(setArtifacts)
       .catch(() => setArtifacts([]));
     // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 기본 모델)
@@ -4904,12 +4904,12 @@ export default function ChatPage() {
               if (ev.session_turns) setSessionTurns(ev.session_turns);
               // UX: 스트리밍 완료 시 아티팩트 자동 갱신 + 신규 저장 토스트
               // 500ms 딜레이: 서버 DB 저장 완료 대기 / 중복 호출 방지
-              if (activeWsRef.current && !artifactFetchingRef.current) {
+              if (requestSessionId && !artifactFetchingRef.current) {
                 artifactFetchingRef.current = true;
                 if (artifactFetchTimerRef.current) clearTimeout(artifactFetchTimerRef.current);
-                const wsIdAtDone = activeWsRef.current;
+                const sessionIdAtDone = requestSessionId;
                 artifactFetchTimerRef.current = setTimeout(() => {
-                  chatApi<Artifact[]>(`/chat/artifacts?workspace_id=${wsIdAtDone}`)
+                  chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionIdAtDone}`)
                     .then((newArtifacts) => {
                       setArtifacts((prev) => {
                         const prevIds = new Set(prev.map((a) => a.id));
