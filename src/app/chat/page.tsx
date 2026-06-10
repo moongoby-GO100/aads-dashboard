@@ -22,6 +22,9 @@ import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, Art
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
 
+const CHAT_ARTIFACT_RENDER_LIMIT = 60;
+const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
+
 type AuthKeyStatus = {
   label?: string;
   key_name?: string;
@@ -1982,6 +1985,7 @@ export default function ChatPage() {
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [artifactListTruncated, setArtifactListTruncated] = useState(false);
   const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
   const [todoLoading, setTodoLoading] = useState(false);
   const [todoError, setTodoError] = useState<string | null>(null);
@@ -3465,6 +3469,7 @@ export default function ChatPage() {
     setSelectedArtifactIdx(0);
     if (!activeSession) {
       setArtifacts([]); setSessionCost(null); setSessionTurns(null); setBriefing(null);
+      setArtifactListTruncated(false);
       if (typeof window !== "undefined" && window.location.hash) {
         window.history.replaceState(null, "", window.location.pathname);
       }
@@ -3626,9 +3631,15 @@ export default function ChatPage() {
       // streaming-status API 실패 시 폴백: 일반 메시지 로드
       loadMessages(isPending ? false : true);
     });
-    chatApi<Artifact[]>(`/chat/artifacts?session_id=${fetchSid}`)
-      .then(setArtifacts)
-      .catch(() => setArtifacts([]));
+    chatApi<Artifact[]>(`/chat/artifacts?session_id=${fetchSid}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
+      .then((items) => {
+        setArtifactListTruncated(items.length > CHAT_ARTIFACT_RENDER_LIMIT);
+        setArtifacts(items.slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      })
+      .catch(() => {
+        setArtifactListTruncated(false);
+        setArtifacts([]);
+      });
     // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 기본 모델)
     {
       const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
@@ -4909,11 +4920,13 @@ export default function ChatPage() {
                 if (artifactFetchTimerRef.current) clearTimeout(artifactFetchTimerRef.current);
                 const sessionIdAtDone = requestSessionId;
                 artifactFetchTimerRef.current = setTimeout(() => {
-                  chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionIdAtDone}`)
+                  chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionIdAtDone}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
                     .then((newArtifacts) => {
                       setArtifacts((prev) => {
                         const prevIds = new Set(prev.map((a) => a.id));
-                        const added = newArtifacts.filter((a) => !prevIds.has(a.id));
+                        const visibleArtifacts = newArtifacts.slice(0, CHAT_ARTIFACT_RENDER_LIMIT);
+                        const added = visibleArtifacts.filter((a) => !prevIds.has(a.id));
+                        setArtifactListTruncated(newArtifacts.length > CHAT_ARTIFACT_RENDER_LIMIT);
                         if (added.length > 0) {
                           const typeLabels: Record<string, string> = {
                             report: "📄 보고서가 저장되었습니다",
@@ -4934,7 +4947,7 @@ export default function ChatPage() {
                           if (artifactToastTimerRef.current) clearTimeout(artifactToastTimerRef.current);
                           artifactToastTimerRef.current = setTimeout(() => setArtifactToast(null), 3000);
                         }
-                        return newArtifacts;
+                        return visibleArtifacts;
                       });
                     })
                     .catch(() => {})
@@ -6510,6 +6523,16 @@ export default function ChatPage() {
           animation: "fadeIn 0.3s ease",
         }}>
           {artifactToast}
+        </div>
+      )}
+      {artifactListTruncated && showArtifactPanel && (
+        <div style={{
+          position: "fixed", bottom: artifactToast ? 72 : 24, right: 24,
+          zIndex: 9998, background: "rgba(15,23,42,0.92)", color: "#e2e8f0",
+          padding: "8px 12px", borderRadius: 8, fontSize: 12,
+          border: "1px solid rgba(148,163,184,0.28)", boxShadow: "0 4px 12px rgba(0,0,0,0.24)",
+        }}>
+          산출물은 최근 {CHAT_ARTIFACT_RENDER_LIMIT}개만 표시 중
         </div>
       )}
       {/* ── Image generation modal ── */}
