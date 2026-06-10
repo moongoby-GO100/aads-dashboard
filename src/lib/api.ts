@@ -301,8 +301,8 @@ export const api = {
   toggleChatBookmark: (messageId: string) =>
     request<any>(`/chat/messages/${messageId}/bookmark`, { method: "PUT" }),
 
-  getChatArtifacts: (sessionId: string) =>
-    request<any>(`/chat/artifacts?session_id=${sessionId}`),
+  getChatArtifacts: (sessionId: string, limit = 60, offset = 0) =>
+    request<unknown[]>(`/chat/artifacts?session_id=${encodeURIComponent(sessionId)}&limit=${limit}&offset=${offset}`),
   getChatArtifact: (id: string) => request<any>(`/chat/artifacts/${id}`),
   updateChatArtifact: (id: string, data: Record<string, unknown>) =>
     request<any>(`/chat/artifacts/${id}`, { method: "PUT", body: JSON.stringify(data) }),

@@ -40,18 +40,11 @@ interface SessionSummaryCardProps {
 
 export default function SessionSummaryCard({ sessionId }: SessionSummaryCardProps) {
   const [items, setItems] = useState<SessionHistoryItem[]>([]);
-  const [dismissed, setDismissed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [dismissedSessionId, setDismissedSessionId] = useState<string | null>(null);
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    // 세션이 바뀌면 카드 초기화
-    setDismissed(false);
-    setLoaded(false);
-    setItems([]);
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!sessionId || loaded) return;
+    if (!sessionId || loadedSessionId === sessionId) return;
     let cancelled = false;
 
     fetch(`${BASE_URL}/chat/sessions/${sessionId}/memory-context`, {
@@ -66,15 +59,15 @@ export default function SessionSummaryCard({ sessionId }: SessionSummaryCardProp
           .filter((h) => h.session_id !== sessionId)
           .slice(0, 3);
         setItems(recent);
-        setLoaded(true);
+        setLoadedSessionId(sessionId);
       })
-      .catch(() => setLoaded(true));
+      .catch(() => setLoadedSessionId(sessionId));
 
     return () => { cancelled = true; };
-  }, [sessionId, loaded]);
+  }, [sessionId, loadedSessionId]);
 
   // 히스토리 없거나 dismiss 시 표시 안 함
-  if (dismissed || !loaded || items.length === 0) return null;
+  if (dismissedSessionId === sessionId || loadedSessionId !== sessionId || items.length === 0) return null;
 
   return (
     <div
@@ -101,7 +94,7 @@ export default function SessionSummaryCard({ sessionId }: SessionSummaryCardProp
           🧠 이전 세션 요약
         </span>
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => setDismissedSessionId(sessionId)}
           style={{
             background: "none", border: "none", cursor: "pointer",
             color: "rgba(255,255,255,0.4)", fontSize: "14px", lineHeight: 1,

@@ -2777,7 +2777,7 @@ export default function ChatPage() {
     }
     resumeRequestInFlightRef.current.add(key);
     resumeRequestLastAtRef.current.set(key, now);
-    return fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/resume`, {
+    return fetch(`${BASE_URL}/chat/sessions/${sessionId}/resume`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` },
     })
@@ -2876,7 +2876,7 @@ export default function ChatPage() {
     try {
       const replayLastEventId = replayFromStart ? "0" : (lastEventIdRef.current || "0");
       const resp = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(replayLastEventId)}`,
+        `${BASE_URL}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(replayLastEventId)}`,
         { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: controller.signal },
       );
       if (!resp.ok || !resp.body) throw new Error("execution attach failed");
@@ -5305,8 +5305,8 @@ export default function ChatPage() {
             try {
               resumeResp = await fetch(
                 currentExecutionIdRef.current
-                  ? `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`
-                  : `${process.env.NEXT_PUBLIC_API_URL || ""}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
+                  ? `${BASE_URL}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`
+                  : `${BASE_URL}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
                 { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
               );
             } catch (resumeFetchErr) {
@@ -6198,14 +6198,15 @@ export default function ChatPage() {
   );
   // 전체 세션에서 사용 중인 태그 목록 수집
   const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
-  const filteredArtifacts = artifacts.filter((a) => {
+  const filteredArtifacts = useMemo(() => artifacts.filter((a) => {
     if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
     if (artifactTab === "dialog") return a.artifact_type === "full_response";
     if (artifactTab === "code") return a.artifact_type === "code";
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
     if (artifactTab === "agenda") return false;
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
-  });
+    return false;
+  }), [artifacts, artifactTab]);
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
 
   // PERF: React.memo 안정화 — 인라인 화살표 함수 제거로 MessageItem 불필요 재렌더 방지
@@ -6233,7 +6234,7 @@ export default function ChatPage() {
     setRoleKey(nextRole);
   }, [activeWs, activeSession, activeWsObj, getWorkspaceDefaultRole, roleLabels]);
 
-  const artifactCounts: Record<string, number> = {
+  const artifactCounts: Record<string, number> = useMemo(() => ({
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
     dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
@@ -6241,7 +6242,7 @@ export default function ChatPage() {
     agenda: 0,
     log: systemMessages.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
-  };
+  }), [artifacts, systemMessages.length]);
 
   function openCreateSessionModal() {
     const defaultRole = getWorkspaceDefaultRole(activeWsObj);

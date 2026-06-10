@@ -16,6 +16,41 @@ import { ChatModelSelector, DEFAULT_CHAT_MODEL, CHAT_MODEL_OPTIONS } from "./Mod
 import ActionChips, { WELCOME_CHIPS, getDynamicChips } from "./ActionChips";
 import { authKeyApi } from "../../services/chatApi";
 
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionResultLike {
+  [index: number]: SpeechRecognitionAlternativeLike | undefined;
+  length: number;
+}
+
+interface SpeechRecognitionResultListLike {
+  [index: number]: SpeechRecognitionResultLike | undefined;
+  length: number;
+}
+
+interface SpeechRecognitionEventLike {
+  results: SpeechRecognitionResultListLike;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
 interface ChatInputProps {
   onSend: (message: string, modelId: string, files?: File[]) => void;
   isStreaming: boolean;
@@ -45,7 +80,8 @@ export default function ChatInput({
   const [primaryKey, setPrimaryKey] = useState<string>("Naver");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const effectiveModel = selectedModel || model;
 
   // 키 순서 로드
   useEffect(() => {
@@ -64,11 +100,6 @@ export default function ChatInput({
     }
   };
 
-  // 모델 외부 동기화
-  useEffect(() => {
-    if (selectedModel) setModel(selectedModel);
-  }, [selectedModel]);
-
   // 텍스트에어리어 자동 높이 조절
   useEffect(() => {
     const ta = textareaRef.current;
@@ -78,20 +109,20 @@ export default function ChatInput({
   }, [text]);
 
   const handleModelChange = (m: string) => {
-    setModel(m);
+    if (!selectedModel) setModel(m);
     onModelChange?.(m);
   };
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if ((!trimmed && attachedFiles.length === 0) || isStreaming) return;
-    onSend(trimmed, model, attachedFiles.length > 0 ? attachedFiles : undefined);
+    onSend(trimmed, effectiveModel, attachedFiles.length > 0 ? attachedFiles : undefined);
     setText("");
     setAttachedFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [text, model, isStreaming, attachedFiles, onSend]);
+  }, [text, effectiveModel, isStreaming, attachedFiles, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -101,7 +132,7 @@ export default function ChatInput({
   };
 
   const handleChipClick = (message: string) => {
-    if (!isStreaming) onSend(message, model);
+    if (!isStreaming) onSend(message, effectiveModel);
   };
 
   // 파일 첨부
@@ -142,8 +173,7 @@ export default function ChatInput({
   const toggleVoice = () => {
     const SpeechRecognitionClass =
       typeof window !== "undefined"
-        ? (window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any })
-            .SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: any }).webkitSpeechRecognition
+        ? (window as SpeechRecognitionWindow).SpeechRecognition || (window as SpeechRecognitionWindow).webkitSpeechRecognition
         : undefined;
 
     if (!SpeechRecognitionClass) {
@@ -161,9 +191,9 @@ export default function ChatInput({
     rec.lang = "ko-KR";
     rec.continuous = false;
     rec.interimResults = true;
-    rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results)
-        .map((r: any) => r[0].transcript)
+    rec.onresult = (e: SpeechRecognitionEventLike) => {
+      const transcript = Array.from({ length: e.results.length }, (_, index) => e.results[index])
+        .map((result) => result?.[0]?.transcript || "")
         .join("");
       setText(transcript);
     };
@@ -177,7 +207,7 @@ export default function ChatInput({
     ? getDynamicChips(lastAssistantMessage)
     : WELCOME_CHIPS;
 
-  const isDeepResearch = CHAT_MODEL_OPTIONS.find((m) => m.id === model)?.isDeepResearch;
+  const isDeepResearch = CHAT_MODEL_OPTIONS.find((m) => m.id === effectiveModel)?.isDeepResearch;
   const canSend = (text.trim().length > 0 || attachedFiles.length > 0) && !isStreaming;
 
   return (
@@ -263,7 +293,7 @@ export default function ChatInput({
 
       {/* 모델 셀렉터 + 키 토글 */}
       <div className="mb-2 flex items-center gap-2">
-        <ChatModelSelector value={model} onChange={handleModelChange} />
+        <ChatModelSelector value={effectiveModel} onChange={handleModelChange} />
         <button
           onClick={toggleAuthKey}
           className="text-xs px-2 py-1 rounded-lg transition-all"

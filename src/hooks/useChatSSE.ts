@@ -20,6 +20,8 @@ import { chatApi, type SourceItem, type SSEChunk } from "@/services/chatApi";
 import { reportError } from "@/services/errorReporter";
 import { registerStream, updateStreamText, completeStream } from "@/services/streamManager";
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1").replace(/\/$/, "");
+
 export interface ToolUseEvent {
   toolName: string;
   toolUseId?: string;
@@ -479,9 +481,8 @@ export function useChatSSE() {
           // Phase4: stream-resume 재연결 시도 (Last-Event-ID 기반)
           if (!isAborted && lastEventIdRef.current !== "0") {
             try {
-              const BASE = process.env.NEXT_PUBLIC_API_URL || "";
               const resumeResp = await fetch(
-                `${BASE}/api/v1/chat/sessions/${sessionId}/stream-resume?last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
+                `${API_BASE}/chat/sessions/${sessionId}/stream-resume?last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
                 { signal: abort.signal }
               );
               if (resumeResp.ok && resumeResp.body) {

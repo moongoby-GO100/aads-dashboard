@@ -233,8 +233,8 @@ export const chatApi = {
     req<void>(`/chat/drive/${fileId}`, { method: "DELETE" }),
 
   // Artifacts
-  getArtifacts: (sessionId: string) =>
-    req<unknown[]>(`/chat/artifacts?session_id=${sessionId}`),
+  getArtifacts: (sessionId: string, limit = 60, offset = 0) =>
+    req<unknown[]>(`/chat/artifacts?session_id=${encodeURIComponent(sessionId)}&limit=${limit}&offset=${offset}`),
   updateArtifact: (artifactId: string, data: { content?: string; title?: string }) =>
     req<unknown>(`/chat/artifacts/${artifactId}`, { method: "PUT", body: JSON.stringify(data) }),
 
