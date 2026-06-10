@@ -3903,9 +3903,11 @@ export default function ChatPage() {
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
+          let completedAi: ChatMessage | undefined;
           if (freshMsgs && freshMsgs.length > 0) {
             const latestAi = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
+              completedAi = latestAi;
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
               const recoverablePartial = freshMsgs
@@ -3933,13 +3935,20 @@ export default function ChatPage() {
               setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
           }
+          if (!completedAi) {
+            setWaitingBgResponse(true);
+            pendingResponseSessions.current.add(sid);
+            setStreaming(true);
+            setToolStatus("🔄 최종 응답 확인 중...");
+            return;
+          }
           setStreaming(false); setStreamBuf("");
           // scroll: isNearBottomRef preserved — user scroll position respected
           if (isNearBottomRef.current) { requestAnimationFrame(() => { const c = messagesContainerRef.current; if (c) c.scrollTop = c.scrollHeight; }); }
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-          const _lastAi979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => isFinalAssistantMessage(m));
+          const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
             if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
             showCompletionToast("응답이 완료되었습니다");
@@ -5547,14 +5556,26 @@ export default function ChatPage() {
                 setWaitingBgResponse(false); setBgPartialContent("");
                 const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc&include_streaming=true`)
                   .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: streamBufRef.current }).reverse());
+                let completedAi: ChatMessage | undefined;
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
                     const latestAi = latestFinalAssistantForExecution(filtered, ss.execution_id || currentExecutionIdRef.current);
-                    if (latestAi) setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
-                    else setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+                    if (latestAi) {
+                      completedAi = latestAi;
+                      setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
+                    } else {
+                      setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+                    }
                     requestServerFinalization(_sid, [0, 1500]);
                   }
+                }
+                if (!completedAi) {
+                  pendingResponseSessions.current.add(_sid);
+                  setWaitingBgResponse(true);
+                  setStreaming(true);
+                  setToolStatus("🔄 최종 응답 확인 중...");
+                  return;
                 }
                 if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
                 setStreaming(false);
@@ -5562,7 +5583,7 @@ export default function ChatPage() {
                 void refreshTodos(_sid);
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
-                const _lastAi1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => isFinalAssistantMessage(m));
+                const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
                   if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
                   showCompletionToast("응답이 완료되었습니다");
