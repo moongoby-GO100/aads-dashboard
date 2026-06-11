@@ -153,7 +153,8 @@ export default function SignupPage() {
       <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8 w-full max-w-sm sm:max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-blue-600">AADS</h1>
-          <p className="text-sm text-gray-500 mt-1">KakaoBot 회원가입</p>
+          <p className="text-sm text-gray-500 mt-1">AADS 워크스페이스 회원가입</p>
+          <p className="mt-2 text-xs text-gray-400">가입 후 조직명과 팀원 권한을 설정합니다.</p>
         </div>
         {formContent}
       </div>
