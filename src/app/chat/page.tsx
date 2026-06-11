@@ -163,6 +163,7 @@ const DESIGN_REQUEST_TYPE_LABELS: Record<string, string> = {
 };
 
 const DEFAULT_ROLE_OPTIONS = [
+  { id: "GeneralAssistant", label: "General" },
   { id: "CEO", label: "CEO" },
   { id: "CTO", label: "CTO" },
   { id: "PM", label: "PM" },
