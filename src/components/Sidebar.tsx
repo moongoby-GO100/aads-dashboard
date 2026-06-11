@@ -29,6 +29,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📊" },
   { href: "/kakaobot", label: "KakaoBot", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
+  { href: "/admin/users", label: "사용자 현황", icon: "👤" },
   { href: "/admin/prompts", label: "Prompts", icon: "📝" },
   { href: "/admin/tasks", label: "Task Board", icon: "🗂️" },
   { href: "/admin/agents", label: "Agent Registry", icon: "🧩" },

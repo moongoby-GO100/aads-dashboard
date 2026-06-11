@@ -36,6 +36,42 @@ export interface AdminSessionItem {
   created_at: string | null;
   message_count: number;
 }
+export interface AdminUsersOverviewResponse {
+  generated_at: string;
+  window_days: number;
+  summary: Record<string, number>;
+  tables: Record<string, boolean>;
+  plans: Array<{ plan: string; users: number }>;
+  membership_roles: Array<{ role: string; status: string; memberships: number }>;
+  tenants: Array<{
+    tenant_id: string;
+    slug: string;
+    name: string;
+    kind: string;
+    status: string;
+    active_members: number;
+    pending_invites: number;
+    created_at: string | null;
+  }>;
+  users: Array<{
+    user_id: string;
+    email: string;
+    name: string;
+    role: string;
+    status: string;
+    plan: string;
+    default_tenant_name: string;
+    tenant_count: number;
+    sessions_30d: number;
+    messages_30d: number;
+    tokens_30d: number;
+    cost_30d: number;
+    created_at: string | null;
+    updated_at: string | null;
+    last_seen_at: string | null;
+  }>;
+  daily: Array<{ day: string; signups: number }>;
+}
 
 import type {
   HealthResponse,
@@ -432,6 +468,12 @@ export const api = {
   getAdminAgent: (role: string) => request<any>(`/admin/agents/${encodeURIComponent(role)}`),
   getAdminAgentStats: () => request<any>("/admin/agents/stats"),
   getAdminSessions: () => request<{ sessions: AdminSessionItem[]; total: number }>("/admin/sessions"),
+  getAdminUsersOverview: (params?: { days?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<AdminUsersOverviewResponse>(`/admin/users/overview${q.size ? `?${q.toString()}` : ""}`);
+  },
   getAdminTasks: (params?: { status?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
