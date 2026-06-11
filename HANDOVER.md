@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-06-11 11:42 KST - Admin user signup and usage overview verification
+- 대상: CEO가 어드민에서 일반 사용자 가입현황과 사용현황을 확인할 수 있는지 최종 확인.
+- 반영 확인: `src/app/admin/users/page.tsx`는 `/admin/users` 화면에서 전체 가입자, 활성 사용자, customer tenant, 초대, 호출/토큰/비용, 채팅 활동과 사용자별 최근 활동을 표시한다. `src/components/Sidebar.tsx`에는 `사용자 현황` admin 전용 메뉴가 추가되어 있고, `src/lib/api.ts`는 `/api/v1/admin/users/overview`를 호출한다.
+- 운영 검증: API 양 슬롯 `aads-server:8100`, `aads-server-green:8102`에서 CEO 토큰으로 `/api/v1/admin/users/overview?days=30&limit=3` 호출 시 HTTP 200을 확인했다. 응답 기준 `total_users=42`, `active_users=34`, `customer_tenants=33`, `calls_window=5,553`, `tokens_window=1,979,329`, `usage_cost_window=$239.398435`이다.
+- 화면 검증: dashboard 양 슬롯 `3100`, `3101`에서 `/admin/users`가 HTTP 200으로 렌더링된다. 브라우저 로그인 E2E는 미실행했으며, 인증 API와 HTTP 렌더 검증으로 대체했다.
+- 제한: `npx eslint src/app/admin/users/page.tsx src/components/Sidebar.tsx`는 통과했다. `src/lib/api.ts`를 포함한 targeted lint는 기존 `no-explicit-any` 부채 141건으로 실패했으며, 이번 변경 diff 자체에는 신규 `any` 추가가 없다.
+
 ## 2026-06-10 12:51 KST - Chat session artifact scope freeze fix
 - 대상: `/chat#266ab3aa-b0fd-46bb-8c54-01e4852c956f` 세션에서 채팅 진행 시 브라우저가 멈추는 현상.
 - 확인: DB 기준 해당 세션은 메시지 532건, 본문 505,688자, 세션 artifact 292건/400,934자였다. 하지만 프론트 `src/app/chat/page.tsx`가 세션 진입과 SSE 완료 후 artifact 갱신 시 `workspace_id` 전체 artifact를 조회해 같은 워크스페이스 artifact 7,026건/9,121,191자를 매번 로드하고 있었다.
