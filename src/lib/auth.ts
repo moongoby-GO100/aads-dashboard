@@ -57,6 +57,29 @@ export interface TenantListResponse {
   tenants: TenantSummary[];
 }
 
+export interface CurrentUser {
+  user_id: string;
+  email: string;
+  is_admin?: boolean;
+  is_internal_admin?: boolean;
+  tenant_id?: string | null;
+  tenant_role?: string | null;
+  user_role?: string | null;
+  tenant?: {
+    id: string;
+    slug: string;
+    name: string;
+    kind: string;
+    status: string;
+  } | null;
+  membership?: {
+    tenant_id: string;
+    user_id: string;
+    role: string;
+    status: string;
+  } | null;
+}
+
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
@@ -83,7 +106,7 @@ export async function login(email: string, password: string): Promise<string> {
   return data.token;
 }
 
-export async function getMe(): Promise<{ user_id: string; email: string } | null> {
+export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) return null;

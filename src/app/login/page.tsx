@@ -1,8 +1,40 @@
 "use client";
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense, useEffect, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/lib/auth";
+import { getMe, login } from "@/lib/auth";
+
+function isInternalAdminPath(pathname: string): boolean {
+  const adminPrefixes = [
+    "/admin",
+    "/project-status",
+    "/conversations",
+    "/channels",
+    "/managers",
+    "/decisions",
+    "/tasks",
+    "/design",
+    "/projects",
+    "/ops",
+    "/lessons",
+    "/flow",
+    "/reports",
+    "/server-status",
+  ];
+  return pathname === "/" || adminPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function subscribeHostname() {
+  return () => {};
+}
+
+function getKakaobotSnapshot() {
+  return typeof window !== "undefined" && window.location.hostname.includes("kakaobot");
+}
+
+function getKakaobotServerSnapshot() {
+  return false;
+}
 
 function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
   const router = useRouter();
@@ -25,9 +57,11 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
     setError("");
     setLoading(true);
     try {
-      const token = await login(email, password);
+      await login(email, password);
       const redirect = searchParams.get("redirect") || searchParams.get("next") || "/";
-      router.push(redirect);
+      const user = await getMe();
+      const isInternalAdmin = Boolean(user?.is_internal_admin);
+      router.push(!isInternalAdmin && isInternalAdminPath(redirect) ? "/chat" : redirect);
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인 실패");
     } finally {
@@ -91,21 +125,11 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
 }
 
 function LoginPageInner() {
-  const [isKakaobot, setIsKakaobot] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setIsKakaobot(window.location.hostname.includes("kakaobot"));
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-400 text-sm">로딩 중...</div>
-      </div>
-    );
-  }
+  const isKakaobot = useSyncExternalStore(
+    subscribeHostname,
+    getKakaobotSnapshot,
+    getKakaobotServerSnapshot,
+  );
 
   if (isKakaobot) {
     return (

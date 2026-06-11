@@ -4,52 +4,52 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏠" },
+  { href: "/", label: "Dashboard", icon: "🏠", adminOnly: true },
   { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
   { href: "/braming", label: "브레인스토밍", icon: "🧠" },
-  { href: "/project-status", label: "Project Status", icon: "📊" },
-  { href: "/conversations", label: "Conversations", icon: "🗨️" },
-  { href: "/channels", label: "대화창 관리", icon: "📌" },
-  { href: "/managers", label: "Managers", icon: "👥" },
+  { href: "/project-status", label: "Project Status", icon: "📊", adminOnly: true },
+  { href: "/conversations", label: "Conversations", icon: "🗨️", adminOnly: true },
+  { href: "/channels", label: "대화창 관리", icon: "📌", adminOnly: true },
+  { href: "/managers", label: "Managers", icon: "👥", adminOnly: true },
   { href: "/team", label: "Team", icon: "👥" },
   { href: "/agenda", label: "아젠다", icon: "📌" },
-  { href: "/decisions", label: "CEO Decisions", icon: "🎯" },
-  { href: "/tasks", label: "Tasks", icon: "📋" },
+  { href: "/decisions", label: "CEO Decisions", icon: "🎯", adminOnly: true },
+  { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true },
   { href: "/docs", label: "문서 통합", icon: "📄" },
-  { href: "/design/modifications", label: "Design Studio", icon: "🎨" },
-  { href: "/projects", label: "Pipeline", icon: "🔧" },
-  { href: "/ops", label: "운영 현황", icon: "📊" },
-  { href: "/ops/recovery", label: "Recovery", icon: "🔄" },
-  { href: "/ops/servers", label: "Servers", icon: "🖥️" },
-  { href: "/ops/memory", label: "메모리", icon: "🧠" },
-  { href: "/ops/pc-agents", label: "PC Agent", icon: "💻" },
-  { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱" },
-  { href: "/lessons", label: "교훈", icon: "💡" },
-  { href: "/flow", label: "FLOW", icon: "🔄" },
-  { href: "/reports", label: "Reports", icon: "📊" },
+  { href: "/design/modifications", label: "Design Studio", icon: "🎨", adminOnly: true },
+  { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true },
+  { href: "/ops", label: "운영 현황", icon: "📊", adminOnly: true },
+  { href: "/ops/recovery", label: "Recovery", icon: "🔄", adminOnly: true },
+  { href: "/ops/servers", label: "Servers", icon: "🖥️", adminOnly: true },
+  { href: "/ops/memory", label: "메모리", icon: "🧠", adminOnly: true },
+  { href: "/ops/pc-agents", label: "PC Agent", icon: "💻", adminOnly: true },
+  { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱", adminOnly: true },
+  { href: "/lessons", label: "교훈", icon: "💡", adminOnly: true },
+  { href: "/flow", label: "FLOW", icon: "🔄", adminOnly: true },
+  { href: "/reports", label: "Reports", icon: "📊", adminOnly: true },
   { href: "/kakaobot", label: "KakaoBot", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
-  { href: "/admin/users", label: "사용자 현황", icon: "👤" },
-  { href: "/admin/prompts", label: "Prompts", icon: "📝" },
-  { href: "/admin/tasks", label: "Task Board", icon: "🗂️" },
-  { href: "/admin/agents", label: "Agent Registry", icon: "🧩" },
-  { href: "/admin/governance", label: "Governance", icon: "🏛️" },
-  { href: "/admin/model-routing", label: "모델 라우팅", icon: "🧭" },
-  { href: "/admin/model-parity", label: "모델 패리티", icon: "⚖️" },
-  { href: "/admin/deploy", label: "배포 현황", icon: "🚀" },
-  { href: "/admin/sessions", label: "세션 리플레이", icon: "📹" },
-  { href: "/admin/emergency", label: "Emergency", icon: "🚨" },
-  { href: "/admin/model-parity", label: "Model Parity", icon: "⚖️" },
-  { href: "/server-status", label: "Server Status", icon: "🖥️" },
+  { href: "/admin/users", label: "사용자 현황", icon: "👤", adminOnly: true },
+  { href: "/admin/prompts", label: "Prompts", icon: "📝", adminOnly: true },
+  { href: "/admin/tasks", label: "Task Board", icon: "🗂️", adminOnly: true },
+  { href: "/admin/agents", label: "Agent Registry", icon: "🧩", adminOnly: true },
+  { href: "/admin/governance", label: "Governance", icon: "🏛️", adminOnly: true },
+  { href: "/admin/model-routing", label: "모델 라우팅", icon: "🧭", adminOnly: true },
+  { href: "/admin/model-parity", label: "모델 패리티", icon: "⚖️", adminOnly: true },
+  { href: "/admin/deploy", label: "배포 현황", icon: "🚀", adminOnly: true },
+  { href: "/admin/sessions", label: "세션 리플레이", icon: "📹", adminOnly: true },
+  { href: "/admin/emergency", label: "Emergency", icon: "🚨", adminOnly: true },
+  { href: "/server-status", label: "Server Status", icon: "🖥️", adminOnly: true },
 ];
 
 interface SidebarProps {
   isOpen: boolean;
+  isInternalAdmin: boolean;
   onOpen: () => void;
   onClose: () => void;
 }
 
-export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function Sidebar({ isOpen, onOpen, onClose }: SidebarProps) {
           </button>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {navItems.filter((item) => isInternalAdmin || !item.adminOnly).map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             return (
               <Link

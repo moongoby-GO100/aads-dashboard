@@ -2113,7 +2113,7 @@ export default function ChatPage() {
   const [newTplCategory, setNewTplCategory] = useState("일반");
 
   // ── Proactive Briefing ──
-  const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean } | null>(null);
+  const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean; scope?: string } | null>(null);
   const briefingShownRef = useRef<Set<string>>(new Set());
 
   // ── AADS-188D: diff_preview 승인 패널 ──
@@ -3663,10 +3663,10 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const shownKey = `briefing_${sid}`;
     if (!briefingShownRef.current.has(sid) && !sessionStorage.getItem(shownKey)) {
-      chatApi<{ has_briefing: boolean; briefing_message: string }>(`/briefing?session_id=${sid}`)
+      chatApi<{ has_briefing: boolean; briefing_message: string; scope?: string }>(`/briefing?session_id=${sid}`)
         .then((res) => {
           if (res.has_briefing && res.briefing_message) {
-            setBriefing({ message: res.briefing_message, collapsed: false });
+            setBriefing({ message: res.briefing_message, collapsed: false, scope: res.scope });
             briefingShownRef.current.add(sid);
             sessionStorage.setItem(shownKey, "1");
           } else {
@@ -7511,7 +7511,9 @@ export default function ChatPage() {
                     }
                   >
                     <span style={{ fontWeight: 600, fontSize: "13px" }}>
-                      📋 프로액티브 브리핑
+                      {briefing.scope === "tenant" || briefing.scope === "customer_tenant"
+                        ? "📋 내 조직 브리핑"
+                        : "📋 CEO 운영 브리핑"}
                     </span>
                     <span
                       style={{
@@ -7538,7 +7540,9 @@ export default function ChatPage() {
                     marginLeft: "4px",
                   }}
                 >
-                  시스템 자동 브리핑 · {new Date().toLocaleString("ko-KR", {
+                  {briefing.scope === "tenant" || briefing.scope === "customer_tenant"
+                    ? "조직 자동 브리핑"
+                    : "시스템 자동 브리핑"} · {new Date().toLocaleString("ko-KR", {
                     timeZone: "Asia/Seoul",
                     month: "numeric",
                     day: "numeric",
