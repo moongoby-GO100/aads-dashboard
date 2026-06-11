@@ -58,9 +58,11 @@ function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
     setLoading(true);
     try {
       await login(email, password);
-      const redirect = searchParams.get("redirect") || searchParams.get("next") || "/";
       const user = await getMe();
       const isInternalAdmin = Boolean(user?.is_internal_admin);
+      const requestedRedirect = searchParams.get("redirect") || searchParams.get("next");
+      const fallbackRedirect = isInternalAdmin ? "/" : "/chat";
+      const redirect = requestedRedirect || fallbackRedirect;
       router.push(!isInternalAdmin && isInternalAdminPath(redirect) ? "/chat" : redirect);
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인 실패");
