@@ -15,6 +15,7 @@ interface AgendaItem {
   decision?: string;
   tags?: string[];
   created_at: string;
+  source_session_id?: string | null;
 }
 
 const AGENDA_STATUS_COLORS: Record<string, string> = {
@@ -309,13 +310,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 
   useEffect(() => {
     if (artifactTab !== "agenda") return;
+    if (!sessionId) {
+      setAgendaItems([]);
+      return;
+    }
     setAgendaLoading(true);
-    fetch(`${BASE_URL}/agenda/`, { headers: authHdrs() })
+    const qs = `?source_session_id=${encodeURIComponent(sessionId)}&limit=50`;
+    fetch(`${BASE_URL}/agenda/${qs}`, { headers: authHdrs() })
       .then((r) => r.ok ? r.json() : Promise.reject(r.status))
       .then((data) => setAgendaItems(data.items ?? []))
       .catch(() => setAgendaItems([]))
       .finally(() => setAgendaLoading(false));
-  }, [artifactTab]);
+  }, [artifactTab, sessionId]);
   const tabBarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = tabBarRef.current;
@@ -493,6 +499,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
                       <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
                         ({unreadLogCount})
+                      </span>
+                    )}
+                    {tab.key === "agenda" && agendaItems.length > 0 && (
+                      <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
+                        ({agendaItems.length})
                       </span>
                     )}
                   </button>
@@ -688,7 +699,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     if (filtered.length === 0) {
                       return (
                         <div style={{ color: "var(--ct-text2)", fontSize: "12px", textAlign: "center", paddingTop: "20px" }}>
-                          등록된 아젠다가 없습니다
+                          현재 세션에 연결된 아젠다가 없습니다
                         </div>
                       );
                     }
