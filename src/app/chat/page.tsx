@@ -7447,10 +7447,42 @@ export default function ChatPage() {
             >
               <div style={{ fontSize: "42px", marginBottom: "14px" }}>💬</div>
               <div style={{ fontSize: "18px", fontWeight: 700, marginBottom: "8px" }}>
-                CEO Chat
+                AI Chat
               </div>
               <div style={{ fontSize: "13px", marginBottom: "20px" }}>
-                메시지를 입력하거나 왼쪽에서 세션을 선택하세요.
+                내 작업공간에서 할 일을 말하거나 아래 질문으로 시작하세요.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  marginBottom: "18px",
+                }}
+              >
+                {[
+                  "처음 사용하는데 어떻게 시작하면 되는지 알려줘",
+                  "내 프로젝트 목표와 다음 단계를 정리해줘",
+                  "팀원 초대와 권한 설정 방법을 알려줘",
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => sendMessage(prompt)}
+                    style={{
+                      padding: "8px 12px",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--ct-border)",
+                      background: "var(--ct-hover)",
+                      color: "var(--ct-text)",
+                      cursor: "pointer",
+                      maxWidth: "260px",
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
               </div>
               <div
                 style={{
@@ -7465,9 +7497,9 @@ export default function ChatPage() {
                   padding: "14px 20px",
                 }}
               >
-                <span>⚡ 상태 확인 → Haiku (빠름·저비용)</span>
-                <span>🔧 코드·수정 → Sonnet (균형)</span>
-                <span>🧠 설계·분석 → Opus (고성능)</span>
+                <span>1. 하고 싶은 일이나 현재 막힌 점을 입력합니다.</span>
+                <span>2. 결과물은 아티팩트 패널에서 다시 확인합니다.</span>
+                <span>3. 팀원은 Team 메뉴에서 초대하고 역할을 지정합니다.</span>
               </div>
             </div>
           )}

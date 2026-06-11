@@ -15,11 +15,11 @@ export interface ActionChip {
 }
 
 export const WELCOME_CHIPS: ActionChip[] = [
-  { id: "briefing",    label: "오늘의 브리핑",    message: "오늘 AADS 전체 상태 브리핑해줘",           icon: "📋" },
-  { id: "work-status", label: "작업현황",        message: "작업현황 알려줘. pending이랑 최근 완료 목록", icon: "📊" },
-  { id: "server-search", label: "서버 파일 검색", message: "KIS 서버에서 설정 파일 목록 찾아줘",       icon: "🔍" },
-  { id: "project",     label: "프로젝트 현황",  message: "6개 프로젝트 전체 현황 요약해줘",         icon: "📂" },
-  { id: "directive",   label: "지시서 작성",    message: "새 지시서 작성 도와줘",                   icon: "✍️" },
+  { id: "briefing",    label: "오늘의 브리핑",    message: "오늘 내 작업공간 브리핑해줘",             icon: "📋" },
+  { id: "how-to",      label: "사용법",          message: "처음 사용하는데 어떻게 시작하면 되는지 내 작업공간 기준으로 알려줘", icon: "❔" },
+  { id: "work-status", label: "작업현황",        message: "내 작업공간의 진행 중인 일과 최근 결과를 요약해줘", icon: "📊" },
+  { id: "project",     label: "프로젝트 정리",  message: "내 프로젝트 목표와 다음 단계를 정리해줘",         icon: "📂" },
+  { id: "team",        label: "팀원 초대",      message: "팀원 초대와 권한 설정 방법을 알려줘",             icon: "👥" },
 ];
 
 // 컨텍스트 기반 동적 칩 생성 (마지막 메시지 내용 기반)
