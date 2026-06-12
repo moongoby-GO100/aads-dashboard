@@ -14,8 +14,8 @@ type UsageData = {
 type CodexLimit = {
   limit_id?: string;
   plan_type?: string;
-  primary?: { used_percent?: number; window_minutes?: number; resets_in_sec?: number };
-  secondary?: { used_percent?: number; window_minutes?: number; resets_in_sec?: number };
+  primary?: { used_percent?: number; window_minutes?: number; resets_in_sec?: number; resets_at_iso?: string };
+  secondary?: { used_percent?: number; window_minutes?: number; resets_in_sec?: number; resets_at_iso?: string };
 };
 
 type CodexData = {
@@ -51,6 +51,18 @@ function formatResetTime(isoStr?: string): string {
   } catch {
     return "";
   }
+}
+
+function formatResetSeconds(seconds?: number): string {
+  if (seconds == null || seconds <= 0) return "";
+  const totalMin = Math.max(0, Math.round(seconds / 60));
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h < 24) return m > 0 ? `${h}h${m}m` : `${h}h`;
+  const days = Math.floor(h / 24);
+  const hours = h % 24;
+  return hours > 0 ? `${days}d${hours}h` : `${days}d`;
 }
 
 function MiniBar({ pct, label, detail, resetIn }: { pct: number; label: string; detail: string; resetIn?: string }) {
@@ -119,7 +131,7 @@ export default function UsageBar() {
   if (error || (!claude && !codex)) return null;
 
   const cm = claude?.claude_max;
-  const cx = codex?.ok ? codex.limits?.[0] : null;
+  const cx = codex?.ok ? (codex.limits?.find((lim) => lim.limit_id === "codex") ?? codex.limits?.[0]) : null;
   const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
   const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
 
@@ -155,11 +167,13 @@ export default function UsageBar() {
             pct={cx.primary?.used_percent ?? 0}
             label="5h"
             detail={`Codex 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (cx.primary?.used_percent ?? 0)).toFixed(0)}%`}
+            resetIn={formatResetSeconds(cx.primary?.resets_in_sec)}
           />
           <MiniBar
             pct={cx.secondary?.used_percent ?? 0}
             label="1w"
             detail={`Codex 1\uc8fc \uc794\ub7c9: ${(100 - (cx.secondary?.used_percent ?? 0)).toFixed(0)}%`}
+            resetIn={formatResetSeconds(cx.secondary?.resets_in_sec)}
           />
         </>
       )}

@@ -284,3 +284,10 @@
 - 반영: `src/components/chat/UsageBar.tsx`의 초기 fetch를 effect 본문 직접 호출에서 `window.setTimeout` 예약 호출로 바꿔 React hooks lint 오류를 제거했다. 표시 로직은 유지했다.
 - 검증: `npx eslint src/components/chat/UsageBar.tsx` 통과. 서버 `https://aads.newtalk.kr/api/v1/ops/codex-usage`는 `200 OK`, `ok=true`, `limits[0]` 포함으로 확인했다.
 - 주의: Codex relay가 `codex_rpc_timeout`이면 DB fallback이 표시되며, 현재 `oauth_usage_log`의 Codex 모델 기록은 0건이라 실시간 한도 수치가 아니라 안전 표시값이다.
+
+## 2026-06-12 18:54 KST - Codex usage reset time on chat bar
+
+- 배경: 채팅 상단 Codex 사용량바가 Claude처럼 남은 리셋 시간을 표시하지 않았다.
+- 원인: `/api/v1/ops/codex-usage`는 `primary.resets_in_sec`, `secondary.resets_in_sec`를 내려주고 있었지만, `src/components/chat/UsageBar.tsx`가 Codex `MiniBar`에 `resetIn`을 전달하지 않았다. 또한 API 응답의 첫 항목이 `codex_bengalfox`일 수 있어 실제 Codex 항목 대신 0% 항목이 표시될 수 있었다.
+- 반영: Codex limit 선택은 `limit_id="codex"`를 우선 사용하고, `resets_in_sec`를 `5h`, `1w` 막대 옆에 `4h30m`, `5d14h` 형식으로 표시하도록 수정했다.
+- 검증: `npx eslint src/components/chat/UsageBar.tsx` 통과. 운영 API `http://127.0.0.1:8102/api/v1/ops/codex-usage` 기준 `codex` 항목의 5h/1w reset 초 값이 존재함을 확인했다.
