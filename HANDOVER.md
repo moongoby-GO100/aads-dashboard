@@ -270,3 +270,10 @@
 - 반영: `src/lib/auth.ts`에 `syncTokenCookieFromStorage()`를 추가하고 `getMe()`/`getToken()` 호출 시 쿠키를 복구한다. `src/app/chat/api.ts`도 채팅 API 토큰 조회 때 쿠키를 복구한다. 채팅 홈 버튼 2곳(`src/app/chat/ChatSidebar.tsx`, `src/components/chat/ChatLayout.tsx`)은 클릭 직전에 쿠키 동기화를 수행한다.
 - 검증: `npx eslint src/lib/auth.ts src/app/chat/api.ts src/app/chat/ChatSidebar.tsx src/components/chat/ChatLayout.tsx` 통과. `npm run build` 통과. 운영 API 양 슬롯에서 CEO 테스트 토큰의 `/api/v1/auth/me`가 `is_internal_admin=true`를 반환했고, active dashboard green `http://127.0.0.1:3101/`는 CEO 쿠키로 `200 OK`를 반환했다.
 - 주의: 전체 `npm run lint`는 기존 전역 ESLint 부채 265 errors/68 warnings로 실패한다. 이번 변경 파일 대상 lint는 통과했다.
+
+## 2026-06-12 13:50 KST - Admin navigation speed patch reapplied after revert
+
+- 배경: `c3037c8 fix(admin): speed up admin navigation`가 `9a4ad19 Revert "fix(admin): speed up admin navigation"`로 되돌아간 상태를 확인했다. 사용자별 세션 UI는 남아 있었지만, 관리자 메뉴 이동 지연 완화 패치가 빠져 있었다.
+- 반영: `src/middleware.ts`에서 서버 측 `/auth/me` 관리자 판정 왕복을 제거하고 토큰 존재 확인만 수행하게 재적용했다. `src/lib/auth.ts`에는 `/auth/me` 30초 캐시를 다시 추가했다. 관리자 데이터 접근 통제는 백엔드 admin API 권한과 `ClientLayout` 클라이언트 가드가 유지한다.
+- 검증: `npx eslint src/middleware.ts src/lib/auth.ts src/app/admin/users/page.tsx src/app/admin/sessions/page.tsx` 통과. `npx tsc --noEmit` 통과. 서버 관리자 세션 API 직접 호출 기준 `objgood@naver.com` tenant 세션 3건과 메시지 상세 5건 반환 확인.
+- 주의: 신규 배포 전 기존 active release는 `9a4ad19afecf`였으며 Step 7 QA는 `UNKNOWN`이라 수동 API/라우트 검증으로 보완했다.
