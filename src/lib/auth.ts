@@ -4,7 +4,6 @@ const API_BASE = typeof window !== "undefined"
 
 export const TOKEN_KEY = "aads_token";
 const COOKIE_MAX_AGE = 24 * 7 * 3600; // 7일로 변경
-const ME_CACHE_TTL_MS = 60_000;
 
 export type TeamInviteRole = "admin" | "member" | "viewer";
 
@@ -81,14 +80,6 @@ export interface CurrentUser {
   } | null;
 }
 
-let cachedMe: { token: string; user: CurrentUser | null; expiresAt: number } | null = null;
-let pendingMe: Promise<CurrentUser | null> | null = null;
-
-function clearMeCache() {
-  cachedMe = null;
-  pendingMe = null;
-}
-
 function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
@@ -119,7 +110,6 @@ export async function login(email: string, password: string): Promise<string> {
     localStorage.setItem(TOKEN_KEY, data.token);
     setTokenCookie(data.token);
   }
-  clearMeCache();
   return data.token;
 }
 
@@ -127,35 +117,15 @@ export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
   const token = syncTokenCookieFromStorage();
   if (!token) return null;
-  const now = Date.now();
-  if (cachedMe && cachedMe.token === token && cachedMe.expiresAt > now) {
-    return cachedMe.user;
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { logout(); return null; }
+    return res.json();
+  } catch {
+    return null;
   }
-  if (pendingMe) return pendingMe;
-  pendingMe = (async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        logout();
-        return null;
-      }
-      const user = await res.json();
-      cachedMe = { token, user, expiresAt: Date.now() + ME_CACHE_TTL_MS };
-      return user;
-    } catch {
-      return cachedMe?.token === token ? cachedMe.user : null;
-    } finally {
-      pendingMe = null;
-    }
-  })();
-  return pendingMe;
-}
-
-export async function refreshMe(): Promise<CurrentUser | null> {
-  clearMeCache();
-  return getMe();
 }
 
 export function logout() {
@@ -163,7 +133,6 @@ export function logout() {
     localStorage.removeItem(TOKEN_KEY);
     clearTokenCookie();
   }
-  clearMeCache();
 }
 
 export async function register(
@@ -195,7 +164,6 @@ export async function register(
     localStorage.setItem(TOKEN_KEY, data.token);
     setTokenCookie(data.token);
   }
-  clearMeCache();
   return data.token;
 }
 
@@ -231,7 +199,6 @@ export async function completeOnboarding(
     localStorage.setItem(TOKEN_KEY, data.token);
     setTokenCookie(data.token);
   }
-  clearMeCache();
   return { token: data.token || token, tenant: data.tenant, invites: data.invites || [] };
 }
 
