@@ -105,9 +105,15 @@ export default function UsageBar() {
   }, []);
 
   useEffect(() => {
-    fetchUsage();
-    const iv = setInterval(fetchUsage, 30_000);
-    return () => clearInterval(iv);
+    const run = () => {
+      void fetchUsage();
+    };
+    const initial = window.setTimeout(run, 0);
+    const iv = window.setInterval(run, 30_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(iv);
+    };
   }, [fetchUsage]);
 
   if (error || (!claude && !codex)) return null;
