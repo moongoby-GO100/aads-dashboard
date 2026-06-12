@@ -6,7 +6,46 @@ const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/
 
 const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$/;
 
-export function middleware(request: NextRequest) {
+const INTERNAL_ADMIN_PATH_PREFIXES = [
+  "/",
+  "/admin",
+  "/project-status",
+  "/conversations",
+  "/channels",
+  "/managers",
+  "/decisions",
+  "/tasks",
+  "/design",
+  "/projects",
+  "/ops",
+  "/lessons",
+  "/flow",
+  "/reports",
+  "/server-status",
+];
+
+function isInternalAdminPath(pathname: string): boolean {
+  return INTERNAL_ADMIN_PATH_PREFIXES.some((prefix) => (
+    prefix === "/" ? pathname === "/" : pathname === prefix || pathname.startsWith(`${prefix}/`)
+  ));
+}
+
+async function hasInternalAdminAccess(request: NextRequest, token: string): Promise<boolean> {
+  try {
+    const meUrl = new URL("/api/v1/auth/me", request.url);
+    const res = await fetch(meUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data?.is_internal_admin);
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get("host") || "";
   const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
@@ -44,6 +83,14 @@ export function middleware(request: NextRequest) {
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
+
+  if (isInternalAdminPath(pathname)) {
+    const allowed = await hasInternalAdminAccess(request, token);
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/chat", request.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
