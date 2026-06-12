@@ -4,6 +4,9 @@ const API_BASE = typeof window !== "undefined"
 
 export const TOKEN_KEY = "aads_token";
 const COOKIE_MAX_AGE = 24 * 7 * 3600; // 7일로 변경
+const ME_CACHE_TTL_MS = 30_000;
+
+let cachedMe: { token: string; user: CurrentUser; expiresAt: number } | null = null;
 
 export type TeamInviteRole = "admin" | "member" | "viewer";
 
@@ -117,12 +120,18 @@ export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
   const token = syncTokenCookieFromStorage();
   if (!token) return null;
+  const now = Date.now();
+  if (cachedMe && cachedMe.token === token && cachedMe.expiresAt > now) {
+    return cachedMe.user;
+  }
   try {
     const res = await fetch(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) { logout(); return null; }
-    return res.json();
+    const user = await res.json();
+    cachedMe = { token, user, expiresAt: now + ME_CACHE_TTL_MS };
+    return user;
   } catch {
     return null;
   }
@@ -133,6 +142,7 @@ export function logout() {
     localStorage.removeItem(TOKEN_KEY);
     clearTokenCookie();
   }
+  cachedMe = null;
 }
 
 export async function register(

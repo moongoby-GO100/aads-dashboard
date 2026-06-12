@@ -247,6 +247,22 @@
 - 반영: `src/components/chat/ChatLayout.tsx`의 `/` 이동 버튼을 `<a href="/">`에서 Next `Link`로 교체했다. 이동 대상은 그대로 `/`이며, CEO/internal admin은 middleware와 `/auth/me`의 `is_internal_admin` 판정으로 어드민 홈에 접근한다.
 - 검증: `npx eslint src/middleware.ts src/components/ClientLayout.tsx src/components/Sidebar.tsx src/app/login/page.tsx src/components/chat/ChatLayout.tsx src/app/chat/ChatSidebar.tsx` 통과. `bash /root/aads/aads-dashboard/deploy.sh`로 release `7698f43ae41a` blue-green 배포 완료. Step 7 QA는 `UNKNOWN`이라 수동 health/API 검증으로 보완 필요.
 
+## 2026-06-12 13:47 KST - Admin user session audit UI and faster admin navigation
+
+- 배경: CEO가 어드민 메뉴 클릭 후 이동이 느리고 페이지 접근이 불안정하며, 관리자가 사용자별 세션을 접근 확인할 수 있어야 한다고 지시했다.
+- 조치:
+  - `src/app/admin/users/page.tsx` 사용자 행에 `세션 보기`를 추가해 해당 사용자의 tenant 세션과 메시지 상세를 관리자 화면에서 열람할 수 있게 했다.
+  - `src/app/admin/sessions/page.tsx`에 이메일/tenant/세션명 검색, tenant/사용자/최근 질문 컬럼, 메시지 상세 패널을 추가했다.
+  - `src/lib/api.ts`에 `/admin/sessions` 필터 파라미터와 `/admin/sessions/{session_id}` 상세 API 타입을 추가했다.
+  - `src/middleware.ts`에서 메뉴 이동마다 서버 측 `/auth/me`를 재호출하던 관리자 판정을 제거했다. 일반 사용자 데이터 차단은 `ClientLayout`과 백엔드 admin API 권한으로 유지한다.
+  - `src/lib/auth.ts`에서 `/auth/me` 결과를 단기 캐시해 클라이언트 라우트 이동 시 중복 인증 왕복을 줄였다.
+- 검증:
+  - `npx eslint src/app/admin/users/page.tsx src/app/admin/sessions/page.tsx src/lib/auth.ts src/middleware.ts` 통과.
+  - `npx tsc --noEmit --pretty false` 통과.
+  - 운영 API 검증: CEO 토큰 `/admin/sessions?email=objgood@naver.com` 200/3건, 일반 사용자 토큰 `/admin/sessions` 403 확인.
+- 주의:
+  - 과거 세션은 서버 DB에 작성자 ID가 없으므로 사용자 active tenant membership 기준으로 노출된다. 신규 세션은 서버 `chat_sessions.user_id`로 작성자 단위 추적된다.
+
 ## 2026-06-12 13:19 KST - Chat home button cookie recovery
 
 - 대상: CEO 계정이 채팅창 홈 버튼으로 `/` 이동 시 관리자 홈 접근이 간헐적으로 막히는 현상.
