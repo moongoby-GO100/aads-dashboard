@@ -30,9 +30,18 @@ function isInternalAdminPath(pathname: string): boolean {
   ));
 }
 
+function authMeUrl(request: NextRequest): URL {
+  const internalApiBase = process.env.AADS_INTERNAL_API_URL || "http://aads-server:8080/api/v1";
+  try {
+    return new URL("/auth/me", internalApiBase.endsWith("/") ? internalApiBase : `${internalApiBase}/`);
+  } catch {
+    return new URL("/api/v1/auth/me", request.url);
+  }
+}
+
 async function hasInternalAdminAccess(request: NextRequest, token: string): Promise<boolean> {
   try {
-    const meUrl = new URL("/api/v1/auth/me", request.url);
+    const meUrl = authMeUrl(request);
     const res = await fetch(meUrl, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
