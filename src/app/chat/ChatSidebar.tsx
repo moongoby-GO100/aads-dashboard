@@ -1,6 +1,7 @@
 "use client";
 import { memo, RefObject, type CSSProperties } from "react";
 import Link from "next/link";
+import { syncTokenCookieFromStorage } from "@/lib/auth";
 import type { Workspace, ChatSession, Theme, ScreenSize } from "./types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -585,6 +586,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
             </button>
             <Link
               href="/"
+              onClick={() => syncTokenCookieFromStorage()}
               style={{
                 padding: "7px 10px",
                 background: "var(--ct-hover)",

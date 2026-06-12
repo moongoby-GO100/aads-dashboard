@@ -3,9 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
-import { api, type AdminUsersOverviewResponse } from "@/lib/api";
+import {
+  api,
+  type AdminSessionDetailResponse,
+  type AdminSessionItem,
+  type AdminUsersOverviewResponse,
+} from "@/lib/api";
 
 type Overview = AdminUsersOverviewResponse;
+type UserRow = Overview["users"][number];
 
 function formatNumber(value: unknown): string {
   const num = typeof value === "number" && Number.isFinite(value) ? value : Number(value || 0);
@@ -53,6 +59,11 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [userSessions, setUserSessions] = useState<AdminSessionItem[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionDetail, setSessionDetail] = useState<AdminSessionDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadOverview = useCallback(async (silent = false, windowDays = days) => {
     if (silent) setRefreshing(true);
@@ -74,6 +85,34 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+
+  const loadUserSessions = useCallback(async (user: UserRow) => {
+    setSelectedUser(user);
+    setSessionsLoading(true);
+    setSessionDetail(null);
+    try {
+      const response = await api.getAdminSessions({ user_id: user.user_id, limit: 120 });
+      setUserSessions(response.sessions || []);
+    } catch (err) {
+      console.error("admin user sessions load failed", err);
+      setError(err instanceof Error ? err.message : "사용자 세션을 불러오지 못했습니다.");
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  const loadSessionDetail = useCallback(async (sessionId: string) => {
+    setDetailLoading(true);
+    try {
+      const response = await api.getAdminSessionDetail(sessionId, 100);
+      setSessionDetail(response);
+    } catch (err) {
+      console.error("admin session detail load failed", err);
+      setError(err instanceof Error ? err.message : "세션 메시지를 불러오지 못했습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
 
   const summary = useMemo(() => data?.summary || {}, [data?.summary]);
   const topStats = useMemo(() => [
@@ -253,11 +292,12 @@ export default function AdminUsersPage() {
                     <th style={thStyle}>비용</th>
                     <th style={thStyle}>가입일</th>
                     <th style={thStyle}>최근 활동</th>
+                    <th style={thStyle}>세션</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data?.users || []).length === 0 ? (
-                    <TableEmpty colSpan={11} loading={loading} />
+                    <TableEmpty colSpan={12} loading={loading} />
                   ) : data?.users.map((user) => (
                     <tr key={user.user_id} style={bodyRowStyle}>
                       <td style={tdStyle}>
@@ -274,11 +314,105 @@ export default function AdminUsersPage() {
                       <td style={tdStyle}>{formatUsd(user.cost_30d)}</td>
                       <td style={tdStyle}>{formatDateTime(user.created_at)}</td>
                       <td style={tdStyle}>{formatDateTime(user.last_seen_at)}</td>
+                      <td style={tdStyle}>
+                        <button
+                          type="button"
+                          onClick={() => loadUserSessions(user)}
+                          style={smallButtonStyle}
+                        >
+                          세션 보기
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </section>
+
+          <section style={cardStyle}>
+            <SectionTitle
+              title="사용자별 세션 접근"
+              right={selectedUser ? `${selectedUser.email} · ${userSessions.length}건` : "사용자 행에서 세션 보기를 선택"}
+            />
+            {!selectedUser ? (
+              <EmptyText loading={false} />
+            ) : (
+              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ ...tableStyle, minWidth: "780px" }}>
+                    <thead>
+                      <tr style={headRowStyle}>
+                        <th style={thStyle}>세션</th>
+                        <th style={thStyle}>Tenant</th>
+                        <th style={thStyle}>메시지</th>
+                        <th style={thStyle}>최근 갱신</th>
+                        <th style={thStyle}>열람</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userSessions.length === 0 ? (
+                        <TableEmpty colSpan={5} loading={sessionsLoading} />
+                      ) : userSessions.map((session) => (
+                        <tr key={session.session_id} style={bodyRowStyle}>
+                          <td style={tdStyle}>
+                            <div style={{ fontWeight: 600 }}>{session.title || session.session_id.slice(0, 8)}</div>
+                            <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{session.workspace}</div>
+                          </td>
+                          <td style={tdStyle}>{session.tenant_name || "-"}</td>
+                          <td style={tdStyle}>{formatNumber(session.message_count)}</td>
+                          <td style={tdStyle}>{formatDateTime(session.updated_at || session.created_at)}</td>
+                          <td style={tdStyle}>
+                            <button
+                              type="button"
+                              onClick={() => loadSessionDetail(session.session_id)}
+                              style={smallButtonStyle}
+                            >
+                              메시지
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", maxHeight: "520px", overflow: "auto" }}>
+                  <SectionTitle
+                    title={sessionDetail?.session?.title || "세션 메시지"}
+                    right={detailLoading ? "로딩 중" : sessionDetail ? `${sessionDetail.messages.length}개` : undefined}
+                  />
+                  {!sessionDetail ? (
+                    <EmptyText loading={detailLoading} />
+                  ) : (
+                    <div className="grid gap-3">
+                      {sessionDetail.messages.map((message) => (
+                        <div
+                          key={message.message_id}
+                          style={{
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "10px",
+                            background: message.role === "user" ? "var(--bg-hover)" : "transparent",
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3" style={{ marginBottom: "6px" }}>
+                            <strong style={{ color: message.role === "user" ? "var(--accent)" : "var(--text-primary)", fontSize: "12px" }}>
+                              {message.role}
+                            </strong>
+                            <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>
+                              {formatDateTime(message.created_at)}
+                            </span>
+                          </div>
+                          <div style={{ color: "var(--text-primary)", fontSize: "13px", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                            {message.content || "-"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -351,4 +485,15 @@ const tdStyle = {
   color: "var(--text-primary)",
   fontSize: "13px",
   verticalAlign: "top" as const,
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--border)",
+  background: "var(--bg-hover)",
+  color: "var(--text-primary)",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 600,
 };

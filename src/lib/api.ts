@@ -32,9 +32,38 @@ export interface AdminDeployStatusResponse {
 export interface AdminSessionItem {
   [key: string]: unknown;
   session_id: string;
+  tenant_id?: string;
+  tenant_name?: string;
+  tenant_kind?: string;
+  user_id?: string | null;
+  user_email?: string;
+  user_name?: string;
+  member_emails?: string;
   workspace: string;
+  title?: string;
+  role_key?: string;
+  current_model?: string;
   created_at: string | null;
+  updated_at?: string | null;
   message_count: number;
+  latest_user_message?: string;
+  latest_assistant_message?: string;
+}
+export interface AdminSessionMessage {
+  message_id: string;
+  role: string;
+  content: string;
+  model_used: string;
+  intent: string;
+  cost: number;
+  tokens_in: number;
+  tokens_out: number;
+  created_at: string | null;
+}
+export interface AdminSessionDetailResponse {
+  session: AdminSessionItem;
+  messages: AdminSessionMessage[];
+  total: number;
 }
 export interface AdminUsersOverviewResponse {
   generated_at: string;
@@ -467,7 +496,17 @@ export const api = {
   getAdminAgents: () => request<any>("/admin/agents"),
   getAdminAgent: (role: string) => request<any>(`/admin/agents/${encodeURIComponent(role)}`),
   getAdminAgentStats: () => request<any>("/admin/agents/stats"),
-  getAdminSessions: () => request<{ sessions: AdminSessionItem[]; total: number }>("/admin/sessions"),
+  getAdminSessions: (params?: { limit?: number; user_id?: string; email?: string; tenant_id?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.user_id) q.set("user_id", params.user_id);
+    if (params?.email) q.set("email", params.email);
+    if (params?.tenant_id) q.set("tenant_id", params.tenant_id);
+    if (params?.search) q.set("search", params.search);
+    return request<{ sessions: AdminSessionItem[]; total: number }>(`/admin/sessions${q.size ? `?${q.toString()}` : ""}`);
+  },
+  getAdminSessionDetail: (sessionId: string, limit = 80) =>
+    request<AdminSessionDetailResponse>(`/admin/sessions/${encodeURIComponent(sessionId)}?limit=${limit}`),
   getAdminUsersOverview: (params?: { days?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));

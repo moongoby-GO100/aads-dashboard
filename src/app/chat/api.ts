@@ -4,7 +4,11 @@ export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("aads_token");
+  const token = localStorage.getItem("aads_token");
+  if (token) {
+    document.cookie = `aads_token=${token}; path=/; max-age=${24 * 7 * 3600}; SameSite=Lax`;
+  }
+  return token;
 }
 
 export function authHdrs(): Record<string, string> {

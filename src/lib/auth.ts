@@ -84,6 +84,13 @@ function setTokenCookie(token: string) {
   document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
 }
 
+export function syncTokenCookieFromStorage(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) setTokenCookie(token);
+  return token;
+}
+
 function clearTokenCookie() {
   document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
 }
@@ -108,7 +115,7 @@ export async function login(email: string, password: string): Promise<string> {
 
 export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = syncTokenCookieFromStorage();
   if (!token) return null;
   try {
     const res = await fetch(`${API_BASE}/auth/me`, {
@@ -197,7 +204,7 @@ export async function completeOnboarding(
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return syncTokenCookieFromStorage();
 }
 
 function requireToken(): string {

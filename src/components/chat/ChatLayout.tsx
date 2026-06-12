@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useCallback } from "react";
+import { syncTokenCookieFromStorage } from "@/lib/auth";
 import ChatSidebar from "./Sidebar";
 import ThemeToggle from "./ThemeToggle";
 
@@ -96,6 +97,7 @@ export default function ChatLayout({
             <ThemeToggle />
             <Link
               href="/"
+              onClick={() => syncTokenCookieFromStorage()}
               className="text-xs px-3 py-1 rounded-lg transition-colors"
               style={{
                 color: "var(--ct-text-muted)",

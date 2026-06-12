@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
-import { api, type AdminSessionItem } from "@/lib/api";
+import { api, type AdminSessionDetailResponse, type AdminSessionItem } from "@/lib/api";
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "-";
@@ -58,6 +58,10 @@ function extractSessions(payload: unknown): AdminSessionItem[] {
 
 export default function AdminSessionsPage() {
   const [sessions, setSessions] = useState<AdminSessionItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
+  const [detail, setDetail] = useState<AdminSessionDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -81,6 +85,35 @@ export default function AdminSessionsPage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }, []);
+
+  const runSearch = useCallback(async () => {
+    setLoading(true);
+    setActiveSearch(search.trim());
+    try {
+      const response = await api.getAdminSessions({ search: search.trim(), limit: 200 });
+      setSessions(extractSessions(response));
+      setError("");
+      setLastRefreshedAt(new Date());
+    } catch (err) {
+      console.error("admin sessions search failed", err);
+      setError(err instanceof Error ? err.message : "세션 검색에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  const loadDetail = useCallback(async (sessionId: string) => {
+    setDetailLoading(true);
+    try {
+      setDetail(await api.getAdminSessionDetail(sessionId, 100));
+      setError("");
+    } catch (err) {
+      console.error("admin session detail failed", err);
+      setError(err instanceof Error ? err.message : "세션 메시지를 불러오지 못했습니다.");
+    } finally {
+      setDetailLoading(false);
     }
   }, []);
 
@@ -124,6 +157,36 @@ export default function AdminSessionsPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") runSearch(); }}
+                placeholder="사용자 이메일, tenant, 세션명 검색"
+                style={{
+                  height: "36px",
+                  minWidth: "260px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text-primary)",
+                  padding: "0 10px",
+                }}
+              />
+              <button
+                type="button"
+                onClick={runSearch}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-hover)",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                검색
+              </button>
               <div
                 style={{
                   padding: "8px 12px",
@@ -136,7 +199,7 @@ export default function AdminSessionsPage() {
               >
                 {refreshing
                   ? "새로고침 중..."
-                  : `최근 갱신 ${lastRefreshedAt ? formatDateTime(lastRefreshedAt.toISOString()) : "-"}`}
+                  : `최근 갱신 ${lastRefreshedAt ? formatDateTime(lastRefreshedAt.toISOString()) : "-"}${activeSearch ? ` · 검색 ${activeSearch}` : ""}`}
               </div>
               <button
                 type="button"
@@ -178,16 +241,20 @@ export default function AdminSessionsPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                    <th style={thStyle}>Session ID</th>
+                    <th style={thStyle}>Session</th>
+                    <th style={thStyle}>Tenant</th>
+                    <th style={thStyle}>사용자</th>
                     <th style={thStyle}>Workspace</th>
-                    <th style={thStyle}>Created At</th>
-                    <th style={thStyle}>Message Count</th>
+                    <th style={thStyle}>최근 질문</th>
+                    <th style={thStyle}>Updated At</th>
+                    <th style={thStyle}>Messages</th>
+                    <th style={thStyle}>열람</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sessions.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "var(--text-secondary)" }}>
+                      <td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "var(--text-secondary)" }}>
                         {loading ? "로딩 중..." : "표시할 세션이 없습니다."}
                       </td>
                     </tr>
@@ -195,17 +262,64 @@ export default function AdminSessionsPage() {
                     sessions.map((session, index) => (
                       <tr key={`${session.session_id}-${index}`} style={{ borderBottom: "1px solid var(--border)" }}>
                         <td style={{ ...tdStyle, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-                          {session.session_id}
+                          <div>{String(session.title || session.session_id)}</div>
+                          <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{session.session_id}</div>
                         </td>
+                        <td style={tdStyle}>{String(session.tenant_name || "-")}</td>
+                        <td style={tdStyle}>{String(session.user_email || session.member_emails || "-")}</td>
                         <td style={tdStyle}>{session.workspace || "-"}</td>
-                        <td style={tdStyle}>{formatDateTime(session.created_at)}</td>
+                        <td style={{ ...tdStyle, maxWidth: "280px" }}>{String(session.latest_user_message || "-")}</td>
+                        <td style={tdStyle}>{formatDateTime(session.updated_at || session.created_at)}</td>
                         <td style={tdStyle}>{toNumber(session.message_count)}</td>
+                        <td style={tdStyle}>
+                          <button type="button" onClick={() => loadDetail(session.session_id)} style={smallButtonStyle}>
+                            메시지
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
+          </section>
+
+          <section style={cardStyle}>
+            <div className="flex items-center justify-between gap-3" style={{ marginBottom: "12px" }}>
+              <h2 style={{ color: "var(--text-primary)", fontSize: "15px", fontWeight: 700 }}>세션 메시지</h2>
+              <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
+                {detailLoading ? "로딩 중" : detail ? `${detail.messages.length}개` : "세션을 선택하세요"}
+              </span>
+            </div>
+            {!detail ? (
+              <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>표에서 메시지를 선택하면 관리자 전용으로 내용을 확인합니다.</div>
+            ) : (
+              <div className="grid gap-3" style={{ maxHeight: "560px", overflow: "auto" }}>
+                {detail.messages.map((message) => (
+                  <div
+                    key={message.message_id}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      background: message.role === "user" ? "var(--bg-hover)" : "transparent",
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3" style={{ marginBottom: "6px" }}>
+                      <strong style={{ color: message.role === "user" ? "var(--accent)" : "var(--text-primary)", fontSize: "12px" }}>
+                        {message.role}
+                      </strong>
+                      <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>
+                        {formatDateTime(message.created_at)}
+                      </span>
+                    </div>
+                    <div style={{ color: "var(--text-primary)", fontSize: "13px", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                      {message.content || "-"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -225,4 +339,15 @@ const tdStyle = {
   color: "var(--text-primary)",
   fontSize: "13px",
   verticalAlign: "top" as const,
+};
+
+const smallButtonStyle = {
+  padding: "6px 10px",
+  borderRadius: "8px",
+  border: "1px solid var(--border)",
+  background: "var(--bg-hover)",
+  color: "var(--text-primary)",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 600,
 };
