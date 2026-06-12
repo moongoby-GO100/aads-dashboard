@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState, useCallback } from "react";
 import ChatSidebar from "./Sidebar";
 import ThemeToggle from "./ThemeToggle";
@@ -93,7 +94,7 @@ export default function ChatLayout({
 
           <div className="flex items-center gap-2 ml-auto">
             <ThemeToggle />
-            <a
+            <Link
               href="/"
               className="text-xs px-3 py-1 rounded-lg transition-colors"
               style={{
@@ -110,7 +111,7 @@ export default function ChatLayout({
               }
             >
               Dashboard
-            </a>
+            </Link>
           </div>
         </header>
 
