@@ -1,5 +1,21 @@
 # AADS Dashboard Handover
 
+## 2026-06-12 12:50 KST - Admin home access final verification
+- 대상: CEO 계정이 채팅창 홈 버튼으로 `/` 이동 시 어드민 홈에 접근하지 못하던 현상.
+- 최종 상태: `moongoby@gmail.com` 검증 토큰 기준 `https://aads.newtalk.kr/` 200, `/chat` 200을 확인했다. 일반 사용자 검증 토큰은 양 대시보드 슬롯 `3100`, `3101`에서 `/` 접근 시 `/chat` 307로 리다이렉트된다.
+- 권한 근거: 운영 DB에서 `moongoby@gmail.com`은 `role=ceo`, `default_tenant=internal`, `tenant_memberships.role=owner`, `status=active`다. `internal` active member 2명은 모두 CEO allowlist 계정이다.
+- 코드 근거: `src/middleware.ts`는 `http://aads-server:8080/api/v1/auth/me`로 `is_internal_admin`을 확인하고, `src/components/chat/ChatLayout.tsx` 홈 버튼은 Next `Link href="/"`를 사용한다.
+- 검증: `npx eslint src/app/chat/page.tsx src/components/chat/ChatLayout.tsx src/middleware.ts src/components/ClientLayout.tsx` 에러 0개(기존 경고 23개), `npm run build` 통과.
+- 한계: CEO 실브라우저 쿠키는 Vault에 없어 브라우저 E2E는 미로그인 화면 확인까지만 수행했고, 인증 상태 검증은 서버 생성 검증 토큰과 API/HTTP 응답으로 대체했다.
+
+## 2026-06-12 11:00 KST - Chat TODO panel default collapsed
+- 대상: 채팅창 진입 또는 세션 이동 시 하단 TODO 패널이 기본 펼침 상태로 열리는 동작.
+- 원인: `src/app/chat/page.tsx`의 `todoCollapsed` 초기값과 세션 변경 reset 값이 모두 `false`라서 첫 렌더와 세션 전환 때마다 TODO 목록이 펼쳐졌다.
+- 반영: `todoCollapsed` 초기값과 `activeSession?.id` 변경 시 reset 값을 모두 `true`로 변경해 채팅 진입/세션 이동 기본 상태를 닫힘으로 맞췄다.
+- 변경 파일: `src/app/chat/page.tsx`, `HANDOVER.md`.
+- 검증: `npm run lint -- src/app/chat/page.tsx` 에러 0개(기존 경고 23개), `npm run build` 통과.
+- 배포: 커밋/푸시/배포는 아직 수행하지 않았다. 운영 반영 시 대시보드 배포가 필요하다.
+
 ## 2026-06-11 11:42 KST - Admin user signup and usage overview verification
 - 대상: CEO가 어드민에서 일반 사용자 가입현황과 사용현황을 확인할 수 있는지 최종 확인.
 - 반영 확인: `src/app/admin/users/page.tsx`는 `/admin/users` 화면에서 전체 가입자, 활성 사용자, customer tenant, 초대, 호출/토큰/비용, 채팅 활동과 사용자별 최근 활동을 표시한다. `src/components/Sidebar.tsx`에는 `사용자 현황` admin 전용 메뉴가 추가되어 있고, `src/lib/api.ts`는 `/api/v1/admin/users/overview`를 호출한다.
@@ -217,3 +233,16 @@
 - 주의:
   - 배포 스크립트 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않는다. 수동 검증으로 화면 문구와 컨테이너 health를 확인했다.
   - Browser Bridge에서 가입 폼 입력 후 submit 이벤트가 API 요청으로 이어지지 않아 브라우저 가입 제출 E2E는 미확정이다. API 직접 검증 기준 customer tenant 생성, agenda 0건, customer briefing scope는 정상이다.
+
+## 2026-06-12 12:11 KST - Admin home middleware auth URL fix
+
+- 대상: CEO 계정이 `/chat` 홈 버튼으로 `/` 이동 시 관리자 홈 대신 `/chat`으로 되돌아가는 현상.
+- 원인: middleware의 내부 `/auth/me` 확인 URL을 `new URL("/auth/me", "http://aads-server:8080/api/v1/")`로 만들면 `/api/v1` 경로가 버려져 `http://aads-server:8080/auth/me`를 호출했다. 이 404가 관리자 권한 없음으로 처리되어 CEO도 `/chat`으로 리다이렉트됐다.
+- 반영: `src/middleware.ts`에서 상대 경로를 `auth/me`로 바꿔 실제 호출 대상이 `http://aads-server:8080/api/v1/auth/me`가 되도록 수정했다.
+- 검증 예정: `npx tsc --noEmit --pretty false`, dashboard blue-green 배포, 공개 도메인 `https://aads.newtalk.kr/` 쿠키 기반 CEO/일반 사용자 리다이렉트 분리 확인.
+
+## 2026-06-12 12:40 KST - Chat admin home Link cleanup
+
+- 대상: 채팅 상단 `Dashboard` 홈 버튼.
+- 반영: `src/components/chat/ChatLayout.tsx`의 `/` 이동 버튼을 `<a href="/">`에서 Next `Link`로 교체했다. 이동 대상은 그대로 `/`이며, CEO/internal admin은 middleware와 `/auth/me`의 `is_internal_admin` 판정으로 어드민 홈에 접근한다.
+- 검증: `npx eslint src/middleware.ts src/components/ClientLayout.tsx src/components/Sidebar.tsx src/app/login/page.tsx src/components/chat/ChatLayout.tsx src/app/chat/ChatSidebar.tsx` 통과. `bash /root/aads/aads-dashboard/deploy.sh`로 release `7698f43ae41a` blue-green 배포 완료. Step 7 QA는 `UNKNOWN`이라 수동 health/API 검증으로 보완 필요.

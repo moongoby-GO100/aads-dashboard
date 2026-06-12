@@ -1990,7 +1990,7 @@ export default function ChatPage() {
   const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
   const [todoLoading, setTodoLoading] = useState(false);
   const [todoError, setTodoError] = useState<string | null>(null);
-  const [todoCollapsed, setTodoCollapsed] = useState(false);
+  const [todoCollapsed, setTodoCollapsed] = useState(true);
   const [showAllTodos, setShowAllTodos] = useState(false);
   const [todoActionLoading, setTodoActionLoading] = useState<string | null>(null);
   const [todoAdding, setTodoAdding] = useState(false);
@@ -3698,7 +3698,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     setShowAllTodos(false);
-    setTodoCollapsed(false);
+    setTodoCollapsed(true);
   }, [activeSession?.id]);
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
