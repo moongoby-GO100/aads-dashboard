@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-06-15 15:16 KST - Chat streaming bubble preservation and BG sync
+- 대상: `/chat#d84b7c2c-64a5-4a80-9472-21170fd7d160` 등에서 추가지시 반영 중 이전 응답 버블이 사라지거나, DB에 저장된 streaming/partial 버블이 새로고침 전후 다르게 보이는 현상.
+- 원인: 프론트 병합 로직이 `streaming_placeholder`를 전역 1개만 남기며 내용 있는 DB 저장 placeholder까지 삭제할 수 있었고, `stream_reset(reason=interrupt_applied)` 처리 시 기존 draft를 별도 버블로 고정하지 않은 채 같은 placeholder를 계속 재사용했다. 또한 배포 전 dashboard blue/green의 `BUILD_ID`와 client manifest가 달라 클라이언트 산출물 혼재 가능성이 있었다.
+- 반영: `src/app/chat/page.tsx`에서 `interrupt-*` 로컬 user 버블을 transient 보존 대상에 포함했다. 중복 `streaming_placeholder` 중 내용 있는 DB 저장본은 삭제하지 않고 `interrupted_partial`로 고정한다. 추가지시 반영 `stream_reset` 시 현재 보이는 draft를 `ai-partial-interrupt-*` 버블로 남기고, 새 streaming placeholder를 이어쓰기 앵커로 유지한다.
+- 검증: `git diff --check -- src/app/chat/page.tsx` 통과, `npm run build` 통과. `npm run lint`는 기존 전역 lint 부채 264 errors / 67 warnings로 실패했으며 이번 변경 파일 신규 에러는 확인되지 않았다.
+- 배포: 커밋 `ba0a058 fix(chat): preserve streaming bubbles during interrupts` 푸시 완료. `bash deploy.sh`로 dashboard blue-green 배포 성공, active blue 및 standby green 헬스체크 통과, 양쪽 `/app/.next/server/app/chat/page.js` 해시가 `7e05546b...`로 일치한다. 배포 스크립트 Step 7 프론트 QA는 `UNKNOWN`이라 브라우저 E2E는 수동 확인 필요하다.
+
 ## 2026-06-15 12:41 KST - Docs electronic contract visibility
 - 대상: `https://aads.newtalk.kr/docs`에서 전자계약 기획서와 근로계약서/프리랜서 계약서/뉴톡 입점계약서 초안이 눈에 잘 띄지 않는 문제.
 - 반영: `src/app/docs/page.tsx`에 `계약/전자계약` 유형 라벨과 색상을 추가하고, AADS 문서 목록 상단에 전자계약 문서 고정 섹션을 추가했다. `전체 보기`는 `AADS + 전자계약` 검색 상태로 전환한다.
