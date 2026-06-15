@@ -194,7 +194,7 @@ const DEFAULT_ROLE_OPTIONS = [
   { id: "RealTradingExpert", label: "Trading" },
 ];
 
-const LOCAL_MESSAGE_PREFIXES = ["tmp-", "ai-", "stopped-"];
+const LOCAL_MESSAGE_PREFIXES = ["tmp-", "ai-", "stopped-", "interrupt-"];
 type ChatToolEvent = NonNullable<ChatMessage["tools_called"]>[number];
 
 function classifyDesignRequest(text: string): string {
@@ -925,10 +925,24 @@ function mergeServerMessagesPreservingLocal(
     ...mergedIncoming,
   ].sort((a, b) => messageTime(a) - messageTime(b));
   // ★ DEDUP: streaming_placeholder 최대 1개만 유지 (마지막 것 우선)
+  // DB에 저장된 내용 있는 placeholder를 삭제하면 새로고침 전후 버블이
+  // 사라져 보인다. 중복 placeholder 중 내용 있는 것은 partial로 고정한다.
   let seenPh = false;
   for (let i = merged.length - 1; i >= 0; i--) {
     if (merged[i].intent === "streaming_placeholder" || isStreamingPlaceholderMessage(merged[i])) {
-      if (seenPh) { merged.splice(i, 1); } else { seenPh = true; }
+      if (seenPh) {
+        if (hasMeaningfulDisplayContent(merged[i])) {
+          merged[i] = {
+            ...merged[i],
+            intent: "interrupted_partial",
+            model_used: merged[i].model_used === "streaming" ? "interrupted" : merged[i].model_used,
+          };
+        } else {
+          merged.splice(i, 1);
+        }
+      } else {
+        seenPh = true;
+      }
     }
   }
   // ★ DEDUP: assistant 중복 제거 — 최종 응답을 partial/interrupted보다 우선 보존
@@ -4992,6 +5006,54 @@ export default function ChatPage() {
             if (ev.type === "stream_reset") {
               // F8: 출력 검증 실패 → 재시도 시 이전 텍스트 초기화
               const visibleDraft = full || streamBufRef.current || bgPartialContentRef.current || "";
+              if (ev.reason === "interrupt_applied" && visibleDraft.trim() && !isPlaceholderOnlyContent(visibleDraft)) {
+                const preservedExecutionId = currentExecutionIdRef.current || undefined;
+                const preservedAt = new Date(Date.now() - 1).toISOString();
+                const nextPlaceholderAt = new Date().toISOString();
+                setMessages((prev) => {
+                  const existingPreserved = prev.some((m) =>
+                    m.role === "assistant" &&
+                    m.intent === "interrupted_partial" &&
+                    m.execution_id === preservedExecutionId &&
+                    normalizedMessageContent(m) === visibleDraft.trim()
+                  );
+                  const preservedMessage: ChatMessage = {
+                    id: `ai-partial-interrupt-${preservedExecutionId || Date.now()}`,
+                    session_id: requestSessionId!,
+                    execution_id: preservedExecutionId,
+                    role: "assistant",
+                    content: visibleDraft,
+                    intent: "interrupted_partial",
+                    model_used: "interrupted",
+                    created_at: preservedAt,
+                  };
+                  const hasPlaceholder = prev.some((m) => isStreamingPlaceholderMessage(m));
+                  const next = prev.map((m) => {
+                    if (!isStreamingPlaceholderMessage(m)) return m;
+                    return {
+                      ...m,
+                      execution_id: preservedExecutionId || m.execution_id,
+                      content: "",
+                      intent: "streaming_placeholder",
+                      model_used: "streaming",
+                      created_at: nextPlaceholderAt,
+                    };
+                  });
+                  return [
+                    ...(existingPreserved ? next : [...next, preservedMessage]),
+                    ...(hasPlaceholder ? [] : [{
+                      id: `ai-streaming-${requestSessionId}`,
+                      session_id: requestSessionId!,
+                      execution_id: preservedExecutionId,
+                      role: "assistant" as const,
+                      content: "",
+                      intent: "streaming_placeholder",
+                      model_used: "streaming",
+                      created_at: nextPlaceholderAt,
+                    }]),
+                  ].sort((a, b) => messageTime(a) - messageTime(b));
+                });
+              }
               _resetDrain();
               full = "";
               if (ev.reason === "llm_retry") accumulatedToolCalls = [];
