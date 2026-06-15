@@ -66,6 +66,7 @@ const PROJECT_COLORS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   doc: "일반문서",
+  contract: "계약/전자계약",
   directive: "지시문",
   handover: "인수인계",
   changelog: "변경이력",
@@ -84,6 +85,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const TYPE_COLORS: Record<string, string> = {
   doc: "bg-gray-700 text-gray-200",
+  contract: "bg-teal-900 text-teal-100",
   directive: "bg-rose-900 text-rose-200",
   handover: "bg-orange-900 text-orange-200",
   changelog: "bg-amber-900 text-amber-200",
@@ -203,6 +205,17 @@ function buildFullPath(file: DocFile): string {
   return `${base}/${rel}`;
 }
 
+function isElectronicContractFile(file: ListedDocFile): boolean {
+  const haystack = `${file.name} ${file.path} ${file.full_path || ""}`.toLowerCase();
+  return (
+    haystack.includes("전자계약") ||
+    haystack.includes("근로계약") ||
+    haystack.includes("입점계약") ||
+    haystack.includes("프리랜서") ||
+    haystack.includes("contracts/")
+  );
+}
+
 function renderMarkdown(text: string): string {
   let html = text
     .replace(/&/g, "&amp;")
@@ -287,7 +300,7 @@ export default function DocsPage() {
     } catch {
       window.localStorage.removeItem(DOCS_CACHE_KEY);
     }
-    fetchDocs();
+    fetchDocs(true);
   }, [fetchDocs]);
 
   useEffect(() => {
@@ -389,6 +402,11 @@ export default function DocsPage() {
     if (sortBy === "size") return b.size - a.size;
     return a.name.localeCompare(b.name);
   });
+
+  const electronicContractFiles = matchingFiles
+    .filter(isElectronicContractFile)
+    .sort((a, b) => b.modified - a.modified)
+    .slice(0, 5);
 
   const availableTypes = Object.keys(typeCounts).sort((a, b) => {
     const labelA = TYPE_LABELS[a] || a;
@@ -530,6 +548,54 @@ export default function DocsPage() {
                   </button>
                 ))}
               </div>
+
+              {electronicContractFiles.length > 0 && (
+                <div
+                  className="rounded-lg p-2 space-y-1"
+                  style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                      전자계약 문서
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedProject("AADS");
+                        setSelectedType("all");
+                        setSelectedFormat("all");
+                        setSearch("전자계약");
+                      }}
+                      className="px-2 py-0.5 text-xs rounded"
+                      style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                    >
+                      전체 보기
+                    </button>
+                  </div>
+                  <div className="grid gap-1">
+                    {electronicContractFiles.map((file) => (
+                      <button
+                        key={`pinned-${file.project}-${file.base_path}-${file.path}`}
+                        onClick={() => openFile(file.project, file)}
+                        className="w-full text-left px-2 py-1.5 rounded transition-colors"
+                        style={{ color: "var(--text-primary)" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "var(--bg-hover)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
+                            {TYPE_LABELS[file.type] || file.type}
+                          </span>
+                          <span className="text-xs truncate">{file.name}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-auto p-2 space-y-1">

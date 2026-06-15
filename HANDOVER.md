@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-06-15 12:41 KST - Docs electronic contract visibility
+- 대상: `https://aads.newtalk.kr/docs`에서 전자계약 기획서와 근로계약서/프리랜서 계약서/뉴톡 입점계약서 초안이 눈에 잘 띄지 않는 문제.
+- 반영: `src/app/docs/page.tsx`에 `계약/전자계약` 유형 라벨과 색상을 추가하고, AADS 문서 목록 상단에 전자계약 문서 고정 섹션을 추가했다. `전체 보기`는 `AADS + 전자계약` 검색 상태로 전환한다.
+- 연동: 백엔드 `app/api/project_docs.py`가 계약/전자계약 문서를 `contract` 유형으로 분류하도록 보강되어 `/docs` 유형 필터에도 노출된다.
+- 검증: `npx eslint src/app/docs/page.tsx` 통과. 백엔드 스캔 함수 직접 호출 기준 `/app/docs/reports/20260615_전자계약_시스템_기획서.md`, `/app/docs/reports/20260615_전자계약서_3종_템플릿_초안.md`, `/app/docs/contracts/*전자계약_초안.md` 3종이 `contract`로 분류됐다.
+- 제한: 실브라우저 E2E는 인증 세션이 필요해 미실행했고, API/함수 스캔 검증으로 대체했다.
+
 ## 2026-06-12 12:50 KST - Admin home access final verification
 - 대상: CEO 계정이 채팅창 홈 버튼으로 `/` 이동 시 어드민 홈에 접근하지 못하던 현상.
 - 최종 상태: `moongoby@gmail.com` 검증 토큰 기준 `https://aads.newtalk.kr/` 200, `/chat` 200을 확인했다. 일반 사용자 검증 토큰은 양 대시보드 슬롯 `3100`, `3101`에서 `/` 접근 시 `/chat` 307로 리다이렉트된다.
