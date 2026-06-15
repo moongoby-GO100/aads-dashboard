@@ -291,3 +291,10 @@
 - 원인: `/api/v1/ops/codex-usage`는 `primary.resets_in_sec`, `secondary.resets_in_sec`를 내려주고 있었지만, `src/components/chat/UsageBar.tsx`가 Codex `MiniBar`에 `resetIn`을 전달하지 않았다. 또한 API 응답의 첫 항목이 `codex_bengalfox`일 수 있어 실제 Codex 항목 대신 0% 항목이 표시될 수 있었다.
 - 반영: Codex limit 선택은 `limit_id="codex"`를 우선 사용하고, `resets_in_sec`를 `5h`, `1w` 막대 옆에 `4h30m`, `5d14h` 형식으로 표시하도록 수정했다.
 - 검증: `npx eslint src/components/chat/UsageBar.tsx` 통과. 운영 API `http://127.0.0.1:8102/api/v1/ops/codex-usage` 기준 `codex` 항목의 5h/1w reset 초 값이 존재함을 확인했다.
+
+## 2026-06-15 12:22 KST - Chat active streaming reconciliation
+
+- 배경: 세션 `95c53d3f-2863-49f5-948e-53e4bab877e2`에서 재시도 후 화면에는 `응답 중단` 버블이 남고, 새로고침하면 같은 실행이 `생성 중` 버블로 바뀌는 표시 불일치가 있었다.
+- 원인: 서버 `streaming-status`는 최신 실행을 `running`으로 반환하지만, 프론트의 로컬 interrupted/partial 버블이 polling merge 전에 우선 표시되어 새로고침 전후 상태가 달라졌다.
+- 반영: `src/app/chat/page.tsx`에 active streaming reconciliation을 추가했다. `streaming-status.is_streaming=true`이면 같은 execution의 interrupted/partial/draft를 즉시 `streaming_placeholder`로 승격하고, 탭 복귀·세션 진입·5초 폴링·재시도/이어쓰기 스트림 시작/복구 실패 경로 모두 같은 보정 함수를 사용한다.
+- 검증: `git diff --check` 통과. `npm run build` 통과. `npm run lint`는 기존 전역 ESLint 부채 264 errors/67 warnings로 실패했으며, 이번 변경 파일에는 신규 error가 확인되지 않았다. DB 직접 조회 기준 해당 세션은 `current_execution_id=e97e2aa4-b729-4595-a15d-e716b0767ef7`, `status=running`, 최신 assistant는 같은 execution의 `streaming_placeholder`였다.

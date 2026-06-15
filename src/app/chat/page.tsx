@@ -485,6 +485,95 @@ function surfaceDbSavedStreamingPlaceholders(
     .filter(Boolean) as ChatMessage[];
 }
 
+function reconcileMessagesForActiveStreaming(
+  messages: ChatMessage[],
+  options: {
+    sessionId: string;
+    executionId?: string | null;
+    partialContent?: string | null;
+    toolCount?: number;
+    lastTool?: string;
+  },
+): ChatMessage[] {
+  const executionId = options.executionId || null;
+  const matchesActiveExecution = (message: ChatMessage) =>
+    Boolean(executionId && message.execution_id === executionId);
+  const hasCompletedForExecution = executionId
+    ? messages.some((message) =>
+      message.role === "assistant" &&
+      message.execution_id === executionId &&
+      isFinalAssistantMessage(message)
+    )
+    : false;
+  if (hasCompletedForExecution) return messages;
+
+  const candidates = messages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => {
+      if (message.session_id !== options.sessionId || message.role !== "assistant") return false;
+      if (executionId) return matchesActiveExecution(message) || isStreamingPlaceholderMessage(message);
+      return isStreamingPlaceholderMessage(message) || isTerminalIncompleteAssistantMessage(message);
+    });
+
+  const preferred = candidates
+    .slice()
+    .sort((a, b) => {
+      const aExact = matchesActiveExecution(a.message) ? 1 : 0;
+      const bExact = matchesActiveExecution(b.message) ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      const aStreaming = isStreamingPlaceholderMessage(a.message) ? 1 : 0;
+      const bStreaming = isStreamingPlaceholderMessage(b.message) ? 1 : 0;
+      if (aStreaming !== bStreaming) return bStreaming - aStreaming;
+      return messageTime(b.message) - messageTime(a.message);
+    })[0];
+
+  const partial = String(options.partialContent || "").trim();
+  const fallbackContent =
+    partial ||
+    (preferred?.message.content && !isPlaceholderOnlyContent(preferred.message.content)
+      ? preferred.message.content
+      : "") ||
+    "⏳ AI가 응답을 생성 중입니다...";
+  const tools = preferred?.message.tools_called;
+  const placeholder: ChatMessage = {
+    ...(preferred?.message || {}),
+    id: preferred?.message.id || `ai-execution-${executionId || Date.now()}`,
+    render_id: preferred?.message.render_id || preferred?.message.id || `ai-execution-${executionId || Date.now()}`,
+    session_id: options.sessionId,
+    execution_id: executionId || preferred?.message.execution_id || undefined,
+    role: "assistant",
+    content: fallbackContent,
+    intent: "streaming_placeholder",
+    model_used: "streaming",
+    tools_called: tools,
+    has_tools: Boolean(preferred?.message.has_tools) || Boolean(options.toolCount && options.toolCount > 0),
+    tool_count: preferred?.message.tool_count ?? options.toolCount,
+    tool_names: preferred?.message.tool_names ?? (options.lastTool ? [options.lastTool] : undefined),
+    created_at: preferred?.message.created_at || new Date(Date.now() + 1).toISOString(),
+  };
+
+  const staleActiveDraftIds = new Set(
+    candidates
+      .filter(({ index, message }) =>
+        index !== preferred?.index &&
+        (
+          isStreamingPlaceholderMessage(message) ||
+          (executionId && matchesActiveExecution(message) && isTerminalIncompleteAssistantMessage(message))
+        )
+      )
+      .map(({ message }) => message.id)
+  );
+
+  if (preferred) {
+    return messages
+      .map((message, index) => index === preferred.index ? placeholder : message)
+      .filter((message) => !staleActiveDraftIds.has(message.id))
+      .sort((a, b) => messageTime(a) - messageTime(b));
+  }
+
+  return [...messages, placeholder].sort((a, b) => messageTime(a) - messageTime(b));
+}
+
 function isTruncatedMinimalMessage(message: ChatMessage): boolean {
   const contentLength = Number(message.content_length || 0);
   const visibleLength = (message.content || "").length;
@@ -2561,6 +2650,8 @@ export default function ChatPage() {
           partial_content?: string;
           execution_id?: string | null;
           last_event_id?: string | null;
+          tool_count?: number;
+          last_tool?: string;
         }>(`/chat/sessions/${sid}/streaming-status`);
         if (activeSessionRef.current !== sid) return;
         if (status.just_completed || !status.is_streaming) {
@@ -2577,6 +2668,13 @@ export default function ChatPage() {
             setBgPartialContent(status.partial_content);
             setStreamBuf(status.partial_content);
           }
+          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+            sessionId: sid,
+            executionId: status.execution_id || currentExecutionIdRef.current,
+            partialContent: status.partial_content || bgPartialContentRef.current,
+            toolCount: status.tool_count,
+            lastTool: status.last_tool,
+          }));
         }
       } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
@@ -3550,6 +3648,13 @@ export default function ChatPage() {
         // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
         // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
         const _exec_id_for_attach = status.execution_id || activeSession?.current_execution_id || null;
+        setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+          sessionId: fetchSid,
+          executionId: _exec_id_for_attach,
+          partialContent: status.partial_content || bgPartialContentRef.current,
+          toolCount: status.tool_count,
+          lastTool: status.last_tool,
+        }));
         if (_exec_id_for_attach) {
           const shouldReplayFromStart = !status.partial_content;
           if (shouldReplayFromStart) lastEventIdRef.current = "0";
@@ -3887,9 +3992,9 @@ export default function ChatPage() {
       tickCount++;
       if (!_waitingBg && !_streaming && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
-      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null } | null = null;
+      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null; tool_count?: number; last_tool?: string } | null = null;
       try {
-        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null }>(
+        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null; tool_count?: number; last_tool?: string }>(
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
@@ -3901,6 +4006,22 @@ export default function ChatPage() {
           if (_streaming && _waitingBg) {
             setStreamBuf(ss.partial_content);
           }
+        }
+        if (ss.is_streaming) {
+          streamingSessionRef.current = sid;
+          setStreaming(true);
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(sid);
+          if (ss.tool_count && ss.last_tool) {
+            setToolStatus(`🔧 ${ss.last_tool} 실행 중... (도구 ${ss.tool_count}회)`);
+          }
+          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+            sessionId: sid,
+            executionId: ss.execution_id || currentExecutionIdRef.current,
+            partialContent: ss.partial_content || bgPartialContentRef.current || streamBufRef.current,
+            toolCount: ss.tool_count,
+            lastTool: ss.last_tool,
+          }));
         }
         if (ss.just_completed) {
           if (finalizingRef.current) {
@@ -5852,6 +5973,18 @@ export default function ChatPage() {
           if (raw === "[DONE]") continue;
           try {
             const ev = JSON.parse(raw);
+            if (ev.type === "stream_start") {
+              if (ev.execution_id) {
+                currentExecutionIdRef.current = ev.execution_id;
+                setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+                  sessionId,
+                  executionId: ev.execution_id,
+                  partialContent: full || streamBufRef.current || bgPartialContentRef.current,
+                }));
+              }
+              resetSseTimeout();
+              continue;
+            }
             if (ev.type === "heartbeat") { resetSseTimeout(); continue; }
             resetSseTimeout();
             if (ev.type === "delta" && typeof ev.content === "string") {
@@ -5909,20 +6042,31 @@ export default function ChatPage() {
       if (!regenGotFinal) {
         const recovered = await mergeLatestAssistantFromServer(sessionId);
         if (!recovered) {
-          setMessages((prev) => prev.map((m) => {
-            if (m.id !== regenPlaceholderId) return m;
-            return convertDraftMessage(m, {
-              fallbackContent: full,
-              note: full.trim() ? "⏳ _응답 복구 대기 중..._" : "",
-            });
-          }).filter(Boolean) as ChatMessage[]);
+          pendingResponseSessions.current.add(sessionId);
+          setWaitingBgResponse(true);
+          setBgPartialContent(full || bgPartialContentRef.current || "");
+          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+            sessionId,
+            executionId: currentExecutionIdRef.current,
+            partialContent: full || bgPartialContentRef.current || "⏳ 응답 복구 중...",
+          }));
+          if (currentExecutionIdRef.current) {
+            attachExecutionReplay(sessionId, currentExecutionIdRef.current, false);
+          } else {
+            void requestResumeOnce(sessionId, { cooldownMs: 0 });
+          }
         }
       }
-      setStreaming(false);
-      setStreamBuf("");
+      if (regenGotFinal) {
+        setStreaming(false);
+        setStreamBuf("");
+      } else {
+        setStreaming(true);
+        if (full) setStreamBuf(full);
+      }
       setRegeneratingId(null);
     }
-  }, [streaming]);
+  }, [attachExecutionReplay, mergeLatestAssistantFromServer, requestResumeOnce, streaming]);
 
   // ── 방식B: 입력창에 복사 (재지시) ──
   const handleCopyToInput = useCallback((content: string) => {
