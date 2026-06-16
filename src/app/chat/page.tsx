@@ -197,6 +197,12 @@ const DEFAULT_ROLE_OPTIONS = [
 const LOCAL_MESSAGE_PREFIXES = ["tmp-", "ai-", "stopped-", "interrupt-"];
 type ChatToolEvent = NonNullable<ChatMessage["tools_called"]>[number];
 
+function normalizeQueuedInterruptDisplayContent(content: string): string {
+  return String(content || "")
+    .replace(/^💬\s*\*\*\[추가 지시\]\*\*\s*/, "")
+    .trim();
+}
+
 function classifyDesignRequest(text: string): string {
   const value = text.toLowerCase();
   if (/간격|여백|좁|넓|밀도|카드|row|compact|spacing|density/.test(value)) return "spacing_density";
@@ -565,6 +571,16 @@ function reconcileMessagesForActiveStreaming(
   );
 
   if (preferred) {
+    const current = messages[preferred.index];
+    const unchanged =
+      staleActiveDraftIds.size === 0 &&
+      current.content === placeholder.content &&
+      current.execution_id === placeholder.execution_id &&
+      current.intent === placeholder.intent &&
+      current.model_used === placeholder.model_used &&
+      current.tool_count === placeholder.tool_count &&
+      JSON.stringify(current.tool_names || []) === JSON.stringify(placeholder.tool_names || []);
+    if (unchanged) return messages;
     return messages
       .map((message, index) => index === preferred.index ? placeholder : message)
       .filter((message) => !staleActiveDraftIds.has(message.id))
@@ -819,8 +835,9 @@ function findLocalMatchForServerMessage(
   const serverContent = normalizedMessageContent(serverMessage);
   const exactContentMatch = localMessages.find((localMessage) =>
     localMessage.role === serverMessage.role &&
-    normalizedMessageContent(localMessage) !== "" &&
-    normalizedMessageContent(localMessage) === serverContent
+    normalizeQueuedInterruptDisplayContent(normalizedMessageContent(localMessage)) !== "" &&
+    normalizeQueuedInterruptDisplayContent(normalizedMessageContent(localMessage)) ===
+      normalizeQueuedInterruptDisplayContent(serverContent)
   );
   if (exactContentMatch) return exactContentMatch;
 
@@ -1553,7 +1570,7 @@ const MessageItem = memo(function MessageItem({
                   marginBottom: "8px",
                 }}>
                   <summary style={{ cursor: "pointer", color: "#f4b557", fontWeight: 500, userSelect: "none" }}>
-                    💭 사고 과정 (실시간)
+                    진행 과정 (실시간)
                   </summary>
                   <div style={{
                     marginTop: "6px",
@@ -1718,7 +1735,7 @@ const MessageItem = memo(function MessageItem({
                     color: '#f4b557',
                   }}>
                     <span style={{fontSize: '10px', opacity: 0.65}}>▶</span>
-                    <span style={{fontWeight: 500}}>{isInterruptedAssistant ? "사고 과정 (중단 전)" : "사고 과정"}</span>
+                    <span style={{fontWeight: 500}}>{isInterruptedAssistant ? "진행 과정 (중단 전)" : "진행 과정"}</span>
                     <span style={{opacity: 0.6, fontSize: '11px'}}>— {finalThinkingSummary.length.toLocaleString()}자</span>
                   </summary>
                   <div style={{
@@ -4654,13 +4671,23 @@ export default function ChatPage() {
       // 대화창에 추가 지시를 user 메시지로 즉시 표시 (첨부파일 포함)
       const attachLabel = interruptAttachments.length > 0
         ? ` 📎 ${interruptAttachments.length}개 파일` : "";
-      setMessages(prev => [...prev, {
-        id: `interrupt-${Date.now()}`,
-        session_id: activeSessionObjRef.current?.id || "",
-        role: "user" as const,
-        content: `💬 **[추가 지시]** ${interruptContent}${attachLabel}`,
-        created_at: new Date().toISOString(),
-      }]);
+      setMessages(prev => {
+        const displayContent = `${interruptContent}${attachLabel}`.trim();
+        const duplicatePending = prev.some((m) =>
+          m.id.startsWith("interrupt-") &&
+          m.role === "user" &&
+          normalizeQueuedInterruptDisplayContent(m.content) === displayContent
+        );
+        if (duplicatePending) return prev;
+        return [...prev, {
+          id: `interrupt-${Date.now()}`,
+          session_id: activeSessionObjRef.current?.id || "",
+          role: "user" as const,
+          content: displayContent,
+          intent: "queued_interrupt",
+          created_at: new Date().toISOString(),
+        }];
+      });
       // 백엔드 인터럽트 큐에 push (첨부파일 포함)
       if (activeSessionObjRef.current?.id) {
         chatApi<{ queued: boolean; message?: string }>(`/chat/sessions/${activeSessionObjRef.current.id}/interrupt`, {
