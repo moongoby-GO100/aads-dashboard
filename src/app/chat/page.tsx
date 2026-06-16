@@ -4323,7 +4323,11 @@ export default function ChatPage() {
         setMessages((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
           const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
-          if (hasStoppedMsg && !_waitingBg) return prev;
+          const latestFinalAssistant = latest.find((m) => isFinalAssistantMessage(m));
+          if (hasStoppedMsg && !_waitingBg && !latestFinalAssistant) return prev;
+          if (hasStoppedMsg && latestFinalAssistant) {
+            return replaceStreamingPlaceholderWithFinal(prev, latestFinalAssistant);
+          }
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
