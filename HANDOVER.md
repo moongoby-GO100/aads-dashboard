@@ -302,6 +302,20 @@
 - 주의:
   - 과거 세션은 서버 DB에 작성자 ID가 없으므로 사용자 active tenant membership 기준으로 노출된다. 신규 세션은 서버 `chat_sessions.user_id`로 작성자 단위 추적된다.
 
+## 2026-06-18 11:42 KST - Personal Assistant Hub minimum UI
+
+- 배경: CEO가 AADS를 개인 인공지능 자비스처럼 만드는 진행상황 보고와 빠른 구현 진행을 지시했다. Pipeline Runner가 `dead_local_pid`, `empty_task_logs`로 반복 실패해 직접 최소 UI를 붙였다.
+- 반영:
+  - `src/app/assistant/page.tsx`를 추가해 내부 관리자용 Personal Assistant Hub를 제공한다.
+  - `src/components/Sidebar.tsx`에 internal admin 전용 `Assistant Hub` 메뉴를 추가했다.
+  - `src/components/ClientLayout.tsx`에 `/assistant`를 internal admin 경로로 등록해 일반 사용자는 `/chat`으로 차단한다.
+- 검증:
+  - `npx eslint src/app/assistant/page.tsx src/components/Sidebar.tsx src/components/ClientLayout.tsx` 통과.
+  - 전체 `npm run lint`는 기존 전역 lint 오류 261건으로 실패했으며, 신규 변경 파일 단위 lint로 대체했다.
+- 주의:
+  - 배포/푸시는 아직 수행하지 않았다.
+  - 실 OAuth 연결은 이번 범위가 아니라 readiness/status contract만 먼저 고정했다.
+
 ## 2026-06-12 13:19 KST - Chat home button cookie recovery
 
 - 대상: CEO 계정이 채팅창 홈 버튼으로 `/` 이동 시 관리자 홈 접근이 간헐적으로 막히는 현상.

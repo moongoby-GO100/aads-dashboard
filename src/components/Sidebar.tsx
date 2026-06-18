@@ -6,6 +6,7 @@ import { useEffect } from "react";
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏠", adminOnly: true },
   { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
+  { href: "/assistant", label: "Assistant Hub", icon: "🧭", adminOnly: true },
   { href: "/braming", label: "브레인스토밍", icon: "🧠" },
   { href: "/project-status", label: "Project Status", icon: "📊", adminOnly: true },
   { href: "/conversations", label: "Conversations", icon: "🗨️", adminOnly: true },

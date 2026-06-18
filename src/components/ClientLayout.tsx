@@ -8,6 +8,7 @@ import { getMe, type CurrentUser } from "@/lib/auth";
 const INTERNAL_ADMIN_PATH_PREFIXES = [
   "/",
   "/admin",
+  "/assistant",
   "/project-status",
   "/conversations",
   "/channels",
