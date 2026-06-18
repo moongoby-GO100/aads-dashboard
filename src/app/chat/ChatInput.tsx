@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useCallback, useImperativeHandle, forwardRef, memo, useEffect } from "react";
 import ScreenShare, { type ScreenShareHandle } from "./ScreenShare";
+import { BASE_URL, authHdrs } from "./api";
 import SlashCommandMenu, {
   SLASH_COMMANDS,
   getFilteredCount,
@@ -15,6 +16,12 @@ const MENTION_TARGETS = [
   { id: "SF", label: "SF", desc: "SmartFarm 시스템" },
   { id: "NTV2", label: "NTV2", desc: "뉴톡 v2 서비스" },
   { id: "NAS", label: "NAS", desc: "NAS 스토리지" },
+];
+
+const CUSTOMER_MENTION_TARGETS = [
+  { id: "PROJECT", label: "내 프로젝트", desc: "현재 조직의 프로젝트" },
+  { id: "TEAM", label: "내 팀", desc: "현재 조직의 팀원/권한" },
+  { id: "TASK", label: "내 작업", desc: "현재 조직의 작업/다음 단계" },
 ];
 
 export interface ChatInputHandle {
@@ -34,14 +41,18 @@ interface ChatInputProps {
   onScreenShare?: (file: File) => void;
   onHiddenScreenCapture?: (file: File) => void;
   screenHiddenMode?: boolean;
+  allowInternalMentions?: boolean;
 }
 
 const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode }, ref) {
+  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode, allowInternalMentions = false }, ref) {
     const [localInput, setLocalInput] = useState("");
+    const [voiceState, setVoiceState] = useState<"idle" | "recording" | "transcribing">("idle");
     const taRef = useRef<HTMLTextAreaElement>(null);
     const hadInputRef = useRef(false);
     const screenShareRef = useRef<ScreenShareHandle>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const voiceChunksRef = useRef<Blob[]>([]);
 
     // 슬래시 명령어 상태
     const [showSlash, setShowSlash] = useState(false);
@@ -101,7 +112,8 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     }, [slashFilter, showSlash, slashIndex]);
 
     // 멘션 메뉴 필터링
-    const filteredMentions = MENTION_TARGETS.filter((t) =>
+    const mentionTargets = allowInternalMentions ? MENTION_TARGETS : CUSTOMER_MENTION_TARGETS;
+    const filteredMentions = mentionTargets.filter((t) =>
       t.id.toLowerCase().startsWith(mentionFilter.toLowerCase()) ||
       t.label.toLowerCase().startsWith(mentionFilter.toLowerCase())
     );
@@ -124,7 +136,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     }, [onHasInput]);
 
     // 멘션 선택 → @프로젝트ID 형태로 삽입
-    const selectMention = useCallback((target: typeof MENTION_TARGETS[number]) => {
+    const selectMention = useCallback((target: typeof mentionTargets[number]) => {
       const ta = taRef.current;
       if (!ta) return;
       const start = mentionStartRef.current;
@@ -146,6 +158,79 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }, 0);
     }, [localInput, updateHasInput]);
+
+    const appendVoiceText = useCallback((text: string) => {
+      const value = String(text || "").trim();
+      if (!value) return;
+      const current = taRef.current?.value ?? localInput;
+      const next = current.trim() ? `${current.trim()}\n${value}` : value;
+      setLocalInput(next);
+      if (taRef.current) {
+        taRef.current.value = next;
+        taRef.current.style.height = "auto";
+        const maxH = window.innerWidth < 768 ? 200 : 160;
+        taRef.current.style.height = Math.min(taRef.current.scrollHeight, maxH) + "px";
+        taRef.current.focus();
+      }
+      updateHasInput(next);
+    }, [localInput, updateHasInput]);
+
+    const transcribeVoice = useCallback(async (blob: Blob) => {
+      if (!blob.size) return;
+      setVoiceState("transcribing");
+      try {
+        const form = new FormData();
+        form.append("audio", blob, "aads-voice.webm");
+        const res = await fetch(`${BASE_URL}/voice/transcribe`, {
+          method: "POST",
+          headers: authHdrs(),
+          body: form,
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          throw new Error(detail || `voice transcribe failed: ${res.status}`);
+        }
+        const data = await res.json();
+        appendVoiceText(String(data?.text || ""));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "음성 변환 실패";
+        onLocalMessage?.(`음성 입력을 사용할 수 없습니다.\n\n${message}`);
+      } finally {
+        setVoiceState("idle");
+      }
+    }, [appendVoiceText, onLocalMessage]);
+
+    const toggleVoiceRecording = useCallback(async () => {
+      if (voiceState === "recording") {
+        mediaRecorderRef.current?.stop();
+        return;
+      }
+      if (voiceState !== "idle") return;
+      try {
+        if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+          throw new Error("이 브라우저에서 녹음을 지원하지 않습니다.");
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        voiceChunksRef.current = [];
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) voiceChunksRef.current.push(event.data);
+        };
+        recorder.onstop = () => {
+          stream.getTracks().forEach((track) => track.stop());
+          const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          mediaRecorderRef.current = null;
+          void transcribeVoice(blob);
+        };
+        mediaRecorderRef.current = recorder;
+        setVoiceState("recording");
+        recorder.start();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "마이크 권한을 확인할 수 없습니다.";
+        onLocalMessage?.(`음성 입력을 시작하지 못했습니다.\n\n${message}`);
+        setVoiceState("idle");
+      }
+    }, [onLocalMessage, transcribeVoice, voiceState]);
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
@@ -350,7 +435,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
               }}
             >
               <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--ct-text-secondary, #888)", borderBottom: "1px solid var(--ct-border, #333)" }}>
-                프로젝트 멘션
+                {allowInternalMentions ? "프로젝트 멘션" : "워크스페이스 멘션"}
               </div>
               {filteredMentions.map((target, idx) => (
                 <button
@@ -389,44 +474,72 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
             </div>
           )}
 
-          <textarea
-            ref={taRef}
-            value={localInput}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            placeholder={placeholder || "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈, / 명령어, @ 멘션)"}
-            rows={1}
-            style={{
-              width: "100%",
-              padding: screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px",
-              fontSize: screenSize === "mobile" ? "16px" : "14px",
-              resize: "none",
-              overflow: "hidden",
-              background: "var(--ct-input)",
-              color: "var(--ct-text)",
-              border: "1px solid var(--ct-border)",
-              borderRadius: "12px",
-              outline: "none",
-              fontFamily: "inherit",
-              lineHeight: "1.5",
-              minHeight: screenSize === "mobile" ? "44px" : "44px",
-              maxHeight: screenSize === "mobile" ? "140px" : "160px",
-            }}
-            inputMode="text"
-            enterKeyHint="send"
-            onFocus={(e) => {
-              e.target.style.borderColor = "var(--ct-accent)";
-              setTimeout(() => {
-                (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-              }, 300);
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "var(--ct-border)";
-              setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);
-            }}
-          />
+          <div style={{ position: "relative" }}>
+            <textarea
+              ref={taRef}
+              value={localInput}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
+              placeholder={placeholder || "메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈, / 명령어, @ 멘션)"}
+              rows={1}
+              style={{
+                width: "100%",
+                padding: allowInternalMentions
+                  ? (screenSize === "mobile" ? "10px 86px 10px 14px" : "10px 46px 10px 14px")
+                  : (screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px"),
+                fontSize: screenSize === "mobile" ? "16px" : "14px",
+                resize: "none",
+                overflow: "hidden",
+                background: "var(--ct-input)",
+                color: "var(--ct-text)",
+                border: "1px solid var(--ct-border)",
+                borderRadius: "12px",
+                outline: "none",
+                fontFamily: "inherit",
+                lineHeight: "1.5",
+                minHeight: screenSize === "mobile" ? "44px" : "44px",
+                maxHeight: screenSize === "mobile" ? "140px" : "160px",
+              }}
+              inputMode="text"
+              enterKeyHint="send"
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--ct-accent)";
+                setTimeout(() => {
+                  (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+                }, 300);
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "var(--ct-border)";
+                setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);
+              }}
+            />
+            {allowInternalMentions && (
+              <button
+                type="button"
+                onClick={toggleVoiceRecording}
+                disabled={voiceState === "transcribing"}
+                title={voiceState === "recording" ? "녹음 중지 후 텍스트 변환" : voiceState === "transcribing" ? "음성 텍스트 변환 중" : "음성으로 입력"}
+                style={{
+                  position: "absolute",
+                  right: screenSize === "mobile" ? "46px" : "8px",
+                  bottom: "6px",
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  border: "1px solid var(--ct-border)",
+                  background: voiceState === "recording" ? "#ef4444" : "var(--ct-hover)",
+                  color: voiceState === "recording" ? "#fff" : "var(--ct-text2)",
+                  cursor: voiceState === "transcribing" ? "wait" : "pointer",
+                  fontSize: "14px",
+                  opacity: voiceState === "transcribing" ? 0.7 : 1,
+                }}
+              >
+                {voiceState === "transcribing" ? "..." : "🎙"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

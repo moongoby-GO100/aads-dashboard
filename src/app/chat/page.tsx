@@ -18,6 +18,7 @@ import UsageBar from "@/components/chat/UsageBar";
 import DiscussionPanel from "@/components/chat/DiscussionPanel";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
+import { getMe, type CurrentUser } from "@/lib/auth";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
@@ -2097,6 +2098,16 @@ export default function ChatPage() {
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("report");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const isInternalAdmin = Boolean(currentUser?.is_internal_admin);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe().then((user) => {
+      if (!cancelled) setCurrentUser(user);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Data ──
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -4042,19 +4053,20 @@ export default function ChatPage() {
           }
         }
         if (ss.is_streaming) {
+          const streamingStatus = ss;
           streamingSessionRef.current = sid;
           setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
-          if (ss.tool_count && ss.last_tool) {
-            setToolStatus(`🔧 ${ss.last_tool} 실행 중... (도구 ${ss.tool_count}회)`);
+          if (streamingStatus.tool_count && streamingStatus.last_tool) {
+            setToolStatus(`🔧 ${streamingStatus.last_tool} 실행 중... (도구 ${streamingStatus.tool_count}회)`);
           }
           setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
-            executionId: ss.execution_id || currentExecutionIdRef.current,
-            partialContent: ss.partial_content || bgPartialContentRef.current || streamBufRef.current,
-            toolCount: ss.tool_count,
-            lastTool: ss.last_tool,
+            executionId: streamingStatus.execution_id || currentExecutionIdRef.current,
+            partialContent: streamingStatus.partial_content || bgPartialContentRef.current || streamBufRef.current,
+            toolCount: streamingStatus.tool_count,
+            lastTool: streamingStatus.last_tool,
           }));
         }
         if (ss.just_completed) {
@@ -7686,12 +7698,14 @@ export default function ChatPage() {
                 color: "var(--ct-text2)",
               }}
             >
-              <div style={{ fontSize: "42px", marginBottom: "14px" }}>💬</div>
+              <div style={{ fontSize: "42px", marginBottom: "14px" }}>{isInternalAdmin ? "🧭" : "💬"}</div>
               <div style={{ fontSize: "18px", fontWeight: 700, marginBottom: "8px" }}>
-                AI Chat
+                {isInternalAdmin ? "Personal Assistant" : "AI Chat"}
               </div>
               <div style={{ fontSize: "13px", marginBottom: "20px" }}>
-                내 작업공간에서 할 일을 말하거나 아래 질문으로 시작하세요.
+                {isInternalAdmin
+                  ? "오늘의 운영, 일정, 작업, 승인 대기 항목을 바로 물어보세요."
+                  : "내 작업공간에서 할 일을 말하거나 아래 질문으로 시작하세요."}
               </div>
               <div
                 style={{
@@ -7702,11 +7716,15 @@ export default function ChatPage() {
                   marginBottom: "18px",
                 }}
               >
-                {[
+                {(isInternalAdmin ? [
+                  "오늘 내가 확인해야 할 작업과 승인 대기 항목을 요약해줘",
+                  "AADS 상태, 러너, 배포 리스크를 우선순위로 보고해줘",
+                  "내 개인 아젠다와 다음 실행 계획을 정리해줘",
+                ] : [
                   "처음 사용하는데 어떻게 시작하면 되는지 알려줘",
                   "내 프로젝트 목표와 다음 단계를 정리해줘",
                   "팀원 초대와 권한 설정 방법을 알려줘",
-                ].map((prompt) => (
+                ]).map((prompt) => (
                   <button
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
@@ -8829,10 +8847,17 @@ export default function ChatPage() {
                   };
                   setMessages((prev) => [...prev, localMsg]);
                 }}
-                placeholder={screenSize === "mobile" ? "메시지 입력... (↵으로 줄바꿈)" : undefined}
+                placeholder={
+                  screenSize === "mobile"
+                    ? "메시지 입력... (↵으로 줄바꿈)"
+                    : isInternalAdmin
+                      ? "개인비서에게 지시하세요... (/ 명령어, @ 프로젝트)"
+                      : "내 작업공간에서 진행할 일을 입력하세요... (/ 명령어, @ 멘션)"
+                }
                 onScreenShare={(file) => handleFiles([file])}
                 onHiddenScreenCapture={handleHiddenScreenCapture}
                 screenHiddenMode={screenHiddenMode}
+                allowInternalMentions={isInternalAdmin}
               />
               {/* Mobile: send button inside textarea area */}
               {screenSize === "mobile" && (

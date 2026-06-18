@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-06-18 10:17 KST - Personal Assistant chat UX and voice input
+- 대상: CEO가 AADS를 개인 인공지능 비서처럼 쓰기 위한 채팅 진입 UX와 음성 입력 MVP, 일반 사용자에게 내부 프로젝트 안내가 노출되는 리스크.
+- 반영:
+  - `src/app/chat/page.tsx`: `/auth/me`의 `is_internal_admin`을 읽어 CEO/internal admin은 Personal Assistant 빈 화면, 운영/승인/아젠다 quick prompt, 개인비서 placeholder를 표시한다. 일반 사용자는 기존 customer workspace 안내를 유지한다.
+  - `src/app/chat/ChatInput.tsx`: 마이크 버튼을 추가해 브라우저 `MediaRecorder` 녹음 후 `/api/v1/voice/transcribe`로 STT 변환하고 입력창에 반영한다.
+  - `src/app/chat/ChatInput.tsx`: 일반 사용자는 `@PROJECT/@TEAM/@TASK` 멘션만 보게 하고, CEO/internal admin만 AADS/KIS/GO100/SF/NTV2/NAS 내부 프로젝트 멘션을 볼 수 있게 분리했다.
+  - `src/app/chat/page.tsx`: 기존 전체 `tsc` 실패 원인이던 streaming status null narrowing 4건을 타입 보정했다.
+- 검증:
+  - `npx eslint src/app/chat/ChatInput.tsx src/app/chat/page.tsx` 에러 0개, 기존 경고 22개.
+  - `npx tsc --noEmit --pretty false` 통과.
+  - `git diff --check -- src/app/chat/ChatInput.tsx src/app/chat/page.tsx` 통과.
+- 제한: 브라우저 마이크 권한과 실제 STT provider 설정 여부는 배포 후 로그인 세션에서 확인해야 한다. provider 미설정 시 UI는 오류 메시지를 채팅에 표시한다.
+
 ## 2026-06-15 15:16 KST - Chat streaming bubble preservation and BG sync
 - 대상: `/chat#d84b7c2c-64a5-4a80-9472-21170fd7d160` 등에서 추가지시 반영 중 이전 응답 버블이 사라지거나, DB에 저장된 streaming/partial 버블이 새로고침 전후 다르게 보이는 현상.
 - 원인: 프론트 병합 로직이 `streaming_placeholder`를 전역 1개만 남기며 내용 있는 DB 저장 placeholder까지 삭제할 수 있었고, `stream_reset(reason=interrupt_applied)` 처리 시 기존 draft를 별도 버블로 고정하지 않은 채 같은 placeholder를 계속 재사용했다. 또한 배포 전 dashboard blue/green의 `BUILD_ID`와 client manifest가 달라 클라이언트 산출물 혼재 가능성이 있었다.
