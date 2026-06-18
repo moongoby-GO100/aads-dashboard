@@ -319,3 +319,10 @@
 - 원인: 해당 실행은 `background_producer_incomplete_exit:missing_done_event`로 자동 재시도 중이었고, DB에는 긴 `streaming_placeholder`가 계속 갱신됐다. 프론트는 같은 내용의 placeholder를 반복 setState하면서 대형 Markdown을 재렌더링했고, 추가지시 로컬 버블과 DB 저장 `queued_interrupt`가 본문 형식 차이로 중복 병합될 수 있었다.
 - 반영: `src/app/chat/page.tsx`에서 active streaming reconcile이 동일 content/execution 상태일 때 기존 배열을 그대로 반환하도록 해 불필요한 재렌더를 줄였다. 추가지시 로컬 버블은 `queued_interrupt` intent와 원문 content로 저장하고 동일 본문은 중복 추가하지 않도록 했다. 로컬/DB 추가지시 병합은 과거 `💬 **[추가 지시]**` prefix를 정규화해 같은 버블로 합쳐지게 했다. 사고 과정 라벨은 내부 추론 원문으로 오해되지 않도록 `진행 과정`으로 바꿨다.
 - 검증: `git diff --check` 통과. `npm run build` 통과. `npm run lint`는 기존 전역 ESLint 부채 264 errors/67 warnings로 실패했으나 이번 변경 파일에는 신규 error가 확인되지 않았다. DB 직접 조회 기준 문제 세션 최신 실행 `0e1be3a3-5636-4469-9fe0-9ce535525e9c`는 17:48:40 KST `completed`로 닫혔고 assistant 최종 버블은 17,652자로 저장됐다.
+
+## 2026-06-18 09:09 KST - Dashboard deploy QA active API alignment
+
+- 배경: CEO가 blue-green 배포/헬스체크 기준과 대시보드 단독 배포 시 API 연쇄 재시작 방지 여부를 재검토하라고 지시했다.
+- 확인: 대시보드 `deploy.sh`는 실제 빌드/standby 동기화 모두 `docker compose ... up -d --build --no-deps`를 사용한다. 다만 Step 7 Visual QA API 기본값이 `http://127.0.0.1:8100`으로 고정되어 API active 슬롯이 `8102`일 때 검증 기준이 어긋날 수 있었다.
+- 반영: `deploy.sh` Step 7에서 `/etc/nginx/conf.d/aads-upstream.conf`의 `aads_api` upstream 중 non-backup active 포트를 파싱해 `QA_API_BASE` 기본값으로 사용하도록 수정했다. `AADS_API_BASE` 명시값은 계속 우선한다.
+- 검증: `bash -n deploy.sh` 통과. 현재 upstream 기준 active API 포트 파싱 결과는 `8100`이다.

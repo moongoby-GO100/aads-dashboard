@@ -405,7 +405,17 @@ log "AADS Dashboard blue-green 배포 성공"
 # Step 7: 프론트엔드 QA 자동 실행
 log "Step 7: 프론트엔드 QA 실행 (30초 안정화 대기 후)"
 sleep 30
-QA_API_BASE="${AADS_API_BASE:-http://127.0.0.1:8100}"
+ACTIVE_API_PORT=$(awk '
+    $1 == "upstream" && $2 == "aads_api" { in_api=1; next }
+    in_api && $1 == "}" { in_api=0 }
+    in_api && $1 == "server" && $2 ~ /^127\.0\.0\.1:(8100|8102)$/ && $0 !~ /backup/ {
+        split($2, addr, ":")
+        print addr[2]
+        exit
+    }
+' "$NGINX_UPSTREAM" 2>/dev/null || true)
+QA_API_BASE="${AADS_API_BASE:-http://127.0.0.1:${ACTIVE_API_PORT:-8100}}"
+log "Step 7: QA API base=${QA_API_BASE}"
 QA_RESPONSE=$(curl -sf -X POST "${QA_API_BASE}/api/v1/visual-qa/full-qa" \
     -H "Content-Type: application/json" \
     -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
