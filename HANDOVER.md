@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-06-18 10:39 KST - Personal Assistant voice UX final verification correction
+- 배경: CEO가 이전 완료보고의 커밋/푸시/배포/문서 상태 충돌을 지적했고, 채팅 개인비서 UX/음성 입력/일반 사용자 분리 상태를 최종 재검증하라고 지시했다.
+- 정정:
+  - dashboard `HEAD`와 `origin/main`은 `8708983b58407c04e7f2d61a575120c584d4beb8`로 일치한다.
+  - 실제 반영 커밋은 `9fb9046 feat(chat): add personal assistant voice input`, `8708983 docs: correct assistant voice verification note`다.
+  - “브라우저 마이크 권한과 실제 STT provider 동작”은 아직 로그인 브라우저 E2E로 검증하지 않았으므로 완료로 보고하지 않는다.
+- 검증:
+  - `npx eslint src/app/chat/ChatInput.tsx src/app/chat/page.tsx` 결과 error 0건, warning 22건.
+  - `curl https://aads.newtalk.kr/api/health` 200, `{"status":"healthy"}` 응답.
+  - dashboard active port는 3100이고, `aads-dashboard`, `aads-dashboard-green` 컨테이너 모두 healthy다.
+- 남은 제한:
+  - CEO 로그인 세션에서 실제 마이크 버튼 노출, 녹음 권한, `/api/v1/voice/transcribe` provider 응답은 브라우저 E2E로 추가 확인해야 한다.
+
 ## 2026-06-18 10:20 KST - Personal Assistant chat UX and voice input
 - 대상: CEO가 AADS를 개인 인공지능 비서처럼 쓰기 위한 채팅 진입 UX와 음성 입력 MVP, 일반 사용자에게 내부 프로젝트 안내가 노출되는 리스크.
 - 반영:
