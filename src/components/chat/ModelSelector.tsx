@@ -7,6 +7,7 @@ export interface ModelOption {
   name: string;
   provider: string;
   cost: string;
+  isSelectable?: boolean;
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
@@ -123,6 +124,7 @@ export interface ChatModelOption {
   cost: string;
   description: string;
   isDeepResearch?: boolean;
+  isSelectable?: boolean;
 }
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
@@ -189,6 +191,17 @@ interface ChatModelPreference {
   is_pinned: boolean;
 }
 
+interface RegistryModel {
+  provider?: string;
+  model_id?: string;
+  display_name?: string;
+  input_cost?: string | number | null;
+  output_cost?: string | number | null;
+  is_active?: boolean;
+  is_selectable?: boolean;
+  is_executable?: boolean;
+}
+
 // ─── preferences 적용 헬퍼 ──────────────────────────────────────────────────
 
 /**
@@ -240,6 +253,32 @@ function applyPreferences(
   return [...mixtureOptions, ...sorted];
 }
 
+function formatRegistryCost(inputCost?: string | number | null, outputCost?: string | number | null): string {
+  const input = Number(inputCost);
+  const output = Number(outputCost);
+  if (!Number.isFinite(input) || !Number.isFinite(output)) return "변동";
+  if (input === 0 && output === 0) return "무료";
+  return `$${input}/$${output}`;
+}
+
+function registryModelToChatOption(model: RegistryModel, duplicateIds: Set<string>): ChatModelOption | null {
+  const modelId = String(model.model_id || "").trim();
+  if (!modelId) return null;
+  const provider = String(model.provider || "legacy").trim().toLowerCase();
+  const id = duplicateIds.has(modelId) ? `${provider}:${modelId}` : modelId;
+  const staticOption = CHAT_MODEL_OPTIONS.find((option) => option.id === modelId);
+  const cost = formatRegistryCost(model.input_cost, model.output_cost);
+  const selectable = Boolean(model.is_active || model.is_selectable || model.is_executable);
+  return {
+    id,
+    label: model.display_name || staticOption?.label || modelId,
+    cost: cost !== "변동" ? cost : staticOption?.cost || cost,
+    description: `${provider}${selectable ? "" : " · 비활성"}`,
+    isDeepResearch: staticOption?.isDeepResearch,
+    isSelectable: selectable,
+  };
+}
+
 // ─── API 호출 ────────────────────────────────────────────────────────────────
 
 const _API_BASE =
@@ -265,6 +304,45 @@ async function fetchChatPreferences(): Promise<ChatModelPreference[]> {
   }
 }
 
+async function fetchRegisteredChatModels(): Promise<ChatModelOption[]> {
+  try {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("aads_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${_API_BASE}/llm-models`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data: { models?: RegistryModel[] } = await res.json();
+    const rows = Array.isArray(data.models) ? data.models : [];
+    const idCounts = rows.reduce((acc, row) => {
+      const modelId = String(row.model_id || "").trim();
+      if (modelId) acc.set(modelId, (acc.get(modelId) || 0) + 1);
+      return acc;
+    }, new Map<string, number>());
+    const duplicateIds = new Set(
+      Array.from(idCounts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([modelId]) => modelId),
+    );
+    const registryOptions = rows
+      .map((row) => registryModelToChatOption(row, duplicateIds))
+      .filter((item): item is ChatModelOption => Boolean(item));
+    const byId = new Map<string, ChatModelOption>();
+    for (const option of registryOptions) byId.set(option.id, option);
+    for (const option of CHAT_MODEL_OPTIONS) {
+      if (!byId.has(option.id) && (option.id === "auto" || option.id === "deep-research")) {
+        byId.set(option.id, { ...option, isSelectable: true });
+      }
+    }
+    return Array.from(byId.values());
+  } catch {
+    return [];
+  }
+}
+
 // ─── ChatModelSelector ───────────────────────────────────────────────────────
 
 interface ChatModelSelectorProps {
@@ -282,9 +360,9 @@ export function ChatModelSelector({ value, onChange, compact }: ChatModelSelecto
     if (loadedRef.current) return;
     loadedRef.current = true;
 
-    fetchChatPreferences().then((prefs) => {
-      if (prefs.length === 0) return; // 폴백: 하드코딩 원본 유지
-      setDisplayOptions(applyPreferences(CHAT_MODEL_OPTIONS, prefs, value));
+    Promise.all([fetchRegisteredChatModels(), fetchChatPreferences()]).then(([registeredModels, prefs]) => {
+      const sourceOptions = registeredModels.length > 0 ? registeredModels : CHAT_MODEL_OPTIONS;
+      setDisplayOptions(applyPreferences(sourceOptions, prefs, value));
     });
     // value 는 초기 마운트 기준 스냅샷만 사용
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,8 +387,8 @@ export function ChatModelSelector({ value, onChange, compact }: ChatModelSelecto
         title={selected?.description}
       >
         {displayOptions.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label} ({m.cost})
+          <option key={m.id} value={m.id} disabled={m.isSelectable === false}>
+            {m.label}{m.isSelectable === false ? " (비활성)" : ""} ({m.cost})
           </option>
         ))}
       </select>

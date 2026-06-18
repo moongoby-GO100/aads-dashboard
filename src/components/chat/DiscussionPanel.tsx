@@ -41,6 +41,7 @@ interface DiscussionPanelProps {
 interface ModelOption {
   value: string;
   label: string;
+  enabled?: boolean;
 }
 
 const BASE_URL =
@@ -129,17 +130,19 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${BASE_URL}/llm-models?active_only=true`, {
+        const res = await fetch(`${BASE_URL}/llm-models`, {
           headers: authHdrs(),
         });
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
         const models: ModelOption[] = (data.models || [])
-          .filter((m: Record<string, unknown>) => m.is_active)
           .map((m: Record<string, unknown>) => ({
             value: m.model_id as string,
-            label: (m.display_name as string) || (m.model_id as string),
+            label: `${(m.display_name as string) || (m.model_id as string)}${
+              m.is_active || m.is_selectable || m.is_executable ? "" : " (비활성)"
+            }`,
+            enabled: Boolean(m.is_active || m.is_selectable || m.is_executable),
           }))
           .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
         if (models.length > 0) {
@@ -152,11 +155,19 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
+  const handlePresetChange = (nextPreset: string) => {
+    setPreset(nextPreset);
     if (!useCustom) {
+      setParticipants([...(DEFAULT_PRESETS[nextPreset]?.participants || [])]);
+    }
+  };
+
+  const handleUseCustomChange = (checked: boolean) => {
+    setUseCustom(checked);
+    if (!checked) {
       setParticipants([...(DEFAULT_PRESETS[preset]?.participants || [])]);
     }
-  }, [preset, useCustom]);
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -501,7 +512,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
               <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
                 <label style={{ flex: 1, minWidth: 140, color: "var(--ct-text, #e0e0e0)" }}>
                   <span style={{ fontWeight: 600, fontSize: 14 }}>프리셋</span>
-                  <select value={preset} onChange={(e) => setPreset(e.target.value)}
+                  <select value={preset} onChange={(e) => handlePresetChange(e.target.value)}
                     style={{
                       width: "100%", marginTop: 6, padding: 10, borderRadius: 8,
                       background: "var(--ct-input-bg, #16213e)", border: "1px solid var(--ct-border, #333)",
@@ -543,7 +554,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "var(--ct-text, #e0e0e0)" }}>
                   <input type="checkbox" checked={useCustom}
-                    onChange={(e) => setUseCustom(e.target.checked)}
+                    onChange={(e) => handleUseCustomChange(e.target.checked)}
                     style={{ accentColor: "#6c5ce7" }} />
                   <span style={{ fontWeight: 600, fontSize: 14 }}>참가자 이름/역할 편집</span>
                 </label>
@@ -579,7 +590,7 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                     <select value={p.model} onChange={(e) => updateParticipant(i, "model", e.target.value)}
                       style={{ flex: 2, minWidth: 140, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
                       {modelOptions.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
+                        <option key={m.value} value={m.value} disabled={m.enabled === false}>{m.label}</option>
                       ))}
                     </select>
                     {useCustom && (

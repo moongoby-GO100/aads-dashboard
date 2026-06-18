@@ -57,6 +57,8 @@ type LlmRegistryModel = {
   input_cost?: string | number | null;
   output_cost?: string | number | null;
   is_active?: boolean;
+  is_selectable?: boolean;
+  is_executable?: boolean;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -1147,6 +1149,7 @@ function buildSelectableModelOption(row: LlmRegistryModel, duplicateModelIds: Se
   const optionId = duplicateModelIds.has(modelId) ? `${row.provider}:${modelId}` : modelId;
   const fallbackStaticOption = getLegacyModelOption(modelId);
   const costLabel = formatCostLabel(row.input_cost, row.output_cost);
+  const isActive = Boolean(row.is_active || row.is_selectable || row.is_executable);
   return {
     id: optionId,
     modelId,
@@ -1154,7 +1157,7 @@ function buildSelectableModelOption(row: LlmRegistryModel, duplicateModelIds: Se
     name: row.display_name || fallbackStaticOption?.name || optionId,
     provider: row.provider || fallbackStaticOption?.provider || "legacy",
     cost: costLabel !== "변동" ? costLabel : fallbackStaticOption?.cost || costLabel,
-    isActive: true,
+    isActive,
   };
 }
 
@@ -2319,7 +2322,7 @@ export default function ChatPage() {
       .sort((a, b) => compareSelectableModels(a, b, preferenceMap))
       .map((option) => ({
         ...option,
-        name: `${option.isPinned ? "📌 " : option.isFavorite ? "★ " : ""}${option.name}`,
+        name: `${option.isPinned ? "📌 " : option.isFavorite ? "★ " : ""}${option.name}${option.isActive ? "" : " (비활성)"}`,
       }));
 
     const options: SelectableModelOption[] = [autoOption, ...orderedOptions];
@@ -2565,7 +2568,7 @@ export default function ChatPage() {
 
   const refreshChatModelCatalog = useCallback(async () => {
     const [modelsRes, preferencesRes] = await Promise.allSettled([
-      chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true"),
+      chatApi<{ models: LlmRegistryModel[] }>("/llm-models"),
       chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
     ]);
     if (modelsRes.status === "fulfilled") {
@@ -2582,7 +2585,7 @@ export default function ChatPage() {
     let cancelled = false;
     const load = async () => {
       const [modelsRes, preferencesRes] = await Promise.allSettled([
-        chatApi<{ models: LlmRegistryModel[] }>("/llm-models?active_only=true"),
+        chatApi<{ models: LlmRegistryModel[] }>("/llm-models"),
         chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
       ]);
       if (cancelled) return;

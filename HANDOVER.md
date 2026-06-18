@@ -326,3 +326,10 @@
 - 확인: 대시보드 `deploy.sh`는 실제 빌드/standby 동기화 모두 `docker compose ... up -d --build --no-deps`를 사용한다. 다만 Step 7 Visual QA API 기본값이 `http://127.0.0.1:8100`으로 고정되어 API active 슬롯이 `8102`일 때 검증 기준이 어긋날 수 있었다.
 - 반영: `deploy.sh` Step 7에서 `/etc/nginx/conf.d/aads-upstream.conf`의 `aads_api` upstream 중 non-backup active 포트를 파싱해 `QA_API_BASE` 기본값으로 사용하도록 수정했다. `AADS_API_BASE` 명시값은 계속 우선한다.
 - 검증: `bash -n deploy.sh` 통과. 현재 upstream 기준 active API 포트 파싱 결과는 `8100`이다.
+
+## 2026-06-18 09:12 KST - Chat model dropdown uses full registry
+
+- 배경: CEO가 채팅 모델 추가를 등록된 모든 모델이 드롭다운에 반영되도록 지시했다.
+- 확인: 운영 `llm_models` 레지스트리에는 478개 모델이 있고, 기존 채팅/토론 UI는 `/llm-models?active_only=true`만 호출해 실행 가능 모델만 표시했다.
+- 반영: `src/app/chat/page.tsx`, `src/components/chat/ModelSelector.tsx`, `src/components/chat/DiscussionPanel.tsx`가 `/llm-models` 전체 레지스트리를 읽도록 변경했다. 실행 가능하지 않은 모델은 드롭다운에 `(비활성)`으로 표시하고 disabled 처리해 등록 현황은 보이되 실수 선택은 막는다.
+- 검증: `npx eslint src/components/chat/ModelSelector.tsx src/components/chat/DiscussionPanel.tsx src/app/chat/page.tsx` 통과. 기존 `src/app/chat/page.tsx` 경고 22건은 남아 있으나 신규 error는 없다.
