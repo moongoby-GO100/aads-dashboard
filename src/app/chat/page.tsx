@@ -22,6 +22,7 @@ import { getMe, type CurrentUser } from "@/lib/auth";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, chatApiWithRetry, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
+import { getRequestedChatSessionId } from "./urlState";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -122,13 +123,6 @@ const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id
 const INITIAL_GATEWAY_RETRY_LIMIT = 30;
 const INITIAL_GATEWAY_RETRY_DELAY_MS = 5000;
 
-function getRequestedChatSessionId(): string | null {
-  if (typeof window === "undefined") return null;
-  const querySession = new URLSearchParams(window.location.search).get("session")?.trim();
-  if (querySession) return querySession;
-  const hashSession = window.location.hash.replace(/^#/, "").trim();
-  return hashSession || null;
-}
 const PROVIDER_CAPACITY_OR_LIMIT_MARKERS = [
   "selected model is at capacity",
   "model is at capacity",
