@@ -3,6 +3,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("aads_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export interface SSEHealth {
   status: string;
   stalled: number;
@@ -59,7 +65,10 @@ export function useSSE() {
     if (fallbackRef.current) return;
     fallbackRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${BASE_URL}/ops/full-health`);
+        const r = await fetch(`${BASE_URL}/ops/full-health`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        });
         if (r.ok) {
           const data = await r.json();
           setHealth({
@@ -85,7 +94,7 @@ export function useSSE() {
 
   useEffect(() => {
     const connect = () => {
-      const es = new EventSource(`${BASE_URL}/ops/stream`);
+      const es = new EventSource(`${BASE_URL}/ops/stream`, { withCredentials: true });
       esRef.current = es;
 
       es.addEventListener("health", (e) => {
