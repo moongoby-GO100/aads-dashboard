@@ -1,0 +1,83 @@
+{
+  "status": "ok",
+  "total": 5,
+  "generated_at": "2026-03-06 12:14 KST",
+  "documents": [
+    {
+      "id": "PLAN-001",
+      "type": "plan",
+      "title": "Adaptive UI 프로토타입 설계서 (UI-PROTO-001)",
+      "filename": "PLAN-001_adaptive-ui-프로토타입-설계서-ui-proto-001.md",
+      "created_at": "2026-03-06 12:14 KST",
+      "source_session": "genspark_aads_mgr_prev",
+      "summary": "# PLAN-001: Adaptive UI 프로토타입 설계서 (UI-PROTO-001)  ## 개요 AADS CEO 대시보드를 위한 Adaptive UI 프로토타입 설계. 3-Layer Progressive Disclosure UI 구조와 Adaptive Router를 통한 키워드-UI 매핑 13종 지원.  ## 3-Layer Progressive Disc",
+      "tags": [
+        "plan",
+        "ui",
+        "dashboard",
+        "adaptive"
+      ]
+    },
+    {
+      "id": "TECH-001",
+      "type": "tech",
+      "title": "Adaptive UI 컴포넌트 구조 + 라우터 설계",
+      "filename": "TECH-001_adaptive-ui-컴포넌트-구조-라우터-설계.md",
+      "created_at": "2026-03-06 12:14 KST",
+      "source_session": "genspark_aads_mgr_prev",
+      "summary": "# TECH-001: Adaptive UI 컴포넌트 구조 + 라우터 설계  ## 컴포넌트 구조  ### AdaptiveRouter ``` AdaptiveRouter ├── KeywordParser       — 입력 텍스트에서 키워드 추출 ├── UIMapper            — 키워드 → UI 컴포넌트 매핑 ├── DataFetcher        ",
+      "tags": [
+        "tech",
+        "ui",
+        "architecture",
+        "adaptive"
+      ]
+    },
+    {
+      "id": "TECH-002",
+      "type": "tech",
+      "title": "AADS 정적 스냅샷 시스템 연구",
+      "filename": "TECH-002_aads-정적-스냅샷-시스템-연구.md",
+      "created_at": "2026-03-06 12:14 KST",
+      "source_session": "genspark_aads_mgr_current",
+      "summary": "# TECH-002: AADS 정적 스냅샷 시스템 연구  ## 목적 AADS API 서버가 다운되거나 응답이 느릴 때 CEO가 핵심 정보에 즉시 접근할 수 있도록 정적 JSON 스냅샷을 주기적으로 생성·저장하는 시스템.  ## 아키텍처 ``` cron (5분 주기) └── generate_manager_snapshot.py     ├── GET /api/v",
+      "tags": [
+        "tech",
+        "snapshot",
+        "static",
+        "research"
+      ]
+    },
+    {
+      "id": "RESEARCH-001",
+      "type": "research",
+      "title": "AI 비용 최적화 연구 보고 (7개 전략)",
+      "filename": "RESEARCH-001_ai-비용-최적화-연구-보고-7개-전략.md",
+      "created_at": "2026-03-06 12:14 KST",
+      "source_session": "genspark_aads_mgr_prev",
+      "summary": "# RESEARCH-001: AI 비용 최적화 연구 보고 (7개 전략)  ## 개요 AADS 시스템에서 사용하는 AI API 비용을 최적화하기 위한 7가지 전략 연구.  ## 전략 1: 모델 티어 분리 - 단순 작업: claude-haiku-4-5 (저렴) - 중간 복잡도: claude-sonnet-4-6 (중간) - 복잡한 분석: claude-opus-4",
+      "tags": [
+        "research",
+        "cost",
+        "optimization",
+        "ai"
+      ]
+    },
+    {
+      "id": "STATUS-001",
+      "type": "status",
+      "title": "지휘통제소 종합 상황 보고서 (API 맵 포함)",
+      "filename": "STATUS-001_지휘통제소-종합-상황-보고서-api-맵-포함.md",
+      "created_at": "2026-03-06 12:14 KST",
+      "source_session": "genspark_aads_mgr_current",
+      "summary": "# STATUS-001: 지휘통제소 종합 상황 보고서  ## 보고 일시 2026-03-06 KST  ## 시스템 현황 요약 | 서버 | 역할 | 상태 | 포트 | |------|------|------|------| | Server 68 | AADS 메인 (aads.newtalk.kr) | 운영중 | 8100, 8101, 18085 | | Server 11",
+      "tags": [
+        "status",
+        "report",
+        "api-map",
+        "system"
+      ]
+    }
+  ],
+  "_snapshot_at": "2026-03-06 12:22:47 KST"
+}

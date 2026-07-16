@@ -1,0 +1,53 @@
+{
+  "type": "full",
+  "collected_at": "2026-07-16T10:26:36.348501+09:00",
+  "server": "unknown",
+  "system": {
+    "disk_usage": "56%  193G   86G",
+    "memory": "23Gi 4.7Gi 12Gi",
+    "load": "3.57, 4.60, 4.21",
+    "uptime": "up 11 weeks, 15 hours, 17 minutes"
+  },
+  "services": {
+    "systemd_active": "aads-pipeline-runner.service active\ndocker.service active\nkmod-static-nodes.service active\nsession_watchdog.service active",
+    "docker": "aads-dashboard-green|Up 4 minutes (healthy)|3100/tcp, 127.0.0.1:3101->3101/tcp\naads-dashboard|Up 7 minutes (healthy)|127.0.0.1:3100->3100/tcp\naads-server|Up 4 hours (healthy)|8765-8767/tcp, 0.0.0.0:8100->8080/tcp, [::]:8100->8080/tcp\naads-server-green|Up 4 hours (healthy)|8765-8767/tcp, 0.0.0.0:8102->8080/tcp, [::]:8102->8080/tcp\nantigravity-test|Up 3 weeks|\naads-litellm|Up 8 days (healthy)|0.0.0.0:4000->4000/tcp, [::]:4000->4000/tcp\naads-postgres|Up 3 weeks (healthy)|0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp\naads-nginx|Up 2 months|\naads-searxng|Up 2 months (healthy)|0.0.0.0:8888->8080/tcp, [::]:8888->8080/tcp\naads-socket-proxy|Up 2 months|2375/tcp\naads-redis|Up 2 months (healthy)|6379/tcp",
+    "open_ports": "0.0.0.0:8199 users:((\"python3\",pid=2457040,fd=6))\n0.0.0.0:8888 users:((\"docker-proxy\",pid=31584,fd=8))\n127.0.0.54:53 users:((\"systemd-resolve\",pid=2496582,fd=17))\n127.0.0.53%lo:53 users:((\"systemd-resolve\",pid=2496582,fd=15))\n0.0.0.0:5433 users:((\"docker-proxy\",pid=506834,fd=8))\n127.0.0.1:3101 users:((\"docker-proxy\",pid=3712893,fd=8))\n127.0.0.1:3100 users:((\"docker-proxy\",pid=3680578,fd=8))\n0.0.0.0:8102 users:((\"docker-proxy\",pid=2433920,fd=8))\n0.0.0.0:8100 users:((\"docker-proxy\",pid=2440006,fd=8))\n0.0.0.0:22 users:((\"sshd\",pid=1653289,fd=3),(\"systemd\",pid=1,fd=76))\n0.0.0.0:80 users:((\"nginx\",pid=3680886,fd=6),(\"nginx\",pid=3680885,fd=6),(\"nginx\",pid=3680884,fd=6),(\"nginx\",pid=3680883,fd=6),(\"nginx\",pid=3680882,fd=6),(\"nginx\",pid=3680881,fd=6),(\"nginx\",pid=3680880,fd=6),(\"nginx\",pid=3680878,fd=6),(\"nginx\",pid=668935,fd=6))\n0.0.0.0:443 users:((\"nginx\",pid=3680886,fd=24),(\"nginx\",pid=3680885,fd=24),(\"nginx\",pid=3680884,fd=24),(\"nginx\",pid=3680883,fd=24),(\"nginx\",pid=3680882,fd=24),(\"nginx\",pid=3680881,fd=24),(\"nginx\",pid=3680880,fd=24),(\"nginx\",pid=3680878,fd=24),(\"nginx\",pid=668935,fd=24))\n0.0.0.0:4000 users:((\"docker-proxy\",pid=2932915,fd=8))\n[::]:8888 users:((\"docker-proxy\",pid=31591,fd=8))\n[::]:5433 users:((\"docker-proxy\",pid=506841,fd=8))\n[::]:8102 users:((\"docker-proxy\",pid=2433927,fd=8))\n[::]:8100 users:((\"docker-proxy\",pid=2440014,fd=8))\n[::]:22 users:((\"sshd\",pid=1653289,fd=4),(\"systemd\",pid=1,fd=78))\n[::]:443 users:((\"nginx\",pid=3680886,fd=10),(\"nginx\",pid=3680885,fd=10),(\"nginx\",pid=3680884,fd=10),(\"nginx\",pid=3680883,fd=10),(\"nginx\",pid=3680882,fd=10),(\"nginx\",pid=3680881,fd=10),(\"nginx\",pid=3680880,fd=10),(\"nginx\",pid=3680878,fd=10),(\"nginx\",pid=668935,fd=10))\n[::]:4000 users:((\"docker-proxy\",pid=2932926,fd=8))"
+  },
+  "processes": {
+    "php": "0",
+    "node": "1",
+    "python": "23"
+  },
+  "recent_changes": {
+    "last_git_commits": {},
+    "last_docker_events": "1784165196 exec_create: /bin/sh -c pg_isready -U aads -d aads aads-postgres\n1784165196 exec_start: /bin/sh -c pg_isready -U aads -d aads aads-postgres\n1784165196 exec_die aads-postgres\n1784165196 exec_die aads-postgres\n1784165196 exec_die aads-server-green"
+  },
+  "runtimes": {
+    "php": "not installed",
+    "python3": "Python 3.12.3",
+    "node": "v20.20.2",
+    "npm": "10.8.2",
+    "composer": "not installed",
+    "pip": "pip 24.0 from /usr/lib/python3/dist-packages/pip (python 3.12)",
+    "docker": "Docker version 29.4.1, build 055a478",
+    "git": "git version 2.43.0"
+  },
+  "projects": {
+    "": {
+      "exists": false
+    }
+  },
+  "databases": {
+    "postgresql": {
+      "databases": "List of relations\n Schema |                   Name                   | Type  | Owner \n--------+------------------------------------------+-------+-------\n public | LiteLLM_CronJob                          | table | aads\n public | LiteLLM_ManagedFileTable                 | table | aads\n public | _prisma_migrations                       | table | aads\n public | ab_test_log                              | table | aads\n public | agent_activity_log                       | table | aads\n public | agent_executions                         | table | aads\n public | ai_generation_logs                       | table | aads\n public | ai_meta_memory                           | table | aads\n public | ai_observations                          | table | aads\n public | ai_persona_references                    | table | aads\n public | ai_personas                              | table | aads\n public | ai_style_presets                         | table | aads\n public | ai_style_versions                        | table | aads\n public | alert_history                            | table | aads\n public | approval_queue                           | table | aads\n public | auth_revoked_tokens                      | table | aads\n public | autonomy_levels                          | table | aads\n public | autonomy_stats                           | table | aads\n public | bg_llm_usage_log                         | table | aads\n public | braming_exports                          | table | aads\n public | braming_node_votes                       | table | aads\n public | braming_nodes                            | table | aads\n public | braming_session_collaborators            | table | aads\n public | braming_session_shares                   | table | aads\n public | braming_sessions                         | table | aads\n public | bridge_activity_log                      | table | aads\n public | briefing_log                             | table | aads\n public | ceo_agenda                               | table | aad",
+      "schema": "table_name                |        column_name         |          data_type          \n------------------------------------------+----------------------------+-----------------------------\n LiteLLM_CronJob                          | cronjob_id                 | text\n LiteLLM_CronJob                          | pod_id                     | text\n LiteLLM_CronJob                          | status                     | USER-DEFINED\n LiteLLM_CronJob                          | last_updated               | timestamp without time zone\n LiteLLM_CronJob                          | ttl                        | timestamp without time zone\n LiteLLM_ManagedFileTable                 | id                         | text\n LiteLLM_ManagedFileTable                 | unified_file_id            | text\n LiteLLM_ManagedFileTable                 | file_object                | jsonb\n LiteLLM_ManagedFileTable                 | model_mappings             | jsonb\n LiteLLM_ManagedFileTable                 | created_at                 | timestamp without time zone\n LiteLLM_ManagedFileTable                 | updated_at                 | timestamp without time zone\n _prisma_migrations                       | id                         | character varying\n _prisma_migrations                       | checksum                   | character varying\n _prisma_migrations                       | finished_at                | timestamp with time zone\n _prisma_migrations                       | migration_name             | character varying\n _prisma_migrations                       | logs                       | text\n _prisma_migrations                       | rolled_back_at             | timestamp with time zone\n _prisma_migrations                       | started_at                 | timestamp with time zone\n _prisma_migrations                       | applied_steps_count        | integer\n ab_test_log                              | id                         | integer\n ab_test_log                              | c"
+    }
+  },
+  "nginx": {
+    "sites_enabled": "aads-upstream.conf\naads-upstream.conf.bak.20260622-ip116-fix\naads-upstream.conf.bak.20260714-chat-fields\naads-upstream.conf.bak.20260714-chat-route\naads-upstream.conf.dashboard.bak\naads-upstream.conf.pre_chat_recovery_20260714\naads-upstream.conf.pre_deploy\naads.conf\naads.conf.bak.20260629\naads.conf.bak.20260710-yeoljeong-fb\naads.conf.bak.20260713-aads-https-fb-split\naads.conf.bak.aads1.20260513093127\naads1.conf\naads1.conf.bak.20260629\nfb.conf\nkakaobot.conf",
+    "server_names": "not found"
+  },
+  "cron": "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin\n\n\n0 4 * * * /root/aads/scripts/disk_cleanup.sh >> /var/log/aads-disk-cleanup.log 2>&1\n\n\n\n\n*/5 * * * * /root/aads/aads-server/scripts/pre_deploy_validate.sh >> /var/log/aads-validate.log 2>&1\n\n0 4 * * * /root/aads/aads-server/scripts/update_claude_all_servers.sh >> /var/log/claude_update.log 2>&1\n\n0 4 * * 0 docker system prune -f >> /var/log/docker_disk_cleanup.log 2>&1\n\n0 5 1 * * docker system df >> /var/log/docker_disk_cleanup.log 2>&1",
+  "trigger": "event",
+  "event_reason": "git_commit"
+}

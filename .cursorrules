@@ -1,0 +1,26 @@
+# AADS-Dashboard Cursor Rules v1.0
+# 최종 수정: 2026-03-09
+
+## API 키 보안 절대 규칙 (R-KEY) — 최우선 준수
+- **절대 API 키를 소스코드/config 파일에 하드코딩하지 않는다**
+- 프론트엔드 코드에 API 키, 시크릿, 비밀번호 절대 포함 금지
+- 환경변수는 `.env.local` 파일에만 저장 (git 커밋 금지)
+- 커밋 전 pre-commit hook이 API 키 패턴 자동 감지 → 차단
+  - 감지 패턴: Google(AIzaSy), Anthropic(sk-ant-api), OpenAI(sk-proj-), Groq(gsk_), DeepSeek(sk-hex), GitHub(ghp_), AWS(AKIA)
+- 위반 시: 제공사가 키를 leaked 처리하여 영구 비활성화됨
+
+## 필수 규칙 (MUST)
+
+### Git 커밋/푸시
+1. 코드 변경 후 반드시 `git add && git commit && git push` 실행
+2. push 없이 작업 완료 보고 금지
+
+### 코드 변경
+3. Next.js 14 App Router 패턴 준수
+4. API 호출은 백엔드 프록시 경유 — 프론트에서 외부 API 직접 호출 금지
+5. 민감 정보는 서버 사이드에서만 처리
+
+## 금지 사항 (MUST NOT)
+- .env.local 커밋 금지
+- API 키/시크릿 프론트엔드 코드에 포함 금지
+- git push 없이 "완료" 보고 금지

@@ -1,0 +1,25 @@
+node_modules/
+.next/
+.env.local
+.env*.local
+npm-debug.log*
+page.tsx.bak_refactor
+*.bak
+*.bak_*
+*.bak-*
+*.pre-*
+build.log
+
+# BG runtime markers
+.active_container
+.active_port
+deploy-logs/
+
+# Build cache
+tsconfig.tsbuildinfo
+
+# Generated reports and media artifacts
+public/reports/
+public/static/reports/
+public/exports/
+reports/*.html

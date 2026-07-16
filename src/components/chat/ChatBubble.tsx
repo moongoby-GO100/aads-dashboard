@@ -1,0 +1,660 @@
+"use client";
+/**
+ * AADS-172-B: ChatBubble
+ * 메시지 버블 컴포넌트
+ * - 사용자: 우측 보라 배경
+ * - AI: 좌측 다크그레이 배경 + 마크다운 렌더링
+ * - 코드 블록 복사 버튼
+ * - 사고 과정 (thought_summary) 접이식
+ * - 출처 카드 (sources)
+ * - 북마크 / 복사 / 지시서 생성 액션
+ */
+import React, { useState } from "react";
+import type { ChatMessage } from "@/services/chatApi";
+import SourceCard from "./SourceCard";
+import ConfidenceBadge from "./ConfidenceBadge";
+import InlineChart from "./InlineChart";
+
+// ─── Inline Markdown Renderer ────────────────────────────────────────────────
+
+function isSafeUrl(url: string): boolean {
+  const trimmed = url.trim().toLowerCase();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
+  if (trimmed.startsWith("/") || trimmed.startsWith("#")) return true;
+  // Block dangerous schemes
+  if (trimmed.startsWith("javascript:") || trimmed.startsWith("data:") || trimmed.startsWith("vbscript:")) return false;
+  // Relative URLs without scheme are safe
+  if (!trimmed.includes(":")) return true;
+  return false;
+}
+
+function normalizeScreenshotUrl(url: string): string {
+  return url
+    .replace(/^https:\/\/aads\.newtalk\.kr\/screenshots\//, "https://aads.newtalk.kr/api/v1/chat/screenshots/")
+    .replace(/^\/screenshots\//, "/api/v1/chat/screenshots/");
+}
+
+function normalizeLocalFileHref(href: string): string {
+  return href.trim().replace(/^file:\/\//i, "");
+}
+
+function isLocalServerFileHref(href: string): boolean {
+  const normalized = normalizeLocalFileHref(href);
+  return normalized.startsWith("/root/aads/") || normalized.startsWith("/tmp/aads-codex-images/");
+}
+
+function trimLocalFileTrailingPunctuation(value: string): { path: string; trailing: string } {
+  let path = value;
+  let trailing = "";
+  while (/[.,;:]$/.test(path)) {
+    trailing = path.slice(-1) + trailing;
+    path = path.slice(0, -1);
+  }
+  return { path, trailing };
+}
+
+function localFileTitle(filePath: string): string {
+  const normalized = normalizeLocalFileHref(filePath);
+  return normalized.split("/").pop() || "서버 파일";
+}
+
+function localFilePreviewHref(href: string): string {
+  return `/chat/artifacts/local-file-preview?path=${encodeURIComponent(normalizeLocalFileHref(href))}`;
+}
+
+function LocalFileArtifactLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const filePath = normalizeLocalFileHref(href);
+  return (
+    <a
+      href={localFilePreviewHref(filePath)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${filePath} 아티팩트에서 열기`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        maxWidth: "100%",
+        padding: "2px 7px",
+        borderRadius: "6px",
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.08)",
+        color: "#a78bfa",
+        fontSize: "0.92em",
+        fontFamily: "inherit",
+        cursor: "pointer",
+        verticalAlign: "baseline",
+        textDecoration: "none",
+      }}
+    >
+      <span aria-hidden="true">문서</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{children}</span>
+    </a>
+  );
+}
+
+function renderInline(text: string, key?: number): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  // 멘션, 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
+  const re = /(@(?:KIS|GO100|AADS|SF|NTV2|NAS)\b|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|(https?:\/\/[^\s<>)"\]]+)|((?:file:\/\/)?(?:\/root\/aads|\/tmp\/aads-codex-images)\/[^\s<>)"\]]+))/gi;
+  let last = 0, m: RegExpExecArray | null, idx = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last)
+      parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
+    if (m[0].startsWith("@") && /^@(?:KIS|GO100|AADS|SF|NTV2|NAS)$/i.test(m[0])) {
+      // P2-7: 멘션 칩 렌더링
+      parts.push(
+        <span key={`mention${key}-${idx++}`}
+          style={{
+            display: "inline-block",
+            padding: "1px 6px",
+            borderRadius: 4,
+            fontSize: "0.85em",
+            fontWeight: 600,
+            background: "rgba(99,102,241,0.15)",
+            color: "#818cf8",
+            verticalAlign: "baseline",
+          }}>
+          {m[0]}
+        </span>
+      );
+    } else if (m[3]) {
+      // 이미지: ![alt](url) — only allow safe URLs
+      const imgSrc = isSafeUrl(m[3]) ? normalizeScreenshotUrl(m[3]) : "";
+      parts.push(
+        imgSrc
+          ? <img key={`img${key}-${idx++}`} src={imgSrc} alt={m[2] || ""} loading="lazy"
+              style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
+          : <span key={`img${key}-${idx++}`}>[image blocked: unsafe URL]</span>
+      );
+    } else if (m[5]) {
+      // 링크: [text](url) — only allow safe URLs
+      if (isLocalServerFileHref(m[5])) {
+        parts.push(
+          <LocalFileArtifactLink key={`a${key}-${idx++}`} href={m[5]}>
+            {m[4]}
+          </LocalFileArtifactLink>
+        );
+        last = m.index + m[0].length;
+        continue;
+      }
+      const linkHref = isSafeUrl(m[5]) ? m[5] : "#";
+      parts.push(
+        <a key={`a${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[4]}</a>
+      );
+    } else if (m[6]) parts.push(<strong key={`b${key}-${idx++}`} className="font-semibold">{m[6]}</strong>);
+    else if (m[7]) parts.push(<em key={`i${key}-${idx++}`} className="italic">{m[7]}</em>);
+    else if (m[8])
+      parts.push(
+        <code key={`c${key}-${idx++}`} className="px-1 py-0.5 rounded text-xs font-mono"
+          style={{ background: "rgba(255,255,255,0.1)", color: "#f9c74f" }}>{m[8]}</code>
+      );
+    else if (m[9]) {
+      // plain URL 자동 링크 변환
+      parts.push(
+        <a key={`au${key}-${idx++}`} href={m[9]} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[9]}</a>
+      );
+    } else if (m[10]) {
+      const { path, trailing } = trimLocalFileTrailingPunctuation(m[10]);
+      parts.push(
+        <React.Fragment key={`lf${key}-${idx++}`}>
+          <LocalFileArtifactLink href={path}>{localFileTitle(path)}</LocalFileArtifactLink>
+          {trailing}
+        </React.Fragment>
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last)}</span>);
+  return parts.length ? parts : text;
+}
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <div className="my-2 rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
+      <div className="flex items-center justify-between px-3 py-1"
+        style={{ background: "rgba(0,0,0,0.4)" }}>
+        <span className="text-xs font-mono" style={{ color: "#94a3b8" }}>{lang || "code"}</span>
+        <button
+          onClick={copy}
+          className="text-xs px-2 py-0.5 rounded transition-colors"
+          style={{ background: copied ? "#22c55e22" : "rgba(255,255,255,0.08)", color: copied ? "#22c55e" : "#94a3b8" }}
+        >
+          {copied ? "복사됨" : "복사"}
+        </button>
+      </div>
+      <pre className="p-3 text-xs font-mono overflow-auto max-h-80 whitespace-pre"
+        style={{ background: "rgba(0,0,0,0.35)", color: "#e2e8f0" }}>
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      const lang = trimmed.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      if (lang === "chart") {
+        elements.push(<InlineChart key={`chart${i}`} raw={codeLines.join("\n")} />);
+      } else {
+        elements.push(<CodeBlock key={`cb${i}`} lang={lang} code={codeLines.join("\n")} />);
+      }
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const row = lines[i].trim().slice(1, -1).split("|").map((c) => c.trim());
+        if (!/^[-:| ]+$/.test(lines[i].trim())) rows.push(row);
+        i++;
+      }
+      elements.push(
+        <div key={`tbl${i}`} className="my-2 overflow-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr style={{ background: "rgba(255,255,255,0.07)" }}>
+                {rows[0]?.map((cell, ci) => (
+                  <th key={ci} className="px-2 py-1 text-left font-semibold"
+                    style={{ border: "1px solid rgba(255,255,255,0.1)" }}>{renderInline(cell, ci)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(1).map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.03)" }}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className="px-2 py-1"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#cbd5e1" }}>{renderInline(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    const hMatch = trimmed.match(/^(#{1,4})\s+(.+)/);
+    if (hMatch) {
+      const level = hMatch[1].length;
+      const sizeMap: Record<number, string> = { 1: "text-base", 2: "text-sm", 3: "text-xs", 4: "text-xs" };
+      elements.push(
+        <p key={`h${i}`} className={`font-bold my-2 ${sizeMap[level]}`}>{renderInline(hMatch[2], i)}</p>
+      );
+      i++; continue;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      elements.push(
+        <blockquote key={`bq${i}`} className="pl-3 my-1 text-xs italic"
+          style={{ borderLeft: "3px solid rgba(167,139,250,0.5)", color: "#94a3b8" }}>
+          {renderInline(trimmed.slice(2), i)}
+        </blockquote>
+      );
+      i++; continue;
+    }
+
+    const liMatch = trimmed.match(/^(-|\*|\d+\.)\s+(.+)/);
+    if (liMatch) {
+      const items: React.ReactNode[] = [];
+      while (i < lines.length && lines[i].trim().match(/^(-|\*|\d+\.)\s+/)) {
+        const m = lines[i].trim().match(/^(-|\*|\d+\.)\s+(.+)/);
+        if (m) items.push(<li key={i}>{renderInline(m[2], i)}</li>);
+        i++;
+      }
+      elements.push(
+        <ul key={`ul${i}`} className="list-disc list-inside text-xs space-y-0.5 my-1 pl-2"
+          style={{ color: "#e2e8f0" }}>{items}</ul>
+      );
+      continue;
+    }
+
+    if (trimmed === "---" || trimmed === "***") {
+      elements.push(<hr key={`hr${i}`} className="my-2" style={{ borderColor: "rgba(255,255,255,0.1)" }} />);
+      i++; continue;
+    }
+
+    if (trimmed) {
+      elements.push(
+        <p key={`p${i}`} className="text-sm leading-relaxed my-0.5">{renderInline(trimmed, i)}</p>
+      );
+    } else {
+      elements.push(<div key={`br${i}`} className="h-2" />);
+    }
+    i++;
+  }
+  return <div>{elements}</div>;
+}
+
+// ─── ThoughtSummary ────────────────────────────────────────────────────────
+
+function ThoughtSummary({ summary }: { summary: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2 rounded-lg overflow-hidden" style={{ border: "1px solid rgba(167,139,250,0.3)" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left"
+        style={{ background: "rgba(139,92,246,0.1)", color: "#a78bfa" }}
+      >
+        <span>{open ? "▼" : "▶"}</span>
+        <span className="font-medium">사고 과정</span>
+      </button>
+      {open && (
+        <div className="px-3 py-2 text-xs" style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
+          {summary}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Attachment File Cards ────────────────────────────────────────────────────
+
+function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
+  if (!attachments || attachments.length === 0) return null;
+
+  const fileIcon = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if (["py", "js", "ts", "tsx", "jsx", "sh", "sql", "go", "rs"].includes(ext)) return "💻";
+    if (["pdf"].includes(ext)) return "📕";
+    if (["xlsx", "xls", "csv"].includes(ext)) return "📊";
+    if (["md", "txt", "log"].includes(ext)) return "📄";
+    if (["json", "yaml", "yml", "toml", "xml"].includes(ext)) return "📋";
+    if (["png", "jpg", "jpeg", "gif", "svg"].includes(ext)) return "🖼️";
+    return "📎";
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1">
+      {attachments.map((att, i) => {
+        const a = att as Record<string, string>;
+        const name = a?.name || a?.filename || `file_${i}`;
+        return (
+          <div
+            key={i}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
+            style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.85)" }}
+          >
+            <span>{fileIcon(name)}</span>
+            <span className="truncate" style={{ maxWidth: "120px" }}>{name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Sanitize raw XML tool blocks ─────────────────────────────────────────────
+
+function stripToolXml(text: string): string {
+  return text
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, "")
+    .replace(/<function_response>[\s\S]*?<\/function_response>/g, "")
+    .trim();
+}
+
+// ─── Main ChatBubble ──────────────────────────────────────────────────────────
+
+interface ChatBubbleProps {
+  message: ChatMessage;
+  isStreaming?: boolean;
+  streamingText?: string;
+  onBookmark?: (id: string) => void;
+  onCopy?: (content: string) => void;
+  onCreateDirective?: (content: string) => void;
+  onViewInPanel?: (content: string) => void;
+  onEditResend?: (message: ChatMessage, newContent: string) => void;
+  onCopyToInput?: (content: string) => void;
+}
+
+export default function ChatBubble({
+  message,
+  isStreaming,
+  streamingText,
+  onBookmark,
+  onCopy,
+  onCreateDirective,
+  onViewInPanel,
+  onEditResend,
+  onCopyToInput,
+}: ChatBubbleProps) {
+  const [showActions, setShowActions] = useState(false);
+  const [copiedMsg, setCopiedMsg] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+
+  const isUser = message.role === "user";
+  const rawContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
+  const displayContent = isUser ? rawContent : stripToolXml(rawContent);
+  const sources = message.sources || [];
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(displayContent).then(() => {
+      setCopiedMsg(true);
+      setTimeout(() => setCopiedMsg(false), 2000);
+    });
+    onCopy?.(displayContent);
+  };
+
+  // 사용자 메시지에서 [첨부파일: ...] 참조 텍스트 분리 (깔끔한 표시)
+  const userDisplayContent = isUser
+    ? displayContent.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim()
+    : displayContent;
+  const userAttachments = (message.attachments || []) as unknown[];
+
+  if (isUser) {
+    const startEdit = () => {
+      setEditText(message.content.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim());
+      setIsEditing(true);
+    };
+    const cancelEdit = () => { setIsEditing(false); setEditText(""); };
+    const submitEdit = () => {
+      const trimmed = editText.trim();
+      if (trimmed && trimmed !== userDisplayContent) {
+        onEditResend?.(message, trimmed);
+      }
+      setIsEditing(false);
+      setEditText("");
+    };
+    const handleEditKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(); }
+      if (e.key === "Escape") cancelEdit();
+    };
+
+    return (
+      <div className="flex justify-end mb-3 group">
+        <div className="max-w-[75%]">
+          {userAttachments.length > 0 && (
+            <FileAttachmentCards attachments={userAttachments} />
+          )}
+
+          {isEditing ? (
+            /* 인라인 편집 모드 */
+            <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid var(--accent)", borderBottomRightRadius: "6px" }}>
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleEditKey}
+                className="w-full p-3 text-sm resize-none outline-none"
+                style={{ background: "rgba(109,40,217,0.15)", color: "#fff", minHeight: "60px", maxHeight: "200px", border: "none" }}
+                rows={Math.min(editText.split("\n").length + 1, 8)}
+              />
+              <div className="flex justify-end gap-2 px-3 py-2" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <button onClick={cancelEdit} className="text-xs px-3 py-1 rounded-lg"
+                  style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}>
+                  취소
+                </button>
+                <button onClick={submitEdit} className="text-xs px-3 py-1 rounded-lg font-medium"
+                  style={{ background: "var(--accent)", color: "#fff" }}>
+                  수정 후 재전송
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* 일반 표시 모드 */
+            <div
+              className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed relative"
+              style={{ background: "var(--accent)", color: "#fff", borderBottomRightRadius: "6px" }}
+              onMouseEnter={() => setShowActions(true)}
+              onMouseLeave={() => setShowActions(false)}
+            >
+              {userDisplayContent}
+
+              {/* 호버 액션 버튼 */}
+              {showActions && !isStreaming && (
+                <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex gap-1"
+                  style={{ opacity: 1, transition: "opacity 0.15s" }}>
+                  {onEditResend && (
+                    <button onClick={startEdit}
+                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      title="수정 후 재전송">
+                      ✏️
+                    </button>
+                  )}
+                  {onCopyToInput && (
+                    <button onClick={() => onCopyToInput(userDisplayContent)}
+                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      title="입력창에 복사 (재지시)">
+                      🔄
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {message.created_at && (
+            <p className="text-right text-xs mt-1 mr-1" style={{ color: "var(--text-secondary)" }}>
+              {message.edited_at && <span style={{ color: "#a78bfa" }}>(수정됨) </span>}
+              {new Date(message.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Intent 기반 출처 배지 ─────────────────────────────────────
+  const intent = (message as ChatMessage & { intent?: string | null }).intent;
+  const intentBadge = (() => {
+    if (!intent || intent === "casual" || intent === "status_check") return null;
+    const map: Record<string, { icon: string; label: string; color: string; bg: string }> = {
+      pipeline_c: { icon: "🤖", label: "Claude Bot", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
+      agent_result: { icon: "⚡", label: "Agent", color: "#8b5cf6", bg: "rgba(139,92,246,0.15)" },
+      system_recovery: { icon: "🔧", label: "System", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
+      auto_reaction: { icon: "🔄", label: "Auto", color: "#06b6d4", bg: "rgba(6,182,212,0.15)" },
+    };
+    return map[intent] || null;
+  })();
+
+  // ─── 비용 표시 (REST API: tokens_in/tokens_out/cost, SSE: input_tokens/output_tokens/cost_usd) ───
+  const displayTokensIn = message.input_tokens || message.tokens_in || null;
+  const displayTokensOut = message.output_tokens || message.tokens_out || null;
+  const displayCost = message.cost_usd || message.cost || null;
+
+  // AI 메시지
+  return (
+    <div className="flex justify-start mb-3 group">
+      <div className="max-w-[80%] min-w-0">
+        {/* 출처 배지 */}
+        {intentBadge && (
+          <div className="flex items-center gap-1.5 mb-1 ml-1">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+              style={{ background: intentBadge.bg, color: intentBadge.color, border: `1px solid ${intentBadge.color}33` }}
+            >
+              {intentBadge.icon} {intentBadge.label}
+            </span>
+          </div>
+        )}
+
+        {/* 사고 과정 */}
+        {message.thought_summary && <ThoughtSummary summary={message.thought_summary} />}
+
+        {/* 메시지 버블 */}
+        <div
+          className="px-4 py-3 rounded-2xl text-sm relative"
+          style={{
+            background: intentBadge ? `linear-gradient(135deg, var(--bg-card), ${intentBadge.bg})` : "var(--bg-card)",
+            border: intentBadge ? `1px solid ${intentBadge.color}44` : "1px solid var(--border)",
+            borderBottomLeftRadius: "6px",
+            color: "var(--text-primary)",
+          }}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => setShowActions(false)}
+        >
+          {isStreaming && !displayContent ? (
+            <span className="animate-pulse" style={{ color: "var(--text-secondary)" }}>···</span>
+          ) : (
+            <MarkdownContent content={displayContent} />
+          )}
+
+          {/* 호버 액션 버튼 */}
+          {showActions && !isStreaming && (
+            <div
+              className="absolute top-2 right-2 flex gap-1"
+              style={{ opacity: showActions ? 1 : 0, transition: "opacity 0.15s" }}
+            >
+              {onBookmark && (
+                <button
+                  onClick={() => onBookmark(message.id)}
+                  className="text-xs px-1.5 py-1 rounded transition-colors"
+                  style={{
+                    background: message.bookmarked ? "rgba(234,179,8,0.2)" : "var(--bg-hover)",
+                    color: message.bookmarked ? "#eab308" : "var(--text-secondary)",
+                  }}
+                  title="북마크"
+                >
+                  {message.bookmarked ? "★" : "☆"}
+                </button>
+              )}
+              <button
+                onClick={handleCopy}
+                className="text-xs px-1.5 py-1 rounded transition-colors"
+                style={{ background: "var(--bg-hover)", color: copiedMsg ? "#22c55e" : "var(--text-secondary)" }}
+                title="복사"
+              >
+                {copiedMsg ? "✓" : "⎘"}
+              </button>
+              {onCreateDirective && (
+                <button
+                  onClick={() => onCreateDirective(displayContent)}
+                  className="text-xs px-1.5 py-1 rounded transition-colors"
+                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  title="지시서 생성"
+                >
+                  📋
+                </button>
+              )}
+              {onViewInPanel && (
+                <button
+                  onClick={() => onViewInPanel(displayContent)}
+                  className="text-xs px-1.5 py-1 rounded transition-colors"
+                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                  title="패널에서 보기"
+                >
+                  🗂
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 출처 카드 */}
+        {sources.length > 0 && <SourceCard sources={sources} />}
+
+        {/* 메타 정보 */}
+        {!isStreaming && (
+          <p className="text-xs mt-1 ml-1 flex items-center flex-wrap gap-1" style={{ color: "var(--text-secondary)" }}>
+            {message.model_used && <span>[{message.model_used}</span>}
+            {displayTokensIn ? ` · ${displayTokensIn.toLocaleString()}in` : ""}
+            {displayTokensOut ? ` · ${displayTokensOut.toLocaleString()}out` : ""}
+            {displayCost && Number(displayCost) > 0 ? ` · $${Number(displayCost).toFixed(4)}` : ""}
+            {message.model_used && <span>]</span>}
+            {message.created_at && (
+              <span style={{ marginLeft: message.model_used ? "6px" : "0" }}>
+                {new Date(message.created_at).toLocaleString("ko-KR", {
+                  month: "numeric", day: "numeric",
+                  hour: "2-digit", minute: "2-digit", second: "2-digit",
+                })}
+              </span>
+            )}
+            {message.confidence_label && (
+              <ConfidenceBadge label={message.confidence_label} />
+            )}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

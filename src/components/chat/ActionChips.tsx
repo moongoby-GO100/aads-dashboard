@@ -1,0 +1,102 @@
+"use client";
+/**
+ * AADS-172-B: ActionChips
+ * 입력창 위 빠른 액션 칩
+ * - 웰컴 화면: 고정 5개 칩
+ * - 대화 중: 컨텍스트 기반 동적 칩
+ * - 칩 클릭 → 자동 메시지 전송
+ */
+
+export interface ActionChip {
+  id: string;
+  label: string;
+  message: string;    // 전송될 메시지
+  icon?: string;
+}
+
+export const WELCOME_CHIPS: ActionChip[] = [
+  { id: "briefing",    label: "오늘의 브리핑",    message: "오늘 내 작업공간 브리핑해줘",             icon: "📋" },
+  { id: "how-to",      label: "사용법",          message: "처음 사용하는데 어떻게 시작하면 되는지 내 작업공간 기준으로 알려줘", icon: "❔" },
+  { id: "work-status", label: "작업현황",        message: "내 작업공간의 진행 중인 일과 최근 결과를 요약해줘", icon: "📊" },
+  { id: "project",     label: "프로젝트 정리",  message: "내 프로젝트 목표와 다음 단계를 정리해줘",         icon: "📂" },
+  { id: "team",        label: "팀원 초대",      message: "팀원 초대와 권한 설정 방법을 알려줘",             icon: "👥" },
+];
+
+// 컨텍스트 기반 동적 칩 생성 (마지막 메시지 내용 기반)
+export function getDynamicChips(lastAssistantMessage: string): ActionChip[] {
+  const msg = lastAssistantMessage.toLowerCase();
+  const chips: ActionChip[] = [];
+
+  if (msg.includes("검색") || msg.includes("소스") || msg.includes("결과")) {
+    chips.push({ id: "deep-analysis", label: "심층 분석", message: "방금 내용 더 심층적으로 분석해줘", icon: "🧠" });
+    chips.push({ id: "report",        label: "보고서 생성", message: "방금 내용으로 보고서 작성해줘", icon: "📄" });
+  }
+  if (msg.includes("서버") || msg.includes("원격") || msg.includes("ssh") || msg.includes("kis") || msg.includes("sf 서버")) {
+    chips.push({ id: "server-list",   label: "서버 파일 검색", message: "SF 서버에서 파일 목록 찾아줘", icon: "🔍" });
+    chips.push({ id: "server-read",   label: "원격 파일 읽기", message: "해당 서버에서 config 파일 내용 보여줘", icon: "📄" });
+  }
+  if (msg.includes("대시보드") || msg.includes("작업") || msg.includes("pending") || msg.includes("완료")) {
+    chips.push({ id: "task-more",     label: "작업 이력 더", message: "최근 완료된 작업 20개 보여줘", icon: "📋" });
+  }
+  if (msg.includes("오류") || msg.includes("에러") || msg.includes("버그")) {
+    chips.push({ id: "fix",    label: "수정 제안",  message: "해결 방안 제시해줘",           icon: "🔧" });
+    chips.push({ id: "ticket", label: "이슈 생성",  message: "지시서로 이슈 등록해줘",       icon: "🎫" });
+  }
+  if (msg.includes("데이터") || msg.includes("db") || msg.includes("쿼리")) {
+    chips.push({ id: "optimize", label: "쿼리 최적화", message: "쿼리 최적화 방안 알려줘", icon: "⚡" });
+  }
+  if (msg.includes("코드") || msg.includes("함수") || msg.includes("api")) {
+    chips.push({ id: "test",    label: "테스트 작성", message: "테스트 코드 작성해줘", icon: "🧪" });
+    chips.push({ id: "docs",    label: "문서화",      message: "문서 작성해줘",        icon: "📝" });
+  }
+
+  // 기본 칩
+  chips.push({ id: "summary",    label: "요약",        message: "위 내용 요약해줘",     icon: "📌" });
+  chips.push({ id: "next-step",  label: "다음 단계",   message: "다음 단계는 뭐야?",    icon: "▶" });
+
+  return chips.slice(0, 5);
+}
+
+interface ActionChipsProps {
+  chips: ActionChip[];
+  onChipClick: (message: string) => void;
+  disabled?: boolean;
+}
+
+export default function ActionChips({ chips, onChipClick, disabled }: ActionChipsProps) {
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mb-2">
+      {chips.map((chip) => (
+        <button
+          key={chip.id}
+          onClick={() => !disabled && onChipClick(chip.message)}
+          disabled={disabled}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all"
+          style={{
+            background: "var(--bg-hover)",
+            color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
+            opacity: disabled ? 0.5 : 1,
+            cursor: disabled ? "not-allowed" : "pointer",
+            whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => {
+            if (!disabled) {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
+            (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
+          }}
+        >
+          {chip.icon && <span>{chip.icon}</span>}
+          <span>{chip.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}

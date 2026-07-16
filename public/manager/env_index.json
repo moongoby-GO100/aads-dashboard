@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-03-06T13:09:13.471785+09:00",
+  "servers": [
+    "68",
+    "211",
+    "114"
+  ],
+  "urls": {
+    "68": "/manager/env_68.json",
+    "211": "/manager/env_211.json",
+    "114": "/manager/env_114.json"
+  }
+}
