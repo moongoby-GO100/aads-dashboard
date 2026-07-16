@@ -9,11 +9,13 @@
   - `src/app/chat/artifacts/[id]/page.tsx`: 새 탭 전체창에서도 `video` 타입을 바로 재생한다.
 - 검증:
   - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과, route 목록에 `/chat/artifacts/[id]` 포함.
 - 제한:
   - 배포는 수행하지 않았다. 운영 화면 반영은 dashboard build/deploy 후 확인해야 한다.
   - 로그인 브라우저 E2E는 미실행이다. 배포 후 실제 `video` 아티팩트로 패널/새창 재생을 확인해야 한다.
 - Git:
-  - 로컬 변경만 존재한다. 커밋/푸시는 아직 수행하지 않았다.
+  - 대시보드 커밋 `3000512 fix: show media artifacts in chat` 생성 완료.
+  - 대시보드 저장소에는 remote가 없어 push할 대상이 없다.
 
 ## 2026-07-14 16:39 KST - Artifact file new-tab preview fix
 - 배경: CEO가 채팅 문서의 파란 문서/새창 아이콘을 클릭하면 문서가 바로 열리지 않고 오류 페이지처럼 보인다고 지적했다.
