@@ -1271,7 +1271,7 @@ const MessageItem = memo(function MessageItem({
   const isDocumentArtifact = Boolean(
     linkedArtifact &&
     msg.role === "assistant" &&
-    ["report", "text", "file", "table", "full_response", "html_preview"].includes(linkedArtifact.artifact_type)
+    ["report", "text", "file", "table", "full_response", "html_preview", "image", "video"].includes(linkedArtifact.artifact_type)
   );
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
@@ -1824,7 +1824,9 @@ const MessageItem = memo(function MessageItem({
                   }}
                   title="아티팩트 패널에서 보기"
                 >
-                  <span aria-hidden="true" style={{ fontSize: "15px", flex: "0 0 auto" }}>📄</span>
+                  <span aria-hidden="true" style={{ fontSize: "15px", flex: "0 0 auto" }}>
+                    {linkedArtifact.artifact_type === "image" ? "🖼️" : linkedArtifact.artifact_type === "video" ? "🎞️" : "📄"}
+                  </span>
                   <span style={{
                     minWidth: 0,
                     flex: 1,
@@ -1835,7 +1837,7 @@ const MessageItem = memo(function MessageItem({
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                   }}>
-                    {linkedArtifact.title || "문서 아티팩트"}
+                    {linkedArtifact.title || (linkedArtifact.artifact_type === "video" ? "영상 아티팩트" : linkedArtifact.artifact_type === "image" ? "이미지 아티팩트" : "문서 아티팩트")}
                   </span>
                   <button
                     type="button"
@@ -5552,6 +5554,7 @@ export default function ChatPage() {
                             code: "💻 코드가 저장되었습니다",
                             chart: "📊 차트가 저장되었습니다",
                             image: "🖼️ 이미지가 저장되었습니다",
+                            video: "🎞️ 영상이 저장되었습니다",
                             file: "📎 파일이 저장되었습니다",
                             table: "📋 테이블이 저장되었습니다",
                             html_preview: "🖼️ HTML 미리보기가 저장되었습니다",
@@ -6886,7 +6889,8 @@ export default function ChatPage() {
     if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
     if (artifactTab === "dialog") return a.artifact_type === "full_response";
     if (artifactTab === "code") return a.artifact_type === "code";
-    if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
+    if (artifactTab === "chart") return a.artifact_type === "chart";
+    if (artifactTab === "media") return a.artifact_type === "image" || a.artifact_type === "video";
     if (artifactTab === "agenda") return false;
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
     return false;
@@ -6895,7 +6899,8 @@ export default function ChatPage() {
 
   const artifactTabFor = useCallback((artifact: Artifact): ArtifactTab => {
     if (artifact.artifact_type === "code") return "code";
-    if (artifact.artifact_type === "chart" || artifact.artifact_type === "image") return "chart";
+    if (artifact.artifact_type === "chart") return "chart";
+    if (artifact.artifact_type === "image" || artifact.artifact_type === "video") return "media";
     if (artifact.artifact_type === "html_preview") return "html_preview";
     if (artifact.artifact_type === "full_response") return "dialog";
     return "report";
@@ -6907,7 +6912,8 @@ export default function ChatPage() {
       if (nextTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
       if (nextTab === "dialog") return a.artifact_type === "full_response";
       if (nextTab === "code") return a.artifact_type === "code";
-      if (nextTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
+      if (nextTab === "chart") return a.artifact_type === "chart";
+      if (nextTab === "media") return a.artifact_type === "image" || a.artifact_type === "video";
       if (nextTab === "html_preview") return a.artifact_type === "html_preview";
       return false;
     });
@@ -6982,7 +6988,8 @@ export default function ChatPage() {
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
     dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
-    chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
+    chart: artifacts.filter((a) => a.artifact_type === "chart").length,
+    media: artifacts.filter((a) => a.artifact_type === "image" || a.artifact_type === "video").length,
     agenda: 0,
     log: systemMessages.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,

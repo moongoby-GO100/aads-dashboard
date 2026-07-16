@@ -13,6 +13,7 @@ function typeLabel(type: Artifact["artifact_type"]): string {
   if (type === "chart") return "Chart";
   if (type === "table") return "Table";
   if (type === "image") return "Image";
+  if (type === "video") return "Video";
   if (type === "file") return "File";
   return "Report";
 }
@@ -138,6 +139,7 @@ function ArtifactStandaloneContent() {
   const title = artifact?.title || "AADS Artifact";
   const isHtml = artifact?.artifact_type === "html_preview";
   const isImage = artifact?.artifact_type === "image";
+  const isVideo = artifact?.artifact_type === "video";
   const isFile = artifact?.artifact_type === "file";
   const isCode = artifact?.artifact_type === "code";
   const loginNext = typeof window === "undefined"
@@ -313,6 +315,16 @@ function ArtifactStandaloneContent() {
             ) : isImage ? (
               <div style={{ display: "grid", placeItems: "center", minHeight: "calc(100dvh - 58px)", padding: "18px" }}>
                 <img src={artifact.content} alt={title} style={{ maxWidth: "100%", maxHeight: "calc(100dvh - 96px)", objectFit: "contain" }} />
+              </div>
+            ) : isVideo ? (
+              <div style={{ display: "grid", placeItems: "center", minHeight: "calc(100dvh - 58px)", padding: "18px", background: "#020617" }}>
+                <video
+                  src={artifact.content}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  style={{ width: "100%", maxWidth: "1280px", maxHeight: "calc(100dvh - 96px)", borderRadius: "10px", background: "#000" }}
+                />
               </div>
             ) : isFile ? (
               <article style={{

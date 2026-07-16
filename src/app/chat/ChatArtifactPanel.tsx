@@ -584,6 +584,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                     { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
+                    { key: "media" as ArtifactTab, icon: "🎞️", label: "미디어" },
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
                 ).filter((tab) => {
@@ -1232,6 +1233,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         full_response: "\ud83d\udcc4 \ubcf4\uace0\uc11c",
                         table: "\ud83d\udcca \ud45c",
                         image: "\ud83d\uddbc\ufe0f \uc774\ubbf8\uc9c0",
+                        video: "\ud83c\udf9e\ufe0f \uc601\uc0c1",
                         file: "\ud83d\udcce \ud30c\uc77c",
                       };
                       const label = typeLabel[displayArtifact.artifact_type] || "\ud83d\udcc4 \ubb38\uc11c";
@@ -1267,6 +1269,19 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           src={displayArtifact.content}
                           alt={displayArtifact.title}
                           style={{ maxWidth: "100%", borderRadius: "8px" }}
+                        />
+                      ) : displayArtifact.artifact_type === "video" ? (
+                        <video
+                          src={displayArtifact.content}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          style={{
+                            width: "100%",
+                            maxHeight: "70vh",
+                            borderRadius: "8px",
+                            background: "#000",
+                          }}
                         />
                       ) : displayArtifact.artifact_type === "file" ? (
                         <a
@@ -1433,6 +1448,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "code" as ArtifactTab, icon: "💻" },
                 { key: "html_preview" as ArtifactTab, icon: "🖼️" },
                 { key: "chart" as ArtifactTab, icon: "📊" },
+                { key: "media" as ArtifactTab, icon: "🎞️" },
                 { key: "tasks" as ArtifactTab, icon: "⚡" },
               ]
             ).map((tab) => (

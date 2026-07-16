@@ -1,5 +1,20 @@
 # AADS Dashboard Handover
 
+## 2026-07-16 12:07 KST - Chat media artifact inline viewing
+- 배경: CEO가 채팅 보고 중 이미지/영상 생성물을 채팅창에서 바로 확인할 수 있는지 물었고, 실제 UI 적용 범위를 닫기 위해 패널/새창 렌더링을 보강했다.
+- 반영:
+  - `src/app/chat/types.ts`: `Artifact.artifact_type`에 `video`, `ArtifactTab`에 `media`를 추가했다.
+  - `src/app/chat/page.tsx`: 이미지/영상 아티팩트를 메시지 카드에서 인식하고, 미디어 탭으로 자동 선택하며, 아티팩트 카운트와 저장 토스트에 반영한다.
+  - `src/app/chat/ChatArtifactPanel.tsx`: 미디어 탭을 추가하고 `video` 아티팩트를 `<video controls playsInline preload="metadata">`로 렌더링한다.
+  - `src/app/chat/artifacts/[id]/page.tsx`: 새 탭 전체창에서도 `video` 타입을 바로 재생한다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+- 제한:
+  - 배포는 수행하지 않았다. 운영 화면 반영은 dashboard build/deploy 후 확인해야 한다.
+  - 로그인 브라우저 E2E는 미실행이다. 배포 후 실제 `video` 아티팩트로 패널/새창 재생을 확인해야 한다.
+- Git:
+  - 로컬 변경만 존재한다. 커밋/푸시는 아직 수행하지 않았다.
+
 ## 2026-07-14 16:39 KST - Artifact file new-tab preview fix
 - 배경: CEO가 채팅 문서의 파란 문서/새창 아이콘을 클릭하면 문서가 바로 열리지 않고 오류 페이지처럼 보인다고 지적했다.
 - 원인:
