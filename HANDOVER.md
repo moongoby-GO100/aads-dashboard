@@ -1,5 +1,30 @@
 # AADS Dashboard Handover
 
+## 2026-07-20 10:35 KST - Chat session switch loading latency
+- 배경: CEO가 채팅 세션 이동 시 로딩이 너무 느리다고 지적했고, 이전 응답이 조사 보고만 수행해 완료 조건을 만족하지 못했다.
+- 원인:
+  - `src/app/chat/page.tsx`의 세션 전환 effect가 `/chat/sessions/{id}/streaming-status` 응답을 기다린 뒤 메시지를 로드하는 순차 구조였다. 이 API가 늦거나 일시 실패하면 첫 메시지 표시 자체가 지연됐다.
+  - 메시지가 비어 있을 때 500ms 자동 재시도 effect가 `messagesLoading` 중에도 동작해 정상 로딩 중 중복 `/chat/messages` 호출을 만들 수 있었다.
+  - `src/components/chat/MemoryContextBar.tsx`가 세션 전환, 브라우저 focus, visibility 복귀마다 `/memory-context`를 즉시 재조회해 화면 상단 로딩 표시와 API 부하를 반복시켰다.
+- 반영:
+  - `src/app/chat/page.tsx`: 세션 진입 시 `/chat/messages`를 먼저 시작하고, `streaming-status`는 병렬로 받아 스트리밍/완료 상태만 보정하도록 변경했다.
+  - `src/app/chat/page.tsx`: 빈 메시지 자동 재시도 조건에 `messagesLoading` 가드를 추가해 정상 초기 로딩 중 중복 fetch를 막았다.
+  - `src/components/chat/MemoryContextBar.tsx`: 세션별 60초 메모리 컨텍스트 캐시와 focus/visibility 강제 재조회 5초 디바운스를 추가했다.
+- 검증:
+  - DB 실측: 서버68 health `HEALTHY`, DB latency `96ms`, 현재 세션 메시지 48건, 아티팩트 57건.
+  - `npx eslint src/app/chat/page.tsx src/components/chat/MemoryContextBar.tsx`: 오류 0건, 기존 warning 23건.
+  - `npm run build`: 성공, `/chat`, `/chat/[id]`, `/chat/artifacts/[id]` route 생성 확인.
+  - 전체 `npm run lint`: 기존 전역 오류 260건으로 실패. 이번 수정 파일 대상 lint는 오류 0건이다.
+- 배포:
+  - `bash /root/aads/aads-dashboard/deploy.sh`: blue-green 배포 성공. 활성 컨테이너 `aads-dashboard`, 활성 포트 `3100`, standby `aads-dashboard-green` health 통과.
+  - 운영 HTTP: `https://aads.newtalk.kr/login` 200 / 0.091s, 비로그인 세션 URL `/chat/fb1b5a3e-4df5-43ff-83ad-8f37cddf8c4a`는 로그인 리다이렉트 307 / 0.068s.
+  - API health: `http://127.0.0.1:8102/health` status `ok`.
+  - 배포 스크립트 Step 7 QA는 `UNKNOWN`으로 종료되어 자동 통과로 간주하지 않았고, HTTP/API/Docker 수동 검증으로 대체했다.
+- Git:
+  - `/root/aads/aads-dashboard` 변경 파일: `src/app/chat/page.tsx`, `src/components/chat/MemoryContextBar.tsx`, `HANDOVER.md`.
+  - 로컬 커밋 `53d53f9 fix: speed up chat session switching` 생성 후 이 HANDOVER 정정 내용으로 amend 예정이다.
+  - remote가 없어 push는 수행할 수 없다.
+
 ## 2026-07-16 12:07 KST - Chat media artifact inline viewing
 - 배경: CEO가 채팅 보고 중 이미지/영상 생성물을 채팅창에서 바로 확인할 수 있는지 물었고, 실제 UI 적용 범위를 닫기 위해 패널/새창 렌더링을 보강했다.
 - 반영:

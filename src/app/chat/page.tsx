@@ -3959,8 +3959,8 @@ export default function ChatPage() {
     const isPending = pendingResponseSessions.current.has(activeSession.id);
     // FIX: streaming-status API 확인 전까지 false 유지 (엉뚱한 세션에 버블 표시 방지)
     // isPending이어도 API로 재확인 후 설정
-    // 세션 진입 시: streaming-status를 먼저 확인 → 결과에 따라 messages fetch
-    // (병렬 실행하면 race condition으로 빈 화면 발생하므로 순차 실행)
+    // 세션 진입 시 메시지는 먼저 표시하고, streaming-status는 병렬로 보정한다.
+    // 이전 순차 구조는 streaming-status 지연이 첫 메시지 렌더링을 막아 세션 전환 체감 로딩을 키웠다.
     const fetchSid = activeSession.id;
     // BUG-1 FIX: cancelled 클로저로 race condition 방지 (activeSessionRef 대신)
     let cancelled = false;
@@ -4005,6 +4005,8 @@ export default function ChatPage() {
           return [] as ChatMessage[];
         });
 
+    const initialMessagesPromise = loadMessages(isPending ? false : true);
+
     chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string; partial_content?: string; execution_id?: string | null; last_event_id?: string | null }>(
       `/chat/sessions/${fetchSid}/streaming-status`
     ).then(async (status) => {
@@ -4025,7 +4027,7 @@ export default function ChatPage() {
         if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
         waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
         // 스트리밍 중 → placeholder 포함하여 메시지 로드
-        await loadMessages(false);
+        await initialMessagesPromise;
         // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
         // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
         const _exec_id_for_attach = status.execution_id || activeSession?.current_execution_id || null;
@@ -4044,7 +4046,7 @@ export default function ChatPage() {
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
         pendingResponseSessions.current.delete(fetchSid);
-        const msgs = await loadMessages(true);
+        const msgs = await initialMessagesPromise;
         // 완료 직후인데 최종 응답이 아직 DB에 없을 수 있음 → 빠른 폴링 + 1.5초 후 재시도
         if (msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           setWaitingBgResponse(true); // 빠른 폴링(1초) 활성화하여 최종 응답 캐치
@@ -4069,7 +4071,7 @@ export default function ChatPage() {
         }
       } else {
         // 스트리밍 아님 → 일반 로드
-        const msgs = await loadMessages(true);
+        const msgs = await initialMessagesPromise;
         // pending 세션이었는데 assistant 응답이 없으면 → 재시도 (placeholder 삭제~응답 저장 gap)
         if (isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           setWaitingBgResponse(true);
@@ -4115,8 +4117,8 @@ export default function ChatPage() {
         }
       }
     }).catch(() => {
-      // streaming-status API 실패 시 폴백: 일반 메시지 로드
-      loadMessages(isPending ? false : true);
+      // streaming-status API 실패 시에도 이미 시작한 메시지 로드는 유지한다.
+      void initialMessagesPromise;
     });
     chatApi<Artifact[]>(`/chat/artifacts?session_id=${fetchSid}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
       .then((items) => {
@@ -4189,7 +4191,7 @@ export default function ChatPage() {
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
   useEffect(() => {
-    if (!activeSession?.id || messages.length > 0 || streaming) return;
+    if (!activeSession?.id || messages.length > 0 || streaming || messagesLoading) return;
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;

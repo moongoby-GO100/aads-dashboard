@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,9 +55,13 @@ interface MemoryContextBarProps {
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 const MAX_CONTEXT_TOKENS = 200_000;
 const LS_KEY = "aads_memory_bar_open";
+const MEMORY_CONTEXT_CACHE_TTL_MS = 60_000;
 
 type TabKey = "memory" | "status" | "history";
 type FetchError = "auth" | "forbidden" | "network" | "notfound" | "server" | null;
+type MemoryContextCacheEntry = { data: MemoryContextData; fetchedAt: number };
+
+const memoryContextCache = new Map<string, MemoryContextCacheEntry>();
 
 const HEALTH_MAP: Record<string, { icon: string; label: string; color: string }> = {
   normal:  { icon: "🟢", label: "정상", color: "#22c55e" },
@@ -101,8 +105,19 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
   });
   const [tab, setTab] = useState<TabKey>("memory");
   const [loading, setLoading] = useState(false);
+  const lastFetchStartedAtRef = useRef(0);
 
-  const fetchData = useCallback(async (sid: string) => {
+  const fetchData = useCallback(async (sid: string, options?: { force?: boolean }) => {
+    const cached = memoryContextCache.get(sid);
+    if (!options?.force && cached && Date.now() - cached.fetchedAt < MEMORY_CONTEXT_CACHE_TTL_MS) {
+      setData(cached.data);
+      setFetchError(null);
+      setLoading(false);
+      return;
+    }
+    const now = Date.now();
+    if (options?.force && now - lastFetchStartedAtRef.current < 5_000) return;
+    lastFetchStartedAtRef.current = now;
     setLoading(true);
     setFetchError(null);
     try {
@@ -122,6 +137,7 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
           const retry = await fetch(`${BASE_URL}/chat/sessions/${sid}/memory-context`, { headers: retryHeaders });
           if (retry.ok) {
             const json = await retry.json();
+            memoryContextCache.set(sid, { data: json, fetchedAt: Date.now() });
             setData(json);
             setFetchError(null);
             return;
@@ -147,6 +163,7 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
       }
 
       const json = await res.json();
+      memoryContextCache.set(sid, { data: json, fetchedAt: Date.now() });
       setData(json);
       setFetchError(null);
     } catch {
@@ -161,10 +178,10 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
     if (!sessionId) { setData(null); setFetchError(null); return; }
     fetchData(sessionId);
     const onVisible = () => {
-      if (!document.hidden && sessionId) fetchData(sessionId);
+      if (!document.hidden && sessionId) fetchData(sessionId, { force: true });
     };
     const onFocus = () => {
-      if (sessionId) fetchData(sessionId);
+      if (sessionId) fetchData(sessionId, { force: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
