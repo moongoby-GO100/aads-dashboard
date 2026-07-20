@@ -626,6 +626,26 @@
   - 로그인된 CEO 브라우저에서 실제 클릭 E2E는 미실행이다. 새 번들 반영을 위해 채팅 탭 새로고침 후 `/root/aads/go100/...html` 경로를 클릭하면 우측/전용 아티팩트 흐름으로 열리는지 확인해야 한다.
   - 커밋/푸시는 수행하지 않았다. 대시보드는 단독 git 저장소가 아니며 서버 저장소에 unrelated dirty 변경이 대량 존재한다.
 
+## 2026-07-20 13:02 KST - Chat session switch loading latency P0 optimization
+
+- 배경: CEO가 채팅 세션 이동 지연 권장조치를 즉시 반영하도록 지시했다.
+- 원인:
+  - 메시지/아티팩트 DB 조회 자체보다 세션 전환 직후 메시지, 스트리밍 상태, 아티팩트, 메모리 맥락, 이전 세션 요약 요청이 겹치는 프론트 요청 경합이 체감 지연을 키웠다.
+- 반영:
+  - `src/app/chat/page.tsx`: 메시지 40건을 `streaming-status`와 병렬 조회하고, 아티팩트 초기 조회를 현재 세션 최근 60건으로 제한했다.
+  - `src/components/chat/SessionSummaryCard.tsx`: 세션 전환 1.2초 후 `/memory-context?summary_only=true` 경량 API를 호출하도록 변경했다.
+  - `src/components/chat/MemoryContextBar.tsx`: 캐시를 우선 표시하고 실제 조회는 0.5~0.9초 지연했으며, 탭 복귀 중복 요청을 `visibilitychange` 단일 경로로 통합했다.
+- 검증:
+  - `npx eslint src/components/chat/MemoryContextBar.tsx src/components/chat/SessionSummaryCard.tsx`: 통과.
+  - `npx eslint src/app/chat/page.tsx src/components/chat/MemoryContextBar.tsx src/components/chat/SessionSummaryCard.tsx`: 오류 0건, 기존 경고 23건.
+  - `npm run build`: Next.js 16.1.6 프로덕션 빌드 및 정적 페이지 57개 생성 통과.
+  - 백엔드 `python3 -m py_compile app/routers/chat.py app/services/chat_service.py`: 통과.
+- 상태:
+  - 코드 커밋: `8ad5c1d`(메시지 병렬/초기 조회 축소), `c797821`(메모리/요약 지연·경량화).
+  - `HANDOVER.md`에 원인, 변경, 검증, 미배포 상태를 기록했다.
+  - 푸시·운영 배포는 수행하지 않았다. 배포 전 영향 범위와 롤백안을 보고하고 CEO 승인을 받아야 한다.
+  - 로그인된 CEO 브라우저 실제 세션 클릭 E2E는 운영 배포 후 수행한다.
+
 ## 2026-07-13 19:42 KST - Chat artifact/image deployment final verification
 
 - 배경: CEO가 "다음 단계 진행"을 지시해 중단됐던 dashboard blue-green 배포 완료 후 운영 검증을 재수행했다.
