@@ -22,8 +22,8 @@
   - 배포 스크립트 Step 7 QA는 `UNKNOWN`으로 종료되어 자동 통과로 간주하지 않았고, HTTP/API/Docker 수동 검증으로 대체했다.
 - Git:
   - `/root/aads/aads-dashboard` 변경 파일: `src/app/chat/page.tsx`, `src/components/chat/MemoryContextBar.tsx`, `HANDOVER.md`.
-  - 로컬 커밋 `53d53f9 fix: speed up chat session switching` 생성 후 이 HANDOVER 정정 내용으로 amend 예정이다.
-  - remote가 없어 push는 수행할 수 없다.
+  - 로컬 커밋 `8ad5c1d2574178f67d079d5d7ae237cde7de8071 fix: speed up chat session switching` 생성 완료.
+  - `/root/aads/aads-dashboard` 저장소에는 `origin` remote가 없어 push는 수행할 수 없다.
 
 ## 2026-07-16 12:07 KST - Chat media artifact inline viewing
 - 배경: CEO가 채팅 보고 중 이미지/영상 생성물을 채팅창에서 바로 확인할 수 있는지 물었고, 실제 UI 적용 범위를 닫기 위해 패널/새창 렌더링을 보강했다.
