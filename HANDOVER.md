@@ -717,4 +717,26 @@
   - active green 번들에서 `문서 프리뷰 서버 응답이 일시적으로 실패했습니다`, `from-local-file`, `local-file-preview`, bare URL linkify 정규식이 포함된 것을 확인했다.
   - `/chat/artifacts/local-file-preview?...` 라우트는 비로그인 기준 `/login`으로 307 리다이렉트되어 Next 라우트 503이 아님을 확인했다.
   - 배포 스크립트는 Step 5 standby 동기화 로그 이후 최종 성공 문구 없이 종료됐다. active green 전환은 완료됐지만 standby blue 이미지는 이전 상태로 남아 있어 다음 대시보드 배포 때 재동기화가 필요하다.
-  - `/root/aads/aads-dashboard`는 단독 git 저장소가 아니어서 커밋/푸시는 수행하지 않는다.
+  - `/root/aads/aads-dashboard`는 독립 로컬 Git 저장소이지만 remote가 등록되어 있지 않다. 이 이전 작업의 커밋/푸시 여부는 해당 시점 ledger 기준으로 별도 확인해야 한다.
+
+## 2026-07-20 13:57 KST - Session-switch optimization production deployment
+
+- 배경: 세션 이동 시 메시지, 스트리밍 상태, 아티팩트, 메모리, 이전 세션 요약 요청이 경쟁해 첫 화면 표시가 늦어지는 문제의 P0 최적화를 운영 반영했다.
+- 반영 확인:
+  - 메시지 초기 조회는 세션당 40건으로 제한하고 스트리밍 상태 복원과 병렬 실행한다.
+  - `MemoryContextBar`는 캐시 여부에 따라 500/900ms 지연 로드하고 탭 복귀 중복 이벤트를 `visibilitychange` 하나로 줄였다.
+  - `SessionSummaryCard`는 세션 첫 화면과 경쟁하지 않도록 1,200ms 지연 로드한다.
+  - API `chat_service.py`는 호스트/신규 blue 컨테이너 SHA-256 일치 확인 후 `8100`으로 graceful upstream 전환했다.
+- 배포:
+  - API active `aads-server:8100`, standby `aads-server-green:8102` 모두 healthy.
+  - Dashboard blue-green 배포 로그: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260720-135001.log`.
+  - Dashboard active `aads-dashboard:3100`, standby `aads-dashboard-green:3101` 모두 healthy; 양 슬롯 동일 소스 빌드/동기화 완료.
+- 검증:
+  - Next.js 16.1.6 production build 성공, 57개 static page 생성 및 `/chat`, `/chat/[id]`, `/chat/artifacts/[id]` 라우트 생성 확인.
+  - nginx 설정 검사 성공. 외부 `/api/v1/health` 200, `/login` 200, 인증 필요 `/chat` 및 artifact route 307 확인.
+  - 최근 nginx access log 300줄에서 5xx 없음.
+  - 현재 세션 DB 실행계획: 최근 메시지 40건 0.531ms, 최근 아티팩트 60건 5.076ms.
+- 한계/리스크:
+  - 자동 프론트 QA는 `UNKNOWN`으로 종료돼 통과로 간주하지 않았다. 로그인 브라우저 실제 세션 클릭 E2E는 미실행이며 API/DB/컨테이너 검증으로 대체했다.
+  - npm audit 경고 9건(낮음 2, 중간 4, 높음 3)은 이번 성능 배포 범위 밖으로 남겼다.
+  - 대시보드 최적화와 검증 기록은 로컬 커밋 `8ad5c1d`, `c797821`, `9a02b8a`에 반영됐다. 저장소에 remote가 없어 push는 수행할 수 없었고, 서버 저장소는 기존 unrelated dirty 변경을 보존했다.
