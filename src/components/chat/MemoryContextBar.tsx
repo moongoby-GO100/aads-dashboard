@@ -176,18 +176,23 @@ export default function MemoryContextBar({ sessionId }: MemoryContextBarProps) {
 
   useEffect(() => {
     if (!sessionId) { setData(null); setFetchError(null); return; }
-    fetchData(sessionId);
+    const cached = memoryContextCache.get(sessionId);
+    if (cached && Date.now() - cached.fetchedAt < MEMORY_CONTEXT_CACHE_TTL_MS) {
+      setData(cached.data);
+      setFetchError(null);
+      setLoading(false);
+    }
+    const timer = window.setTimeout(() => fetchData(sessionId), cached ? 500 : 900);
+    // visibilitychange와 window.focus는 탭 복귀 시 연달아 발생할 수 있다.
+    // 메모리 맥락은 실시간 데이터가 아니므로 visibilitychange 하나만 사용하고,
+    // 캐시 TTL을 존중해 세션 전환의 핵심 메시지 요청과 경쟁하지 않게 한다.
     const onVisible = () => {
-      if (!document.hidden && sessionId) fetchData(sessionId, { force: true });
-    };
-    const onFocus = () => {
-      if (sessionId) fetchData(sessionId, { force: true });
+      if (!document.hidden && sessionId) void fetchData(sessionId);
     };
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onFocus);
     return () => {
+      window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onFocus);
     };
   }, [sessionId, fetchData]);
 

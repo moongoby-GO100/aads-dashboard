@@ -2,7 +2,7 @@
 /**
  * SessionSummaryCard — 세션 첫 진입 시 이전 세션 요약 카드 표시
  *
- * MemoryContextBar와 동일한 /chat/sessions/{id}/memory-context API 사용.
+ * /chat/sessions/{id}/memory-context?summary_only=true API 사용.
  * session_history 배열에서 최근 3개 세션을 요약해 표시.
  * 닫기 버튼으로 dismiss 가능.
  */
@@ -46,24 +46,30 @@ export default function SessionSummaryCard({ sessionId }: SessionSummaryCardProp
   useEffect(() => {
     if (!sessionId || loadedSessionId === sessionId) return;
     let cancelled = false;
-
-    fetch(`${BASE_URL}/chat/sessions/${sessionId}/memory-context`, {
-      headers: getAuthHeaders(),
-    })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: MemoryContextResponse | null) => {
-        if (cancelled || !data) return;
-        const history = data.session_history || [];
-        // 현재 세션 자신을 제외한 최근 3개
-        const recent = history
-          .filter((h) => h.session_id !== sessionId)
-          .slice(0, 3);
-        setItems(recent);
-        setLoadedSessionId(sessionId);
+    const load = () => {
+      fetch(`${BASE_URL}/chat/sessions/${sessionId}/memory-context?summary_only=true`, {
+        headers: getAuthHeaders(),
       })
-      .catch(() => setLoadedSessionId(sessionId));
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: MemoryContextResponse | null) => {
+          if (cancelled || !data) return;
+          const history = data.session_history || [];
+          // 현재 세션 자신을 제외한 최근 3개
+          const recent = history
+            .filter((h) => h.session_id !== sessionId)
+            .slice(0, 3);
+          setItems(recent);
+          setLoadedSessionId(sessionId);
+        })
+        .catch(() => setLoadedSessionId(sessionId));
+    };
 
-    return () => { cancelled = true; };
+    const timer = window.setTimeout(load, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [sessionId, loadedSessionId]);
 
   // 히스토리 없거나 dismiss 시 표시 안 함
