@@ -740,3 +740,12 @@
   - 자동 프론트 QA는 `UNKNOWN`으로 종료돼 통과로 간주하지 않았다. 로그인 브라우저 실제 세션 클릭 E2E는 미실행이며 API/DB/컨테이너 검증으로 대체했다.
   - npm audit 경고 9건(낮음 2, 중간 4, 높음 3)은 이번 성능 배포 범위 밖으로 남겼다.
   - 대시보드 최적화와 검증 기록은 로컬 커밋 `8ad5c1d`, `c797821`, `9a02b8a`에 반영됐다. 저장소에 remote가 없어 push는 수행할 수 없었고, 서버 저장소는 기존 unrelated dirty 변경을 보존했다.
+
+## 2026-07-20 14:05 KST - Session-switch 503 rate-limit closeout
+
+- 최종 검증 중 최근 nginx 로그에서 채팅 메시지·스트리밍 상태·사용량 API가 `503`으로 제한되는 현상을 재확인했다.
+- 원인: `/api/v1/` 공통 nginx 제한이 Cloudflare 엣지 IP 기준 `60r/m`, `burst=20`이라 여러 채팅 탭의 정상 요청도 같은 버킷에서 차단됐다.
+- 조치: 보호 기능은 유지하면서 `nginx-aads.conf`와 live `/etc/nginx/conf.d/aads.conf`를 `600r/m`, `burst=120`으로 조정하고 `nginx -t` 통과 후 무중단 reload했다.
+- 검증: 동일 채팅 API 30개 동시 요청에서 `503=0`(`401=30`, 인증 없는 정상 차단), reload 다음 초부터 수집한 nginx 142줄은 `200=108`, `304=2`, `307=2`, `401=30`, `5xx=0`이었다.
+- 제한: Browser Bridge는 `no online PC agent`로 로그인 클릭 E2E를 실행하지 못했다. 운영 로그에서 로그인 Chrome의 `limit=40` 메시지/streaming-status 요청이 200으로 처리되는 것을 확인하고 API·DB·컨테이너 폴백으로 대체했다.
+- 롤백: nginx rate/burst를 `60r/m`, `20`으로 복원한 뒤 설정 검사와 reload를 수행한다.
