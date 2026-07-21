@@ -26,6 +26,7 @@ import { getRequestedChatSessionId } from "./urlState";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
+const CHAT_MESSAGE_DOM_RENDER_LIMIT = 150;
 const TOOL_EVENT_INITIAL_RENDER_LIMIT = 40;
 const TOOL_EVENT_RENDER_STEP = 40;
 const LIVE_TOOL_LOG_RENDER_LIMIT = 20;
@@ -7255,8 +7256,9 @@ export default function ChatPage() {
       i++;
     }
     // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
-    const MAX_RENDER = 150;
-    const capped = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
+    const capped = display.length > CHAT_MESSAGE_DOM_RENDER_LIMIT
+      ? display.slice(display.length - CHAT_MESSAGE_DOM_RENDER_LIMIT)
+      : display;
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
       const isSystemMsg = m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
@@ -8768,9 +8770,9 @@ export default function ChatPage() {
           )}
 
           {/* 4번: 중복 메시지 압축 렌더링 — useMemo로 계산, cap 150개 */}
-          {displayData.totalCount > 150 && (
+          {displayData.totalCount > CHAT_MESSAGE_DOM_RENDER_LIMIT && (
             <div style={{ textAlign: "center", padding: "8px", fontSize: "12px", color: "var(--ct-text2)" }}>
-              최근 150건만 표시 중 (전체 {displayData.totalCount}건)
+              최근 {CHAT_MESSAGE_DOM_RENDER_LIMIT}건만 표시 중 (전체 {displayData.totalCount}건)
             </div>
           )}
           {(() => {
@@ -8782,7 +8784,7 @@ export default function ChatPage() {
               const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
-                <React.Fragment key={msg.render_id || msg.id || idx}>
+                <div className="ct-message-virtual-item" key={msg.render_id || msg.id || idx}>
                   <MessageItem
                     msg={msg}
                     idx={idx}
@@ -8873,7 +8875,7 @@ export default function ChatPage() {
                       >접기 ▴</button>
                     </div>
                   )}
-                </React.Fragment>
+                </div>
               );
             });
           })()}

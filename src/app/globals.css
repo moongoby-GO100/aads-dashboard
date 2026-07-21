@@ -48,6 +48,14 @@ body {
   will-change: transform;
 }
 
+/* Browser-native viewport virtualization for variable-height chat rows.
+   React keeps the bounded message window mounted while the browser skips
+   layout and paint work for rows outside the visible viewport. */
+.ct-message-virtual-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+
 /* C1: 사이드바/아티팩트 오버레이 트랜지션 */
 .ct-overlay-sidebar {
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s ease;

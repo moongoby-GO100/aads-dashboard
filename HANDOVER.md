@@ -808,3 +808,20 @@
   - 대시보드 코드 커밋 `dfe515a`, 이전 문서 커밋 `6bca949`; 본 항목은 후속 문서 커밋으로 기록한다.
   - 대시보드 저장소는 remote 미등록으로 push하지 못한다.
   - API 변경은 서버 커밋 `393145ae`; 서버 저장소가 `origin/main` 대비 분기되고 다른 미커밋 변경이 있어 push하지 않는다.
+
+## 2026-07-21 14:03 KST - E2E helper removal and large-session viewport virtualization
+
+- P0 보안 정리:
+  - URL query의 token을 cookie/localStorage로 복사하던 `public/e2e-auth.html`을 소스에서 삭제했다.
+  - 삭제 후 빌드 산출물에 해당 파일이 없음을 확인하고, 대시보드 blue-green 배포 후 양 슬롯 컨테이너에서도 부재를 검증한다.
+- P1 슬롯 정합성:
+  - 조치 전 실측에서 `aads-dashboard:3100`, `aads-dashboard-green:3101` 양 슬롯이 healthy였다.
+  - nginx와 `.active_container`/`.active_port`는 blue `3100` active로 일치했다.
+- P1 대용량 세션:
+  - 기존 최근 40건 cursor 페이지네이션과 150건 DOM 상한을 유지한다.
+  - `ct-message-virtual-item`에 `content-visibility:auto`와 intrinsic size를 적용해 가변 높이 메시지의 화면 밖 layout/paint를 브라우저가 생략하도록 했다.
+- 로컬 검증:
+  - `npx eslint src/app/chat/page.tsx src/app/globals.css`: 오류 0건, 기존 warning 23건.
+  - `npm run build`: Next.js 16.1.6 production build 성공, 57개 페이지 생성 성공.
+  - `git diff --check`: 성공.
+- 배포/운영 검증은 이 항목의 후속 결과에 기록한다.
