@@ -12,7 +12,14 @@
   - 초기 하단 안정화 시간을 800ms로 줄이고 wheel/touch/pointer 입력 즉시 자동 스크롤을 중단한다.
   - 이전 대화 prepend 후 `이전 scrollTop + scrollHeight 증가분`으로 동일 뷰포트를 복구한다.
 - 검증: `git diff --check`, `npx tsc --noEmit`, 대상 파일 ESLint(오류 0건), `npm run build`(57개 route) 통과.
-- 상태: 코드·정적 검증 완료. 커밋/push/blue-green 배포 및 권한 있는 브라우저 E2E는 아래 운영 절차에서 확인한다.
+- 운영 반영·검증 (2026-07-22 07:58~08:03 KST):
+  - 커밋 `60557347c5c1`을 `fix/yeoljeong-onboarding-a4-dashboard-20260721` 브랜치에 push했다.
+  - blue-green 배포 후 활성 blue(3100)와 standby green(3101)이 모두 release `60557347c5c1`, healthy임을 확인했다.
+  - 외부 `/login` HTTP 200과 `/api/v1/health` status `ok`, 활성 정적 번들의 `ct-messages-end-anchor` 포함을 확인했다.
+  - 대상과 동일한 192개 메시지 fixture를 실제 Chromium에서 placeholder→장문 최종응답으로 교체했다. scrollHeight는 61,843→64,998px로 증가했지만 하단 거리는 0→0px로 유지됐다.
+  - 임시 QA URL·fixture는 검증 직후 제거하고 Nginx 설정 검증/reload 및 QA URL 404를 확인했다.
+  - 배포 Step 7은 `UNKNOWN`이므로 통과로 간주하지 않는다. 대상 세션은 CEO 계정 소유라 별도 E2E 계정으로 실제 메시지를 생성할 수 없었고, 위 브라우저 회귀검증과 HTTP/API/컨테이너/번들 검증으로 대체했다.
+- 상태: 코드·커밋·push·blue-green 배포·문서 반영 완료. CEO 소유 대상 세션에서 실제 새 응답을 생성하는 계정 종단 E2E만 권한 분리로 미실행이다.
 
 ## 2026-07-22 07:21 KST - Chat final-response scroll anchor stabilization
 - 대상: `/chat/476cae48-9bd5-467b-b2da-2f68606c180e` 등 장문·대형 채팅 세션에서 최종 응답 확정 시 뷰포트가 상단으로 점프하는 현상.
