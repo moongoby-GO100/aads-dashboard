@@ -2599,6 +2599,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
+  const initialAutoScrollCancelledRef = useRef(false);
   const isNearBottomRef = useRef(true);
   const prevMessagesCountRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -3011,6 +3012,7 @@ export default function ChatPage() {
     if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
       `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&fields=render&include_streaming=true`
     ).catch(() => null);
@@ -3024,7 +3026,12 @@ export default function ChatPage() {
         return [...unique, ...prev];
       });
       requestAnimationFrame(() => {
-        if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+        if (container) {
+          // Preserve the exact visible position after prepending older rows.
+          // Using only the height delta dropped the pre-load scrollTop and
+          // fought the browser anchor, producing an upward/downward jump.
+          container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
+        }
       });
     } else {
       setHasMoreMessages(false);
@@ -4254,6 +4261,11 @@ export default function ChatPage() {
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
+    const cancelInitialAutoScroll = () => {
+      if (!isInitialLoadRef.current) return;
+      initialAutoScrollCancelledRef.current = true;
+      isInitialLoadRef.current = false;
+    };
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       // 맨 위 근접 시 이전 메시지 자동 로드
@@ -4263,8 +4275,20 @@ export default function ChatPage() {
       }
     };
     container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
+    container.addEventListener("wheel", cancelInitialAutoScroll, { passive: true });
+    container.addEventListener("touchstart", cancelInitialAutoScroll, { passive: true });
+    container.addEventListener("pointerdown", cancelInitialAutoScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      container.removeEventListener("wheel", cancelInitialAutoScroll);
+      container.removeEventListener("touchstart", cancelInitialAutoScroll);
+      container.removeEventListener("pointerdown", cancelInitialAutoScroll);
+    };
   }, [hasMoreMessages, loadOlderMessages]);
+
+  useEffect(() => {
+    initialAutoScrollCancelledRef.current = false;
+  }, [activeSession?.id]);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
@@ -4274,17 +4298,25 @@ export default function ChatPage() {
     if (isInitialLoadRef.current) {
       if (messages.length === 0) return; // FIX-2: 빈 DOM에서 stabilizer 낭비 방지
       container.scrollTop = container.scrollHeight;
-      // PERF: ResizeObserver로 DOM 변화 감지 (setInterval 50ms → 이벤트 기반)
+      // Keep the initial view at the tail while content settles, but stop as
+      // soon as the user starts scrolling. The previous unconditional
+      // observer overrode wheel/touch input for up to three seconds.
       const observer = new ResizeObserver(() => {
+        if (initialAutoScrollCancelledRef.current || !isNearBottomRef.current) {
+          observer.disconnect();
+          isInitialLoadRef.current = false;
+          return;
+        }
         container.scrollTop = container.scrollHeight;
       });
       observer.observe(container);
-      // 3초 후 자동 해제 (초기 로드 완료)
+      // Long markdown is laid out synchronously; a short settling window is
+      // sufficient for images/fonts without trapping the user's scroll.
       const timeout = setTimeout(() => {
         observer.disconnect();
         isInitialLoadRef.current = false;
         isNearBottomRef.current = true;
-      }, 3000);
+      }, 800);
       return () => { observer.disconnect(); clearTimeout(timeout); };
     } else if (isNearBottomRef.current) {
       // near-bottom이면 메시지 교체(merge/replace) 시에도 하단 고정 (DOM 재배치 스크롤 점프 방지)

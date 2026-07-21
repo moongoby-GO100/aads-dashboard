@@ -61,12 +61,13 @@ body {
   min-height: 1px;
 }
 
-/* Browser-native viewport virtualization for variable-height chat rows.
-   React keeps the bounded message window mounted while the browser skips
-   layout and paint work for rows outside the visible viewport. */
+/* Keep loaded chat rows measurable. Native content-visibility used a 320px
+   estimate for responses that can be tens of thousands of characters. When
+   an off-screen row became visible, the corrected height changed scrollTop
+   abruptly. Pagination already bounds the initial DOM to 40 messages. */
 .ct-message-virtual-item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 320px;
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 /* The live tail must use its measured height while streaming/finalizing. */

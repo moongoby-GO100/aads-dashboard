@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-07-22 07:53 KST - Large-session manual scroll stabilization
+- 대상: `/chat/d84b7c2c-64a5-4a80-9472-21170fd7d160`에서 사용자가 스크롤할 때 뷰포트가 갑자기 위·아래로 이동하는 현상.
+- 실측: 세션 메시지 682건, 전체 본문 1,552,324자, assistant 최대 32,668자. 초기 페이지는 40건, DOM 렌더 상한은 150건이다.
+- 원인:
+  - `content-visibility:auto`가 오프스크린 장문 메시지를 320px로 추정한 뒤 실제 높이로 재계산해 수동 스크롤 중 전체 높이를 변경했다.
+  - 초기 로드 `ResizeObserver`가 최대 3초간 사용자 입력과 무관하게 하단 이동을 반복했다.
+  - 이전 대화 prepend 후 보정값에 기존 `scrollTop`이 누락되어 최대 80px의 위치 오차가 발생했고 browser anchor와 충돌했다.
+- 반영:
+  - 로드된 메시지 행은 실제 높이로 측정하도록 native `content-visibility` 가상화를 해제했다. 서버 페이지네이션/DOM 150건 상한은 유지한다.
+  - 초기 하단 안정화 시간을 800ms로 줄이고 wheel/touch/pointer 입력 즉시 자동 스크롤을 중단한다.
+  - 이전 대화 prepend 후 `이전 scrollTop + scrollHeight 증가분`으로 동일 뷰포트를 복구한다.
+- 검증: `git diff --check`, `npx tsc --noEmit`, 대상 파일 ESLint(오류 0건), `npm run build`(57개 route) 통과.
+- 상태: 코드·정적 검증 완료. 커밋/push/blue-green 배포 및 권한 있는 브라우저 E2E는 아래 운영 절차에서 확인한다.
+
 ## 2026-07-22 07:21 KST - Chat final-response scroll anchor stabilization
 - 대상: `/chat/476cae48-9bd5-467b-b2da-2f68606c180e` 등 장문·대형 채팅 세션에서 최종 응답 확정 시 뷰포트가 상단으로 점프하는 현상.
 - 원인: `content-visibility: auto` 메시지 가상화가 오프스크린 장문 행을 추정 높이로 계산하는 동안 브라우저가 메시지 행을 scroll anchor로 선택했다. SSE placeholder가 최종 메시지로 교체되어 실제 높이가 확정될 때 선택된 행의 좌표 보정과 기존 하단 자동 스크롤이 충돌했다.
