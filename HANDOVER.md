@@ -14,12 +14,12 @@
   - `npx tsc --noEmit --pretty false`: 통과.
   - `git diff --check -- src/app/chat/page.tsx`: 통과.
   - `npm run build`: 성공, 57개 페이지 생성 및 `/chat`, `/chat/[id]`, `/chat/artifacts/[id]` route 확인.
-- 운영 배포 (2026-07-21 11:14~11:22 KST):
-  - `bash deploy.sh` blue-green 배포 성공. 활성 슬롯은 `aads-dashboard` (`3100`, blue), standby는 `aads-dashboard-green` (`3101`)이다.
-  - 양 슬롯 release `f4ed76260551`, 컨테이너 healthy, 내부/외부 `/login` 200, API `8100`/`8102` `/health` 200을 확인했다.
+- 운영 배포 (2026-07-21 11:31~11:37 KST 최종 원장 정합화):
+  - 로컬 코드 커밋 `5337a1f4fe53`을 릴리스 SHA로 `bash deploy.sh` blue-green 재배포했다. 활성 슬롯은 `aads-dashboard-green` (`3101`, green), standby는 `aads-dashboard` (`3100`, blue)이다.
+  - 양 슬롯 release `5337a1f4fe53`, 컨테이너 healthy, 내부/외부 `/login` 200, API `8100`/`8102` `/health` 200을 확인했다.
   - 활성 Next.js 번들에서 `이전 도구 기록` P0 지연 렌더 코드 포함을 확인했다.
   - 자동 프론트 QA는 `UNKNOWN`으로 미확정이며, Browser Bridge는 `no online PC agent`로 로그인 E2E를 실행하지 못했다. HTTP/API/컨테이너/운영 번들 검증으로 대체했다.
-- 상태: 코드·문서 기록·운영 배포 완료. 본 항목의 `src/app/chat/page.tsx`와 `HANDOVER.md`는 선별 로컬 커밋으로 기록한다. 이 저장소에는 Git remote/upstream이 등록되어 있지 않아 푸시는 수행할 수 없다. CEO 브라우저 Performance/heap 전후 실측은 미완료다.
+- 상태: 코드 커밋 `5337a1f4fe53` 및 운영 배포 완료. 최종 배포 원장 보정은 문서 전용 후속 커밋으로 기록한다. 이 저장소에는 Git remote/upstream이 등록되어 있지 않아 푸시는 수행할 수 없다. CEO 브라우저 Performance/heap 전후 실측은 미완료다.
 
 ## 2026-07-20 10:35 KST - Chat session switch loading latency
 - 배경: CEO가 채팅 세션 이동 시 로딩이 너무 느리다고 지적했고, 이전 응답이 조사 보고만 수행해 완료 조건을 만족하지 못했다.
