@@ -833,3 +833,20 @@
   - 운영 CSS bundle에 `contain-intrinsic-size:auto 320px`가 포함된 것을 확인했다.
   - DB 재조회 기준 대상 세션은 메시지 3,729건·아티팩트 2,158건이 보존돼 있다.
   - Browser Bridge/PC Agent가 offline이라 로그인 브라우저 E2E는 미실행했으며, credential 도구의 HTTP 폴백과 위 운영 검증으로 대체했다.
+
+## 2026-07-21 14:19 KST - Chat risk final ledger reconciliation
+
+- 최종 재검증:
+  - `public/e2e-auth.html` 삭제와 `src/app/chat/page.tsx`, `src/app/globals.css`의 대용량 세션 가상화 변경은 코드 커밋 `535e7a8cf3844e97811f69a51faea7bd77f47e75`에 포함되어 있다.
+  - 외부 `/static/e2e-auth.html`은 404, `/api/v1/health`는 200이며, 3100/3101 양 슬롯 `/login`은 200이다.
+  - 양 운영 컨테이너에서 E2E helper 파일 부재와 `contain-intrinsic-size:auto 320px` 운영 CSS 포함을 재확인했다.
+  - nginx 실제 설정과 저장소 설정은 green(3101) active, blue(3100) backup으로 일치하며 양 컨테이너가 healthy다.
+  - 대상 세션 DB 재조회 결과 메시지 3,729건·아티팩트 2,158건이 보존되어 있다.
+  - `npx eslint src/app/chat/page.tsx src/app/globals.css`는 오류 0건(기존 warning 23건), `npm run build`는 Next.js 16.1.6 컴파일 및 57개 페이지 생성을 완료했다.
+- Git 원장:
+  - 대시보드 로컬 저장소에는 remote가 등록되어 있지 않다.
+  - GitHub `moongoby-GO100/aads-dashboard`의 `main`을 읽기 전용 조회한 결과 로컬과 공통 조상이 없고 `remote 744 / local 21` 커밋으로 분리되어 있다.
+  - main 강제 푸시는 금지되므로 push는 수행하지 않는다. 원격 반영은 별도 정상 clone에서 변경을 선별 이식하고 검수하는 후속 통합 작업이 필요하다.
+- E2E 제한:
+  - 저장된 AADS E2E credential로 로그인 검증을 재시도했으나 PC Agent가 offline이라 Browser Bridge 세션을 확보하지 못했다.
+  - R-E2E 절차에 따라 로그인 페이지 HTTP 200, API health 200, 양 슬롯/운영 번들/DB 검증으로 대체했다.
