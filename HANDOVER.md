@@ -1,5 +1,26 @@
 # AADS Dashboard Handover
 
+## 2026-07-21 10:28 KST - Chat browser freeze P0 rendering guards
+- 배경: 대형 채팅 세션에서 질문/지시 전송 시 브라우저가 멈추는 현상이 재발했다. 최근 메시지에는 단일 메시지당 수백 건의 도구 이벤트가 포함될 수 있고, 스트리밍 시작/종료가 전체 메시지 렌더와 Markdown 재파싱을 유발하는 구조였다.
+- 반영 (`src/app/chat/page.tsx`):
+  - 전역 streaming 상태는 최근 3개 메시지와 마지막 assistant에만 전달해 과거 메시지 전체의 memo 무효화를 차단했다.
+  - 접힌 도구 상세는 DOM을 만들지 않고, 펼칠 때 최신 40건만 먼저 렌더한 뒤 40건 단위로 추가 표시한다. 실시간 도구 로그 상태는 최대 40건, 화면 렌더는 최신 20건으로 제한했다.
+  - 스트리밍 중 본문은 경량 `pre-wrap` 텍스트로 표시해 토큰 갱신마다 전체 Markdown/코드 하이라이트를 재실행하지 않는다. 완료 메시지는 기존 Markdown 렌더링을 유지한다.
+  - 실시간 사고 과정 표시는 최신 12,000자로 제한했다.
+  - 메시지-아티팩트 추정 매칭은 세션별 40자 prefix bucket을 미리 구성해 메시지마다 모든 아티팩트 본문을 정규화·순회하지 않도록 변경했다.
+  - 숨은 브라우저 탭은 활성 streaming/background 응답이 없는 경우 status/messages 폴링을 중단한다.
+- 검증:
+  - `npx eslint src/app/chat/page.tsx`: 오류 0건, 기존 경고 23건.
+  - `npx tsc --noEmit --pretty false`: 통과.
+  - `git diff --check -- src/app/chat/page.tsx`: 통과.
+  - `npm run build`: 성공, 57개 페이지 생성 및 `/chat`, `/chat/[id]`, `/chat/artifacts/[id]` route 확인.
+- 운영 배포 (2026-07-21 11:14~11:22 KST):
+  - `bash deploy.sh` blue-green 배포 성공. 활성 슬롯은 `aads-dashboard` (`3100`, blue), standby는 `aads-dashboard-green` (`3101`)이다.
+  - 양 슬롯 release `f4ed76260551`, 컨테이너 healthy, 내부/외부 `/login` 200, API `8100`/`8102` `/health` 200을 확인했다.
+  - 활성 Next.js 번들에서 `이전 도구 기록` P0 지연 렌더 코드 포함을 확인했다.
+  - 자동 프론트 QA는 `UNKNOWN`으로 미확정이며, Browser Bridge는 `no online PC agent`로 로그인 E2E를 실행하지 못했다. HTTP/API/컨테이너/운영 번들 검증으로 대체했다.
+- 상태: 코드·문서 기록·운영 배포 완료. 본 항목의 `src/app/chat/page.tsx`와 `HANDOVER.md`는 선별 로컬 커밋으로 기록한다. 이 저장소에는 Git remote/upstream이 등록되어 있지 않아 푸시는 수행할 수 없다. CEO 브라우저 Performance/heap 전후 실측은 미완료다.
+
 ## 2026-07-20 10:35 KST - Chat session switch loading latency
 - 배경: CEO가 채팅 세션 이동 시 로딩이 너무 느리다고 지적했고, 이전 응답이 조사 보고만 수행해 완료 조건을 만족하지 못했다.
 - 원인:

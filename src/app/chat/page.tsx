@@ -26,6 +26,9 @@ import { getRequestedChatSessionId } from "./urlState";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
+const TOOL_EVENT_INITIAL_RENDER_LIMIT = 40;
+const TOOL_EVENT_RENDER_STEP = 40;
+const LIVE_TOOL_LOG_RENDER_LIMIT = 20;
 
 type AuthKeyStatus = {
   label?: string;
@@ -1213,7 +1216,6 @@ function compareSelectableModels(
 interface MessageItemProps {
   msg: ChatMessage;
   idx: number;
-  streaming: boolean;
   editingMsgId: string | null;
   editText: string;
   setEditingMsgId: (id: string | null) => void;
@@ -1240,15 +1242,16 @@ interface MessageItemProps {
   isLastAssistantMsg?: boolean;
   onSpeakMessage?: (msg: ChatMessage) => void;
   speakingMessageId?: string | null;
+  onHydrateTools?: (msg: ChatMessage) => void;
 }
 
 const MessageItem = memo(function MessageItem({
-  msg, idx, streaming, editingMsgId, editText,
+  msg, idx, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenArtifactWindow, onOpenLocalFileArtifact, onOpenLightbox, isLastAssistantMsg,
-  onSpeakMessage, speakingMessageId,
+  onSpeakMessage, speakingMessageId, onHydrateTools,
 }: MessageItemProps) {
   // reply_to_id가 있으면 원본 메시지 찾기
 
@@ -1263,9 +1266,15 @@ const MessageItem = memo(function MessageItem({
   const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
-  const normalizedToolEvents = normalizeToolEventsForRender(msg.tools_called);
+  const normalizedToolEvents = useMemo(
+    () => normalizeToolEventsForRender(msg.tools_called),
+    [msg.tools_called],
+  );
   const hasToolSummary = msg.role === "assistant" && !isVisiblyStreaming && !streamingContent && messageHasToolSummary(msg);
-  const toolEventsForRender = normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg);
+  const toolEventsForRender = useMemo(
+    () => normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg),
+    [msg, normalizedToolEvents],
+  );
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
   const isSpeakingThisMessage = msg.role === "assistant" && speakingMessageId === msg.id;
   const isDocumentArtifact = Boolean(
@@ -1274,9 +1283,25 @@ const MessageItem = memo(function MessageItem({
     ["report", "text", "file", "table", "full_response", "html_preview", "image", "video"].includes(linkedArtifact.artifact_type)
   );
 
-  const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
-  const forceToolsOpen = Boolean(isLastAssistantMsg && !isVisiblyStreaming);
+  const [toolsOpen, setToolsOpen] = useState(
+    () => Boolean(
+      isLastAssistantMsg &&
+      normalizedToolEvents.length > 0 &&
+      toolEventsForRender.length <= TOOL_EVENT_INITIAL_RENDER_LIMIT
+    ),
+  );
+  const [toolEventRenderLimit, setToolEventRenderLimit] = useState(TOOL_EVENT_INITIAL_RENDER_LIMIT);
+  const forceToolsOpen = Boolean(
+    isLastAssistantMsg &&
+    !isVisiblyStreaming &&
+    normalizedToolEvents.length > 0 &&
+    toolEventsForRender.length <= TOOL_EVENT_INITIAL_RENDER_LIMIT
+  );
   const effectiveToolsOpen = forceToolsOpen || toolsOpen;
+  const visibleToolEvents = useMemo(
+    () => toolEventsForRender.slice(Math.max(0, toolEventsForRender.length - toolEventRenderLimit)),
+    [toolEventRenderLimit, toolEventsForRender],
+  );
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
@@ -1313,7 +1338,7 @@ const MessageItem = memo(function MessageItem({
           }}>⚙️ 시스템 트리거</span>
         </div>
       )}
-      {/* user buttons moved to bottom */ false && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
+      {/* user buttons moved to bottom */ false && !isVisiblyStreaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
         <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => {
@@ -1580,7 +1605,7 @@ const MessageItem = memo(function MessageItem({
                   marginBottom: streamingContent ? "8px" : "0",
                   maxHeight: "180px", overflowY: "auto" as const,
                 }}>
-                  {streamToolLogs?.map((log, i) => (
+                  {streamToolLogs?.slice(-LIVE_TOOL_LOG_RENDER_LIMIT).map((log, i) => (
                     <div key={i} style={{ marginBottom: "4px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "5px", color: log.icon === "✅" ? "#4ade80" : "var(--ct-accent)" }}>
                         <span>{log.icon}</span>
@@ -1624,7 +1649,8 @@ const MessageItem = memo(function MessageItem({
                     overflowY: "auto" as const,
                     lineHeight: 1.5,
                   }}>
-                    {streamingThinking}
+                    {streamingThinking.length > 12000 ? "…\n" : ""}
+                    {streamingThinking.slice(-12000)}
                     <span style={{
                       display: "inline-block", width: "2px", height: "12px",
                       background: "#f4b557", marginLeft: "2px",
@@ -1636,10 +1662,13 @@ const MessageItem = memo(function MessageItem({
               ) : null}
               {streamingContent ? (
                 <>
-                  <MarkdownBlock
-                    text={streamingContent}
-                    onLocalFileLink={(filePath, title) => onOpenLocalFileArtifact?.(msg.session_id, filePath, title)}
-                  />
+                  <div style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    lineHeight: 1.65,
+                  }}>
+                    {streamingContent}
+                  </div>
                   <span style={{
                     display: "inline-block", width: "2px", height: "14px",
                     background: "var(--ct-accent)", marginLeft: "2px",
@@ -1691,7 +1720,15 @@ const MessageItem = memo(function MessageItem({
                 const hydrateFailed = normalizedToolEvents.length === 0 && toolHydrationStatus === "error";
                 const needsHydrate = normalizedToolEvents.length === 0 && !toolHydrationStatus && Boolean(msg.has_tools);
                 return (
-                  <details open={effectiveToolsOpen} onToggle={(e) => setToolsOpen((e.target as HTMLDetailsElement).open)} style={{marginBottom: '8px'}}>
+                  <details
+                    open={effectiveToolsOpen}
+                    onToggle={(e) => {
+                      const isOpen = (e.target as HTMLDetailsElement).open;
+                      setToolsOpen(isOpen);
+                      if (isOpen && needsHydrate) onHydrateTools?.(msg);
+                    }}
+                    style={{marginBottom: '8px'}}
+                  >
                     <summary style={{
                       cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
                       borderRadius: '8px', background: 'rgba(108,99,255,0.06)',
@@ -1710,7 +1747,7 @@ const MessageItem = memo(function MessageItem({
                         <span style={{opacity: 0.6, fontSize: '11px', marginLeft: '4px'}}>상세 불러오는 중</span>
                       )}
                     </summary>
-                    <div style={{
+                    {effectiveToolsOpen && <div style={{
                       padding: '8px 10px', marginTop: '4px',
                       borderRadius: '8px', background: 'rgba(108,99,255,0.06)',
                       border: '1px solid rgba(108,99,255,0.2)',
@@ -1726,7 +1763,7 @@ const MessageItem = memo(function MessageItem({
                           도구 상세 기록을 불러오지 못했습니다.
                         </div>
                       )}
-                      {toolEventsForRender.map((ev, i: number) => (
+                      {visibleToolEvents.map((ev, i: number) => (
                         <div key={i} style={{marginBottom: '4px'}}>
                           {ev.type === 'tool_use' && (
                             <>
@@ -1764,7 +1801,21 @@ const MessageItem = memo(function MessageItem({
                           )}
                         </div>
                       ))}
-                    </div>
+                      {toolEventsForRender.length > visibleToolEvents.length && (
+                        <button
+                          type="button"
+                          onClick={() => setToolEventRenderLimit((limit) => limit + TOOL_EVENT_RENDER_STEP)}
+                          style={{
+                            width: "100%", marginTop: "6px", padding: "5px 8px",
+                            borderRadius: "6px", border: "1px solid var(--ct-border)",
+                            background: "var(--ct-hover)", color: "var(--ct-text2)",
+                            cursor: "pointer", fontSize: "11px",
+                          }}
+                        >
+                          이전 도구 기록 {Math.min(TOOL_EVENT_RENDER_STEP, toolEventsForRender.length - visibleToolEvents.length)}건 더 보기
+                        </button>
+                      )}
+                    </div>}
                   </details>
                 );
               })()}
@@ -2056,7 +2107,7 @@ const MessageItem = memo(function MessageItem({
                 <ConfidenceBadge label={msg.confidence_label} />
               )}
             </span>
-            {onReplyTo && !streaming && !msg.id.startsWith("tmp-") && (
+            {onReplyTo && !isVisiblyStreaming && !msg.id.startsWith("tmp-") && (
               <button
                 onClick={() => onReplyTo(msg)}
                 title="이 응답에 답글"
@@ -2072,7 +2123,7 @@ const MessageItem = memo(function MessageItem({
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
-            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
+            {onRegenerate && !isVisiblyStreaming && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
               <>
                 {(isInterruptedAssistant || isRecoverablePlaceholder) && (
                   <button
@@ -2106,7 +2157,7 @@ const MessageItem = memo(function MessageItem({
                 >🔄</button>
               </>
             )}
-            {onSpeakMessage && !streaming && !msg.id.startsWith("tmp-") && msg.content.trim() && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
+            {onSpeakMessage && !isVisiblyStreaming && !msg.id.startsWith("tmp-") && msg.content.trim() && msg.intent !== "streaming_placeholder" && msg.intent !== "rate_limited" && (
               <button
                 onClick={() => onSpeakMessage(msg)}
                 title={isSpeakingThisMessage ? "음성 재생 중지" : "이 응답을 음성으로 재생"}
@@ -2140,7 +2191,7 @@ const MessageItem = memo(function MessageItem({
           </div>
         )}
         {/* user bottom action buttons */}
-        {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
+        {msg.role === "user" && !isVisiblyStreaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
           <div style={{
             display: "flex", justifyContent: "flex-end", gap: "4px",
             marginTop: "4px", marginRight: "4px",
@@ -2210,8 +2261,6 @@ const MessageItem = memo(function MessageItem({
   prev.msg.role === next.msg.role &&
   prev.msg.intent === next.msg.intent &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
-  prev.streaming === next.streaming &&
-  prev.isLastAssistantMsg === next.isLastAssistantMsg &&
   prev.editingMsgId === next.editingMsgId &&
   (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
   prev.msg.tools_called === next.msg.tools_called &&
@@ -2827,6 +2876,24 @@ export default function ChatPage() {
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
+  const messageListInFlightRef = useRef<Map<string, Promise<ChatMessage[]>>>(new Map());
+
+  const fetchLatestMessagesSingleFlight = useCallback((sessionId: string, limit = 50): Promise<ChatMessage[]> => {
+    const key = `${sessionId}:${limit}:render`;
+    let request = messageListInFlightRef.current.get(key);
+    if (!request) {
+      request = chatApi<ChatMessage[]>(
+        `/chat/messages?session_id=${sessionId}&limit=${limit}&sort=desc&fields=render&include_streaming=true`
+      ).finally(() => {
+        if (messageListInFlightRef.current.get(key) === request) {
+          messageListInFlightRef.current.delete(key);
+        }
+      });
+      messageListInFlightRef.current.set(key, request);
+    }
+    // Consumers reverse/merge independently; never expose the shared array instance.
+    return request.then((messages) => messages.slice());
+  }, []);
 
   // 탭 복귀 시 DB에서 메시지 재조회 — 백그라운드 저장된 응답을 화면에 반영
   useEffect(() => {
@@ -2874,7 +2941,7 @@ export default function ChatPage() {
         }
       } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${sid}&limit=40&include_streaming=true`
+        `/chat/messages?session_id=${sid}&limit=40&fields=render&include_streaming=true`
       ).then((result) => {
         if (activeSessionRef.current !== sid) return;
         const shouldKeepPlaceholder = streamingRef.current || waitingBgRef.current || Boolean(bgPartialContentRef.current);
@@ -2915,16 +2982,6 @@ export default function ChatPage() {
   const artifactFetchingRef = useRef(false); // 중복 re-fetch 방지
   const artifactFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolHydrationRequestedRef = useRef<Set<string>>(new Set());
-  const toolHydrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const needsToolHydration = useCallback((msg: ChatMessage): boolean => {
-    if (msg.role !== "assistant") return false;
-    if (msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming")) return false;
-    if (!messageHasToolSummary(msg)) return false;
-    if (normalizeToolEventsForRender(msg.tools_called).length > 0) return false;
-    if (msg.tool_hydration_status === "loaded" || msg.tool_hydration_status === "error") return false;
-    return Boolean(msg.has_tools || Number(msg.tool_count || 0) > 0);
-  }, []);
 
   const hydrateMessageTools = useCallback(async (msg: ChatMessage) => {
     if (!msg.id || toolHydrationRequestedRef.current.has(msg.id)) return;
@@ -2948,30 +3005,13 @@ export default function ChatPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!activeSession?.id) return;
-    if (streamingRef.current || waitingBgRef.current) return;
-    if (toolHydrationTimerRef.current) clearTimeout(toolHydrationTimerRef.current);
-    toolHydrationTimerRef.current = setTimeout(() => {
-      if (streamingRef.current || waitingBgRef.current) return;
-      const target = messages.find(needsToolHydration);
-      if (target) void hydrateMessageTools(target);
-    }, 500);
-    return () => {
-      if (toolHydrationTimerRef.current) {
-        clearTimeout(toolHydrationTimerRef.current);
-        toolHydrationTimerRef.current = null;
-      }
-    };
-  }, [activeSession?.id, messages, needsToolHydration, hydrateMessageTools]);
-
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
     if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
+      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&fields=render&include_streaming=true`
     ).catch(() => null);
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
@@ -3009,7 +3049,7 @@ export default function ChatPage() {
       }
       if (!finalMessage) {
         const latest = await chatApi<ChatMessage[]>(
-          `/chat/messages?session_id=${sessionId}&limit=8&sort=desc&include_streaming=true`
+          `/chat/messages?session_id=${sessionId}&limit=8&sort=desc&fields=render&include_streaming=true`
         ).catch(() => [] as ChatMessage[]);
         const savedAssistant = (expectedExecutionId
           ? latest.find((m) =>
@@ -3261,7 +3301,7 @@ export default function ChatPage() {
                 || (Object.values(inp).filter((v: unknown) => typeof v === "string")[0] as string)
                 || "";
               const sub = paramText ? String(paramText).slice(0, 80) : undefined;
-              setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }]);
+              setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }].slice(-TOOL_EVENT_INITIAL_RENDER_LIMIT));
               setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
             } else if (ev.type === "tool_result" && ev.tool_name) {
               const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
@@ -3272,7 +3312,7 @@ export default function ChatPage() {
                   const realIdx = updated.length - 1 - lastIdx;
                   updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
                 }
-                return updated;
+                return updated.slice(-TOOL_EVENT_INITIAL_RENDER_LIMIT);
               });
               setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
             } else if (ev.type === "thinking" && (ev.thinking || ev.content)) {
@@ -3291,7 +3331,7 @@ export default function ChatPage() {
               setToolStatus("🔄 응답 복구 상태 확인 중...");
               return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
-              const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc&include_streaming=true`)
+              const fresh = await fetchLatestMessagesSingleFlight(attachSessionId)
                 .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full }).reverse());
               if (activeSessionRef.current !== attachSessionId) return;
               setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
@@ -3318,7 +3358,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [mergeLatestAssistantFromServer, preservePartialAndContinueStreaming]);
+  }, [fetchLatestMessagesSingleFlight, preservePartialAndContinueStreaming]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -3966,7 +4006,7 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=40&include_streaming=true`
+        `/chat/messages?session_id=${fetchSid}&limit=40&fields=render&include_streaming=true`
       )
         .then((result) => {
           const msgs = result.messages;
@@ -4195,7 +4235,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&fields=render&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -4310,9 +4350,7 @@ export default function ChatPage() {
       if (activeSessionRef.current !== sid || streamingRef.current) return;
       // safety-net은 cooldown 무시 — placeholder 잔류 시 반드시 복구
       try {
-        const msgs = await chatApi<ChatMessage[]>(
-          `/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`
-        );
+        const msgs = await fetchLatestMessagesSingleFlight(sid);
         if (activeSessionRef.current !== sid || streamingRef.current) return;
         const processed = surfaceDbSavedStreamingPlaceholders(msgs, {}).reverse();
         const latestAi = latestFinalAssistantForExecution(processed, currentExecutionIdRef.current);
@@ -4334,7 +4372,7 @@ export default function ChatPage() {
 
     }, 800);
     return () => clearTimeout(timer);
-  }, [streaming]);
+  }, [fetchLatestMessagesSingleFlight, streaming]);
 
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
@@ -4368,6 +4406,9 @@ export default function ChatPage() {
       if (isInitialLoadRef.current) return;
       const _streaming = streamingRef.current;
       const _waitingBg = waitingBgRef.current;
+      // 숨은 탭은 활성 응답 복구가 필요한 경우에만 폴링한다. 여러 채팅 탭을
+      // 오래 열어둔 환경에서 세션별 status/messages 요청이 누적되는 것을 막는다.
+      if (document.visibilityState !== "visible" && !_streaming && !_waitingBg) return;
       // PERF-FIX: waitingBg true->false 전환 시 tickCount 리셋
       // 대기 중 카운터가 증가하여 false 전환 직후 즉시 실행되는 현상 방지
       if (prevWaitingBg && !_waitingBg) { tickCount = 0; }
@@ -4416,7 +4457,7 @@ export default function ChatPage() {
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
           streamingSessionRef.current = null;
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+          const freshMsgs = await fetchLatestMessagesSingleFlight(sid)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -4483,7 +4524,7 @@ export default function ChatPage() {
           finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
-          const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+          const freshMsgs = await fetchLatestMessagesSingleFlight(sid)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -4573,7 +4614,7 @@ export default function ChatPage() {
             // 긴 도구 실행/LLM 지연 중 placeholder를 interruption_notice로 전환하면
             // 하단에 "응답 중단" 배지가 생기고, 이후 재연결이 다시 붙으면서
             // 중단/재실행이 반복되는 것처럼 보인다.
-            const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+            const freshMsgs = await fetchLatestMessagesSingleFlight(sid)
               .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
               if (Date.now() >= mergeCooldownUntilRef.current) { setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
@@ -4628,7 +4669,7 @@ export default function ChatPage() {
             mergeCooldownUntilRef.current = Date.now() + 5000;
             setStreaming(false); setStreamBuf("");
             try {
-              const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
+              const allMsgs = await fetchLatestMessagesSingleFlight(sid)
                 .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
               if (cancelled) return;
               mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -4689,7 +4730,7 @@ export default function ChatPage() {
       } catch { /* 폴링 실패 무시 */ }
     }, 5000); // 5초 간격: 브라우저 부하 감소
     return () => { cancelled = true; clearInterval(iv); };
-  }, [activeSession?.id]); // PERF: 의존성을 세션 ID만으로 축소
+  }, [activeSession?.id, fetchLatestMessagesSingleFlight]); // PERF: 의존성을 세션 ID와 안정적인 single-flight 함수로 축소
 
   // ── Toggle theme ──
   function toggleTheme() {
@@ -5649,7 +5690,7 @@ export default function ChatPage() {
                 || "";
               const sub = paramText ? String(paramText).slice(0, 80) : undefined;
               if (!isStale()) {
-                setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }]);
+                setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }].slice(-TOOL_EVENT_INITIAL_RENDER_LIMIT));
                 setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
               }
             } else if (ev.type === "tool_result" && ev.tool_name) {
@@ -5675,7 +5716,7 @@ export default function ChatPage() {
                     const realIdx = updated.length - 1 - lastIdx;
                     updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
                   }
-                  return updated;
+                  return updated.slice(-TOOL_EVENT_INITIAL_RENDER_LIMIT);
                 });
                 setToolStatus(`✅ ${ev.tool_name} 완료 — 응답 생성 중...`);
               }
@@ -5850,7 +5891,7 @@ export default function ChatPage() {
           await new Promise((r) => setTimeout(r, 3000 * (retry + 1)));
           try {
             const msgs = await chatApi<ChatMessage[]>(
-              `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc&include_streaming=true`
+              `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc&fields=render&include_streaming=true`
             ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
             const aiMsg = msgs.find((m) => isFinalAssistantMessage(m));
             if (aiMsg) {
@@ -6197,7 +6238,7 @@ export default function ChatPage() {
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
-                const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc&include_streaming=true`)
+                const freshMsgs = await fetchLatestMessagesSingleFlight(_sid)
                   .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: streamBufRef.current }).reverse());
                 let completedAi: ChatMessage | undefined;
                 if (freshMsgs) {
@@ -6290,7 +6331,7 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc&include_streaming=true`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc&fields=render&include_streaming=true`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
@@ -6334,7 +6375,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&fields=render&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -7283,13 +7324,23 @@ export default function ChatPage() {
       };
       return order[artifact.artifact_type] ?? 9;
     };
-    const bySession = new Map<string, Artifact[]>();
+    const matchBuckets = new Map<string, Artifact[]>();
+    const normalizedArtifacts = new Map<string, { title: string; content: string }>();
+    const addToBucket = (sessionId: string, prefix: string, artifact: Artifact) => {
+      if (prefix.length < 40) return;
+      const key = `${sessionId}\u0000${prefix.slice(0, 40)}`;
+      const list = matchBuckets.get(key) || [];
+      if (!list.some((item) => item.id === artifact.id)) list.push(artifact);
+      matchBuckets.set(key, list);
+    };
     for (const artifact of artifacts) {
-      const list = bySession.get(artifact.session_id) || [];
-      list.push(artifact);
-      bySession.set(artifact.session_id, list);
+      const title = normalize(artifact.title);
+      const content = normalize(artifact.content);
+      normalizedArtifacts.set(artifact.id, { title, content });
+      addToBucket(artifact.session_id, title, artifact);
+      addToBucket(artifact.session_id, content, artifact);
     }
-    for (const list of bySession.values()) {
+    for (const list of matchBuckets.values()) {
       list.sort((a, b) => {
         const priorityDiff = artifactPriority(a) - artifactPriority(b);
         if (priorityDiff !== 0) return priorityDiff;
@@ -7300,14 +7351,16 @@ export default function ChatPage() {
     const map = new Map<string, Artifact>();
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
+      const msgText = normalize(msg.content);
+      const bucketKey = msgText.length >= 40 ? `${msg.session_id}\u0000${msgText.slice(0, 40)}` : "";
+      const candidates = bucketKey ? matchBuckets.get(bucketKey) || [] : [];
       if (msg.artifact_id) {
         const direct = artifactByIdMap.get(msg.artifact_id);
-        const candidates = bySession.get(msg.session_id) || [];
         const betterDocument = direct
           ? candidates.find((artifact) => (
               artifact.id !== direct.id &&
               artifactPriority(artifact) < artifactPriority(direct) &&
-              normalize(msg.content).startsWith(normalize(artifact.content).slice(0, 120))
+              msgText.startsWith((normalizedArtifacts.get(artifact.id)?.content || "").slice(0, 120))
             ))
           : null;
         const selectedArtifact = betterDocument ?? direct;
@@ -7315,13 +7368,12 @@ export default function ChatPage() {
         continue;
       }
 
-      const msgText = normalize(msg.content);
       if (msgText.length < 40) continue;
       const msgPrefix = msgText.slice(0, 120);
-      const candidates = bySession.get(msg.session_id) || [];
       const matched = candidates.find((artifact) => {
-        const title = normalize(artifact.title);
-        const content = normalize(artifact.content);
+        const normalized = normalizedArtifacts.get(artifact.id);
+        const title = normalized?.title || "";
+        const content = normalized?.content || "";
         const titlePrefix = title.slice(0, 80);
         const contentPrefix = content.slice(0, 120);
         if (titlePrefix.length >= 40 && msgText.startsWith(titlePrefix)) return true;
@@ -8734,7 +8786,6 @@ export default function ChatPage() {
                   <MessageItem
                     msg={msg}
                     idx={idx}
-                    streaming={streaming}
                     editingMsgId={editingMsgId}
                     editText={editText}
                     setEditingMsgId={setEditingMsgId}
@@ -8775,6 +8826,7 @@ export default function ChatPage() {
                     isLastAssistantMsg={msg.id === lastAssistantId}
                     onSpeakMessage={isInternalAdmin ? speakAssistantMessage : undefined}
                     speakingMessageId={speakingMessageId}
+                    onHydrateTools={hydrateMessageTools}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -8785,11 +8837,10 @@ export default function ChatPage() {
                     </div>
                   )}
                   {hiddenMsgs && isExpanded && hiddenMsgs.map((hm, hi) => (
-                    <MessageItem
+                      <MessageItem
                       key={hm.id || `hidden-${hi}`}
                       msg={hm}
                       idx={idx + hi + 1}
-                      streaming={streaming}
                       editingMsgId={editingMsgId}
                       editText={editText}
                       setEditingMsgId={setEditingMsgId}
@@ -8811,6 +8862,7 @@ export default function ChatPage() {
                       isLastAssistantMsg={false}
                       onSpeakMessage={isInternalAdmin ? speakAssistantMessage : undefined}
                       speakingMessageId={speakingMessageId}
+                      onHydrateTools={hydrateMessageTools}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
