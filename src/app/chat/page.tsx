@@ -7867,7 +7867,7 @@ export default function ChatPage() {
               const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
-                <React.Fragment key={msg.render_id || msg.id || idx}>
+                <div className="ct-message-virtual-item" key={msg.render_id || msg.id || idx}>
                   <MessageItem
                     msg={msg}
                     idx={idx}
@@ -7950,7 +7950,7 @@ export default function ChatPage() {
                       >접기 ▴</button>
                     </div>
                   )}
-                </React.Fragment>
+                </div>
               );
             });
           })()}

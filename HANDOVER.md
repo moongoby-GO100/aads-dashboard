@@ -372,3 +372,9 @@
 - 확인: 운영 `llm_models` 레지스트리에는 478개 모델이 있고, 기존 채팅/토론 UI는 `/llm-models?active_only=true`만 호출해 실행 가능 모델만 표시했다.
 - 반영: `src/app/chat/page.tsx`, `src/components/chat/ModelSelector.tsx`, `src/components/chat/DiscussionPanel.tsx`가 `/llm-models` 전체 레지스트리를 읽도록 변경했다. 실행 가능하지 않은 모델은 드롭다운에 `(비활성)`으로 표시하고 disabled 처리해 등록 현황은 보이되 실수 선택은 막는다.
 - 검증: `npx eslint src/components/chat/ModelSelector.tsx src/components/chat/DiscussionPanel.tsx src/app/chat/page.tsx` 통과. 기존 `src/app/chat/page.tsx` 경고 22건은 남아 있으나 신규 error는 없다.
+## 2026-07-21 14:25 KST - Chat residual-risk closeout
+
+- P0 security: removed `public/e2e-auth.html`; the production URL `/static/e2e-auth.html` now returns HTTP 404, preventing URL tokens from being copied into cookies/localStorage or access logs through the temporary helper.
+- P1 slot consistency: production nginx and dashboard markers both identify green `3101` as active; blue `3100` remains the healthy rollback slot. Both containers run release `535e7a8cf384`.
+- P1 large sessions: chat loads messages through the existing 40-row cursor API and now applies browser-native `content-visibility` virtualization to each rendered message row. Production sample session `aa433b41-0ad2-421c-ae7c-bac4806035cc` contained 3,729 messages and 2,158 artifacts at verification time.
+- Verification: targeted ESLint completed with 0 errors (existing warnings only); both dashboard slots were healthy; external `/login` returned HTTP 200; external `/static/e2e-auth.html` returned HTTP 404.
