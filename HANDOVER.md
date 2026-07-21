@@ -824,4 +824,9 @@
   - `npx eslint src/app/chat/page.tsx src/app/globals.css`: 오류 0건, 기존 warning 23건.
   - `npm run build`: Next.js 16.1.6 production build 성공, 57개 페이지 생성 성공.
   - `git diff --check`: 성공.
-- 배포/운영 검증은 이 항목의 후속 결과에 기록한다.
+- 배포/운영 검증:
+  - 커밋 `535e7a8cf384`를 `/root/aads/aads-dashboard/deploy.sh`로 blue-green 배포했다.
+  - 2026-07-21 14:09:42 KST 기준 active green(3101), standby blue(3100) 모두 release `535e7a8cf384`, healthy이며 nginx upstream과 일치한다.
+  - 양 컨테이너에서 `/app/public/e2e-auth.html` 및 `/app/public/static/e2e-auth.html`이 모두 존재하지 않음을 확인했다.
+  - 외부 `/api/v1/health` 200, 대상 세션 URL 비인증 요청은 원 경로를 보존해 로그인으로 307, `/static/e2e-auth.html`은 404를 확인했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이므로 통과 근거로 사용하지 않았고, API·HTTP·컨테이너·릴리스 SHA 수동 검증으로 대체했다.
