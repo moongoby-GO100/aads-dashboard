@@ -917,3 +917,10 @@
   - 배포·push는 운영 승인 전이므로 수행하지 않았다.
   - 배민 주문 URL, 최종 메뉴·가격, 전화번호, 사업자 푸터 정보 확정 후 CTA 연결과 검색 노출 전환이 필요하다.
 - 배포 대상/롤백: AADS dashboard blue-green 배포 대상이며, 문제 시 nginx upstream을 직전 dashboard 슬롯으로 되돌리는 기존 `deploy.sh` 자동 롤백 절차를 사용한다.
+- 최종 운영 반영·재검증 (2026-07-22 08:47~08:50 KST):
+  - 기능 커밋 `e368c6dcc3f3e90e765a24dbd30621f4c1704785`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - AADS dashboard blue-green 배포 후 외부 `https://aads.newtalk.kr/unni-naengmyeon`이 로그인 리다이렉트 없이 HTTP 200, HTML `content-type: text/html; charset=utf-8`로 응답한다.
+  - 공개 브랜드 자산 `logo.svg`는 HTTP 200 `image/svg+xml`, `hero-naengmyeon.webp`는 HTTP 200 `image/webp` 및 129,976바이트로 응답한다.
+  - Browser Bridge 실검증에서 문서 제목 `언니냉면 | 성신여대 배달 냉면`, 대표 메뉴 2종, 성신여대점 주소, 배민 입점 준비 상태와 푸터가 정상 렌더링됐다.
+  - 운영 dashboard blue/green 컨테이너는 모두 `healthy`다. 독립 전체 페이지 캡처는 SSH 인자 길이 제한으로 실패했으나, 동일 URL의 Browser Bridge 탐색·접근성 트리와 외부 HTTP/정적 자산 검증으로 대체했다.
+  - 현재 공개 페이지는 미확정 가격·전화번호·배민 주문 URL을 준비 중으로 표시하고 `noindex, nofollow`를 유지한다. 확정 정보 수령 전까지 주문 CTA 활성화와 검색 노출 전환은 의도적으로 보류한다.
