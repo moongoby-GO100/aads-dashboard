@@ -770,3 +770,20 @@
 - 검증: 동일 채팅 API 30개 동시 요청에서 `503=0`(`401=30`, 인증 없는 정상 차단), reload 다음 초부터 수집한 nginx 142줄은 `200=108`, `304=2`, `307=2`, `401=30`, `5xx=0`이었다.
 - 제한: Browser Bridge는 `no online PC agent`로 로그인 클릭 E2E를 실행하지 못했다. 운영 로그에서 로그인 Chrome의 `limit=40` 메시지/streaming-status 요청이 200으로 처리되는 것을 확인하고 API·DB·컨테이너 폴백으로 대체했다.
 - 롤백: nginx rate/burst를 `60r/m`, `20`으로 복원한 뒤 설정 검사와 reload를 수행한다.
+
+## 2026-07-21 13:02 KST - Durable `/chat/{sessionId}` refresh recovery closeout
+
+- 증상: `https://aads.newtalk.kr/chat/aa433b41-0ad2-421c-ae7c-bac4806035cc`를 새로고침하면 저장된 대화가 화면에 복원되지 않았다.
+- 데이터 확인: 세션 `aa433b41-0ad2-421c-ae7c-bac4806035cc`는 DB에 존재하며 메시지 3,727건이 보존되어 있다.
+- 원인: `/chat/[id]`가 `/chat?session=...`으로 다시 전체 이동했지만 공통 URL 상태 복원 함수는 query/hash만 읽고 `/chat/{sessionId}` pathname을 읽지 않아, 인증·워크스페이스 초기화와 이중 이동이 경합할 수 있었다.
+- 수정:
+  - `src/app/chat/[id]/page.tsx`가 리다이렉트 컴포넌트 대신 공통 채팅 페이지를 직접 렌더링한다.
+  - `src/app/chat/urlState.ts`가 query → hash → pathname 순서로 세션 ID를 복원하며 URL decode 실패도 안전하게 처리한다.
+- 코드 커밋: `dfe515af3b630da5c964e83428948a5d608c9ada` (`fix(chat): restore durable session on refresh`).
+- 배포: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260721-125239.log` 기준 blue-green 성공. active `aads-dashboard:3100`, standby `aads-dashboard-green:3101` 모두 `AADS_RELEASE_SHA=dfe515af3b63`, healthy 상태다.
+- 검증:
+  - 대상 ESLint: 오류 0건, 기존 warning 22건.
+  - 외부 `/api/v1/health` 200, 대상 `/chat/{sessionId}` 비인증 요청은 로그인 보호에 의해 307.
+  - nginx 설정 검사 성공, 외부 `/login` 헬스체크 성공.
+- 제한: 배포 Step 7 자동 프론트 QA는 `UNKNOWN`이므로 성공으로 간주하지 않았다. Browser Bridge 연결 세션이 없어 로그인된 CEO 브라우저 E2E는 실행하지 못했고 DB·HTTP·컨테이너·운영 릴리스 검증으로 대체했다.
+- Git: 대시보드 저장소에는 remote가 등록되어 있지 않아 push는 불가능하다. 서버 저장소의 기존 unrelated dirty 변경은 보존했다.
