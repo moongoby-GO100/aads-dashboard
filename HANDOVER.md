@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-07-22 08:33 KST - 매장비서 계약서·입사파일 UI 최종 동기화
+
+- `public/apps/yeoljeong-finance/index.html`과 `public/static/apps/yeoljeong-finance/index.html`을 서버 계약서 원본과 동기화했다.
+- 승인 직원 자동채움·수정값 보존·A4 팝업을 유지하면서 프리랜서 기간/장소 및 용역비 누락을 수정했고, 인증 파일 Blob 모달과 PDF sandbox 예외를 복원했다.
+- Dashboard Blue 3100/Green 3101 양 슬롯에 동일 HTML을 적용했으며 SHA-256은 `1ed76211818d0dcc9d346629ec467e004a05736cd2e66622800a7551311b300b`다.
+- 외부 `aads.newtalk.kr`와 `fb.newtalk.kr` 정적 페이지에서 계약 A4 모달, 파일 모달, 프리랜서 기간·용역비 마커를 확인했다.
+
 ## 2026-07-22 07:53 KST - Large-session manual scroll stabilization
 - 대상: `/chat/d84b7c2c-64a5-4a80-9472-21170fd7d160`에서 사용자가 스크롤할 때 뷰포트가 갑자기 위·아래로 이동하는 현상.
 - 실측: 세션 메시지 682건, 전체 본문 1,552,324자, assistant 최대 32,668자. 초기 페이지는 40건, DOM 렌더 상한은 150건이다.
