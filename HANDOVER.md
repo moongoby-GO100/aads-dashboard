@@ -787,3 +787,24 @@
   - nginx 설정 검사 성공, 외부 `/login` 헬스체크 성공.
 - 제한: 배포 Step 7 자동 프론트 QA는 `UNKNOWN`이므로 성공으로 간주하지 않았다. Browser Bridge 연결 세션이 없어 로그인된 CEO 브라우저 E2E는 실행하지 못했고 DB·HTTP·컨테이너·운영 릴리스 검증으로 대체했다.
 - Git: 대시보드 저장소에는 remote가 등록되어 있지 않아 push는 불가능하다. 서버 저장소의 기존 unrelated dirty 변경은 보존했다.
+
+## 2026-07-21 14:01 KST - GO100-002 message rendering E2E and ledger closeout
+
+- 대상: `https://aads.newtalk.kr/chat/aa433b41-0ad2-421c-ae7c-bac4806035cc` 새로고침 후 대화 본문 미표시 장애.
+- 최종 원인: 대시보드는 `fields=render` 메시지 계약을 사용했지만 당시 활성 API 슬롯이 해당 값을 허용하지 않아 메시지 요청이 422로 실패했다. URL pathname 복원 결함과 API 슬롯 계약 불일치가 연속으로 존재했다.
+- 조치:
+  - 대시보드 URL 복원은 커밋 `dfe515af3b630da5c964e83428948a5d608c9ada`로 수정했다.
+  - API `full|minimal|render` 계약과 경량 render projection은 서버 커밋 `393145ae`로 선별 기록했다.
+  - 양 API 슬롯에서 `fields=render` 지원을 확인했다.
+  - 검증용 임시 관리자 credential `TEMP-SESSION-E2E-20260721`은 비활성 상태를 DB에서 재확인했다.
+  - 토큰을 URL에서 localStorage로 옮기던 untracked `public/static/e2e-auth.html`은 소스와 양 운영 슬롯에서 제거했다.
+- E2E/운영 검증:
+  - 내부 관리자 인증으로 동일 URL을 재현한 뒤 메시지 API 200과 최신 대화 DOM 렌더를 확인했고, CEO가 실제 브라우저에서 `표시된다`고 확인했다.
+  - DB에는 메시지 3,729건·아티팩트 2,157건이 보존되어 있다.
+  - 14:00:46 KST 대시보드 blue-green 배포 완료: active blue(3100), standby green(3101), 양 슬롯 release `6bca9491b27d`, healthy.
+  - 외부 `/api/v1/health` 200, 대상 URL 비인증 접근은 원 경로를 보존해 로그인으로 307, 제거된 `/static/e2e-auth.html`은 404.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이므로 성공 근거로 사용하지 않았고 위 DB·HTTP·컨테이너·인증 E2E로 대체 검증했다.
+- Git/배포 장부:
+  - 대시보드 코드 커밋 `dfe515a`, 이전 문서 커밋 `6bca949`; 본 항목은 후속 문서 커밋으로 기록한다.
+  - 대시보드 저장소는 remote 미등록으로 push하지 못한다.
+  - API 변경은 서버 커밋 `393145ae`; 서버 저장소가 `origin/main` 대비 분기되고 다른 미커밋 변경이 있어 push하지 않는다.
