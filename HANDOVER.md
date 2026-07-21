@@ -830,3 +830,6 @@
   - 양 컨테이너에서 `/app/public/e2e-auth.html` 및 `/app/public/static/e2e-auth.html`이 모두 존재하지 않음을 확인했다.
   - 외부 `/api/v1/health` 200, 대상 세션 URL 비인증 요청은 원 경로를 보존해 로그인으로 307, `/static/e2e-auth.html`은 404를 확인했다.
   - 배포 Step 7 자동 QA는 `UNKNOWN`이므로 통과 근거로 사용하지 않았고, API·HTTP·컨테이너·릴리스 SHA 수동 검증으로 대체했다.
+  - 운영 CSS bundle에 `contain-intrinsic-size:auto 320px`가 포함된 것을 확인했다.
+  - DB 재조회 기준 대상 세션은 메시지 3,729건·아티팩트 2,158건이 보존돼 있다.
+  - Browser Bridge/PC Agent가 offline이라 로그인 브라우저 E2E는 미실행했으며, credential 도구의 HTTP 폴백과 위 운영 검증으로 대체했다.
