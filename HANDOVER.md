@@ -16,8 +16,8 @@
   - 활성 슬롯은 `aads-dashboard` (`3100`, blue), standby는 `aads-dashboard-green` (`3101`, green)이며 두 슬롯 모두 release `b12b85bc4d41`, healthy 상태다.
   - 내부 blue/green `/login`과 외부 `https://aads.newtalk.kr/login` HTTP 200, 외부 API `/api/v1/health` status `ok`를 확인했다.
   - 활성 컨테이너 정적 번들에서 `ct-messages-end-anchor` CSS/JS 포함을 확인했다.
-  - 저장된 E2E 계정 로그인은 Browser Bridge 재연결 후 2회 모두 실패해 대상 세션의 인증 브라우저 재현은 수행하지 못했다. 배포 Step 7도 `UNKNOWN`이므로 통과로 간주하지 않고 HTTP/API/컨테이너/번들 검증으로 대체했다.
-- 상태: 코드·커밋·push·운영 배포·문서 반영 완료. 인증 계정 복구 후 대상 세션에서 실제 장문 응답을 생성하는 브라우저 E2E는 미완료다.
+  - 저장된 E2E 계정은 `/api/v1/auth/login/e2e-inject` 경로로 정상 인증됐다. 다만 해당 계정은 대상 세션 소유자(`476cae48-9bd5-467b-b2da-2f68606c180e`)가 아니어서 UI가 `세션 없음`으로 표시됐고, 실제 장문 응답 생성 E2E는 수행할 수 없었다. 배포 Step 7도 `UNKNOWN`이므로 통과로 간주하지 않고 HTTP/API/컨테이너/번들 검증으로 대체했다.
+- 상태: 코드·커밋·push·운영 배포·문서 반영 완료. 대상 세션 접근 권한이 있는 E2E 계정으로 실제 장문 응답을 생성하는 브라우저 검증은 미완료다.
 
 ## 2026-07-21 10:28 KST - Chat browser freeze P0 rendering guards
 - 배경: 대형 채팅 세션에서 질문/지시 전송 시 브라우저가 멈추는 현상이 재발했다. 최근 메시지에는 단일 메시지당 수백 건의 도구 이벤트가 포함될 수 있고, 스트리밍 시작/종료가 전체 메시지 렌더와 Markdown 재파싱을 유발하는 구조였다.
