@@ -16,10 +16,14 @@
   - 커밋 `60557347c5c1`을 `fix/yeoljeong-onboarding-a4-dashboard-20260721` 브랜치에 push했다.
   - blue-green 배포 후 활성 blue(3100)와 standby green(3101)이 모두 release `60557347c5c1`, healthy임을 확인했다.
   - 외부 `/login` HTTP 200과 `/api/v1/health` status `ok`, 활성 정적 번들의 `ct-messages-end-anchor` 포함을 확인했다.
-  - 대상과 동일한 192개 메시지 fixture를 실제 Chromium에서 placeholder→장문 최종응답으로 교체했다. scrollHeight는 61,843→64,998px로 증가했지만 하단 거리는 0→0px로 유지됐다.
+  - 실제 대상 세션 전체(당시 682개 메시지)를 복제한 것은 아니며, 192개 메시지로 구성한 합성 대형 세션 fixture를 실제 Chromium에서 placeholder→장문 최종응답으로 교체했다. scrollHeight는 61,843→64,998px로 증가했지만 하단 거리는 0→0px로 유지됐다.
   - 임시 QA URL·fixture는 검증 직후 제거하고 Nginx 설정 검증/reload를 완료했다. 제거 후 해당 미등록 경로는 대시보드 인증 미들웨어의 로그인 전환(HTTP 307)만 반환하며 fixture 콘텐츠를 제공하지 않는다.
   - 배포 Step 7은 `UNKNOWN`이므로 통과로 간주하지 않는다. 대상 세션은 CEO 계정 소유라 별도 E2E 계정으로 실제 메시지를 생성할 수 없었고, 위 브라우저 회귀검증과 HTTP/API/컨테이너/번들 검증으로 대체했다.
 - 상태: 코드·커밋·push·blue-green 배포·문서 반영 완료. CEO 소유 대상 세션에서 실제 새 응답을 생성하는 계정 종단 E2E만 권한 분리로 미실행이다.
+- 원장 재검증 (2026-07-22 08:12 KST):
+  - DB에서 대상 세션은 현재 684개 메시지(assistant 367, user 317), 전체 본문 1,554,914자, assistant 최대 32,668자로 확인했다. 07:53 KST의 682개 이후 대화 2개가 추가됐다.
+  - 활성 슬롯은 blue(3100), release `60557347c5c1`; standby green(3101)도 동일 release이며 모두 healthy다. 두 슬롯의 정적 JS/CSS 번들에서 스크롤 패치 식별자를 확인했다.
+  - 저장된 AADS E2E 계정 로그인은 실패했고 로그인 페이지 HTTP 200, API health `ok`, 컨테이너 health와 release 검증으로 대체했다. CEO 소유 세션의 실제 수동 스크롤 종단 E2E는 여전히 미실행으로 유지한다.
 
 ## 2026-07-22 07:21 KST - Chat final-response scroll anchor stabilization
 - 대상: `/chat/476cae48-9bd5-467b-b2da-2f68606c180e` 등 장문·대형 채팅 세션에서 최종 응답 확정 시 뷰포트가 상단으로 점프하는 현상.
