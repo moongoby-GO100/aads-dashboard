@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-07-22 07:21 KST - Chat final-response scroll anchor stabilization
+- 대상: `/chat/476cae48-9bd5-467b-b2da-2f68606c180e` 등 장문·대형 채팅 세션에서 최종 응답 확정 시 뷰포트가 상단으로 점프하는 현상.
+- 원인: `content-visibility: auto` 메시지 가상화가 오프스크린 장문 행을 추정 높이로 계산하는 동안 브라우저가 메시지 행을 scroll anchor로 선택했다. SSE placeholder가 최종 메시지로 교체되어 실제 높이가 확정될 때 선택된 행의 좌표 보정과 기존 하단 자동 스크롤이 충돌했다.
+- 반영:
+  - `src/app/globals.css`: 스크롤 컨테이너의 일반 자식은 anchor 후보에서 제외하고, 하단 sentinel만 browser scroll anchor가 되도록 지정했다.
+  - `src/app/globals.css`, `src/app/chat/page.tsx`: 최신 4개 메시지는 `content-visibility: visible`로 실제 높이를 유지하고, 나머지 메시지는 기존 가상화를 유지한다.
+  - `src/app/chat/page.tsx`: 기존 `messagesEndRef`에 전용 anchor class와 접근성 숨김 속성을 추가했다.
+- 검증:
+  - `git diff --check`: 통과.
+  - `npx tsc --noEmit`: 통과.
+  - `npm run build`: 성공, 57개 페이지 생성 및 `/chat`, `/chat/[id]` route 확인.
+- 상태: 코드 패치 및 정적 검증 완료. 운영 배포와 인증 브라우저 대상 세션 E2E 결과는 아래 후속 기록에서 확정한다.
+
 ## 2026-07-21 10:28 KST - Chat browser freeze P0 rendering guards
 - 배경: 대형 채팅 세션에서 질문/지시 전송 시 브라우저가 멈추는 현상이 재발했다. 최근 메시지에는 단일 메시지당 수백 건의 도구 이벤트가 포함될 수 있고, 스트리밍 시작/종료가 전체 메시지 렌더와 Markdown 재파싱을 유발하는 구조였다.
 - 반영 (`src/app/chat/page.tsx`):

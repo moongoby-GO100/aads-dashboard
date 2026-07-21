@@ -48,12 +48,31 @@ body {
   will-change: transform;
 }
 
+/* Keep the bottom sentinel as the only browser scroll anchor. Long markdown
+   rows are virtualized and can change height after the final SSE placeholder
+   is replaced; anchoring one of those rows can otherwise jump the viewport. */
+.ct-messages-scroll > :not(.ct-messages-end-anchor) {
+  overflow-anchor: none;
+}
+
+.ct-messages-end-anchor {
+  overflow-anchor: auto;
+  flex: 0 0 1px;
+  min-height: 1px;
+}
+
 /* Browser-native viewport virtualization for variable-height chat rows.
    React keeps the bounded message window mounted while the browser skips
    layout and paint work for rows outside the visible viewport. */
 .ct-message-virtual-item {
   content-visibility: auto;
   contain-intrinsic-size: auto 320px;
+}
+
+/* The live tail must use its measured height while streaming/finalizing. */
+.ct-message-tail-item {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 /* C1: 사이드바/아티팩트 오버레이 트랜지션 */

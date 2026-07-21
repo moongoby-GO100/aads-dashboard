@@ -8777,14 +8777,17 @@ export default function ChatPage() {
           )}
           {(() => {
             const { display, lastAssistantId } = displayData;
-            return display.map(({ msg, idx, hiddenMsgs }) => {
+            return display.map(({ msg, idx, hiddenMsgs }, displayIndex) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 시스템 메시지: 접이식 한 줄 표시
               // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
               const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
               if (isSystemMsg) return null;
               return (
-                <div className="ct-message-virtual-item" key={msg.render_id || msg.id || idx}>
+                <div
+                  className={`ct-message-virtual-item${displayIndex >= display.length - 4 ? " ct-message-tail-item" : ""}`}
+                  key={msg.render_id || msg.id || idx}
+                >
                   <MessageItem
                     msg={msg}
                     idx={idx}
@@ -8940,7 +8943,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} className="ct-messages-end-anchor" aria-hidden="true" />
         </div>
 
         {/* Input Area */}
