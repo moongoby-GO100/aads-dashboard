@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/braming/shared", "/apps", "/static", "/screenshots", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/braming/shared", "/unni-naengmyeon", "/brands", "/apps", "/static", "/screenshots", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 

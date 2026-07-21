@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" role="img" aria-labelledby="title">
+  <title id="title">언니냉면 심볼</title>
+  <rect width="220" height="220" rx="50" fill="#F45D48"/>
+  <path fill="#FFF8EA" d="M49 88h122c0 38.7-27.3 70-61 70s-61-31.3-61-70Z"/>
+  <path stroke="#FFF8EA" stroke-linecap="round" stroke-width="10" d="M58 71h104"/>
+  <path stroke="#173E35" stroke-linecap="round" stroke-width="7" fill="none" d="M77 102c20 17 47 17 67 0M90 125c13 9 27 9 40 0"/>
+  <path fill="#173E35" d="M86 55c0-9 7.2-16 16-16h16c8.8 0 16 7 16 16H86Z"/>
+</svg>

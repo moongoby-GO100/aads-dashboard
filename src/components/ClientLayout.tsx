@@ -48,6 +48,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       pathname === "/login" ||
       pathname === "/signup" ||
       pathname.startsWith("/invite/accept") ||
+      pathname.startsWith("/unni-naengmyeon") ||
       pathname.startsWith("/kakaobot");
 
     if (publicPath || isKakaobot) return;
@@ -73,6 +74,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     pathname.startsWith("/invite/accept") ||
     pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||
+    pathname.startsWith("/unni-naengmyeon") ||
     pathname.startsWith("/kakaobot") ||
     isKakaobot;
 

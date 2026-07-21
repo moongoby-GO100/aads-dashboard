@@ -894,3 +894,26 @@
 - E2E 제한:
   - 저장된 AADS E2E credential로 로그인 검증을 재시도했으나 PC Agent가 offline이라 Browser Bridge 세션을 확보하지 못했다.
   - R-E2E 절차에 따라 로그인 페이지 HTTP 200, API health 200, 양 슬롯/운영 번들/DB 검증으로 대체했다.
+
+## 2026-07-22 08:27 KST - 언니냉면 공개 홈페이지 제작
+
+- 배경: 열정국밥 성신여대점 샵인샵으로 준비 중인 배달전문 브랜드 `언니냉면`의 홈페이지와 로고 디자인을 우선 제작했다.
+- 공개 경로: `/unni-naengmyeon`.
+- 브랜드 자산:
+  - `public/brands/unni-naengmyeon/logo.svg`: 냉면 그릇 심볼과 한글 워드마크를 결합한 산호색/짙은 녹색 로고.
+  - `public/brands/unni-naengmyeon/mark.svg`: 파비콘·앱 아이콘용 정사각 심볼.
+  - `public/brands/unni-naengmyeon/hero-naengmyeon.webp`: 생성형 이미지 기반 물냉면 연출 이미지. 1,440×901, 128KB WebP로 최적화했으며 화면에 `메뉴 연출 이미지`를 명시했다.
+- 화면 구성: 반응형 히어로, 물냉면/비빔냉면 대표 메뉴, 브랜드 소개, 성신여대점 위치, 배민 입점 준비 상태, 오픈 예정 CTA, 푸터.
+- 운영 안전:
+  - 미확정 가격·구성·전화번호·배민 주문 URL은 임의 게시하지 않고 준비 중으로 표기했다.
+  - 배민 입점과 사업자/고객센터 정보 확정 전까지 검색 노출을 막도록 `noindex, nofollow`를 적용했다.
+  - `src/middleware.ts`와 `ClientLayout.tsx`에서 홈페이지·브랜드 자산을 인증 없이 접근 가능한 공개 경로로 등록했다.
+- 검증:
+  - 대상 ESLint 오류 0건.
+  - `npm run build`: Next.js 16.1.6 production build 성공, `/unni-naengmyeon` 라우트 포함 58개 페이지 생성.
+  - 로컬 HTTP: 홈페이지 200, hero WebP 200, HTML title 정상.
+  - Playwright 데스크톱 1,440px/모바일 390px 렌더: 가로 overflow 없음, 콘솔 오류 0건, 이미지 3개 로드, 내부 앵커 8개 모두 유효.
+- 미완료:
+  - 배포·push는 운영 승인 전이므로 수행하지 않았다.
+  - 배민 주문 URL, 최종 메뉴·가격, 전화번호, 사업자 푸터 정보 확정 후 CTA 연결과 검색 노출 전환이 필요하다.
+- 배포 대상/롤백: AADS dashboard blue-green 배포 대상이며, 문제 시 nginx upstream을 직전 dashboard 슬롯으로 되돌리는 기존 `deploy.sh` 자동 롤백 절차를 사용한다.
