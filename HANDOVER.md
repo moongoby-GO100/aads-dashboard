@@ -17,7 +17,7 @@
   - blue-green 배포 후 활성 blue(3100)와 standby green(3101)이 모두 release `60557347c5c1`, healthy임을 확인했다.
   - 외부 `/login` HTTP 200과 `/api/v1/health` status `ok`, 활성 정적 번들의 `ct-messages-end-anchor` 포함을 확인했다.
   - 대상과 동일한 192개 메시지 fixture를 실제 Chromium에서 placeholder→장문 최종응답으로 교체했다. scrollHeight는 61,843→64,998px로 증가했지만 하단 거리는 0→0px로 유지됐다.
-  - 임시 QA URL·fixture는 검증 직후 제거하고 Nginx 설정 검증/reload 및 QA URL 404를 확인했다.
+  - 임시 QA URL·fixture는 검증 직후 제거하고 Nginx 설정 검증/reload를 완료했다. 제거 후 해당 미등록 경로는 대시보드 인증 미들웨어의 로그인 전환(HTTP 307)만 반환하며 fixture 콘텐츠를 제공하지 않는다.
   - 배포 Step 7은 `UNKNOWN`이므로 통과로 간주하지 않는다. 대상 세션은 CEO 계정 소유라 별도 E2E 계정으로 실제 메시지를 생성할 수 없었고, 위 브라우저 회귀검증과 HTTP/API/컨테이너/번들 검증으로 대체했다.
 - 상태: 코드·커밋·push·blue-green 배포·문서 반영 완료. CEO 소유 대상 세션에서 실제 새 응답을 생성하는 계정 종단 E2E만 권한 분리로 미실행이다.
 
