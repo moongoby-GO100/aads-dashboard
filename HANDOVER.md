@@ -1327,3 +1327,9 @@
   - 대상 ESLint: 오류 0건, 기존 warning 22건.
   - Next.js 16.1.6 production build: 컴파일 및 57개 route 생성 성공.
 - E2E 제한: PC Agent가 offline이라 로그인 Browser Bridge 검증은 불가했다. Credential Vault 로그인 페이지 HTTP fallback 200, 대상 DB 메시지 순서, 회귀 테스트와 production build로 선검증했으며 운영 배포 후 API/컨테이너/릴리스 검증을 수행한다.
+- 운영 반영·검증 (2026-07-23 08:47~08:52 KST):
+  - 운영 브랜치 커밋 `9acd9db9f146`을 push하고 dashboard blue-green 배포를 완료했다. 08:50:57 KST blue(3100) 헬스 통과 후 nginx를 전환했고, green(3101) standby도 같은 릴리스로 동기화했다.
+  - 08:51:55 KST 기준 양 슬롯 `healthy`, release `9acd9db9f146`; 외부 `/login` 200, `/api/v1/health` 200(status=ok), 대상 URL 비인증 접근은 원 경로를 보존해 로그인으로 307이다.
+  - 양 운영 슬롯의 Next.js 번들에서 generation guard 식별자 `previousExecutionId` 포함을 확인했다.
+  - 자동 프론트 QA는 `UNKNOWN`으로 통과 처리하지 않았다. 저장된 E2E 계정은 CEO 소유 대상 세션에 접근할 수 없어 상태 API 404/메시지 0건을 반환했으며, PC Agent도 offline이라 실제 CEO 클릭 E2E는 미실행이다. 8개 상태 전이 테스트, DB 순서, 운영 번들·HTTP·컨테이너 검증으로 대체했다.
+- 상태: 코드·회귀 테스트·HANDOVER·커밋·push·blue-green 배포·운영 검증 완료. CEO 권한 브라우저에서 실제 질문 1건을 보내는 수동 확인만 권한/PC Agent 제약으로 미실행이다.
