@@ -1000,3 +1000,19 @@
   - 외부 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200, 신규 `hero-naengmyeon-brass-v2.webp`는 HTTP 200 `image/webp` 및 166,124바이트, `/api/v1/health`는 HTTP 200으로 응답했다.
   - 운영 HTML에서 고정 메뉴바 릴리스의 신규 문구, 배민 단축 URL, 고명 설명, 사선 띠 문구를 확인했다.
   - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. Browser Bridge/PC Agent가 offline이므로 브라우저 E2E 대신 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA로 검증했다.
+
+## 2026-07-22 15:45 KST - 언니냉면 바가지머리 로고 추가 시안 3종 HTML
+
+- 목적: CEO가 참고 이미지의 둥근 바가지머리와 친근한 언니 인상을 반영한 추가 로고 3종을 브라우저에서 비교·확대·저장할 수 있도록 별도 HTML을 제공한다.
+- 산출물:
+  - `public/unni-naengmyeon-bowlcut-logo-concepts-20260722.html`: 3열 반응형 비교, 확대 dialog, PNG 저장 링크, 적용처 선택 가이드.
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-d-front-bowlcut-bowl.png`: 정면 바가지머리+냉면 그릇형.
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-e-profile-noodle.png`: 옆얼굴+젓가락 면발형.
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-f-bowlcut-seal.png`: 바가지머리+한글 인장형.
+- 이미지 생성: Codex built-in `image_gen`으로 생성한 세 결과를 프로젝트 정적 자산으로 보존했다. 각 파일은 1,254×1,254 RGB PNG다.
+- 공개 목표 URL: `https://aads.newtalk.kr/unni-naengmyeon-bowlcut-logo-concepts-20260722.html`.
+- 로컬 검증:
+  - Python 정적 HTTP 서버에서 HTML과 PNG 3장 모두 HTTP 200.
+  - PNG 응답 크기 762,399/810,782/707,456바이트 및 1,254×1,254 RGB 형식을 확인했다.
+  - PC Agent 오프라인으로 `capture_screenshot`은 실행하지 못했고, 로컬 Playwright는 Chromium 런타임 부재로 캡처하지 못했다. HTTP·파일 형식·이미지 육안 확인으로 대체했다.
+- 운영 영향/롤백: 신규 정적 HTML 1개와 PNG 3개만 추가하며 기존 홈페이지/API는 변경하지 않는다. 문제 시 직전 dashboard 슬롯으로 nginx upstream을 되돌릴 수 있다.
