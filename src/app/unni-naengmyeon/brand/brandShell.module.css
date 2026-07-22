@@ -10,7 +10,7 @@
 
 .headerInner {
   width: min(1180px, calc(100% - 40px));
-  height: 84px;
+  height: 104px;
   margin: auto;
   display: flex;
   align-items: center;
@@ -21,21 +21,21 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 15px;
   color: #173e35;
   text-decoration: none;
 }
 
 .brand img {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 76px;
+  height: 76px;
+  border-radius: 17px;
   object-fit: cover;
   mix-blend-mode: multiply;
 }
 
 .brand span {
-  font-size: 26px;
+  font-size: clamp(31px, 3vw, 40px);
   font-weight: 950;
   letter-spacing: -.09em;
   white-space: nowrap;
@@ -65,10 +65,10 @@
 }
 
 @media (max-width: 640px) {
-  .headerInner { width: min(100% - 24px, 560px); height: 72px; gap: 12px; }
+  .headerInner { width: min(100% - 24px, 560px); height: 82px; gap: 10px; }
   .brand { gap: 8px; }
-  .brand img { width: 46px; height: 46px; border-radius: 11px; }
-  .brand span { font-size: 20px; }
+  .brand img { width: 54px; height: 54px; border-radius: 12px; }
+  .brand span { font-size: 24px; }
   .nav { gap: 2px; }
   .nav a { padding: 8px 7px; font-size: 10px; }
   .nav a:first-child { display: none; }

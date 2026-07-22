@@ -26,11 +26,14 @@ export default function UnniLogoGuidePage() {
       <section className={styles.hero}>
         <div>
           <span>BRAND IDENTITY · 2026</span>
-          <h1>언니냉면<br />로고 가이드</h1>
+          <h1><strong>언니냉면</strong><small>로고 가이드</small></h1>
           <p>둥근 바가지머리, 중앙 워드마크, 냉면 그릇을 하나로 연결한 컨셉 H를 메인 로고로 사용합니다.</p>
         </div>
         <div className={styles.mainLogo}>
-          <Image src={`${LOGO_ROOT}/concept-h-wordmark-noodles.png`} alt="언니냉면 컨셉 H 메인 로고" width={1254} height={1254} priority />
+          <div className={styles.primaryLockup}>
+            <Image src={`${LOGO_ROOT}/concept-h-wordmark-noodles.png`} alt="바가지머리와 냉면 그릇을 결합한 언니냉면 컨셉 H 메인 로고" width={1254} height={1254} priority />
+            <span aria-hidden="true">언니냉면</span>
+          </div>
           <b>PRIMARY LOGO · CONCEPT H</b>
         </div>
       </section>

@@ -4,7 +4,7 @@ import BrandNav from "../BrandNav";
 import styles from "./page.module.css";
 
 const ASSET_ROOT = "/brands/unni-naengmyeon/banners-20260722";
-const MARK = "/brands/unni-naengmyeon/mark.svg";
+const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
 
 type ConceptTone = "classic" | "night" | "ice" | "premium" | "coral";
 
@@ -105,7 +105,7 @@ const pickupConcepts = [
     image: "concept-p1-ice-blue.png",
     tone: "pickupIce",
     eyebrow: "DELIVERY · TAKE OUT",
-    title: <>언니냉면<br /><em>배달/포장 픽업존</em></>,
+    title: <>배달·포장<br /><em>픽업존</em></>,
     guide: "주문번호 확인 후 픽업",
   },
   {
@@ -115,7 +115,7 @@ const pickupConcepts = [
     image: "concept-p2-rider-arrow.png",
     tone: "pickupNight",
     eyebrow: "배달기사님, 여기입니다",
-    title: <>언니냉면<br /><em>배달/포장 픽업존</em></>,
+    title: <>배달·포장<br /><em>픽업존</em></>,
     guide: "픽업은 이쪽  →",
   },
   {
@@ -125,7 +125,7 @@ const pickupConcepts = [
     image: "concept-p3-friendly-pack.png",
     tone: "pickupCream",
     eyebrow: "어서 오세요",
-    title: <>언니냉면<br /><em>배달/포장 픽업존</em></>,
+    title: <>배달·포장<br /><em>픽업존</em></>,
     guide: "포장 주문 · 배달 픽업",
   },
 ];
@@ -138,7 +138,7 @@ export const metadata: Metadata = {
 function BannerLogo({ inverse = false }: { inverse?: boolean }) {
   return (
     <div className={`${styles.bannerLogo} ${inverse ? styles.inverseLogo : ""}`}>
-      <Image src={MARK} alt="" width={220} height={220} />
+      <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />
       <strong>언니냉면</strong>
     </div>
   );
