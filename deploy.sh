@@ -14,7 +14,8 @@ set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 COMPOSE_DIR="/root/aads/aads-server"
-COMPOSE_FILE="docker-compose.prod.yml"
+COMPOSE_FILE="/root/aads/aads-server/docker-compose.prod.yml"
+COMPOSE_OVERRIDE="/root/aads/aads-dashboard-unni/docker-compose.unni-release.yml"
 COMPOSE_PROJECT="aads-server"
 BLUE_SERVICE="aads-dashboard"
 GREEN_SERVICE="aads-dashboard-green"
@@ -23,6 +24,7 @@ GREEN_CONTAINER="aads-dashboard-green"
 BLUE_PORT="3100"
 GREEN_PORT="3101"
 STATE_DIR="/root/aads/aads-dashboard"
+SOURCE_DIR="/root/aads/aads-dashboard-unni"
 HEALTH_BLUE="http://127.0.0.1:${BLUE_PORT}/login"
 HEALTH_GREEN="http://127.0.0.1:${GREEN_PORT}/login"
 HEALTH_EXTERNAL="${DASHBOARD_EXTERNAL_HEALTH_URL:-https://aads.newtalk.kr/login}"
@@ -119,8 +121,8 @@ if ! flock -w 300 8; then
     exit 1
 fi
 
-if git -C "$STATE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-$(git -C "$STATE_DIR" rev-parse --short=12 HEAD)}"
+if git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-$(git -C "$SOURCE_DIR" rev-parse --short=12 HEAD)}"
 else
     export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-unknown}"
 fi
@@ -209,7 +211,7 @@ container_release_sha() {
 
 sync_dashboard_standby() {
     local slot="$1" service="$2" container="$3" health_url="$4"
-    local args=(-f "$COMPOSE_FILE")
+    local args=(-f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE")
 
     if [ "$slot" = "green" ]; then
         args+=(--profile green)
@@ -313,7 +315,7 @@ verify_upstream_shape() {
 
 cd "$COMPOSE_DIR"
 
-COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+COMPOSE_ARGS=(-f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE")
 
 # Step 0: 현재 활성 슬롯 판별
 ACTIVE_SLOT=$(current_active_slot)

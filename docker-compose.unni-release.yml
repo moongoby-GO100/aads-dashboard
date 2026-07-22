@@ -1,0 +1,9 @@
+services:
+  aads-dashboard:
+    build:
+      context: /root/aads/aads-dashboard-unni
+      dockerfile: Dockerfile
+  aads-dashboard-green:
+    build:
+      context: /root/aads/aads-dashboard-unni
+      dockerfile: Dockerfile
