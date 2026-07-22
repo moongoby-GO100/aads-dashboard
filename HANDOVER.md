@@ -1068,3 +1068,9 @@
   - `npm run build` 성공: Next.js 16.1.6, `/unni-naengmyeon` 포함 58개 라우트 생성.
   - PC Agent 오프라인 및 로컬 Chromium 런타임 부재로 화면 캡처는 실행하지 못했으며 HTTP·파일 형식·이미지 육안 확인으로 대체했다.
 - 운영 영향/롤백: 비교 HTML 1개와 신규 PNG 3개만 반영하며 기존 홈페이지·API·DB에는 영향이 없다. 문제 시 직전 대시보드 릴리스 슬롯 또는 본 커밋 revert로 복구한다.
+- 운영 반영·최종 검증 (2026-07-22 16:22~16:28 KST):
+  - 기능·자산 커밋 `4fa7e71b0cf2`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - `bash deploy.sh` blue-green 배포를 완료했고 active blue와 standby green이 모두 `healthy`, `AADS_RELEASE_SHA=4fa7e71b0cf2`로 일치한다.
+  - 공개 비교 HTML, 신규 PNG 3장, 기존 `/unni-naengmyeon`, `/api/v1/health`가 모두 HTTP 200으로 응답했다. 신규 PNG 응답 크기는 각각 783,560/745,367/704,228바이트로 로컬 원본과 일치한다.
+  - 운영 HTML에서 신규 G/H/I 파일 경로와 `바가지머리 → 언니냉면 글씨 로고 → 냉면 그릇` 문구를 확인했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent 오프라인·서버 Chromium 부재로 브라우저 픽셀 E2E 대신 공개 HTTP·정적 자산·API·컨테이너 헬스·릴리스 SHA 검증으로 대체했다.
