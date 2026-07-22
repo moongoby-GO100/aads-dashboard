@@ -1040,3 +1040,15 @@
   - 운영 HTML에서 신규 이미지 경로, `붉은 다대기`, `황동그릇에 땅콩`, `실제 메뉴 이미지` 문구 렌더를 확인했다.
 - 제한:
   - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. Browser Bridge/PC Agent가 오프라인이라 운영 스크린샷 E2E는 실행하지 못했으며, 공개 HTTP·원본 해시·API·컨테이너·릴리스 SHA 검증으로 대체했다.
+
+## 2026-07-22 16:12 KST - 컨셉 D 계열 로고 시안 G/H/I 추가
+
+- CEO 요청: 기존 컨셉 D의 정면 바가지머리·냉면 그릇 조형을 유지한 추가 로고 시안 3종을 만들고 같은 공개 비교 페이지에 넣는다.
+- 반영:
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-g-smile-wave.png`: 눈웃음과 육수 물결을 결합한 친근한 정면형.
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-fringe-noodles.png`: 앞머리 세 가닥을 면발과 그릇으로 연결한 업종 직관형.
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-i-round-seal.png`: 바가지머리와 면발을 원 안에 압축한 인장형.
+  - `public/unni-naengmyeon-bowlcut-logo-concepts-20260722.html`: 기존 D/E/F 3종 페이지를 D~I 6종 비교 페이지로 확장하고, 신규 시안 설명·확대 보기·PNG 저장·선택 가이드를 추가했다.
+- 이미지 생성: Codex built-in `image_gen` 기본 경로를 사용했다. 세 파일 모두 1,254×1,254 RGB PNG이며 흑백 단색, 굵은 선, 정면 바가지머리 계열과 정확한 `언니냉면` 표기를 육안 검수했다.
+- 운영 영향/롤백: 정적 HTML 1개와 PNG 3개만 변경·추가하며 기존 언니냉면 홈페이지, API, DB에는 영향이 없다. 문제 시 직전 대시보드 릴리스 슬롯으로 nginx upstream을 되돌리거나 본 커밋을 revert할 수 있다.
+- 공개 URL: `https://aads.newtalk.kr/unni-naengmyeon-bowlcut-logo-concepts-20260722.html`.
