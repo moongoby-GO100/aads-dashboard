@@ -93,25 +93,39 @@
 .frontFooterLogo .bannerLogo { justify-content: center; gap: 2.2cqw; }
 .frontFooterLogo .bannerLogo img { width: 9.5cqw; height: 9.5cqw; border-radius: 1.8cqw; }
 .frontFooterLogo .bannerLogo strong { font-size: 7.2cqw; letter-spacing: -.035em; }
-.b1Feature .backCopy { margin-top: 3.8cqw; }
-.b1Feature .backCopy h3 { font-size: 10.2cqw; line-height: .94; letter-spacing: -.04em; }
-.b1Feature .backCopy h3 em { display: block; margin-top: 1.2cqw; }
-.b1MenuStack { display: grid; gap: 5.2cqw; margin-top: 4.8cqw; }
-.b1MenuSection { margin-top: 0; padding: 4.8cqw 5cqw; }
-.b1MenuSection > span { margin-bottom: 2cqw; font-size: 4.2cqw; line-height: 1.25; letter-spacing: .055em; }
+.b1Feature.back .bannerInner { padding: 5.5cqw 6cqw 4.8cqw; }
+.b1Feature.back .bannerLogo { gap: 1.8cqw; }
+.b1Feature.back .bannerLogo img { width: 13cqw; height: 13cqw; border-radius: 2cqw; }
+.b1Feature.back .bannerLogo strong { font-size: 7.4cqw; letter-spacing: -.045em; }
+.b1Feature .backCopy { margin-top: 2.6cqw; }
+.b1Feature .backCopy > span { font-size: 2.3cqw; }
+.b1Feature .backCopy h3 { margin-top: 1.5cqw; font-size: 8.8cqw; line-height: .92; letter-spacing: -.04em; }
+.b1Feature .backCopy h3 em { display: block; margin-top: .8cqw; }
+.b1MenuStack { display: grid; gap: 3.2cqw; margin-top: 3.3cqw; }
+.b1MenuSection { margin-top: 0; padding: 3.2cqw 3.6cqw; border-radius: 3cqw; }
+.b1MenuSection > span { margin-bottom: 1.2cqw; font-size: 3.3cqw; line-height: 1.2; letter-spacing: .065em; }
 .b1MenuSection > .b1MenuRows, .b1MenuSection > .b1SetRows { display: grid; gap: 0; padding: 0; border-top: 0; }
-.b1MenuSection .b1MenuRow { display: grid; grid-template-columns: 15cqw minmax(0, 1fr) auto; align-items: center; gap: 2.6cqw; min-height: 16.8cqw; padding: 2.1cqw 0; border-top: .18cqw solid rgba(23,62,53,.16); }
-.b1SingleThumb, .b1SetThumb { width: 15cqw; height: 11.25cqw; overflow: hidden; border-radius: 1.5cqw; background: #dce8e3; }
+.b1MenuSection .b1MenuRow { display: grid; grid-template-columns: 13.2cqw minmax(0, 1fr) auto; align-items: center; gap: 2cqw; min-height: 14.8cqw; padding: 1.55cqw 0; border-top: .18cqw solid rgba(23,62,53,.16); }
+.b1SingleThumb, .b1SetThumb { width: 13.2cqw; height: 10cqw; overflow: hidden; border-radius: 1.35cqw; background: #dce8e3; }
 .b1SingleThumb img { width: 100%; height: 100%; object-fit: cover; }
 .b1SetThumb { display: grid; }
 .b1SetThumb img { width: 100%; height: 100%; min-width: 0; grid-area: 1 / 1; object-fit: cover; }
 .b1SetThumb.menuThumbCollage { grid-template-columns: repeat(3, 1fr); }
 .b1SetThumb.menuThumbCollage img { grid-area: auto; }
-.b1MenuRow b { font-size: 3.5cqw; line-height: 1.28; letter-spacing: -.03em; }
-.b1MenuRow strong { font-size: 3.5cqw; line-height: 1.28; white-space: nowrap; }
-.b1SetGroup h4 { margin: 0 0 2.8cqw; color: white; font-size: 9.2cqw; font-weight: 950; letter-spacing: -.04em; line-height: 1; }
+.b1SetPlaceholder { display: grid; place-items: center; width: 100%; height: 100%; background: var(--green); color: white; font-size: 1.8cqw; font-weight: 950; letter-spacing: .04em; }
+.b1MenuCopy { min-width: 0; display: grid; align-content: center; gap: .45cqw; }
+.b1MenuCopy small { width: fit-content; margin: 0; padding: .4cqw .8cqw; border-radius: 999px; background: var(--coral); color: white; font-size: 1.65cqw; font-weight: 900; letter-spacing: -.015em; line-height: 1.1; }
+.b1MenuCopy b { overflow-wrap: anywhere; font-size: 3cqw; line-height: 1.16; letter-spacing: -.035em; }
+.b1MenuCopy span { color: #68736f; font-size: 1.8cqw; font-weight: 750; letter-spacing: -.025em; line-height: 1.2; }
+.b1MenuRow strong { font-size: 3cqw; line-height: 1.18; white-space: nowrap; }
+.b1SetGroup h4 { margin: 0 0 1.8cqw; color: white; font-size: 7.8cqw; font-weight: 950; letter-spacing: -.04em; line-height: .96; }
 .b1SetGroup h4 em { color: var(--coral); font-style: normal; }
-.b1SetSection .b1MenuRow { padding-block: 2.1cqw; }
+.b1SetSection .b1MenuRow { padding-block: 1.45cqw; }
+.b1BackFooter { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 2.2cqw; padding-top: 3cqw; }
+.b1BackFooter .bannerLogo { min-width: 0; }
+.b1BackFooter .bannerLogo img { width: 9.5cqw; height: 9.5cqw; border-radius: 1.8cqw; }
+.b1BackFooter .bannerLogo strong { font-size: 6.2cqw; letter-spacing: -.035em; }
+.b1BackFooter > strong { flex: 0 0 auto; padding: 2.2cqw 2.6cqw; border-radius: 2cqw; background: var(--coral); color: white; font-size: 3.2cqw; font-weight: 950; letter-spacing: -.035em; }
 .nightD1 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.84) 49%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.2) 100%); }
 .nightD2 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.82) 48%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.24) 100%); }
 .nightD1 .backShade, .nightD2 .backShade { background: linear-gradient(180deg, rgba(3,22,19,.97), rgba(3,22,19,.9) 58%, rgba(3,22,19,.7)); }

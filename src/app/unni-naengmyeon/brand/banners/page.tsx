@@ -54,16 +54,9 @@ const visualSetMenu = [
 
 const visualSingleMenu = [
   {
-    name: "외할머니 명태회냉면",
-    price: "13,000원",
-    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
-    alt: "붉은 명태회 양념과 고명을 올린 냉면",
-    objectPosition: "50% 54%",
-    scale: 1.18,
-    transformOrigin: "50% 54%",
-  },
-  {
-    name: "물비냉 언니냉면",
+    name: "언니냉면",
+    tag: "물비냉 속시원",
+    detail: "시원한 육수와 비빔 양념을 한 번에",
     price: "10,500원",
     image: "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp",
     alt: "육수와 비빔 양념을 함께 즐기는 언니냉면",
@@ -73,6 +66,8 @@ const visualSingleMenu = [
   },
   {
     name: "물냉면",
+    tag: "과일육수/개운시원",
+    detail: "과일육수로 개운하고 시원하게",
     price: "10,000원",
     image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
     alt: "살얼음 육수를 담은 황동그릇 물냉면",
@@ -82,12 +77,82 @@ const visualSingleMenu = [
   },
   {
     name: "비빔냉면",
+    tag: "매콤달콤",
+    detail: "수제 양념의 매콤달콤한 감칠맛",
     price: "10,000원",
     image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
     alt: "매콤한 붉은 양념과 고명을 올린 비빔냉면",
     objectPosition: "50% 50%",
     scale: 1,
     transformOrigin: "50% 50%",
+  },
+  {
+    name: "불냉면",
+    tag: "매움도전",
+    detail: "화끈하게 당기는 매운맛 도전",
+    price: "10,000원",
+    image: "/brands/unni-naengmyeon/menu/bul-naengmyeon.png",
+    alt: "화끈한 붉은 양념과 고명을 올린 불냉면",
+    objectPosition: "50% 50%",
+    scale: 1,
+    transformOrigin: "50% 50%",
+  },
+  {
+    name: "처갓집 묵사발",
+    tag: "강력추천",
+    detail: "도토리묵과 시원한 육수의 별미",
+    price: "9,000원",
+    image: "/brands/unni-naengmyeon/menu/muksabal.png",
+    alt: "도토리묵과 오이, 김치, 김가루를 올린 시원한 묵사발",
+    objectPosition: "50% 50%",
+    scale: 1,
+    transformOrigin: "50% 50%",
+  },
+  {
+    name: "외할머니 명태회냉면",
+    tag: "꼬들꼬들",
+    detail: "명태회 130g을 푸짐하게",
+    price: "13,000원",
+    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
+    alt: "붉은 명태회 양념과 고명을 올린 냉면",
+    objectPosition: "50% 54%",
+    scale: 1.18,
+    transformOrigin: "50% 54%",
+  },
+];
+
+const b1SetMenu = [
+  {
+    name: "냉면 + 수제돈까스",
+    detail: "혼자서도 든든하게",
+    price: "15,500원",
+    images: ["naengmyeon-donkatsu.webp"],
+  },
+  {
+    name: "냉면 + 찐만두",
+    detail: "혼자서도 담백하게",
+    price: "15,000원",
+    images: ["naengmyeon-mandu.webp"],
+  },
+  {
+    name: "냉면 + 몽땅 SET",
+    detail: "돈까스 + 사이드 2개 선택",
+    price: "19,500원",
+    images: ["bibim-naengmyeon.webp", "naengmyeon-donkatsu.webp", "naengmyeon-mandu.webp"],
+  },
+  {
+    name: "냉면 2 + 수제돈까스",
+    detail: "둘이서도 든든하게",
+    price: "25,000원",
+    images: [],
+    placeholder: "2인 SET",
+  },
+  {
+    name: "냉면 2 + 찐만두",
+    detail: "둘이서도 담백하게",
+    price: "25,500원",
+    images: [],
+    placeholder: "2인 SET",
   },
 ];
 
@@ -271,7 +336,11 @@ function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVis
                     }}
                   />
                 </div>
-                <b>{item.name}</b>
+                <div className={styles.b1MenuCopy}>
+                  <small>[{item.tag}]</small>
+                  <b>{item.name}</b>
+                  <span>{item.detail}</span>
+                </div>
                 <strong>{item.price}</strong>
               </div>
             ))}
@@ -282,14 +351,19 @@ function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVis
           <div className={`${styles.menuBoard} ${styles.b1MenuSection} ${styles.b1SetSection}`}>
             <span>세트메뉴</span>
             <div className={styles.b1SetRows}>
-              {visualSetMenu.map((item) => (
+              {b1SetMenu.map((item) => (
                 <div className={styles.b1MenuRow} key={item.name}>
                   <div className={`${styles.b1SetThumb} ${item.images.length > 1 ? styles.menuThumbCollage : ""}`}>
-                    {item.images.map((image) => (
-                      <Image key={image} src={`/brands/unni-naengmyeon/menu/${image}`} alt="" width={160} height={120} />
-                    ))}
+                    {item.images.length > 0
+                      ? item.images.map((image) => (
+                        <Image key={image} src={`/brands/unni-naengmyeon/menu/${image}`} alt="" width={160} height={120} />
+                      ))
+                      : <span className={styles.b1SetPlaceholder}>{item.placeholder}</span>}
                   </div>
-                  <b>{item.name}</b>
+                  <div className={styles.b1MenuCopy}>
+                    <b>{item.name}</b>
+                    <span>{item.detail}</span>
+                  </div>
                   <strong>{item.price}</strong>
                 </div>
               ))}
@@ -372,7 +446,14 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
               <div className={isFeaturedNight ? styles.prominentLogo : ""}><BannerLogo inverse={inverse} /></div>
               <div className={styles.backCopy}><span>UNNI&apos;S CHOICE</span><h3>{concept.backTitle}</h3></div>
               <MenuBoard mode={concept.menuMode} />
-              {!isB1 && <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>{pickupLabel}</strong></div>}
+              {isB1 ? (
+                <div className={styles.b1BackFooter}>
+                  <BannerLogo inverse />
+                  <strong>배달·포장 픽업존</strong>
+                </div>
+              ) : (
+                <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>{pickupLabel}</strong></div>
+              )}
             </div>
             {!isB1 && <ProductionGuides />}
           </div>
