@@ -58,24 +58,36 @@ const visualSingleMenu = [
     price: "13,000원",
     image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
     alt: "붉은 명태회 양념과 고명을 올린 냉면",
+    objectPosition: "50% 54%",
+    scale: 1.18,
+    transformOrigin: "50% 54%",
   },
   {
     name: "물비냉 언니냉면",
     price: "10,500원",
-    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
+    image: "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp",
     alt: "육수와 비빔 양념을 함께 즐기는 언니냉면",
+    objectPosition: "50% 50%",
+    scale: 1.72,
+    transformOrigin: "36% 23%",
   },
   {
     name: "물냉면",
     price: "10,000원",
     image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
     alt: "살얼음 육수를 담은 황동그릇 물냉면",
+    objectPosition: "72% 50%",
+    scale: 1,
+    transformOrigin: "50% 50%",
   },
   {
     name: "비빔냉면",
     price: "10,000원",
     image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
     alt: "매콤한 붉은 양념과 고명을 올린 비빔냉면",
+    objectPosition: "50% 50%",
+    scale: 1,
+    transformOrigin: "50% 50%",
   },
 ];
 
@@ -246,7 +258,19 @@ function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVis
           <div className={styles.b1MenuRows}>
             {visualSingleMenu.map((item) => (
               <div className={styles.b1MenuRow} key={item.name}>
-                <Image src={item.image} alt={item.alt} width={240} height={180} />
+                <div className={styles.b1SingleThumb}>
+                  <Image
+                    src={item.image}
+                    alt={item.alt}
+                    width={240}
+                    height={180}
+                    style={{
+                      objectPosition: item.objectPosition,
+                      transform: `scale(${item.scale})`,
+                      transformOrigin: item.transformOrigin,
+                    }}
+                  />
+                </div>
                 <b>{item.name}</b>
                 <strong>{item.price}</strong>
               </div>

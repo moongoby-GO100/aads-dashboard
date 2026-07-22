@@ -96,22 +96,23 @@
 .b1Feature .backCopy { margin-top: 3.8cqw; }
 .b1Feature .backCopy h3 { font-size: 10.2cqw; line-height: .94; letter-spacing: -.04em; }
 .b1Feature .backCopy h3 em { display: block; margin-top: 1.2cqw; }
-.b1MenuStack { display: grid; gap: 4.8cqw; margin-top: 4.5cqw; }
-.b1MenuSection { margin-top: 0; padding: 4.4cqw 4.6cqw; }
-.b1MenuSection > span { margin-bottom: 1.7cqw; font-size: 4cqw; line-height: 1.2; letter-spacing: .055em; }
+.b1MenuStack { display: grid; gap: 5.2cqw; margin-top: 4.8cqw; }
+.b1MenuSection { margin-top: 0; padding: 4.8cqw 5cqw; }
+.b1MenuSection > span { margin-bottom: 2cqw; font-size: 4.2cqw; line-height: 1.25; letter-spacing: .055em; }
 .b1MenuSection > .b1MenuRows, .b1MenuSection > .b1SetRows { display: grid; gap: 0; padding: 0; border-top: 0; }
-.b1MenuSection .b1MenuRow { display: grid; grid-template-columns: 14cqw minmax(0, 1fr) auto; align-items: center; gap: 2.4cqw; min-height: 14.2cqw; padding: 1.85cqw 0; border-top: .18cqw solid rgba(23,62,53,.16); }
-.b1MenuRow > img, .b1SetThumb { width: 14cqw; height: 10.5cqw; overflow: hidden; border-radius: 1.4cqw; object-fit: cover; background: #dce8e3; }
+.b1MenuSection .b1MenuRow { display: grid; grid-template-columns: 15cqw minmax(0, 1fr) auto; align-items: center; gap: 2.6cqw; min-height: 16.8cqw; padding: 2.1cqw 0; border-top: .18cqw solid rgba(23,62,53,.16); }
+.b1SingleThumb, .b1SetThumb { width: 15cqw; height: 11.25cqw; overflow: hidden; border-radius: 1.5cqw; background: #dce8e3; }
+.b1SingleThumb img { width: 100%; height: 100%; object-fit: cover; }
 .b1SetThumb { display: grid; }
 .b1SetThumb img { width: 100%; height: 100%; min-width: 0; grid-area: 1 / 1; object-fit: cover; }
 .b1SetThumb.menuThumbCollage { grid-template-columns: repeat(3, 1fr); }
 .b1SetThumb.menuThumbCollage img { grid-area: auto; }
-.b1MenuRow b { font-size: 3.15cqw; line-height: 1.25; letter-spacing: -.025em; }
-.b1MenuRow strong { font-size: 3.05cqw; line-height: 1.25; white-space: nowrap; }
-.b1SetGroup h4 { margin: 0 0 2.6cqw; color: white; font-size: 8.7cqw; font-weight: 950; letter-spacing: -.04em; line-height: .98; }
+.b1MenuRow b { font-size: 3.5cqw; line-height: 1.28; letter-spacing: -.03em; }
+.b1MenuRow strong { font-size: 3.4cqw; line-height: 1.28; white-space: nowrap; }
+.b1SetGroup h4 { margin: 0 0 2.8cqw; color: white; font-size: 9.2cqw; font-weight: 950; letter-spacing: -.04em; line-height: 1; }
 .b1SetGroup h4 em { color: var(--coral); font-style: normal; }
-.b1SetSection .b1MenuRow { padding-block: 1.85cqw; }
-.b1SetSection .b1MenuRow b, .b1SetSection .b1MenuRow strong { font-size: 3.15cqw; line-height: 1.25; }
+.b1SetSection .b1MenuRow { padding-block: 2.1cqw; }
+.b1SetSection .b1MenuRow b, .b1SetSection .b1MenuRow strong { font-size: 3.5cqw; line-height: 1.28; }
 .nightD1 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.84) 49%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.2) 100%); }
 .nightD2 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.82) 48%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.24) 100%); }
 .nightD1 .backShade, .nightD2 .backShade { background: linear-gradient(180deg, rgba(3,22,19,.97), rgba(3,22,19,.9) 58%, rgba(3,22,19,.7)); }
