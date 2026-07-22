@@ -1074,3 +1074,6 @@
   - 공개 비교 HTML, 신규 PNG 3장, 기존 `/unni-naengmyeon`, `/api/v1/health`가 모두 HTTP 200으로 응답했다. 신규 PNG 응답 크기는 각각 783,560/745,367/704,228바이트로 로컬 원본과 일치한다.
   - 운영 HTML에서 신규 G/H/I 파일 경로와 `바가지머리 → 언니냉면 글씨 로고 → 냉면 그릇` 문구를 확인했다.
   - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent 오프라인·서버 Chromium 부재로 브라우저 픽셀 E2E 대신 공개 HTTP·정적 자산·API·컨테이너 헬스·릴리스 SHA 검증으로 대체했다.
+- 최종 동기화 (2026-07-22 16:30~16:34 KST):
+  - 설명 강조 수정과 본 기록을 포함한 릴리스 `db4a4b791c58`을 blue-green 배포했다. active green과 standby blue는 모두 `running/healthy`이며 릴리스 SHA가 일치한다.
+  - 공개 HTML은 `<strong>언니냉면</strong>` 2곳과 G/H/I 신규 경로를 반환한다. 세 PNG의 로컬·운영 SHA-256이 각각 `26ee2535...`/`79b30727...`/`3cc1a6b4...`로 일치하며, 기존 홈페이지와 API도 HTTP 200이다.
