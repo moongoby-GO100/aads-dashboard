@@ -964,3 +964,10 @@
   - 정적 HTTP 검증에서 비교 HTML과 PNG 3장 모두 200, PNG 응답 크기 1,025,367/1,103,165/913,692바이트.
   - `git diff --check`와 HTML 내 로컬 이미지 참조 파일 존재 검사를 통과했다.
 - 운영 영향/롤백: 신규 정적 파일만 추가하며 기존 언니냉면 홈페이지와 API 코드는 변경하지 않는다. 이상 시 해당 릴리스 직전 대시보드 슬롯으로 nginx upstream을 되돌릴 수 있다.
+- 운영 반영·최종 검증 (2026-07-22 14:19~14:23 KST):
+  - 기능·자산 커밋 `8154b016abc6`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - `bash deploy.sh` blue-green 배포를 완료했으며 active는 `aads-dashboard:3100`, standby는 `aads-dashboard-green:3101`이다.
+  - 양 dashboard 슬롯이 `AADS_RELEASE_SHA=8154b016abc6` 및 `healthy`로 일치한다.
+  - 공개 비교 HTML, PNG 3장, 기존 `/unni-naengmyeon`, `/api/v1/health`가 모두 HTTP 200으로 응답했다.
+  - Browser Bridge에서 제목·시안 A/B/C·이미지 3개·확대 버튼 3개·PNG 저장 링크 3개·선택 가이드 표 렌더를 확인했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이므로 성공 근거로 사용하지 않았다. full-page 캡처는 SSH 인자 길이 제한, 로컬 Playwright 캡처는 Chromium 런타임 부재로 실패했으며 공개 브라우저 접근성 트리·HTTP·정적 자산·컨테이너·릴리스 SHA 검증으로 대체했다.
