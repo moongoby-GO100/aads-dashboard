@@ -1311,3 +1311,19 @@
   - `public/brands/unni-naengmyeon/banners-20260722/print/outdoor-b1-back.png`: 웹 원고에서 1,200×3,600px로 재출력했다.
 - 검증: 대상 ESLint, `npx tsc --noEmit`, `git diff --check`, `npm run build` 통과. Playwright 원본 렌더를 육안 검수해 단품 6행·세트 5행·하단 픽업존의 잘림과 겹침이 없음을 확인했다.
 - 운영 영향/롤백: 언니냉면 B-1 배너 페이지와 메뉴 이미지 2장, 인쇄 PNG 1장에만 영향이 있으며 API·DB 변경은 없다. 문제 시 본 커밋 revert 또는 직전 blue-green 슬롯 전환으로 복구한다.
+## 2026-07-23 08:34 KST - New request stale-answer generation guard (P0)
+
+- 대상: `/chat/8ad08cc2-620c-4a70-8305-74a8d9b43c4e`에서 새 질문 직후 직전 답변이 새 응답처럼 즉시 노출되는 현상.
+- 실측 근거: 대상 세션의 직전 user/assistant 메시지는 2026-07-23 08:25:15/08:25:16 KST에 정상 순서로 DB 저장되어 있어 저장 순서 문제가 아니었다.
+- 원인: backend가 복구를 위해 완료된 streaming-status를 60~300초 보존하는 동안, 새 POST의 `stream_start` 전 polling이 직전 execution의 `just_completed`를 새 요청 완료로 오인해 새 optimistic placeholder를 직전 assistant 메시지로 교체할 수 있었다.
+- P0 수정:
+  - 새 foreground 요청마다 request generation과 직전 execution ID를 기록한다.
+  - 새 `stream_start` 전 과거 `just_completed`, idle 상태, 동일한 과거 execution 상태를 무시한다.
+  - 활성 execution과 다른 polling 결과도 UI 병합에서 제외한다.
+  - 새 요청 시작 시 `streamBufRef`/`bgPartialContentRef`를 React state보다 먼저 동기 초기화한다.
+- 검증:
+  - `node scripts/test-chat-streaming-guard.cjs`: 8 assertions passed.
+  - `tsc --noEmit`: 성공.
+  - 대상 ESLint: 오류 0건, 기존 warning 22건.
+  - Next.js 16.1.6 production build: 컴파일 및 57개 route 생성 성공.
+- E2E 제한: PC Agent가 offline이라 로그인 Browser Bridge 검증은 불가했다. Credential Vault 로그인 페이지 HTTP fallback 200, 대상 DB 메시지 순서, 회귀 테스트와 production build로 선검증했으며 운영 배포 후 API/컨테이너/릴리스 검증을 수행한다.
