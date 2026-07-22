@@ -115,6 +115,7 @@
   .pair { grid-template-columns: repeat(2, minmax(0, 46vw)); }
 }
 @media (max-width: 760px) {
+  .intro h1 { font-size: 46px; word-break: keep-all; }
   .recommend { grid-template-columns: 1fr; gap: 8px; }
   .recommend strong { padding: 0; border: 0; }
   .conceptHeading { align-items: flex-start; flex-direction: column; gap: 8px; }
