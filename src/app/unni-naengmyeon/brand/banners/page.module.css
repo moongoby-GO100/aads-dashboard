@@ -108,11 +108,10 @@
 .b1SetThumb.menuThumbCollage { grid-template-columns: repeat(3, 1fr); }
 .b1SetThumb.menuThumbCollage img { grid-area: auto; }
 .b1MenuRow b { font-size: 3.5cqw; line-height: 1.28; letter-spacing: -.03em; }
-.b1MenuRow strong { font-size: 3.4cqw; line-height: 1.28; white-space: nowrap; }
+.b1MenuRow strong { font-size: 3.5cqw; line-height: 1.28; white-space: nowrap; }
 .b1SetGroup h4 { margin: 0 0 2.8cqw; color: white; font-size: 9.2cqw; font-weight: 950; letter-spacing: -.04em; line-height: 1; }
 .b1SetGroup h4 em { color: var(--coral); font-style: normal; }
 .b1SetSection .b1MenuRow { padding-block: 2.1cqw; }
-.b1SetSection .b1MenuRow b, .b1SetSection .b1MenuRow strong { font-size: 3.5cqw; line-height: 1.28; }
 .nightD1 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.84) 49%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.2) 100%); }
 .nightD2 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.82) 48%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.24) 100%); }
 .nightD1 .backShade, .nightD2 .backShade { background: linear-gradient(180deg, rgba(3,22,19,.97), rgba(3,22,19,.9) 58%, rgba(3,22,19,.7)); }

@@ -18,7 +18,7 @@ await fs.mkdir(outputRoot, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({
-    viewport: { width: 1500, height: 1100 },
+    viewport: { width: 1500, height: 2000 },
     deviceScaleFactor: 2,
   });
   await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
