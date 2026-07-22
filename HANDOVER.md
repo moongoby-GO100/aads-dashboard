@@ -948,3 +948,19 @@
   - 외부 `https://aads.newtalk.kr/unni-naengmyeon`은 로그인 리다이렉트 없이 HTTP 200이며, 운영 HTML에서 `익숙한 메뉴 그대로`, `외할머니 명태회냉면`, `냉면 + 수제돈까스` 렌더를 확인했다.
   - 로고, hero WebP, 신규 메뉴 WebP 3종과 `/api/v1/health`를 HTTP/API로 재검증했다.
   - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent가 offline이라 브라우저 스크린샷 E2E는 미실행했으며, 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA 검증으로 대체했다.
+
+## 2026-07-22 14:14 KST - 언니냉면 로고 시안 3종 비교 페이지
+
+- 목적: CEO가 로고 디자인 3안을 이미지로 직접 비교하고 원본 PNG를 열거나 저장할 수 있도록 공개 HTML 비교 페이지를 제공한다.
+- 산출물:
+  - `public/unni-naengmyeon-logo-concepts-20260722.html`: 반응형 비교 페이지, 원본 확대 dialog, PNG 저장 링크, 선택 가이드.
+  - `public/brands/unni-naengmyeon/logo-concepts-20260722/concept-a-wave-bowl.png`: 물결 면그릇형.
+  - `public/brands/unni-naengmyeon/logo-concepts-20260722/concept-b-sister-seal.png`: 친근한 언니 인장형.
+  - `public/brands/unni-naengmyeon/logo-concepts-20260722/concept-c-hangul-monogram.png`: 한글 모노그램형.
+- 이미지 생성: Codex built-in `image_gen` 기본 경로로 생성한 3개 결과를 프로젝트 정적 자산으로 복사했다. 각 PNG는 1,254×1,254 RGB이며 `언니냉면`/`UNNI NAENGMYEON` 표기를 육안 검수했다.
+- 공개 목표 URL: `https://aads.newtalk.kr/unni-naengmyeon-logo-concepts-20260722.html`.
+- 로컬 검증:
+  - `npm run build`: Next.js 16.1.6 production build 성공, 기존 `/unni-naengmyeon` 포함 58개 라우트 생성.
+  - 정적 HTTP 검증에서 비교 HTML과 PNG 3장 모두 200, PNG 응답 크기 1,025,367/1,103,165/913,692바이트.
+  - `git diff --check`와 HTML 내 로컬 이미지 참조 파일 존재 검사를 통과했다.
+- 운영 영향/롤백: 신규 정적 파일만 추가하며 기존 언니냉면 홈페이지와 API 코드는 변경하지 않는다. 이상 시 해당 릴리스 직전 대시보드 슬롯으로 nginx upstream을 되돌릴 수 있다.
