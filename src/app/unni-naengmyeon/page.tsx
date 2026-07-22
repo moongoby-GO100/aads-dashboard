@@ -7,14 +7,14 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://aads.newtalk.kr"),
   title: "언니냉면 | 성신여대 배달 냉면",
   applicationName: "언니냉면",
-  description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다. 시원한 물냉면과 매콤한 비빔냉면을 곧 배민에서 만나보세요.",
+  description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다. 황동그릇에 담은 물냉면과 매콤한 비빔냉면 메뉴를 만나보세요.",
   keywords: ["언니냉면", "성신여대 냉면", "성북구 냉면", "배달 냉면", "물냉면", "비빔냉면"],
   openGraph: {
     title: "언니냉면 | 언니가 제대로 말아주는 냉면",
     description: "성신여대 앞에서 시작하는 배달전문 냉면 브랜드",
     type: "website",
     locale: "ko_KR",
-    images: [{ url: "/brands/unni-naengmyeon/hero-naengmyeon.webp", width: 1440, height: 901, alt: "언니냉면 물냉면 연출 이미지" }],
+    images: [{ url: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp", width: 1600, height: 1000, alt: "황동그릇에 담은 언니냉면 물냉면 연출 이미지" }],
   },
   icons: {
     icon: [{ url: "/brands/unni-naengmyeon/mark.svg", type: "image/svg+xml" }],
@@ -44,35 +44,50 @@ type MenuItem = {
   detail?: string;
   price: string;
   badge?: string;
+  toppings?: boolean;
 };
 
+const BAEMIN_MENU_URL = "https://s.baemin.com/2b000l0sq2E18";
+const TOPPING_DESCRIPTION = "땅콩 + 깨 + 무김치 + 오이 + 계란 (다대기가 소량 들어가는 메뉴에요 :))";
+const BRASS_WATER_IMAGE = "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp";
+
+function getMenuImage(name: string) {
+  if (name.includes("돈까스")) return "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
+  if (name.includes("만두")) return "/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp";
+  if (name.includes("명태") || name.includes("비냉") || name.includes("비빔") || name.includes("불냉")) {
+    return "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp";
+  }
+  if (name.includes("냉면")) return BRASS_WATER_IMAGE;
+  return null;
+}
+
 const signatureMenus: MenuItem[] = [
-  { name: "외할머니 명태회냉면", detail: "땅콩·깨·무김치·오이·계란·명태회 130g", price: "13,000원", badge: "꼬들꼬들 명태회" },
-  { name: "물비냉 언니냉면", detail: "시원한 육수와 비빔 양념을 함께 즐기는 대표 메뉴", price: "10,500원", badge: "인기 메뉴" },
-  { name: "물냉면", detail: "과일 육수로 개운하고 시원하게", price: "10,000원" },
-  { name: "비빔냉면", detail: "매콤달콤한 수제 양념", price: "10,000원" },
-  { name: "불냉면", detail: "매운맛에 도전하는 화끈한 한 그릇", price: "10,000원" },
+  { name: "외할머니 명태회냉면", detail: "꼬들꼬들한 명태회 130g을 푸짐하게", price: "13,000원", badge: "꼬들꼬들 명태회", toppings: true },
+  { name: "물비냉 언니냉면", detail: "시원한 육수와 비빔 양념을 함께 즐기는 대표 메뉴", price: "10,500원", badge: "인기 메뉴", toppings: true },
+  { name: "물냉면", detail: "과일 육수로 개운하고 시원하게", price: "10,000원", toppings: true },
+  { name: "비빔냉면", detail: "매콤달콤한 수제 양념", price: "10,000원", toppings: true },
+  { name: "불냉면", detail: "매운맛에 도전하는 화끈한 한 그릇", price: "10,000원", toppings: true },
   { name: "처갓집 묵사발", detail: "도토리묵·오이·김치·김가루", price: "9,000원", badge: "술안주 추천" },
 ];
 
 const soloSets: MenuItem[] = [
-  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 2p", price: "14,500원", badge: "시원·바삭" },
-  { name: "냉면 + 함박 2P SET", detail: "냉면 + 함박스테이크 2p", price: "14,000원", badge: "시원·단짠" },
-  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 3p", price: "13,000원", badge: "시원·쫀득" },
-  { name: "냉면 + 수제돈까스 SET", detail: "냉면 + 수제 등심돈까스 1p", price: "15,500원", badge: "찰떡궁합" },
-  { name: "냉면 + 찐만두 SET", detail: "냉면 + 찐만두 4p", price: "15,000원", badge: "담백궁합" },
-  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 4p", price: "16,000원", badge: "바삭궁합" },
-  { name: "냉면 + 함박 4P SET", detail: "냉면 + 함박스테이크 4p", price: "17,000원", badge: "달달궁합" },
-  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 6p", price: "15,500원", badge: "쫀득궁합" },
-  { name: "냉면 + 몽땅 SET", detail: "냉면 + 수제돈까스 1p + 사이드 2개 선택", price: "19,500원", badge: "열정가득" },
+  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 2p", price: "14,500원", badge: "시원·바삭", toppings: true },
+  { name: "냉면 + 함박 2P SET", detail: "냉면 + 함박스테이크 2p", price: "14,000원", badge: "시원·단짠", toppings: true },
+  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 3p", price: "13,000원", badge: "시원·쫀득", toppings: true },
+  { name: "냉면 + 수제돈까스 SET", detail: "냉면 + 수제 등심돈까스 1p", price: "15,500원", badge: "찰떡궁합", toppings: true },
+  { name: "냉면 + 찐만두 SET", detail: "냉면 + 찐만두 4p", price: "15,000원", badge: "담백궁합", toppings: true },
+  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 4p", price: "16,000원", badge: "바삭궁합", toppings: true },
+  { name: "냉면 + 함박 4P SET", detail: "냉면 + 함박스테이크 4p", price: "17,000원", badge: "달달궁합", toppings: true },
+  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 6p", price: "15,500원", badge: "쫀득궁합", toppings: true },
+  { name: "냉면 + 몽땅 SET", detail: "냉면 + 수제돈까스 1p + 사이드 2개 선택", price: "19,500원", badge: "열정가득", toppings: true },
 ];
 
 const doubleSets: MenuItem[] = [
-  { name: "냉면 + 냉면 + 수제돈까스 SET", detail: "냉면 2그릇 + 수제돈까스 1p", price: "25,000원", badge: "참 든든한정식" },
-  { name: "냉면 + 냉면 + 찐만두 SET", detail: "냉면 2그릇 + 찐만두 4p", price: "25,500원", badge: "담백정식" },
-  { name: "냉면 + 냉면 + 만두튀김 SET", detail: "냉면 2그릇 + 만두튀김 4p", price: "26,000원", badge: "바삭정식" },
-  { name: "냉면 + 냉면 + 함박 4P SET", detail: "냉면 2그릇 + 함박스테이크 4p", price: "26,500원", badge: "열정정식" },
-  { name: "냉면 + 냉면 + 미니전 SET", detail: "냉면 2그릇 + 미니전 6p", price: "25,000원", badge: "쫀득정식" },
+  { name: "냉면 + 냉면 + 수제돈까스 SET", detail: "냉면 2그릇 + 수제돈까스 1p", price: "25,000원", badge: "참 든든한정식", toppings: true },
+  { name: "냉면 + 냉면 + 찐만두 SET", detail: "냉면 2그릇 + 찐만두 4p", price: "25,500원", badge: "담백정식", toppings: true },
+  { name: "냉면 + 냉면 + 만두튀김 SET", detail: "냉면 2그릇 + 만두튀김 4p", price: "26,000원", badge: "바삭정식", toppings: true },
+  { name: "냉면 + 냉면 + 함박 4P SET", detail: "냉면 2그릇 + 함박스테이크 4p", price: "26,500원", badge: "열정정식", toppings: true },
+  { name: "냉면 + 냉면 + 미니전 SET", detail: "냉면 2그릇 + 미니전 6p", price: "25,000원", badge: "쫀득정식", toppings: true },
 ];
 
 const sideMenus: MenuItem[] = [
@@ -113,16 +128,25 @@ const drinks: MenuItem[] = [
 function MenuList({ items }: { items: MenuItem[] }) {
   return (
     <div className={styles.fullMenuGrid}>
-      {items.map((item, index) => (
-        <article className={styles.fullMenuItem} key={`${item.name}-${index}`}>
-          <div>
-            {item.badge && <span>{item.badge}</span>}
-            <h4>{item.name}</h4>
-            {item.detail && <p>{item.detail}</p>}
-          </div>
-          <strong>{item.price}</strong>
-        </article>
-      ))}
+      {items.map((item, index) => {
+        const menuImage = getMenuImage(item.name);
+        return (
+          <article className={styles.fullMenuItem} key={`${item.name}-${index}`}>
+            {menuImage && (
+              <div className={styles.menuThumb}>
+                <Image src={menuImage} alt={`${item.name} 메뉴 이미지`} fill sizes="96px" />
+              </div>
+            )}
+            <div className={styles.menuItemCopy}>
+              {item.badge && <span>{item.badge}</span>}
+              <h4>{item.name}</h4>
+              {item.detail && <p>{item.detail}</p>}
+              {item.toppings && <p className={styles.toppingDescription}>{TOPPING_DESCRIPTION}</p>}
+            </div>
+            <strong>{item.price}</strong>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -143,7 +167,7 @@ export default function UnniNaengmyeonPage() {
             <a href="#location">매장 안내</a>
             <a href="#inquiry">문의</a>
           </nav>
-          <a className={styles.headerCta} href="#order">배민 입점 준비 중</a>
+          <a className={styles.headerCta} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer">배민 메뉴 보기</a>
         </div>
       </header>
 
@@ -160,14 +184,14 @@ export default function UnniNaengmyeonPage() {
             </div>
             <div className={styles.openingNote}>
               <span className={styles.pulse} aria-hidden="true" />
-              배달의민족 온라인 입점 진행 중
+              고명희냉면 배민 메뉴 기준 구성 완료
             </div>
           </div>
           <div className={styles.heroVisual}>
             <div className={styles.heroBadge}><b>ICE COLD</b><span>끝까지 시원하게</span></div>
             <Image
-              src="/brands/unni-naengmyeon/hero-naengmyeon.webp"
-              alt="얼음 육수와 메밀면을 담은 물냉면 연출 이미지"
+              src={BRASS_WATER_IMAGE}
+              alt="황동그릇에 얼음 육수와 메밀면을 담은 물냉면 연출 이미지"
               fill
               priority
               sizes="(max-width: 900px) 100vw, 55vw"
@@ -176,7 +200,7 @@ export default function UnniNaengmyeonPage() {
           </div>
         </div>
         <div className={styles.marquee} aria-label="언니냉면 브랜드 키워드">
-          <div><span>시원하게</span><i>◆</i><span>매콤하게</span><i>◆</i><span>든든하게</span><i>◆</i><span>언니답게</span><i>◆</i><span>시원하게</span><i>◆</i><span>매콤하게</span></div>
+          <div><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>푸짐한 고명</span><i>◆</i><span>시원하게</span><i>◆</i><span>매콤하게</span><i>◆</i><span>든든하게</span><i>◆</i><span>언니답게</span><i>◆</i><span>배달 한 그릇</span><i>◆</i><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>푸짐한 고명</span></div>
         </div>
       </section>
 
@@ -189,7 +213,7 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
-              src="/brands/unni-naengmyeon/hero-naengmyeon.webp"
+              src={BRASS_WATER_IMAGE}
               alt="언니 물냉면"
               fill
               sizes="(max-width: 900px) 100vw, 50vw"
@@ -266,7 +290,7 @@ export default function UnniNaengmyeonPage() {
               <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
             </div>
           </div>
-          <div className={styles.locationStatus}><span /> 현재 배민 입점 준비 중입니다</div>
+          <a className={styles.locationStatus} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer"><span /> 배민에서 동일 메뉴 구성 확인하기 <ArrowIcon /></a>
         </div>
       </section>
 
@@ -287,10 +311,10 @@ export default function UnniNaengmyeonPage() {
 
       <section className={styles.orderSection} id="order">
         <div className={styles.orderBowl} aria-hidden="true"><span /><span /><span /></div>
-        <p>OPENING SOON</p>
-        <h2>성신여대 앞에서<br />곧 만나요!</h2>
-        <span>배민 입점이 완료되면 주문 링크가 열립니다.</span>
-        <button type="button" disabled>배민 주문 준비 중</button>
+        <p>BAEMIN MENU</p>
+        <h2>언니냉면 메뉴를<br />미리 확인하세요</h2>
+        <span>현재 제공받는 고명희냉면 메뉴 구성과 이미지를 배민 앱에서 확인할 수 있습니다.</span>
+        <a className={styles.orderButton} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer">배민 메뉴 바로가기 <ArrowIcon /></a>
       </section>
 
       <footer className={styles.footer}>
