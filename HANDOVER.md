@@ -941,4 +941,10 @@
   - 대상 ESLint 오류 0건, `tsc --noEmit` 통과, `git diff --check` 통과.
   - `npm run build`: Next.js 16.1.6 프로덕션 빌드 성공, `/unni-naengmyeon` 포함 58개 라우트 생성.
   - 로컬 HTTP에서 페이지와 신규 이미지 3종 모두 200, HTML에서 브랜드명·전체 메뉴·주소 렌더를 확인했다.
-- 운영 반영: 코드 커밋·push·blue-green 배포 후 외부 URL 브라우저 E2E와 양 슬롯 헬스를 최종 기록한다.
+- 운영 반영 (2026-07-22 13:08~13:12 KST):
+  - 커밋 `f3116e12f403a49c87b3120885e709a1ad30e5aa`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - `bash deploy.sh` blue-green 배포를 완료했으며 active는 `aads-dashboard-green:3101`, standby는 `aads-dashboard:3100`이다.
+  - 양 dashboard 슬롯이 `AADS_RELEASE_SHA=f3116e12f403` 및 `healthy`로 일치한다.
+  - 외부 `https://aads.newtalk.kr/unni-naengmyeon`은 로그인 리다이렉트 없이 HTTP 200이며, 운영 HTML에서 `익숙한 메뉴 그대로`, `외할머니 명태회냉면`, `냉면 + 수제돈까스` 렌더를 확인했다.
+  - 로고, hero WebP, 신규 메뉴 WebP 3종과 `/api/v1/health`를 HTTP/API로 재검증했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent가 offline이라 브라우저 스크린샷 E2E는 미실행했으며, 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA 검증으로 대체했다.
