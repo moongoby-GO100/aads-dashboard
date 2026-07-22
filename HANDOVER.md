@@ -1016,3 +1016,10 @@
   - PNG 응답 크기 762,399/810,782/707,456바이트 및 1,254×1,254 RGB 형식을 확인했다.
   - PC Agent 오프라인으로 `capture_screenshot`은 실행하지 못했고, 로컬 Playwright는 Chromium 런타임 부재로 캡처하지 못했다. HTTP·파일 형식·이미지 육안 확인으로 대체했다.
 - 운영 영향/롤백: 신규 정적 HTML 1개와 PNG 3개만 추가하며 기존 홈페이지/API는 변경하지 않는다. 문제 시 직전 dashboard 슬롯으로 nginx upstream을 되돌릴 수 있다.
+- 운영 반영·최종 검증 (2026-07-22 15:46~15:50 KST):
+  - 기능·자산 커밋 `3eda8399d2e2`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - 기존 작업 폴더의 미커밋 홈페이지 변경과 분리된 clean worktree에서 `bash deploy.sh` blue-green 배포를 완료했다.
+  - active `aads-dashboard:3100`과 standby `aads-dashboard-green:3101`이 모두 `healthy`, `AADS_RELEASE_SHA=3eda8399d2e2`로 일치한다.
+  - 공개 HTML, PNG 3장, 기존 `/unni-naengmyeon`, `/api/v1/health`가 모두 HTTP 200으로 응답했고 PNG 응답 크기는 로컬 원본과 일치한다.
+  - 운영 HTML에서 CONCEPT D/E/F, PNG 저장, 선택 가이드 문구를 확인했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent가 오프라인이라 운영 스크린샷 E2E는 실행하지 못했으며, 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA 검증으로 대체했다.
