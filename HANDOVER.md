@@ -13,7 +13,12 @@
   - 업로드 완료 후 `file_id` 첨부 참조를 JSON으로 전송하여 multipart 이중 업로드를 제거했다.
   - 파일 업로드 401 발생 시 토큰을 갱신하고 한 번 재시도한다.
 - 검증: `git diff --check`, `npx tsc --noEmit`, 대상 파일 ESLint(오류 0건), `npm run build`(57개 route) 통과.
-- 운영 반영: 커밋·push·blue-green 배포 및 실제 30개 파일 E2E 결과를 아래 후속 상태에 기록한다.
+- 운영 반영·검증 (2026-07-22 11:47~11:56 KST):
+  - 코드 커밋 `c35c513d4518`을 `fix/chat-bulk-image-upload-20260722` 브랜치에 push했다.
+  - blue-green 배포 후 활성 green(3101)과 standby blue(3100)가 모두 release `c35c513d4518`, healthy임을 확인했다.
+  - 외부 `/login`과 `/api/v1/health`는 HTTP 200이며, 활성 정적 번들에서 신규 최대 50개 제한·업로드 진행률 문구를 확인했다.
+  - 저장된 E2E 계정 로그인은 2회 실패해 인증 채팅 화면에서 30개 선택→전송 종단 검증은 미실행이다. 기존 실사용 24개 고유/59건 업로드 성공 로그·DB, 정적 검사, 운영 번들/API/컨테이너 검증으로 대체했다.
+  - 배포 Step 7은 `UNKNOWN`이므로 통과로 간주하지 않는다.
 
 ## 2026-07-22 07:53 KST - Large-session manual scroll stabilization
 - 대상: `/chat/d84b7c2c-64a5-4a80-9472-21170fd7d160`에서 사용자가 스크롤할 때 뷰포트가 갑자기 위·아래로 이동하는 현상.
