@@ -15,6 +15,12 @@
   - `npx tsc --noEmit`: 통과.
   - `npm run build`: 성공, 60개 route 생성 및 언니냉면 3개 route 확인.
   - Playwright Chromium 데스크톱·모바일 검수에서 홈페이지 메뉴 이미지 16개가 모두 로드됐고, B-1 웹 원고의 이미지 17개도 모두 로드됐다. 단품 6종·세트 5종의 사진/메뉴명/가격 겹침·잘림이 없음을 육안 확인했다.
+- 운영 반영·검증 (2026-07-23 08:16~08:23 KST):
+  - 커밋 `a3ec286c7487`을 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push하고 `bash deploy.sh`로 blue-green 무중단 배포했다.
+  - 08:19:40 KST에 nginx upstream을 green(3101)으로 전환했으며, green 활성 슬롯과 blue standby 슬롯 모두 release `a3ec286c7487`, running/healthy 상태임을 확인했다.
+  - 외부 홈페이지와 B-1 원고 페이지, NAS 정적 이미지 9종, B-1 인쇄 PNG가 모두 HTTP 200을 반환했다. 운영 Chromium에서 홈페이지와 B-1 각각 NAS 이미지 17개가 모두 로드됐고 깨진 이미지는 0개였다.
+  - 자동 프론트 QA는 `UNKNOWN`으로 미확정이며 Browser Bridge는 PC Agent 오프라인으로 실행하지 못했다. 운영 URL에 대한 서버 Chromium 렌더링과 HTTP·컨테이너 검증으로 대체했다.
+- 상태: 코드·실메뉴 자산·인쇄 PNG·커밋·push·blue-green 배포·운영 검증·문서 기록 완료.
 - 운영 영향/롤백: 언니냉면 홈페이지·B-1 배너 페이지·정적 메뉴 이미지·B-1 뒷면 PNG에만 영향이 있고 API·DB 변경은 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 대시보드 슬롯으로 전환한다.
 
 ## 2026-07-22 07:53 KST - Large-session manual scroll stabilization
