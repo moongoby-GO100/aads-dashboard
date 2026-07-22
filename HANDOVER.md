@@ -1052,3 +1052,19 @@
 - 이미지 생성: Codex built-in `image_gen` 기본 경로를 사용했다. 세 파일 모두 1,254×1,254 RGB PNG이며 흑백 단색, 굵은 선, 정면 바가지머리 계열과 정확한 `언니냉면` 표기를 육안 검수했다.
 - 운영 영향/롤백: 정적 HTML 1개와 PNG 3개만 변경·추가하며 기존 언니냉면 홈페이지, API, DB에는 영향이 없다. 문제 시 직전 대시보드 릴리스 슬롯으로 nginx upstream을 되돌리거나 본 커밋을 revert할 수 있다.
 - 공개 URL: `https://aads.newtalk.kr/unni-naengmyeon-bowlcut-logo-concepts-20260722.html`.
+
+## 2026-07-22 16:22 KST - 바가지머리·글씨·그릇 결합형 G/H/I 교체
+
+- CEO 추가 지시: 바가지머리와 냉면 그릇 사이에 정확한 `언니냉면` 글씨 로고가 들어가는 조합도 시안으로 만든다.
+- 반영:
+  - `concept-g-wordmark-wave.png`: 눈웃음 아래의 브랜드명이 머리와 물결형 그릇을 연결하는 안.
+  - `concept-h-wordmark-noodles.png`: 브랜드명 아래에서 세 가닥 면발이 그릇으로 이어지는 안.
+  - `concept-i-wordmark-plaque.png`: 브랜드명을 간판형 중앙 띠로 강조하고 면 소용돌이 그릇을 결합한 안.
+  - 비교 HTML의 G/H/I 이미지·설명·선택 가이드를 위 3안으로 교체했다. 기존 D/E/F는 유지했다.
+- 이미지 생성: Codex built-in `image_gen` 기본 경로를 사용했다. 세 파일은 모두 1,254×1,254 RGB PNG이며 `바가지머리 → 언니냉면 → 냉면 그릇` 순서와 한글 표기를 육안 검수했다.
+- 검증:
+  - 로컬 정적 HTTP에서 HTML과 PNG 3장 모두 HTTP 200.
+  - `git diff --check` 통과.
+  - `npm run build` 성공: Next.js 16.1.6, `/unni-naengmyeon` 포함 58개 라우트 생성.
+  - PC Agent 오프라인 및 로컬 Chromium 런타임 부재로 화면 캡처는 실행하지 못했으며 HTTP·파일 형식·이미지 육안 확인으로 대체했다.
+- 운영 영향/롤백: 비교 HTML 1개와 신규 PNG 3개만 반영하며 기존 홈페이지·API·DB에는 영향이 없다. 문제 시 직전 대시보드 릴리스 슬롯 또는 본 커밋 revert로 복구한다.
