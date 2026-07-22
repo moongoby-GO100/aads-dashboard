@@ -25,8 +25,9 @@
 
 .header { position: fixed; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid rgba(23,62,53,.12); background: rgba(255,248,234,.92); box-shadow: 0 8px 26px rgba(23,62,53,.06); backdrop-filter: blur(16px); }
 .headerInner { width: min(1240px, calc(100% - 48px)); height: 92px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 36px; }
-.brand { display: block; width: 78px; line-height: 0; }
-.brand img { display: block; width: 100%; height: auto; border-radius: 18px; mix-blend-mode: multiply; }
+.brand { display: flex; flex: 0 0 auto; align-items: center; gap: 13px; line-height: 1; }
+.brand img { display: block; width: 68px; height: 68px; border-radius: 16px; mix-blend-mode: multiply; object-fit: cover; }
+.brandWordmark { color: var(--green); font-size: 30px; font-weight: 950; letter-spacing: -.09em; white-space: nowrap; }
 .nav { display: flex; align-items: center; gap: 38px; margin-left: auto; font-size: 14px; font-weight: 750; }
 .nav a, .headerCta { transition: opacity .2s, transform .2s; }
 .nav a:hover { opacity: .55; }
@@ -178,8 +179,9 @@
 
 @media (max-width: 900px) {
   .headerInner { width: min(100% - 32px, 720px); height: 76px; }
-  .brand { width: 64px; }
-  .brand img { border-radius: 15px; }
+  .brand { gap: 9px; }
+  .brand img { width: 52px; height: 52px; border-radius: 13px; }
+  .brandWordmark { font-size: 23px; }
   .nav { display: none; }
   .headerCta { padding: 9px 12px; font-size: 11px; }
   .hero, .menuSection, .storySection, .locationSection, .inquirySection, .orderSection { scroll-margin-top: 76px; }
@@ -199,6 +201,8 @@
 }
 
 @media (max-width: 620px) {
+  .headerInner { gap: 12px; }
+  .brandWordmark { font-size: 21px; }
   .headerCta { max-width: 124px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .heroCopy { padding-top: 58px; }
   .hero h1 { font-size: 49px; }

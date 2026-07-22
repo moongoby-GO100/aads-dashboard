@@ -168,6 +168,7 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.headerInner}>
           <a className={styles.brand} href="#top" aria-label="언니냉면 홈">
             <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} priority />
+            <span className={styles.brandWordmark} aria-hidden="true">언니냉면</span>
           </a>
           <nav className={styles.nav} aria-label="주요 메뉴">
             <a href="#menu">메뉴</a>

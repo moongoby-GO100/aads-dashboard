@@ -1089,3 +1089,16 @@
   - 대상 `page.tsx` ESLint 통과.
   - `npm run build` 성공: Next.js 16.1.6, `/unni-naengmyeon` 포함 58개 라우트 생성.
 - 운영 영향/롤백: 언니냉면 페이지의 브랜드 이미지와 표시 크기만 변경하며 API·DB·주문 링크에는 영향이 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 nginx upstream을 되돌린다.
+
+## 2026-07-22 19:07 KST - 헤더 로고 옆 한글 워드마크 보강
+
+- CEO 요청: 헤더의 컨셉 H 로고가 작게 보여 브랜드명이 잘 읽히지 않으므로, 로고 옆에 `언니냉면` 문구를 배치한다.
+- 반영:
+  - 컨셉 H 이미지는 심볼 역할로 유지하고 오른쪽에 별도 텍스트 워드마크를 추가했다.
+  - 데스크톱은 로고 68px·워드마크 30px, 모바일은 로고 52px·워드마크 21~23px로 반응형 적용했다.
+  - 링크의 기존 `aria-label`은 유지하고 장식용 중복 문구는 `aria-hidden` 처리했다.
+- 검증:
+  - 대상 `page.tsx` ESLint 통과.
+  - `npm run build` 성공: Next.js 16.1.6, `/unni-naengmyeon` 포함 58개 라우트 생성.
+  - 로컬 production 서버 HTML에서 `언니냉면</span>` 렌더를 확인했고 `git diff --check`를 통과했다.
+- 운영 영향/롤백: 언니냉면 헤더의 로고 영역만 변경하며 API·DB·주문 링크에는 영향이 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 nginx upstream을 되돌린다.
