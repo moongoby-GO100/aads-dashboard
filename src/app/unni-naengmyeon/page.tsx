@@ -172,7 +172,14 @@ export default function UnniNaengmyeonPage() {
           </a>
           <nav className={styles.nav} aria-label="주요 메뉴">
             <a href="#menu">메뉴</a>
-            <a href="#story">브랜드</a>
+            <div className={styles.navGroup}>
+              <button type="button" aria-haspopup="true">브랜드 <span aria-hidden="true">⌄</span></button>
+              <div className={styles.navDropdown}>
+                <a href="#story">브랜드 스토리</a>
+                <a href="/unni-naengmyeon/brand/logo">로고 가이드</a>
+                <a href="/unni-naengmyeon/brand/banners">입간판 시안</a>
+              </div>
+            </div>
             <a href="#location">매장 안내</a>
             <a href="#inquiry">문의</a>
           </nav>
