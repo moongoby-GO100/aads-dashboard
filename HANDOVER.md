@@ -1023,3 +1023,20 @@
   - 공개 HTML, PNG 3장, 기존 `/unni-naengmyeon`, `/api/v1/health`가 모두 HTTP 200으로 응답했고 PNG 응답 크기는 로컬 원본과 일치한다.
   - 운영 HTML에서 CONCEPT D/E/F, PNG 저장, 선택 가이드 문구를 확인했다.
   - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. PC Agent가 오프라인이라 운영 스크린샷 E2E는 실행하지 못했으며, 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA 검증으로 대체했다.
+
+## 2026-07-22 15:56 KST - 고명희 원본 물냉면 이미지 적용
+
+- CEO 요청: 기존 황동그릇 연출 이미지 대신, 붉은 다대기와 고명이 실제로 보이는 고명희냉면 원본 물냉면 사진을 언니냉면 홈페이지에 적용한다.
+- 반영:
+  - 기존 프로젝트 자산 `public/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp`의 황동그릇 물냉면 영역을 CSS로 확대·크롭해 대표 hero, 메뉴 갤러리, 물냉면 계열 카드에 재사용했다.
+  - 원본 음식 구성은 생성형 편집하지 않았으며, 대표 이미지 설명과 Open Graph 이미지를 실제 메뉴 사진 기준으로 변경했다.
+  - 대표 영역 문구를 `메뉴 연출 이미지`에서 `실제 메뉴 이미지`로 변경했다.
+- 검증:
+  - `git diff --check`, 대상 `page.tsx` ESLint, `npx tsc --noEmit`, `npm run build`를 통과했다. Next.js 빌드에서 `/unni-naengmyeon` 포함 58개 라우트가 생성됐다.
+  - 기능 커밋 `bd7d02192cfd`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - `bash deploy.sh` blue-green 배포를 완료했으며 active는 `aads-dashboard-green:3101`, standby는 `aads-dashboard:3100`이다.
+  - 양 dashboard 슬롯이 `healthy`, `AADS_RELEASE_SHA=bd7d02192cfd`로 일치한다.
+  - 외부 홈페이지, 원본 WebP, `/api/v1/health`는 모두 HTTP 200이다. 운영 WebP는 359,140바이트이며 로컬·운영 SHA-256이 `e1fee2259925dc077cc858ec295b38eb8cb8552973d70bb389cc7a8c645bc844`로 일치한다.
+  - 운영 HTML에서 신규 이미지 경로, `붉은 다대기`, `황동그릇에 땅콩`, `실제 메뉴 이미지` 문구 렌더를 확인했다.
+- 제한:
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. Browser Bridge/PC Agent가 오프라인이라 운영 스크린샷 E2E는 실행하지 못했으며, 공개 HTTP·원본 해시·API·컨테이너·릴리스 SHA 검증으로 대체했다.
