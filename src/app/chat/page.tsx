@@ -2368,6 +2368,7 @@ export default function ChatPage() {
   const [apiKeyInfo, setApiKeyInfo] = useState<ApiKeyInfoState | null>(null);
   const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number; failed: number } | null>(null);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(true);
@@ -5368,7 +5369,7 @@ export default function ChatPage() {
         fetchHeaders["Content-Type"] = "application/json";
         fetchBody = JSON.stringify({ content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
-      } else if (rawFiles.length > 0) {
+      } else if (rawFiles.length > 0 && attachments.length === 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
         const formData = new FormData();
         formData.append("session_id", sessionId!);
@@ -6702,12 +6703,42 @@ export default function ChatPage() {
     screenContextRef.current = file;
   }, []);
 
-  // ── File attachment (클라이언트 측 inline 변환 — 서버 업로드 불필요) ──
+  // ── File attachment ──
   async function handleFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);
-    // 로컬 미리보기용 File 객체 즉시 저장
-    setPendingPreviewFiles((prev) => [...prev, ...fileArray]);
+    if (uploadingRef.current) {
+      setYellowWarning("현재 파일 업로드가 끝난 뒤 추가 파일을 선택해주세요.");
+      return;
+    }
+
+    const MAX_PENDING_FILES = 50;
+    const existingFiles = pendingPreviewFilesRef.current;
+    const existingKeys = new Set(existingFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+    const selectedFiles = Array.from(files);
+    const deduplicatedFiles = selectedFiles.filter((file) => {
+      const key = `${file.name}:${file.size}:${file.lastModified}`;
+      if (existingKeys.has(key)) return false;
+      existingKeys.add(key);
+      return true;
+    });
+    const remainingSlots = Math.max(0, MAX_PENDING_FILES - existingFiles.length);
+    const fileArray = deduplicatedFiles.slice(0, remainingSlots);
+    const skippedCount = selectedFiles.length - fileArray.length;
+
+    if (fileArray.length === 0) {
+      setYellowWarning(skippedCount > 0 ? "이미 선택된 파일이거나 최대 50개 첨부 제한에 도달했습니다." : "추가할 파일이 없습니다.");
+      return;
+    }
+
+    const nextPreviewFiles = [...existingFiles, ...fileArray];
+    pendingPreviewFilesRef.current = nextPreviewFiles;
+    setPendingPreviewFiles(nextPreviewFiles);
+    uploadingRef.current = true;
+    setUploading(true);
+    setUploadProgress({ completed: 0, total: fileArray.length, failed: 0 });
+    if (skippedCount > 0) {
+      setYellowWarning(`${skippedCount}개 중복/초과 파일은 제외하고 ${fileArray.length}개를 업로드합니다.`);
+    }
 
     const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
     const TEXT_EXTS = new Set([
@@ -6718,9 +6749,22 @@ export default function ChatPage() {
     ]);
     const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv", "flv", "m4v"]);
     const VIDEO_MAX_BYTES = 20 * 1024 * 1024; // 20MB
-    const _sid = activeSession?.id;
+    const _sid = activeSessionObjRef.current?.id;
 
-    for (const file of fileArray) {
+    const readBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const readText = (file: File) => new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve("");
+      reader.readAsText(file.slice(0, 500_000));
+    });
+
+    const prepareAttachment = async (file: File): Promise<Record<string, unknown>> => {
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const isImage = IMAGE_EXTS.has(ext) || file.type.startsWith("image/");
       const isText = TEXT_EXTS.has(ext) || file.type.startsWith("text/");
@@ -6730,136 +6774,128 @@ export default function ChatPage() {
       if (isImage && _sid) {
         try {
           const result = await uploadChatFile(file, _sid);
-          pendingAttachments.current.push({
+          return {
             type: "image", file_id: result.file_id,
             media_type: result.mime_type, name: result.original_name,
             file_url: result.file_url, thumbnail_url: result.thumbnail_url,
-          });
+          };
         } catch {
           // fallback: base64
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
+          const base64 = await readBase64(file);
           const mediaType = file.type || `image/${ext === "jpg" ? "jpeg" : ext}`;
-          pendingAttachments.current.push({ type: "image", base64, media_type: mediaType, name: file.name });
+          return { type: "image", base64, media_type: mediaType, name: file.name };
         }
       } else if (isImage) {
         // 세션 없으면 기존 base64 방식
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+        const base64 = await readBase64(file);
         const mediaType = file.type || `image/${ext === "jpg" ? "jpeg" : ext}`;
-        pendingAttachments.current.push({ type: "image", base64, media_type: mediaType, name: file.name });
+        return { type: "image", base64, media_type: mediaType, name: file.name };
       } else if (isText) {
         // 텍스트 파일: 서버 업로드 시도 → fallback: 로컬 읽기
         if (_sid) {
           try {
             const result = await uploadChatFile(file, _sid);
-            pendingAttachments.current.push({
+            return {
               type: "text", file_id: result.file_id, name: result.original_name,
               file_url: result.file_url, file_size: result.file_size,
-            });
+            };
           } catch {
             // fallback: 로컬 읽기
-            const content = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => resolve("");
-              reader.readAsText(file.slice(0, 500_000));
-            });
-            pendingAttachments.current.push({ type: "text", name: file.name, content });
+            const content = await readText(file);
+            return { type: "text", name: file.name, content };
           }
         } else {
-          const content = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => resolve("");
-            reader.readAsText(file.slice(0, 500_000));
-          });
-          pendingAttachments.current.push({ type: "text", name: file.name, content });
+          const content = await readText(file);
+          return { type: "text", name: file.name, content };
         }
       } else if (ext === "pdf" || file.type === "application/pdf") {
         // PDF: 서버 업로드 시도 → fallback base64
         if (_sid) {
           try {
             const result = await uploadChatFile(file, _sid);
-            pendingAttachments.current.push({
+            return {
               type: "pdf", file_id: result.file_id, name: result.original_name,
               media_type: "application/pdf", file_url: result.file_url,
-            });
+            };
           } catch {
-            const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-              reader.onerror = () => resolve("");
-              reader.readAsDataURL(file);
-            });
-            pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+            const base64 = await readBase64(file).catch(() => "");
+            return { type: "pdf", base64, name: file.name, media_type: "application/pdf" };
           }
         } else {
-          const base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(file);
-          });
-          pendingAttachments.current.push({ type: "pdf", base64, name: file.name, media_type: "application/pdf" });
+          const base64 = await readBase64(file).catch(() => "");
+          return { type: "pdf", base64, name: file.name, media_type: "application/pdf" };
         }
       } else if (isVideo) {
         // 동영상: 20MB 이하 → 서버 업로드 시도 → fallback base64
         if (file.size > VIDEO_MAX_BYTES) {
-          pendingAttachments.current.push({ type: "file", name: file.name, error: `동영상 파일이 너무 큽니다 (최대 20MB). 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB` });
+          return { type: "file", name: file.name, error: `동영상 파일이 너무 큽니다 (최대 20MB). 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB` };
         } else if (_sid) {
           try {
             const result = await uploadChatFile(file, _sid);
-            pendingAttachments.current.push({
+            return {
               type: "video", file_id: result.file_id, name: result.original_name,
               media_type: result.mime_type, file_url: result.file_url,
-            });
+            };
           } catch {
-            const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-              reader.onerror = () => resolve("");
-              reader.readAsDataURL(file);
-            });
+            const base64 = await readBase64(file).catch(() => "");
             const mediaType = file.type || `video/${ext}`;
-            pendingAttachments.current.push({ type: "video", base64, name: file.name, media_type: mediaType });
+            return { type: "video", base64, name: file.name, media_type: mediaType };
           }
         } else {
-          const base64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(file);
-          });
+          const base64 = await readBase64(file).catch(() => "");
           const mediaType = file.type || `video/${ext}`;
-          pendingAttachments.current.push({ type: "video", base64, name: file.name, media_type: mediaType });
+          return { type: "video", base64, name: file.name, media_type: mediaType };
         }
       } else {
         // 기타 파일: 서버 업로드 시도
         if (_sid) {
           try {
             const result = await uploadChatFile(file, _sid);
-            pendingAttachments.current.push({
+            return {
               type: "file", file_id: result.file_id, name: result.original_name,
               file_url: result.file_url, file_size: result.file_size,
-            });
+            };
           } catch {
-            pendingAttachments.current.push({ type: "file", name: file.name });
+            return { type: "file", name: file.name };
           }
         } else {
-          pendingAttachments.current.push({ type: "file", name: file.name });
+          return { type: "file", name: file.name };
         }
       }
+    };
+
+    const results = new Array<Record<string, unknown> | null>(fileArray.length).fill(null);
+    let cursor = 0;
+    let completed = 0;
+    let failed = 0;
+    const worker = async () => {
+      while (cursor < fileArray.length) {
+        const index = cursor++;
+        try {
+          const result = await prepareAttachment(fileArray[index]);
+          results[index] = result;
+          if (result.error) failed += 1;
+        } catch (error) {
+          failed += 1;
+          results[index] = { type: "file", name: fileArray[index].name, error: error instanceof Error ? error.message : "업로드 실패" };
+        } finally {
+          completed += 1;
+          setUploadProgress({ completed, total: fileArray.length, failed });
+        }
+      }
+    };
+
+    try {
+      const concurrency = Math.min(4, fileArray.length);
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      pendingAttachments.current.push(...results.filter((item): item is Record<string, unknown> => item !== null));
+      if (failed > 0) setYellowWarning(`${fileArray.length}개 중 ${failed}개 업로드에 실패했습니다. 실패 파일을 제거하거나 다시 선택해주세요.`);
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+      window.setTimeout(() => setUploadProgress(null), 2500);
+      textareaRef.current?.focus();
     }
-    textareaRef.current?.focus();
   }
 
 
@@ -6867,7 +6903,10 @@ export default function ChatPage() {
 
   // 개별 첨부 파일 제거
   function removePendingFile(idx: number) {
-    setPendingPreviewFiles((prev) => prev.filter((_, i) => i !== idx));
+    if (uploadingRef.current) return;
+    const nextFiles = pendingPreviewFilesRef.current.filter((_, i) => i !== idx);
+    pendingPreviewFilesRef.current = nextFiles;
+    setPendingPreviewFiles(nextFiles);
     pendingAttachments.current = pendingAttachments.current.filter((_, i) => i !== idx);
   }
 
@@ -9383,14 +9422,18 @@ export default function ChatPage() {
           )}
 
           {/* 업로드 진행 표시 */}
-          {uploading && (
+          {(uploading || uploadProgress) && (
             <div style={{
               display: "flex", alignItems: "center", gap: "6px",
               marginBottom: "6px", padding: "4px 10px",
               fontSize: "12px", color: "var(--ct-accent)",
               background: "var(--ct-hover)", borderRadius: "8px",
             }}>
-              ⏳ 파일 업로드 중...
+              {uploading
+                ? `⏳ 파일 업로드 중... ${uploadProgress?.completed || 0}/${uploadProgress?.total || 0}`
+                : uploadProgress?.failed
+                  ? `⚠️ 업로드 완료 ${uploadProgress.completed}/${uploadProgress.total} · 실패 ${uploadProgress.failed}`
+                  : `✅ 파일 ${uploadProgress?.completed || 0}개 업로드 완료`}
             </div>
           )}
 

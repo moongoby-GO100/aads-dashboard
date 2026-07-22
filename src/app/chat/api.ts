@@ -131,13 +131,24 @@ export async function uploadChatFile(file: File, sessionId: string): Promise<{
   thumbnail_url?: string;
   file_url?: string;
 }> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch(`${BASE_URL}/chat/files/upload?session_id=${sessionId}&uploaded_by=user`, {
-    method: "POST",
-    headers: { ...authHdrs() },
-    body: formData,
-  });
+  const upload = (authorization?: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetch(`${BASE_URL}/chat/files/upload?session_id=${sessionId}&uploaded_by=user`, {
+      method: "POST",
+      headers: authorization ? { Authorization: `Bearer ${authorization}` } : { ...authHdrs() },
+      body: formData,
+    });
+  };
+
+  let res = await upload();
+  if (res.status === 401) {
+    const currentToken = getToken();
+    if (currentToken) {
+      const refreshedToken = await refreshAuthToken(currentToken).catch(() => null);
+      if (refreshedToken) res = await upload(refreshedToken);
+    }
+  }
   if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
   return res.json();
 }
