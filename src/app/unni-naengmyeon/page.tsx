@@ -50,17 +50,21 @@ type MenuItem = {
 };
 
 const TOPPING_DESCRIPTION = "땅콩 + 깨 + 무김치 + 오이 + 계란 (다대기가 소량 들어가는 메뉴에요 :))";
-const WATER_MENU_IMAGE = "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
+const MENU_ASSET_ROOT = "/brands/unni-naengmyeon/menu";
+const WATER_MENU_IMAGE = `${MENU_ASSET_ROOT}/nas-water-naengmyeon.jpg`;
 
 function getMenuImage(name: string) {
-  // Only attach a photo when the photographed composition matches the menu.
-  // The Baemin captures do not provide an exact standalone photo for every
-  // side/set, so keyword fallbacks would mislabel food (for example, showing
-  // steamed dumplings for fried dumplings or plain naengmyeon for a ham steak set).
-  if (name === "냉면 + 수제돈까스 SET") return "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
-  if (name === "냉면 + 찐만두 SET") return "/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp";
-  if (name === "비빔냉면") return "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp";
-  if (name === "물냉면") return WATER_MENU_IMAGE;
+  // NAS 원본 파일명이 특정하는 메뉴에만 사진을 붙인다. 구성과 다른
+  // 유사 사진을 키워드로 재사용하지 않아 실제 판매 메뉴를 오인하지 않게 한다.
+  if (name === "외할머니 명태회냉면") return `${MENU_ASSET_ROOT}/nas-pollack-naengmyeon.jpg`;
+  if (name === "물비냉 언니냉면" || name === "물냉면") return WATER_MENU_IMAGE;
+  if (name === "비빔냉면" || name === "불냉면") return `${MENU_ASSET_ROOT}/nas-bibim-bul-naengmyeon.jpg`;
+  if (name === "처갓집 묵사발") return `${MENU_ASSET_ROOT}/nas-muksabal.jpg`;
+  if (name === "냉면 + 수제돈까스 SET") return `${MENU_ASSET_ROOT}/nas-donkatsu-set.jpg`;
+  if (name === "냉면 + 찐만두 SET") return `${MENU_ASSET_ROOT}/nas-mandu-set.jpg`;
+  if (name === "냉면 + 미니전 SET") return `${MENU_ASSET_ROOT}/nas-mini-jeon-set.jpg`;
+  if (name === "냉면 + 함박 4P SET") return `${MENU_ASSET_ROOT}/nas-hambak-set.jpg`;
+  if (name === "냉면 + 몽땅 SET") return `${MENU_ASSET_ROOT}/nas-all-in-set.jpg`;
   return null;
 }
 
@@ -138,7 +142,7 @@ function MenuList({ items }: { items: MenuItem[] }) {
             {menuImage && (
               <div className={styles.menuThumb}>
                 <Image
-                  className={item.name === "물냉면" ? styles.waterMenuCrop : undefined}
+                  className={styles.nasMenuCrop}
                   src={menuImage}
                   alt={`${item.name} 메뉴 이미지`}
                   fill
@@ -207,7 +211,7 @@ export default function UnniNaengmyeonPage() {
           <div className={styles.heroVisual}>
             <div className={styles.heroBadge}><b>ICE COLD</b><span>끝까지 시원하게</span></div>
             <Image
-              className={styles.waterMenuCrop}
+              className={styles.nasMenuCrop}
               src={WATER_MENU_IMAGE}
               alt="황동그릇에 땅콩, 깨, 무김치, 오이, 계란과 붉은 다대기를 담은 물냉면"
               fill
@@ -231,7 +235,7 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
-              className={styles.waterMenuCrop}
+              className={styles.nasMenuCrop}
               src={WATER_MENU_IMAGE}
               alt="붉은 다대기와 고명이 보이는 언니 물냉면"
               fill
@@ -241,16 +245,16 @@ export default function UnniNaengmyeonPage() {
           </div>
           <div className={styles.galleryStack}>
             <div className={styles.galleryPhoto}>
-              <Image src="/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp" alt="언니 비빔냉면" fill sizes="(max-width: 900px) 50vw, 25vw" />
+              <Image className={styles.nasMenuCrop} src={`${MENU_ASSET_ROOT}/nas-bibim-bul-naengmyeon.jpg`} alt="언니 비빔냉면" fill sizes="(max-width: 900px) 50vw, 25vw" />
               <span>언니 비빔냉면</span>
             </div>
             <div className={styles.galleryPhoto}>
-              <Image src="/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp" alt="언니냉면과 수제돈까스 세트" fill sizes="(max-width: 900px) 50vw, 25vw" />
+              <Image className={styles.nasMenuCrop} src={`${MENU_ASSET_ROOT}/nas-donkatsu-set.jpg`} alt="언니냉면과 수제돈까스 세트" fill sizes="(max-width: 900px) 50vw, 25vw" />
               <span>냉면 + 수제돈까스</span>
             </div>
           </div>
           <div className={styles.galleryPhoto}>
-            <Image src="/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp" alt="언니냉면과 찐만두 세트" fill sizes="(max-width: 900px) 100vw, 50vw" />
+            <Image className={styles.nasMenuCrop} src={`${MENU_ASSET_ROOT}/nas-mandu-set.jpg`} alt="언니냉면과 찐만두 세트" fill sizes="(max-width: 900px) 100vw, 50vw" />
             <span>냉면 + 찐만두</span>
           </div>
         </div>

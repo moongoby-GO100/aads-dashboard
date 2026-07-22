@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 08:15 KST - 언니냉면 NAS 실메뉴 이미지 반영
+- CEO 요청: `\\newtalk_nas\RnR\★사업자별 서류\사업자별\언니냉면\메뉴`의 실제 메뉴 사진을 찾아 언니냉면 사이트에 반영한다.
+- 원본 확인:
+  - 서버114의 NAS 전용 읽기 경로를 통해 `/volume1/RnR/★사업자별 서류/사업자별/언니냉면/메뉴`에 접속했다. NAS 원본은 수정하지 않았다.
+  - 메뉴명이 붙은 원본 9종(물냉면, 비빔/불냉면, 묵사발, 명태회냉면, 돈까스·찐만두·미니전·함박·몽땅 세트)을 SHA-256으로 대조해 전용 메뉴 자산으로 복사했다.
+- 반영:
+  - `public/brands/unni-naengmyeon/menu/nas-*.jpg`: NAS 실메뉴 이미지 9장을 원본 품질로 추가했다.
+  - `src/app/unni-naengmyeon/page.tsx`, `page.module.css`: 홈페이지 대표/갤러리/전체 메뉴에서 실제 구성과 이름이 일치하는 메뉴에만 NAS 사진을 연결했다. 휴대폰 갤러리 UI가 노출되지 않도록 CSS 크롭을 적용했다.
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`, `page.module.css`: B-1 단품 6종과 세트 5종을 NAS 사진으로 교체했다. 세트 5종은 돈까스·찐만두·미니전·함박 4P·몽땅으로 실제 파일 구성을 고정했다.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/outdoor-b1-back.png`: 웹 원고와 같은 실제 사진으로 1,200×3,600px 인쇄 PNG를 재출력했다.
+- 검증:
+  - `npx eslint src/app/unni-naengmyeon/page.tsx src/app/unni-naengmyeon/brand/banners/page.tsx`: 오류 0건.
+  - `npx tsc --noEmit`: 통과.
+  - `npm run build`: 성공, 60개 route 생성 및 언니냉면 3개 route 확인.
+  - Playwright Chromium 데스크톱·모바일 검수에서 홈페이지 메뉴 이미지 16개가 모두 로드됐고, B-1 웹 원고의 이미지 17개도 모두 로드됐다. 단품 6종·세트 5종의 사진/메뉴명/가격 겹침·잘림이 없음을 육안 확인했다.
+- 운영 영향/롤백: 언니냉면 홈페이지·B-1 배너 페이지·정적 메뉴 이미지·B-1 뒷면 PNG에만 영향이 있고 API·DB 변경은 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 대시보드 슬롯으로 전환한다.
+
 ## 2026-07-22 07:53 KST - Large-session manual scroll stabilization
 - 대상: `/chat/d84b7c2c-64a5-4a80-9472-21170fd7d160`에서 사용자가 스크롤할 때 뷰포트가 갑자기 위·아래로 이동하는 현상.
 - 실측: 세션 메시지 682건, 전체 본문 1,552,324자, assistant 최대 32,668자. 초기 페이지는 40건, DOM 렌더 상한은 150건이다.
