@@ -3,6 +3,8 @@ import Image from "next/image";
 import InquiryForm from "./InquiryForm";
 import styles from "./page.module.css";
 
+const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://aads.newtalk.kr"),
   title: "언니냉면 | 성신여대 배달 냉면",
@@ -14,11 +16,11 @@ export const metadata: Metadata = {
     description: "성신여대 앞에서 시작하는 배달전문 냉면 브랜드",
     type: "website",
     locale: "ko_KR",
-    images: [{ url: "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp", width: 1456, height: 1092, alt: "황동그릇에 붉은 다대기와 고명을 담은 언니냉면 물냉면" }],
+    images: [{ url: BRAND_LOGO, width: 1254, height: 1254, alt: "바가지머리와 냉면 그릇 사이에 언니냉면 글씨와 면발을 결합한 컨셉 H 로고" }],
   },
   icons: {
-    icon: [{ url: "/brands/unni-naengmyeon/mark.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/brands/unni-naengmyeon/mark.svg" }],
+    icon: [{ url: BRAND_LOGO, type: "image/png" }],
+    apple: [{ url: BRAND_LOGO }],
   },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "언니냉면" },
   robots: { index: false, follow: false },
@@ -165,7 +167,7 @@ export default function UnniNaengmyeonPage() {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <a className={styles.brand} href="#top" aria-label="언니냉면 홈">
-            <Image src="/brands/unni-naengmyeon/logo.svg" alt="언니냉면" width={720} height={220} priority />
+            <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} priority />
           </a>
           <nav className={styles.nav} aria-label="주요 메뉴">
             <a href="#menu">메뉴</a>
@@ -327,7 +329,7 @@ export default function UnniNaengmyeonPage() {
 
       <footer className={styles.footer}>
         <div>
-          <Image src="/brands/unni-naengmyeon/logo.svg" alt="언니냉면" width={720} height={220} />
+          <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />
           <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
         </div>
         <div className={styles.footerInfo}>

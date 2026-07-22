@@ -25,8 +25,8 @@
 
 .header { position: fixed; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid rgba(23,62,53,.12); background: rgba(255,248,234,.92); box-shadow: 0 8px 26px rgba(23,62,53,.06); backdrop-filter: blur(16px); }
 .headerInner { width: min(1240px, calc(100% - 48px)); height: 92px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 36px; }
-.brand { display: block; width: 184px; line-height: 0; }
-.brand img { display: block; width: 100%; height: auto; }
+.brand { display: block; width: 78px; line-height: 0; }
+.brand img { display: block; width: 100%; height: auto; border-radius: 18px; mix-blend-mode: multiply; }
 .nav { display: flex; align-items: center; gap: 38px; margin-left: auto; font-size: 14px; font-weight: 750; }
 .nav a, .headerCta { transition: opacity .2s, transform .2s; }
 .nav a:hover { opacity: .55; }
@@ -167,7 +167,7 @@
 .orderButton:hover { transform: translateY(-3px); background: var(--green-soft); }
 
 .footer { display: flex; justify-content: space-between; gap: 50px; padding: 62px max(24px, calc((100% - 1160px) / 2)); background: #102f29; color: rgba(255,255,255,.58); }
-.footer img { width: 170px; filter: brightness(0) invert(1); }
+.footer img { width: 150px; border-radius: 24px; }
 .footer > div > p { margin: 10px 0 0; font-size: 12px; }
 .footerInfo { text-align: right; }
 .footerInfo p { margin: 0 0 4px; font-size: 12px; }
@@ -178,7 +178,8 @@
 
 @media (max-width: 900px) {
   .headerInner { width: min(100% - 32px, 720px); height: 76px; }
-  .brand { width: 148px; }
+  .brand { width: 64px; }
+  .brand img { border-radius: 15px; }
   .nav { display: none; }
   .headerCta { padding: 9px 12px; font-size: 11px; }
   .hero, .menuSection, .storySection, .locationSection, .inquirySection, .orderSection { scroll-margin-top: 76px; }

@@ -1077,3 +1077,15 @@
 - 최종 동기화 (2026-07-22 16:30~16:34 KST):
   - 설명 강조 수정과 본 기록을 포함한 릴리스 `db4a4b791c58`을 blue-green 배포했다. active green과 standby blue는 모두 `running/healthy`이며 릴리스 SHA가 일치한다.
   - 공개 HTML은 `<strong>언니냉면</strong>` 2곳과 G/H/I 신규 경로를 반환한다. 세 PNG의 로컬·운영 SHA-256이 각각 `26ee2535...`/`79b30727...`/`3cc1a6b4...`로 일치하며, 기존 홈페이지와 API도 HTTP 200이다.
+
+## 2026-07-22 18:36 KST - 컨셉 H 메인 브랜드 로고 확정
+
+- CEO 확정: `concept-h-wordmark-noodles.png`를 언니냉면 홈페이지 메인 로고로 적용한다.
+- 반영:
+  - 헤더와 푸터의 기존 가로형 SVG 로고를 컨셉 H 정사각형 PNG로 교체했다.
+  - 브라우저 아이콘·Apple 아이콘·Open Graph 공유 이미지도 컨셉 H로 통일했다.
+  - 정사각형 로고가 데스크톱·모바일 헤더에서 잘리지 않도록 각각 78px/64px로 조정하고, 푸터는 150px로 배치했다.
+- 검증:
+  - 대상 `page.tsx` ESLint 통과.
+  - `npm run build` 성공: Next.js 16.1.6, `/unni-naengmyeon` 포함 58개 라우트 생성.
+- 운영 영향/롤백: 언니냉면 페이지의 브랜드 이미지와 표시 크기만 변경하며 API·DB·주문 링크에는 영향이 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 nginx upstream을 되돌린다.
