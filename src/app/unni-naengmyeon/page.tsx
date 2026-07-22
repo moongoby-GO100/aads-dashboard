@@ -39,13 +39,93 @@ const ArrowIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
 );
 
-const SnowIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.2 6.5l15.6 11M19.8 6.5l-15.6 11M8 4l4 2.3L16 4M8 20l4-2.3L16 20M3.8 10.5 8 12l-4.2 1.5M20.2 10.5 16 12l4.2 1.5"/></svg>
-);
+type MenuItem = {
+  name: string;
+  detail?: string;
+  price: string;
+  badge?: string;
+};
 
-const FlameIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2.8c.6 3.7-2.2 4.9-3.7 7.2-1.1-1-1.5-2.2-1.2-3.6C5.8 8.2 4 10.7 4 13.7a8 8 0 0 0 16 0c0-4.7-3.2-8.7-6.8-10.9Z"/><path d="M12.2 11.1c.3 2-1.5 2.8-1.5 4.4 0 1.2.9 2.1 2 2.1 1.7 0 2.8-1.4 2.8-3.1 0-1.5-.9-2.8-2.3-4.1.1 1.3-.3 2.2-1 2.8"/></svg>
-);
+const signatureMenus: MenuItem[] = [
+  { name: "외할머니 명태회냉면", detail: "땅콩·깨·무김치·오이·계란·명태회 130g", price: "13,000원", badge: "꼬들꼬들 명태회" },
+  { name: "물비냉 언니냉면", detail: "시원한 육수와 비빔 양념을 함께 즐기는 대표 메뉴", price: "10,500원", badge: "인기 메뉴" },
+  { name: "물냉면", detail: "과일 육수로 개운하고 시원하게", price: "10,000원" },
+  { name: "비빔냉면", detail: "매콤달콤한 수제 양념", price: "10,000원" },
+  { name: "불냉면", detail: "매운맛에 도전하는 화끈한 한 그릇", price: "10,000원" },
+  { name: "처갓집 묵사발", detail: "도토리묵·오이·김치·김가루", price: "9,000원", badge: "술안주 추천" },
+];
+
+const soloSets: MenuItem[] = [
+  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 2p", price: "14,500원", badge: "시원·바삭" },
+  { name: "냉면 + 함박 2P SET", detail: "냉면 + 함박스테이크 2p", price: "14,000원", badge: "시원·단짠" },
+  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 3p", price: "13,000원", badge: "시원·쫀득" },
+  { name: "냉면 + 수제돈까스 SET", detail: "냉면 + 수제 등심돈까스 1p", price: "15,500원", badge: "찰떡궁합" },
+  { name: "냉면 + 찐만두 SET", detail: "냉면 + 찐만두 4p", price: "15,000원", badge: "담백궁합" },
+  { name: "냉면 + 만두튀김 SET", detail: "냉면 + 만두튀김 4p", price: "16,000원", badge: "바삭궁합" },
+  { name: "냉면 + 함박 4P SET", detail: "냉면 + 함박스테이크 4p", price: "17,000원", badge: "달달궁합" },
+  { name: "냉면 + 미니전 SET", detail: "냉면 + 미니전 6p", price: "15,500원", badge: "쫀득궁합" },
+  { name: "냉면 + 몽땅 SET", detail: "냉면 + 수제돈까스 1p + 사이드 2개 선택", price: "19,500원", badge: "열정가득" },
+];
+
+const doubleSets: MenuItem[] = [
+  { name: "냉면 + 냉면 + 수제돈까스 SET", detail: "냉면 2그릇 + 수제돈까스 1p", price: "25,000원", badge: "참 든든한정식" },
+  { name: "냉면 + 냉면 + 찐만두 SET", detail: "냉면 2그릇 + 찐만두 4p", price: "25,500원", badge: "담백정식" },
+  { name: "냉면 + 냉면 + 만두튀김 SET", detail: "냉면 2그릇 + 만두튀김 4p", price: "26,000원", badge: "바삭정식" },
+  { name: "냉면 + 냉면 + 함박 4P SET", detail: "냉면 2그릇 + 함박스테이크 4p", price: "26,500원", badge: "열정정식" },
+  { name: "냉면 + 냉면 + 미니전 SET", detail: "냉면 2그릇 + 미니전 6p", price: "25,000원", badge: "쫀득정식" },
+];
+
+const sideMenus: MenuItem[] = [
+  { name: "수제 등심돈까스", price: "5,500원" },
+  { name: "새우튀김 4p", price: "5,000원" },
+  { name: "함박스테이크", detail: "2p 4,000원 · 4p 8,000원", price: "4,000원부터" },
+  { name: "고기찐만두 4p", price: "6,000원" },
+  { name: "김치찐만두 4p", price: "6,000원" },
+  { name: "반반찐만두 4p", price: "6,000원" },
+  { name: "갈비찐만두 5p", price: "5,000원" },
+  { name: "고기만두튀김 4p", price: "6,500원" },
+  { name: "반반만두튀김 4p", price: "6,500원" },
+  { name: "갈비만두튀김 5p", price: "5,500원" },
+  { name: "미니 감자전 4p", price: "3,500원" },
+  { name: "미니 김치전 4p", price: "3,500원" },
+  { name: "미니 부추전 4p", price: "3,500원" },
+  { name: "미니 모듬전 6p", price: "6,000원" },
+];
+
+const extras: MenuItem[] = [
+  { name: "살얼음 동동 육수 추가", price: "2,000원" },
+  { name: "수제양념 다대기 추가", price: "1,000원" },
+  { name: "매운 수제양념 다대기 추가", price: "1,000원" },
+  { name: "명태회 130g 추가", price: "3,000원" },
+  { name: "무김치 추가", price: "1,000원" },
+  { name: "계란 추가", price: "1,000원" },
+  { name: "돈까스소스 추가", price: "1,000원" },
+];
+
+const drinks: MenuItem[] = [
+  { name: "코카콜라 355ml", price: "2,000원" },
+  { name: "코카콜라 제로 355ml", price: "2,000원" },
+  { name: "펩시 제로 355ml", price: "2,000원" },
+  { name: "칠성사이다 355ml", price: "2,000원" },
+  { name: "식혜 238ml", price: "1,000원" },
+];
+
+function MenuList({ items }: { items: MenuItem[] }) {
+  return (
+    <div className={styles.fullMenuGrid}>
+      {items.map((item, index) => (
+        <article className={styles.fullMenuItem} key={`${item.name}-${index}`}>
+          <div>
+            {item.badge && <span>{item.badge}</span>}
+            <h4>{item.name}</h4>
+            {item.detail && <p>{item.detail}</p>}
+          </div>
+          <strong>{item.price}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
 
 export default function UnniNaengmyeonPage() {
   return (
@@ -103,43 +183,58 @@ export default function UnniNaengmyeonPage() {
       <section className={styles.menuSection} id="menu">
         <div className={styles.sectionHeading}>
           <span>OUR MENU</span>
-          <h2>오늘은 어떤 냉면?</h2>
-          <p>언니냉면의 대표 메뉴부터 먼저 소개합니다.</p>
+          <h2>익숙한 메뉴 그대로,<br />이제 언니냉면으로</h2>
+          <p>전달해 주신 배민 메뉴를 기준으로 이름과 구성을 언니냉면에 맞춰 반영했습니다.</p>
         </div>
-        <div className={styles.menuShowcase}>
-          <div className={styles.menuPhoto}>
+        <div className={styles.menuGallery}>
+          <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
               src="/brands/unni-naengmyeon/hero-naengmyeon.webp"
-              alt="얼음 육수와 메밀면, 달걀과 오이 고명을 담은 물냉면"
+              alt="언니 물냉면"
               fill
-              sizes="(max-width: 900px) 100vw, 46vw"
+              sizes="(max-width: 900px) 100vw, 50vw"
             />
-            <span>대표 메뉴 연출 이미지</span>
+            <span>언니 물냉면</span>
           </div>
-          <div className={styles.menuGrid}>
-          <article className={`${styles.menuCard} ${styles.waterCard}`}>
-            <span className={styles.menuNumber}>01</span>
-            <div className={styles.menuIcon}><SnowIcon /></div>
-            <div>
-              <span className={styles.menuTag}>COOL &amp; CLEAN</span>
-              <h3>언니 물냉면</h3>
-              <p>차갑고 개운하게, 한 그릇 끝까지 시원한 정석 물냉면</p>
+          <div className={styles.galleryStack}>
+            <div className={styles.galleryPhoto}>
+              <Image src="/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp" alt="언니 비빔냉면" fill sizes="(max-width: 900px) 50vw, 25vw" />
+              <span>언니 비빔냉면</span>
             </div>
-            <span className={styles.menuStatus}>가격 · 구성 준비 중</span>
-          </article>
-          <article className={`${styles.menuCard} ${styles.spicyCard}`}>
-            <span className={styles.menuNumber}>02</span>
-            <div className={styles.menuIcon}><FlameIcon /></div>
-            <div>
-              <span className={styles.menuTag}>SWEET &amp; SPICY</span>
-              <h3>언니 비빔냉면</h3>
-              <p>입맛 당기는 매콤함과 은근한 달큰함이 어우러진 비빔냉면</p>
+            <div className={styles.galleryPhoto}>
+              <Image src="/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp" alt="언니냉면과 수제돈까스 세트" fill sizes="(max-width: 900px) 50vw, 25vw" />
+              <span>냉면 + 수제돈까스</span>
             </div>
-            <span className={styles.menuStatus}>가격 · 구성 준비 중</span>
-          </article>
+          </div>
+          <div className={styles.galleryPhoto}>
+            <Image src="/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp" alt="언니냉면과 찐만두 세트" fill sizes="(max-width: 900px) 100vw, 50vw" />
+            <span>냉면 + 찐만두</span>
           </div>
         </div>
-        <p className={styles.menuNotice}>메뉴 가격과 선택 옵션은 배민 입점 완료 후 최종 공개됩니다.</p>
+
+        <div className={styles.fullMenu}>
+          <section className={styles.menuCategory}>
+            <div className={styles.menuCategoryHeading}><span>01</span><div><small>MAIN</small><h3>대표 냉면</h3></div></div>
+            <MenuList items={signatureMenus} />
+          </section>
+          <section className={styles.menuCategory}>
+            <div className={styles.menuCategoryHeading}><span>02</span><div><small>SOLO SET</small><h3>혼자서도 든든한 세트</h3></div></div>
+            <MenuList items={soloSets} />
+          </section>
+          <section className={styles.menuCategory}>
+            <div className={styles.menuCategoryHeading}><span>03</span><div><small>DOUBLE SET</small><h3>둘이서 든든한 세트</h3></div></div>
+            <MenuList items={doubleSets} />
+          </section>
+          <section className={styles.menuCategory}>
+            <div className={styles.menuCategoryHeading}><span>04</span><div><small>SIDE</small><h3>사이드 메뉴</h3></div></div>
+            <MenuList items={sideMenus} />
+          </section>
+          <section className={styles.menuCategory}>
+            <div className={styles.menuCategoryHeading}><span>05</span><div><small>EXTRA &amp; DRINK</small><h3>추가 메뉴 · 음료</h3></div></div>
+            <MenuList items={[...extras, ...drinks]} />
+          </section>
+        </div>
+        <p className={styles.menuNotice}>가격은 전달된 배민 메뉴 화면 기준이며, 할인·선택 옵션·판매 여부는 실제 주문 화면에서 달라질 수 있습니다.</p>
       </section>
 
       <section className={styles.storySection} id="story">
