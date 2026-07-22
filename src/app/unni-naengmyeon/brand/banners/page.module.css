@@ -1,3 +1,10 @@
+@font-face {
+  font-family: "Unni Pretendard";
+  src: url("/fonts/pretendard/PretendardVariable.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
 .page {
   --green: #173e35;
   --coral: #f45d48;
@@ -7,7 +14,7 @@
   overflow-x: hidden;
   background: #f2eee5;
   color: var(--green);
-  font-family: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-family: "Unni Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 }
 .page * { box-sizing: border-box; }
 .intro { width: min(1120px, calc(100% - 40px)); margin: auto; padding: 90px 0 65px; }
@@ -36,6 +43,9 @@
 .bannerLogo { display: flex; align-items: center; gap: 2.2cqw; }
 .bannerLogo img { width: 17cqw; height: 17cqw; border-radius: 2.7cqw; object-fit: cover; mix-blend-mode: multiply; }
 .bannerLogo strong { color: var(--green); font-size: 8.6cqw; font-weight: 950; letter-spacing: -.1em; white-space: nowrap; }
+.prominentLogo .bannerLogo { gap: 2.8cqw; }
+.prominentLogo .bannerLogo img { width: 19cqw; height: 19cqw; }
+.prominentLogo .bannerLogo strong { font-size: 12cqw; letter-spacing: -.115em; text-shadow: 0 1.2cqw 4cqw rgba(0,0,0,.28); }
 .inverseLogo strong { color: white; }
 .inverseLogo img { background: white; mix-blend-mode: normal; }
 .frontShade, .backShade, .pickupShade { position: absolute; inset: 0; z-index: -2; }
@@ -55,15 +65,35 @@
 .menuBoard b { font-size: 3.1cqw; }
 .menuBoard strong { color: var(--coral); font-size: 3.1cqw; }
 .menuBoard small { display: block; margin-top: 2.5cqw; color: #71807b; font-size: 1.8cqw; }
+.visualMenuBoard { margin-top: 5.5cqw; padding: 4.5cqw; }
+.visualMenuBoard > span { margin-bottom: 2cqw; }
+.visualMenuBoard .visualMenuRow { display: grid; grid-template-columns: 15cqw minmax(0, 1fr); gap: 2.8cqw; padding: 2.4cqw 0; }
+.visualMenuRow > div:last-child { min-width: 0; display: grid; align-content: center; gap: .7cqw; }
+.visualMenuRow b { font-size: 2.9cqw; line-height: 1.15; }
+.visualMenuRow strong { font-size: 3cqw; }
+.menuThumb { width: 15cqw; height: 11.5cqw; display: grid; overflow: hidden; border-radius: 1.8cqw; background: #dce8e3; }
+.menuThumb img { width: 100%; height: 100%; grid-area: 1 / 1; object-fit: cover; }
+.menuThumbCollage { grid-template-columns: repeat(3, 1fr); }
+.menuThumbCollage img { min-width: 0; grid-area: auto; }
 .backPickup { margin-top: auto; display: grid; gap: 2cqw; padding-top: 4cqw; border-top: .3cqw solid currentColor; }
 .backPickup b { font-size: 3.1cqw; }
 .backPickup strong { color: var(--coral); font-size: 6.1cqw; }
-.night .frontShade, .premium .frontShade { background: linear-gradient(180deg, rgba(5,26,23,.96) 0%, rgba(5,26,23,.82) 45%, rgba(5,26,23,.18) 69%, rgba(5,26,23,.88) 100%); }
-.night.front, .premium.front { color: white; }
-.night .frontCopy h3, .premium .frontCopy h3 { color: white; }
-.night.back, .premium.back { color: white; background: var(--green); }
-.night .backShade, .premium .backShade { background: linear-gradient(180deg, rgba(5,26,23,.96), rgba(5,26,23,.88) 56%, rgba(5,26,23,.72)); }
-.night .menuBoard, .premium .menuBoard { background: rgba(255,248,234,.95); color: var(--green); }
+.night .frontShade, .nightD1 .frontShade, .nightD2 .frontShade, .premium .frontShade { background: linear-gradient(180deg, rgba(5,26,23,.96) 0%, rgba(5,26,23,.82) 45%, rgba(5,26,23,.18) 69%, rgba(5,26,23,.88) 100%); }
+.night.front, .nightD1.front, .nightD2.front, .premium.front { color: white; }
+.night .frontCopy h3, .nightD1 .frontCopy h3, .nightD2 .frontCopy h3, .premium .frontCopy h3 { color: white; }
+.night.back, .nightD1.back, .nightD2.back, .premium.back { color: white; background: var(--green); }
+.night .backShade, .nightD1 .backShade, .nightD2 .backShade, .premium .backShade { background: linear-gradient(180deg, rgba(5,26,23,.96), rgba(5,26,23,.88) 56%, rgba(5,26,23,.72)); }
+.night .menuBoard, .nightD1 .menuBoard, .nightD2 .menuBoard, .premium .menuBoard { background: rgba(255,248,234,.96); color: var(--green); }
+.nightD1 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.84) 49%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.2) 100%); }
+.nightD2 .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.97) 0%, rgba(3,22,19,.82) 48%, rgba(3,22,19,.08) 67%, rgba(3,22,19,.24) 100%); }
+.nightD1 .backShade, .nightD2 .backShade { background: linear-gradient(180deg, rgba(3,22,19,.97), rgba(3,22,19,.9) 58%, rgba(3,22,19,.7)); }
+.featuredNight .frontCopy { margin-top: 9cqw; }
+.featuredNight .frontCopy h3 { font-size: 17cqw; line-height: .86; letter-spacing: -.105em; }
+.featuredNight .frontCopy h3 em { display: block; margin-top: 3.5cqw; font-size: .72em; letter-spacing: -.055em; }
+.featuredNight .frontCopy p { font-size: 3.7cqw; }
+.featuredNight .direction { margin-top: 5cqw; font-size: 8cqw; }
+.featuredNight .backCopy { margin-top: 6.5cqw; }
+.featuredNight .backCopy h3 { font-size: 10.8cqw; }
 .ice .frontShade { background: linear-gradient(180deg, rgba(236,249,255,.97), rgba(236,249,255,.84) 43%, transparent 66%, rgba(23,62,53,.62)); }
 .ice .direction { background: var(--green); }
 .ice .backShade { background: linear-gradient(180deg, rgba(226,247,255,.98), rgba(226,247,255,.92) 62%, rgba(226,247,255,.78)); }

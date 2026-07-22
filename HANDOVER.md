@@ -1183,3 +1183,23 @@
   - `npm run build` 성공: Next.js 16.1.6, 로고·배너 페이지를 포함한 60개 라우트 생성.
   - PNG 3장 파일 형식·1,200×1,200px 규격 확인 및 이미지 육안 검수 완료. P1/P2/P3 모두 최신 H 로고와 대형 `언니냉면` 워드마크가 정상 노출된다.
 - 운영 영향/롤백: 언니냉면 브랜드 페이지와 정적 픽업 PNG 3장만 변경한다. API·DB에는 영향이 없으며 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 전환한다.
+
+## 2026-07-22 22:02 KST - 나이트 라이더 D-1·D-2 및 사진형 세트 메뉴 추가
+
+- CEO 요청:
+  - 실외 CONCEPT B 나이트 라이더 계열을 확장한 D-1·D-2 두 시안을 추가한다.
+  - `언니냉면` 상호를 더 크게 키우고, 웹과 다운로드 PNG에서 글꼴이 달라지는 문제를 수정한다.
+  - C안처럼 하단에 세트 메뉴를 넣되 홈페이지의 메뉴별 실제 이미지를 함께 노출한다.
+- 반영:
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`: D-1 픽업 비콘과 D-2 메뉴 스포트라이트를 추가해 실외 시안을 7안·14면으로 확장했다.
+  - D-1·D-2는 기존 B안의 딥그린·화이트·코랄 고대비 톤을 유지하고, 상단 로고 워드마크와 본문 `언니냉면`을 원거리 가독성 기준으로 확대했다.
+  - 뒷면에는 홈페이지 자산 `naengmyeon-donkatsu.webp`, `naengmyeon-mandu.webp`, `bibim-naengmyeon.webp`를 이용한 사진형 세트 메뉴 3종을 추가했다.
+  - Codex built-in `image_gen`으로 글자 없는 D-1 물냉면·D-2 비빔냉면/세트 야간 배경 2종을 생성해 프로젝트 자산으로 저장했다.
+  - PNG 글꼴 차이 원인이었던 Sharp SVG의 `WenQuanYi Zen Hei` 강제 지정을 제거했다. 공식 Pretendard 1.3.9 variable WOFF2와 라이선스를 프로젝트에 보존하고, 웹과 PNG를 동일 Chromium/Pretendard 렌더 경로로 통합했다.
+  - `scripts/render-unni-banner-assets.mjs`가 실외 14면을 1,200×3,600px, 실내 3면을 1,200×1,200px로 정규화해 출력한다. 기존 픽업 전용 스크립트는 통합 렌더러 호환 진입점으로 유지했다.
+- 검증:
+  - 대상 ESLint와 `npx tsc --noEmit` 통과.
+  - 로컬 공개 font URL이 HTTP 200 `font/woff2`로 응답한다.
+  - Playwright Chromium으로 실외 14면·실내 3면 총 17개 PNG를 다시 렌더링했고, 17/17 규격 검사를 통과했다.
+  - D-1·D-2 앞·뒷면을 육안 검수해 대형 상호, 픽업 방향, 사진형 세트 메뉴, 한글 폰트가 정상 노출됨을 확인했다.
+- 운영 영향/롤백: 언니냉면 배너 페이지·공개 폰트·정적 PNG에만 영향이 있으며 API·DB 변경은 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 전환한다.

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "render:unni-banners": "node scripts/render-unni-banner-assets.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
