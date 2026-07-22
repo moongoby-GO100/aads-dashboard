@@ -992,4 +992,11 @@
   - 로컬 HTTP: 홈페이지 200, 신규 황동그릇 WebP 200, HTML에서 배민 URL과 고명 설명 렌더를 확인했다.
 - 제한:
   - 배민 단축 URL은 서버 직접 요청에서 HTTP 502/403을 반환했고 연결 Android 환경에는 ADB가 없어 배민 원본 상품 이미지를 추가 다운로드하지 못했다. 기존 세션 캡처를 기준으로 이전에 프로젝트에 반영된 물/비빔/돈까스/만두 이미지를 메뉴명별로 재사용했다.
-  - 운영 배포 후 외부 HTTP·정적 자산·브라우저·양 슬롯 릴리스 SHA를 재검증해야 한다.
+  - Browser Bridge는 PC Agent 오프라인으로 운영 화면 캡처를 실행하지 못했다. 공개 HTML·정적 자산·API·컨테이너 검증으로 대체했다.
+- 운영 반영·최종 검증 (2026-07-22 15:23~15:28 KST):
+  - 기능·자산 커밋 `a1b84317469f`을 원격 `feat/unni-naengmyeon-homepage-20260722` 브랜치에 push했다.
+  - `bash deploy.sh` blue-green 배포를 완료했으며 active는 `aads-dashboard-green:3101`, standby는 `aads-dashboard:3100`이다.
+  - 양 dashboard 슬롯이 `AADS_RELEASE_SHA=a1b84317469f` 및 `healthy`로 일치한다.
+  - 외부 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200, 신규 `hero-naengmyeon-brass-v2.webp`는 HTTP 200 `image/webp` 및 166,124바이트, `/api/v1/health`는 HTTP 200으로 응답했다.
+  - 운영 HTML에서 고정 메뉴바 릴리스의 신규 문구, 배민 단축 URL, 고명 설명, 사선 띠 문구를 확인했다.
+  - 배포 Step 7 자동 QA는 `UNKNOWN`이어서 성공 근거로 사용하지 않았다. Browser Bridge/PC Agent가 offline이므로 브라우저 E2E 대신 공개 HTTP·정적 자산·API·컨테이너·릴리스 SHA로 검증했다.
