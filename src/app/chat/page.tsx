@@ -23,6 +23,10 @@ import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, Art
 import { BASE_URL, getToken, authHdrs, chatApi, chatApiWithRetry, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
 import { getRequestedChatSessionId } from "./urlState";
+import {
+  shouldIgnoreStreamingStatus,
+  type ForegroundStreamRequest,
+} from "@/lib/chatStreamingGuard";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -2975,6 +2979,8 @@ export default function ChatPage() {
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
+  const foregroundRequestRef = useRef<ForegroundStreamRequest | null>(null);
+  const foregroundRequestSequenceRef = useRef(0);
   const executionAttachAbortRef = useRef<AbortController | null>(null);
   const resumeRequestInFlightRef = useRef<Set<string>>(new Set());
   const resumeRequestLastAtRef = useRef<Map<string, number>>(new Map());
@@ -4456,6 +4462,20 @@ export default function ChatPage() {
           `/chat/sessions/${sid}/streaming-status`
         );
         if (cancelled) return;
+        const expectedExecutionId = (_streaming || _waitingBg) ? currentExecutionIdRef.current : null;
+        if (shouldIgnoreStreamingStatus({
+          sessionId: sid,
+          status: ss,
+          pendingRequest: foregroundRequestRef.current,
+          expectedExecutionId,
+        })) return;
+        if (
+          foregroundRequestRef.current?.sessionId === sid &&
+          ss.is_streaming &&
+          ss.execution_id
+        ) {
+          foregroundRequestRef.current = null;
+        }
         if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
         if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
         if (ss.partial_content) {
@@ -5246,8 +5266,23 @@ export default function ChatPage() {
     // P2-2: 분기 모드 캡처 후 초기화
     const _capturedBranch = branchPointRef.current;
     setBranchPoint(null);
+    const previousExecutionId = currentExecutionIdRef.current;
+    const foregroundRequest: ForegroundStreamRequest = {
+      requestId: ++foregroundRequestSequenceRef.current,
+      sessionId,
+      previousExecutionId,
+    };
+    foregroundRequestRef.current = foregroundRequest;
+    // React state updates are batched. Clear refs synchronously so a status poll
+    // or very fast stream_start cannot reuse the previous response text.
+    streamingRef.current = true;
+    waitingBgRef.current = false;
+    streamBufRef.current = "";
+    bgPartialContentRef.current = "";
     setStreaming(true);
+    setWaitingBgResponse(false);
     setStreamBuf("");
+    setBgPartialContent("");
     setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
@@ -5489,6 +5524,9 @@ export default function ChatPage() {
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
               if (ev.execution_id) {
                 currentExecutionIdRef.current = ev.execution_id;
+                if (foregroundRequestRef.current?.requestId === foregroundRequest.requestId) {
+                  foregroundRequestRef.current = null;
+                }
                 setMessages((prev) => prev.map((m) =>
                   m.intent === "streaming_placeholder" ? { ...m, execution_id: ev.execution_id } : m,
                 ));
@@ -6203,6 +6241,13 @@ export default function ChatPage() {
     } finally {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
+      // Keep the generation guard across the completion one-shots below. If no
+      // stream_start arrives, release it after their longest retry window.
+      window.setTimeout(() => {
+        if (foregroundRequestRef.current?.requestId === foregroundRequest.requestId) {
+          foregroundRequestRef.current = null;
+        }
+      }, 30000);
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
       const _isInvisibleRecovery = !streamGotFinal && (_invisibleRecoveryActivated || waitingBgRef.current);  // B3-FIX: 완료 시 항상 cleanup
@@ -6267,6 +6312,12 @@ export default function ChatPage() {
               const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; execution_id?: string | null; last_event_id?: string | null }>(
                 `/chat/sessions/${_sid}/streaming-status`
               );
+              if (shouldIgnoreStreamingStatus({
+                sessionId: _sid,
+                status: ss,
+                pendingRequest: foregroundRequestRef.current,
+                expectedExecutionId: currentExecutionIdRef.current,
+              })) return;
               if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
               if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {

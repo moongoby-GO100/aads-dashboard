@@ -911,3 +911,19 @@
 - E2E 제한:
   - 저장된 AADS E2E credential로 로그인 검증을 재시도했으나 PC Agent가 offline이라 Browser Bridge 세션을 확보하지 못했다.
   - R-E2E 절차에 따라 로그인 페이지 HTTP 200, API health 200, 양 슬롯/운영 번들/DB 검증으로 대체했다.
+## 2026-07-23 08:34 KST - New request stale-answer generation guard (P0)
+
+- 대상: `/chat/8ad08cc2-620c-4a70-8305-74a8d9b43c4e`에서 새 질문 직후 직전 답변이 새 응답처럼 즉시 노출되는 현상.
+- 실측 근거: 대상 세션의 직전 user/assistant 메시지는 2026-07-23 08:25:15/08:25:16 KST에 정상 순서로 DB 저장되어 있어 저장 순서 문제가 아니었다.
+- 원인: backend가 복구를 위해 완료된 streaming-status를 60~300초 보존하는 동안, 새 POST의 `stream_start` 전 polling이 직전 execution의 `just_completed`를 새 요청 완료로 오인해 새 optimistic placeholder를 직전 assistant 메시지로 교체할 수 있었다.
+- P0 수정:
+  - 새 foreground 요청마다 request generation과 직전 execution ID를 기록한다.
+  - 새 `stream_start` 전 과거 `just_completed`, idle 상태, 동일한 과거 execution 상태를 무시한다.
+  - 활성 execution과 다른 polling 결과도 UI 병합에서 제외한다.
+  - 새 요청 시작 시 `streamBufRef`/`bgPartialContentRef`를 React state보다 먼저 동기 초기화한다.
+- 검증:
+  - `node scripts/test-chat-streaming-guard.cjs`: 8 assertions passed.
+  - `tsc --noEmit`: 성공.
+  - 대상 ESLint: 오류 0건, 기존 warning 22건.
+  - Next.js 16.1.6 production build: 컴파일 및 57개 route 생성 성공.
+- E2E 제한: PC Agent가 offline이라 로그인 Browser Bridge 검증은 불가했다. Credential Vault 로그인 페이지 HTTP fallback 200, 대상 DB 메시지 순서, 회귀 테스트와 production build로 선검증했으며 운영 배포 후 API/컨테이너/릴리스 검증을 수행한다.
