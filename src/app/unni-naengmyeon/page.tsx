@@ -49,7 +49,6 @@ type MenuItem = {
   toppings?: boolean;
 };
 
-const BAEMIN_MENU_URL = "https://s.baemin.com/2b000l0sq2E18";
 const TOPPING_DESCRIPTION = "땅콩 + 깨 + 무김치 + 오이 + 계란 (다대기가 소량 들어가는 메뉴에요 :))";
 const WATER_MENU_IMAGE = "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
 
@@ -183,7 +182,7 @@ export default function UnniNaengmyeonPage() {
             <a href="#location">매장 안내</a>
             <a href="#inquiry">문의</a>
           </nav>
-          <a className={styles.headerCta} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer">배민 메뉴 보기</a>
+          <span className={styles.headerCta} aria-disabled="true">배민 입점 준비 중</span>
         </div>
       </header>
 
@@ -200,7 +199,7 @@ export default function UnniNaengmyeonPage() {
             </div>
             <div className={styles.openingNote}>
               <span className={styles.pulse} aria-hidden="true" />
-              고명희냉면 배민 메뉴 기준 구성 완료
+              언니냉면 메뉴 준비 중
             </div>
           </div>
           <div className={styles.heroVisual}>
@@ -285,7 +284,7 @@ export default function UnniNaengmyeonPage() {
           <div className={styles.storyCopy}>
             <span>WHY UNNI?</span>
             <h2>가깝고, 편하고,<br />자꾸 생각나는 한 그릇</h2>
-            <p>언니냉면은 열정국밥 성신여대점 주방에서 시작하는 배달전문 냉면 브랜드입니다. 복잡한 말보다 맛있는 한 그릇으로 기억되겠습니다.</p>
+            <p>언니냉면은 시원한 육수와 매콤한 양념, 푸짐한 고명을 한 그릇에 담아 전하는 성신여대 앞 배달전문 냉면 브랜드입니다. 복잡한 말보다 맛있는 한 그릇으로 기억되겠습니다.</p>
           </div>
           <ul className={styles.promiseList}>
             <li><b>01</b><span><strong>배달전문</strong>주문부터 식사까지 편하게</span></li>
@@ -305,10 +304,10 @@ export default function UnniNaengmyeonPage() {
             <div className={styles.addressIcon}><PinIcon /></div>
             <div>
               <strong>서울특별시 성북구 동소문로 90 1층</strong>
-              <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
+              <p>성신여대 앞 · 배달전문 냉면 브랜드</p>
             </div>
           </div>
-          <a className={styles.locationStatus} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer"><span /> 배민에서 동일 메뉴 구성 확인하기 <ArrowIcon /></a>
+          <div className={styles.locationStatus} aria-label="언니냉면 배민 입점 준비 중"><span /> 배민 입점 준비 중</div>
         </div>
       </section>
 
@@ -329,16 +328,16 @@ export default function UnniNaengmyeonPage() {
 
       <section className={styles.orderSection} id="order">
         <div className={styles.orderBowl} aria-hidden="true"><span /><span /><span /></div>
-        <p>BAEMIN MENU</p>
-        <h2>언니냉면 메뉴를<br />미리 확인하세요</h2>
-        <span>현재 제공받는 고명희냉면 메뉴 구성과 이미지를 배민 앱에서 확인할 수 있습니다.</span>
-        <a className={styles.orderButton} href={BAEMIN_MENU_URL} target="_blank" rel="noopener noreferrer">배민 메뉴 바로가기 <ArrowIcon /></a>
+        <p>BAEMIN COMING SOON</p>
+        <h2>언니냉면 배민 입점을<br />준비하고 있습니다</h2>
+        <span>언니냉면 주문 페이지가 등록되면 공식 주문 링크를 이곳에 연결하겠습니다.</span>
+        <span className={styles.orderButton} aria-disabled="true">입점 준비 중</span>
       </section>
 
       <footer className={styles.footer}>
         <div>
           <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />
-          <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
+          <p>성신여대 앞 · 배달전문 냉면 브랜드</p>
         </div>
         <div className={styles.footerInfo}>
           <p>서울특별시 성북구 동소문로 90 1층</p>

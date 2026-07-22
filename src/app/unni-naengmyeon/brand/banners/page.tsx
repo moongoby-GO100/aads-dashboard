@@ -51,7 +51,7 @@ function ConceptA() {
               <h3>언니가 제대로<br /><em>말아주는 냉면</em></h3>
               <p>시원하게 · 매콤하게 · 든든하게</p>
             </div>
-            <div className={styles.bottomRibbon}><b>배민에서 언니냉면을 찾아보세요</b><span>서울 성북구 동소문로 90 1층</span></div>
+            <div className={styles.bottomRibbon}><b>언니냉면 배민 입점 준비 중</b><span>서울 성북구 동소문로 90 1층</span></div>
           </div>
           <DownloadLink file="concept-a-front.png">A 앞면 PNG</DownloadLink>
         </div>
@@ -61,7 +61,7 @@ function ConceptA() {
             <BannerLogo inverse />
             <div className={styles.backTitle}><span>UNNI&apos;S PICK</span><h3>오늘은<br />뭐 먹을래?</h3></div>
             <div className={styles.menuBoard}>{menuRows.map(([name, price], i) => <div key={name}><i>0{i + 1}</i><b>{name}</b><strong>{price}</strong></div>)}</div>
-            <div className={styles.orderBadge}><span>BAEMIN</span><b>배달 주문 가능</b><small>성신여대점 · 샵인샵</small></div>
+            <div className={styles.orderBadge}><span>BAEMIN</span><b>입점 준비 중</b><small>성신여대 앞 · 배달전문</small></div>
           </div>
           <DownloadLink file="concept-a-back.png">A 뒷면 PNG</DownloadLink>
         </div>
@@ -95,7 +95,7 @@ function ConceptB() {
             <span className={styles.bSmall}>COOL · SPICY · HEARTY</span>
             <h3>시원하게<br /><em>말아줄게</em></h3>
             <div className={styles.bFeature}><b>대표 메뉴</b><strong>물비냉 언니냉면</strong><span>시원한 육수와 비빔 양념을 한 그릇에</span><i>10,500원</i></div>
-            <div className={styles.bOrder}><b>배민 메뉴 보기</b><span>언니냉면을 검색하세요</span></div>
+            <div className={styles.bOrder}><b>배민 입점 준비 중</b><span>공식 주문 링크는 등록 후 안내</span></div>
           </div>
           <DownloadLink file="concept-b-back.png">B 뒷면 PNG</DownloadLink>
         </div>
