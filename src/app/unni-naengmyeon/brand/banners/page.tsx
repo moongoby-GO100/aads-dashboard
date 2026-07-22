@@ -53,10 +53,30 @@ const visualSetMenu = [
 ];
 
 const visualSingleMenu = [
-  { name: "외할머니 명태회냉면", price: "13,000원", image: "bibim-naengmyeon.webp" },
-  { name: "물비냉 언니냉면", price: "10,500원", image: "bibim-naengmyeon.webp" },
-  { name: "물냉면", price: "10,000원", image: "naengmyeon-donkatsu.webp" },
-  { name: "비빔냉면", price: "10,000원", image: "bibim-naengmyeon.webp" },
+  {
+    name: "외할머니 명태회냉면",
+    price: "13,000원",
+    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
+    alt: "붉은 명태회 양념과 고명을 올린 냉면",
+  },
+  {
+    name: "물비냉 언니냉면",
+    price: "10,500원",
+    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
+    alt: "육수와 비빔 양념을 함께 즐기는 언니냉면",
+  },
+  {
+    name: "물냉면",
+    price: "10,000원",
+    image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
+    alt: "살얼음 육수를 담은 황동그릇 물냉면",
+  },
+  {
+    name: "비빔냉면",
+    price: "10,000원",
+    image: "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp",
+    alt: "매콤한 붉은 양념과 고명을 올린 비빔냉면",
+  },
 ];
 
 const outdoorConcepts: OutdoorConcept[] = [
@@ -226,7 +246,7 @@ function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVis
           <div className={styles.b1MenuRows}>
             {visualSingleMenu.map((item) => (
               <div className={styles.b1MenuRow} key={item.name}>
-                <Image src={`/brands/unni-naengmyeon/menu/${item.image}`} alt="" width={160} height={120} />
+                <Image src={item.image} alt={item.alt} width={240} height={180} />
                 <b>{item.name}</b>
                 <strong>{item.price}</strong>
               </div>
