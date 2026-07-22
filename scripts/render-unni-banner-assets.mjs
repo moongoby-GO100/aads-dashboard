@@ -6,6 +6,12 @@ import sharp from "sharp";
 const root = process.cwd();
 const outputRoot = path.join(root, "public/brands/unni-naengmyeon/banners-20260722/print");
 const pageUrl = process.env.UNNI_BANNER_URL || "http://127.0.0.1:3100/unni-naengmyeon/brand/banners";
+const requestedExports = new Set(
+  (process.env.UNNI_BANNER_EXPORTS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 
 await fs.mkdir(outputRoot, { recursive: true });
 
@@ -23,7 +29,7 @@ try {
     elements.map((element) => element.getAttribute("data-export")).filter(Boolean),
   );
 
-  for (const name of exports) {
+  for (const name of exports.filter((exportName) => requestedExports.size === 0 || requestedExports.has(exportName))) {
     const locator = page.locator(`[data-export="${name}"]`);
     await locator.evaluate((element, exportName) => {
       const htmlElement = element;

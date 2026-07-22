@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 const ASSET_ROOT = "/brands/unni-naengmyeon/banners-20260722";
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
 
-type ConceptTone = "classic" | "night" | "nightD1" | "nightD2" | "ice" | "premium" | "coral";
+type ConceptTone = "classic" | "night" | "nightB1" | "nightD1" | "nightD2" | "ice" | "premium" | "coral";
 
 type OutdoorConcept = {
   id: string;
@@ -18,7 +18,7 @@ type OutdoorConcept = {
   frontSub: string;
   direction: string;
   backTitle: React.ReactNode;
-  menuMode: "single" | "set" | "setVisual";
+  menuMode: "single" | "set" | "setVisual" | "singleVisualSet";
 };
 
 const singleMenu = [
@@ -52,6 +52,13 @@ const visualSetMenu = [
   },
 ];
 
+const visualSingleMenu = [
+  { name: "외할머니 명태회냉면", price: "13,000원", image: "bibim-naengmyeon.webp" },
+  { name: "물비냉 언니냉면", price: "10,500원", image: "bibim-naengmyeon.webp" },
+  { name: "물냉면", price: "10,000원", image: "naengmyeon-donkatsu.webp" },
+  { name: "비빔냉면", price: "10,000원", image: "bibim-naengmyeon.webp" },
+];
+
 const outdoorConcepts: OutdoorConcept[] = [
   {
     id: "a",
@@ -76,6 +83,18 @@ const outdoorConcepts: OutdoorConcept[] = [
     direction: "입구 방향  →",
     backTitle: <>시원한 한 끼<br /><em>포장됩니다</em></>,
     menuMode: "single",
+  },
+  {
+    id: "b1",
+    tone: "nightB1",
+    name: "나이트 라이더 B-1 · 픽업존",
+    summary: "B안의 배경과 색감은 그대로 유지하고 상호를 약 2배 확대, 사진형 단품·세트 메뉴와 무방향 픽업존 안내를 결합한 안",
+    image: "concept-b-bold-food.png",
+    frontTitle: <>언니냉면<br /><em>PICK UP</em></>,
+    frontSub: "배달기사 픽업 · 포장 주문",
+    direction: "배달·포장 픽업존",
+    backTitle: <>시원한 냉면<br /><em>메뉴 & 세트</em></>,
+    menuMode: "singleVisualSet",
   },
   {
     id: "d1",
@@ -174,7 +193,7 @@ const pickupConcepts = [
 
 export const metadata: Metadata = {
   title: "언니냉면 600×1800 양면 입간판 · 픽업존 시안",
-  description: "실외 600×1800mm 양면 입간판 7안과 실내 유리용 600×600mm 픽업존 3안입니다.",
+  description: "실외 600×1800mm 양면 입간판 8안과 실내 유리용 600×600mm 픽업존 3안입니다.",
 };
 
 function BannerLogo({ inverse = false }: { inverse?: boolean }) {
@@ -198,7 +217,38 @@ function ProductionGuides({ square = false }: { square?: boolean }) {
   );
 }
 
-function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" }) {
+function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVisualSet" }) {
+  if (mode === "singleVisualSet") {
+    return (
+      <div className={`${styles.menuBoard} ${styles.b1CombinedMenu}`}>
+        <span>TAKE OUT MENU</span>
+        <div className={styles.b1MenuRows}>
+          {visualSingleMenu.map((item) => (
+            <div className={styles.b1MenuRow} key={item.name}>
+              <Image src={`/brands/unni-naengmyeon/menu/${item.image}`} alt="" width={160} height={120} />
+              <b>{item.name}</b>
+              <strong>{item.price}</strong>
+            </div>
+          ))}
+        </div>
+        <span className={styles.b1SetLabel}>TAKE OUT SET MENU</span>
+        <div className={styles.b1SetRows}>
+          {visualSetMenu.map((item) => (
+            <div className={styles.b1MenuRow} key={item.name}>
+              <div className={`${styles.b1SetThumb} ${item.images.length > 1 ? styles.menuThumbCollage : ""}`}>
+                {item.images.map((image) => (
+                  <Image key={image} src={`/brands/unni-naengmyeon/menu/${image}`} alt="" width={160} height={120} />
+                ))}
+              </div>
+              <b>{item.name}</b>
+              <strong>{item.price}</strong>
+            </div>
+          ))}
+        </div>
+        <small>매장 상황에 따라 메뉴·가격이 변경될 수 있습니다</small>
+      </div>
+    );
+  }
   if (mode === "setVisual") {
     return (
       <div className={`${styles.menuBoard} ${styles.visualMenuBoard}`}>
@@ -234,9 +284,11 @@ function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" }) {
 }
 
 function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
-  const isNightRider = concept.tone === "night" || concept.tone === "nightD1" || concept.tone === "nightD2";
+  const isNightRider = concept.tone === "night" || concept.tone === "nightB1" || concept.tone === "nightD1" || concept.tone === "nightD2";
   const inverse = isNightRider || concept.tone === "premium";
   const isFeaturedNight = concept.tone === "nightD1" || concept.tone === "nightD2";
+  const isB1 = concept.tone === "nightB1";
+  const pickupLabel = isB1 ? "배달·포장 픽업존" : "입구 방향  →";
   return (
     <article className={styles.concept}>
       <div className={styles.conceptHeading}>
@@ -245,7 +297,7 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
       </div>
       <div className={styles.pair}>
         <div>
-          <div className={`${styles.banner} ${styles[concept.tone]} ${isFeaturedNight ? styles.featuredNight : ""} ${styles.front}`} data-export={`outdoor-${concept.id}-front`}>
+          <div className={`${styles.banner} ${styles[concept.tone]} ${isFeaturedNight ? styles.featuredNight : ""} ${isB1 ? styles.b1Feature : ""} ${styles.front}`} data-export={`outdoor-${concept.id}-front`}>
             <Image className={styles.coverImage} src={`${ASSET_ROOT}/${concept.image}`} alt="" fill sizes="600px" priority={concept.id === "a"} />
             <div className={styles.frontShade} />
             <div className={styles.bannerInner}>
@@ -263,14 +315,14 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
           <DownloadLink file={`outdoor-${concept.id}-front.png`}>{concept.id.toUpperCase()} 앞면 PNG</DownloadLink>
         </div>
         <div>
-          <div className={`${styles.banner} ${styles[concept.tone]} ${isFeaturedNight ? styles.featuredNight : ""} ${styles.back}`} data-export={`outdoor-${concept.id}-back`}>
+          <div className={`${styles.banner} ${styles[concept.tone]} ${isFeaturedNight ? styles.featuredNight : ""} ${isB1 ? styles.b1Feature : ""} ${styles.back}`} data-export={`outdoor-${concept.id}-back`}>
             <Image className={styles.backImage} src={`${ASSET_ROOT}/${concept.image}`} alt="" fill sizes="600px" />
             <div className={styles.backShade} />
             <div className={styles.bannerInner}>
               <div className={isFeaturedNight ? styles.prominentLogo : ""}><BannerLogo inverse={inverse} /></div>
               <div className={styles.backCopy}><span>UNNI&apos;S CHOICE</span><h3>{concept.backTitle}</h3></div>
               <MenuBoard mode={concept.menuMode} />
-              <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>입구 방향  →</strong></div>
+              <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>{pickupLabel}</strong></div>
             </div>
             <ProductionGuides />
           </div>
@@ -308,16 +360,16 @@ export default function UnniBannerConceptsPage() {
       <section className={styles.intro}>
         <span>OUTDOOR + INDOOR SIGNAGE</span>
         <h1>길에서는 찾기 쉽고,<br />유리에서는 바로 픽업</h1>
-        <p>실외 600×1800mm 양면 입간판 7안과 실내 유리 부착용 600×600mm 픽업존 3안입니다. D-1·D-2는 B안의 나이트 라이더 톤을 확장해 상호 원거리 가독성과 사진형 세트 메뉴를 강화했습니다.</p>
-        <div><b>7 OUTDOOR</b><b>14 SIDES</b><b>3 INDOOR</b><b>600×1800 / 600×600</b></div>
+        <p>실외 600×1800mm 양면 입간판 8안과 실내 유리 부착용 600×600mm 픽업존 3안입니다. B-1은 B안의 나이트 라이더 배경을 그대로 유지하면서 상호 확대, 사진형 단품·세트 메뉴, 방향 없는 픽업존 안내를 반영했습니다.</p>
+        <div><b>8 OUTDOOR</b><b>16 SIDES</b><b>3 INDOOR</b><b>600×1800 / 600×600</b></div>
       </section>
 
       <section className={styles.recommend}>
-        <span>CTO RECOMMENDATION</span><strong>실외 D-1 · 실내 P2 조합</strong><p>D-1은 야간 상호 가독성과 기사 동선이 가장 빠르고, 뒷면 사진형 세트 메뉴가 포장 고객의 선택을 돕습니다.</p>
+        <span>CTO RECOMMENDATION</span><strong>실외 B-1 · 실내 P2 조합</strong><p>B-1은 검토 완료된 B 배경을 유지하면서 상호 가독성, 기사 픽업 인지, 단품·세트 메뉴 선택을 한 번에 해결합니다.</p>
       </section>
 
       <section className={styles.sectionIntro}>
-        <span>01 · OUTDOOR</span><h2>600 × 1800 양면 입간판</h2><p>기존 시안에 B안 기반 나이트 라이더 D-1·D-2를 추가했습니다. 웹과 PNG 모두 같은 Pretendard 원본 폰트를 사용합니다.</p>
+        <span>01 · OUTDOOR</span><h2>600 × 1800 양면 입간판</h2><p>B-1은 CONCEPT B의 이미지와 나이트 라이더 톤을 그대로 사용하고 요청하신 정보 계층만 수정했습니다. 웹과 PNG 모두 같은 Pretendard 원본 폰트를 사용합니다.</p>
       </section>
       <div className={styles.concepts}>{outdoorConcepts.map((concept) => <OutdoorConceptCard key={concept.id} concept={concept} />)}</div>
 
@@ -330,7 +382,7 @@ export default function UnniBannerConceptsPage() {
         <h2>업체 발주 기준과 제작 상태</h2>
         <div className={styles.specGrid}>
           <div><b>요청 상품 유형</b><span>600×1800 실외 양면 배너 · 세부 사양은 판매자 확인 필요</span></div>
-          <div><b>실외 완성 규격</b><span>600 × 1800mm · 양면 14면 구성</span></div>
+          <div><b>실외 완성 규격</b><span>600 × 1800mm · 양면 16면 구성</span></div>
           <div><b>실내 완성 규격</b><span>600 × 600mm · 유리 부착용 3안</span></div>
           <div><b>가공 유보영역</b><span>실외 상·하단 80mm, 사방 중요정보 30mm 안쪽 배치</span></div>
           <div><b>현재 파일</b><span>RGB PNG 시안 · 웹/PNG 동일 Pretendard 폰트 고정</span></div>

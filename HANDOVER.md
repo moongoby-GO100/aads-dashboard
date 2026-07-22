@@ -1203,3 +1203,15 @@
   - Playwright Chromium으로 실외 14면·실내 3면 총 17개 PNG를 다시 렌더링했고, 17/17 규격 검사를 통과했다.
   - D-1·D-2 앞·뒷면을 육안 검수해 대형 상호, 픽업 방향, 사진형 세트 메뉴, 한글 폰트가 정상 노출됨을 확인했다.
 - 운영 영향/롤백: 언니냉면 배너 페이지·공개 폰트·정적 PNG에만 영향이 있으며 API·DB 변경은 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 전환한다.
+
+## 2026-07-22 22:24 KST - CONCEPT B-1 나이트 라이더 확정 수정
+
+- CEO 요청: 기존 CONCEPT B 나이트 라이더 배경과 색감은 그대로 유지하고 `언니냉면` 메인 타이틀만 약 2배 크게 보이도록 조정한다. 뒷면 단품 메뉴에 실제 메뉴 이미지를 붙이고 그 아래 D-1형 세트 메뉴를 추가하며, 방향이 바뀔 수 있는 `입구 방향 →` 문구는 화살표 없는 `배달·포장 픽업존`으로 교체한다.
+- 변경:
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`: 기존 `concept-b-bold-food.png`를 그대로 재사용하는 B-1 시안을 신규 등록했다. 단품 4종과 세트 3종에 홈페이지 메뉴 이미지 자산을 연결하고, 앞·뒷면 픽업 안내에서 방향 화살표를 제거했다.
+  - `src/app/unni-naengmyeon/brand/banners/page.module.css`: B-1 전용 상호 타이틀을 기존 B 대비 원거리 가독성 중심으로 확대하고 단품·세트 결합 메뉴판을 600×1800 비율에 맞게 정리했다.
+  - `scripts/render-unni-banner-assets.mjs`: 지정 시안만 선택 출력할 수 있는 `UNNI_BANNER_EXPORTS` 필터를 추가했다.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/outdoor-b1-front.png`, `outdoor-b1-back.png`: 웹과 동일한 Pretendard 폰트로 1,200×3,600px 인쇄 미리보기를 생성했다.
+- 이미지 처리: 새 AI 이미지는 생성하지 않았다. CONCEPT B 이미지를 그대로 유지하라는 지시에 따라 기존 프로젝트 자산을 불변 입력으로 사용하고 텍스트·메뉴·안내 정보만 HTML/CSS로 합성했다.
+- 검증: 대상 ESLint, TypeScript, `git diff --check` 통과. 앞·뒷면 PNG를 육안 검수해 상호 확대, 사진형 단품 4종, 사진형 세트 3종, 화살표 없는 픽업존 표기와 안전영역 내 배치를 확인했다.
+- 운영 영향/롤백: 언니냉면 배너 페이지와 신규 B-1 PNG 2장에만 영향이 있으며 API·DB 변경은 없다. 문제 시 본 커밋을 revert하거나 직전 blue-green 슬롯으로 전환한다.
