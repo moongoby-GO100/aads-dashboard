@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
+import InquiryForm from "./InquiryForm";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -60,6 +61,7 @@ export default function UnniNaengmyeonPage() {
             <a href="#menu">메뉴</a>
             <a href="#story">브랜드</a>
             <a href="#location">매장 안내</a>
+            <a href="#inquiry">문의</a>
           </nav>
           <a className={styles.headerCta} href="#order">배민 입점 준비 중</a>
         </div>
@@ -104,7 +106,17 @@ export default function UnniNaengmyeonPage() {
           <h2>오늘은 어떤 냉면?</h2>
           <p>언니냉면의 대표 메뉴부터 먼저 소개합니다.</p>
         </div>
-        <div className={styles.menuGrid}>
+        <div className={styles.menuShowcase}>
+          <div className={styles.menuPhoto}>
+            <Image
+              src="/brands/unni-naengmyeon/hero-naengmyeon.webp"
+              alt="얼음 육수와 메밀면, 달걀과 오이 고명을 담은 물냉면"
+              fill
+              sizes="(max-width: 900px) 100vw, 46vw"
+            />
+            <span>대표 메뉴 연출 이미지</span>
+          </div>
+          <div className={styles.menuGrid}>
           <article className={`${styles.menuCard} ${styles.waterCard}`}>
             <span className={styles.menuNumber}>01</span>
             <div className={styles.menuIcon}><SnowIcon /></div>
@@ -125,8 +137,9 @@ export default function UnniNaengmyeonPage() {
             </div>
             <span className={styles.menuStatus}>가격 · 구성 준비 중</span>
           </article>
+          </div>
         </div>
-        <p className={styles.menuNotice}>정확한 가격과 최종 구성은 배민 입점 완료 후 공개됩니다.</p>
+        <p className={styles.menuNotice}>메뉴 가격과 선택 옵션은 배민 입점 완료 후 최종 공개됩니다.</p>
       </section>
 
       <section className={styles.storySection} id="story">
@@ -154,11 +167,26 @@ export default function UnniNaengmyeonPage() {
           <div className={styles.locationDetails}>
             <div className={styles.addressIcon}><PinIcon /></div>
             <div>
-              <strong>서울특별시 성북구 동소문동5가 67-4</strong>
+              <strong>서울특별시 성북구 동소문로 90 1층</strong>
               <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
             </div>
           </div>
           <div className={styles.locationStatus}><span /> 현재 배민 입점 준비 중입니다</div>
+        </div>
+      </section>
+
+      <section className={styles.inquirySection} id="inquiry">
+        <div className={styles.inquiryInner}>
+          <div className={styles.inquiryCopy}>
+            <span>CONTACT US</span>
+            <h2>언니에게<br />물어보세요</h2>
+            <p>메뉴, 단체 주문, 배달과 관련해 궁금한 내용을 남겨주세요. 확인 후 남겨주신 연락처로 답변드립니다.</p>
+            <div className={styles.inquiryPrivacy}>
+              <strong>비공개 문의</strong>
+              <span>작성 내용과 연락처는 홈페이지에 공개되지 않습니다.</span>
+            </div>
+          </div>
+          <InquiryForm />
         </div>
       </section>
 
@@ -176,7 +204,7 @@ export default function UnniNaengmyeonPage() {
           <p>열정국밥 성신여대점 샵인샵 · 배달전문</p>
         </div>
         <div className={styles.footerInfo}>
-          <p>서울특별시 성북구 동소문동5가 67-4</p>
+          <p>서울특별시 성북구 동소문로 90 1층</p>
           <p>사업자 정보 및 고객센터는 오픈 전 업데이트 예정</p>
           <small>© 2026 UNNI NAENGMYEON. ALL RIGHTS RESERVED.</small>
         </div>
