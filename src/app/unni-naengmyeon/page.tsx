@@ -57,8 +57,8 @@ function getMenuImage(name: string) {
   // The Baemin captures do not provide an exact standalone photo for every
   // side/set, so keyword fallbacks would mislabel food (for example, showing
   // steamed dumplings for fried dumplings or plain naengmyeon for a ham steak set).
-  if (name.includes("수제돈까스")) return "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
-  if (name.includes("냉면") && name.includes("찐만두")) return "/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp";
+  if (name === "냉면 + 수제돈까스 SET") return "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
+  if (name === "냉면 + 찐만두 SET") return "/brands/unni-naengmyeon/menu/naengmyeon-mandu.webp";
   if (name === "비빔냉면") return "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp";
   if (name === "물냉면") return WATER_MENU_IMAGE;
   return null;
