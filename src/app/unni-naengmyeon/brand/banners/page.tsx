@@ -93,7 +93,7 @@ const outdoorConcepts: OutdoorConcept[] = [
     frontTitle: <>언니냉면<br /><em>PICK UP</em></>,
     frontSub: "배달기사 픽업 · 포장 주문",
     direction: "배달·포장 픽업존",
-    backTitle: <>시원한 냉면<br /><em>메뉴 & 세트</em></>,
+    backTitle: <>시원한 한 끼<br /><em>포장됩니다.</em></>,
     menuMode: "singleVisualSet",
   },
   {
@@ -220,32 +220,38 @@ function ProductionGuides({ square = false }: { square?: boolean }) {
 function MenuBoard({ mode }: { mode: "single" | "set" | "setVisual" | "singleVisualSet" }) {
   if (mode === "singleVisualSet") {
     return (
-      <div className={`${styles.menuBoard} ${styles.b1CombinedMenu}`}>
-        <span>TAKE OUT MENU</span>
-        <div className={styles.b1MenuRows}>
-          {visualSingleMenu.map((item) => (
-            <div className={styles.b1MenuRow} key={item.name}>
-              <Image src={`/brands/unni-naengmyeon/menu/${item.image}`} alt="" width={160} height={120} />
-              <b>{item.name}</b>
-              <strong>{item.price}</strong>
-            </div>
-          ))}
-        </div>
-        <span className={styles.b1SetLabel}>TAKE OUT SET MENU</span>
-        <div className={styles.b1SetRows}>
-          {visualSetMenu.map((item) => (
-            <div className={styles.b1MenuRow} key={item.name}>
-              <div className={`${styles.b1SetThumb} ${item.images.length > 1 ? styles.menuThumbCollage : ""}`}>
-                {item.images.map((image) => (
-                  <Image key={image} src={`/brands/unni-naengmyeon/menu/${image}`} alt="" width={160} height={120} />
-                ))}
+      <div className={styles.b1MenuStack}>
+        <div className={`${styles.menuBoard} ${styles.b1MenuSection}`}>
+          <span>단품메뉴</span>
+          <div className={styles.b1MenuRows}>
+            {visualSingleMenu.map((item) => (
+              <div className={styles.b1MenuRow} key={item.name}>
+                <Image src={`/brands/unni-naengmyeon/menu/${item.image}`} alt="" width={160} height={120} />
+                <b>{item.name}</b>
+                <strong>{item.price}</strong>
               </div>
-              <b>{item.name}</b>
-              <strong>{item.price}</strong>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-        <small>매장 상황에 따라 메뉴·가격이 변경될 수 있습니다</small>
+        <div className={styles.b1SetGroup}>
+          <h4>혼자서도 둘이서도<br /><em>푸짐하게</em></h4>
+          <div className={`${styles.menuBoard} ${styles.b1MenuSection} ${styles.b1SetSection}`}>
+            <span>세트메뉴</span>
+            <div className={styles.b1SetRows}>
+              {visualSetMenu.map((item) => (
+                <div className={styles.b1MenuRow} key={item.name}>
+                  <div className={`${styles.b1SetThumb} ${item.images.length > 1 ? styles.menuThumbCollage : ""}`}>
+                    {item.images.map((image) => (
+                      <Image key={image} src={`/brands/unni-naengmyeon/menu/${image}`} alt="" width={160} height={120} />
+                    ))}
+                  </div>
+                  <b>{item.name}</b>
+                  <strong>{item.price}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -308,9 +314,9 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
                 <p>{concept.frontSub}</p>
               </div>
               <div className={styles.direction}>{concept.direction}</div>
-              <div className={styles.location}>서울 성북구 동소문로 90 1층</div>
+              {isB1 ? <div className={styles.frontFooterLogo}><BannerLogo inverse /></div> : <div className={styles.location}>서울 성북구 동소문로 90 1층</div>}
             </div>
-            <ProductionGuides />
+            {!isB1 && <ProductionGuides />}
           </div>
           <DownloadLink file={`outdoor-${concept.id}-front.png`}>{concept.id.toUpperCase()} 앞면 PNG</DownloadLink>
         </div>
@@ -322,9 +328,9 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
               <div className={isFeaturedNight ? styles.prominentLogo : ""}><BannerLogo inverse={inverse} /></div>
               <div className={styles.backCopy}><span>UNNI&apos;S CHOICE</span><h3>{concept.backTitle}</h3></div>
               <MenuBoard mode={concept.menuMode} />
-              <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>{pickupLabel}</strong></div>
+              {!isB1 && <div className={styles.backPickup}><b>배달기사 픽업 · 방문 포장</b><strong>{pickupLabel}</strong></div>}
             </div>
-            <ProductionGuides />
+            {!isB1 && <ProductionGuides />}
           </div>
           <DownloadLink file={`outdoor-${concept.id}-back.png`}>{concept.id.toUpperCase()} 뒷면 PNG</DownloadLink>
         </div>
