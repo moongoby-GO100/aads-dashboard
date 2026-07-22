@@ -15,7 +15,7 @@ export default function BrandNav() {
         <nav className={styles.nav} aria-label="언니냉면 브랜드 메뉴">
           <Link href="/unni-naengmyeon">홈</Link>
           <Link href="/unni-naengmyeon/brand/logo">로고 가이드</Link>
-          <Link href="/unni-naengmyeon/brand/banners">입간판 시안</Link>
+          <Link href="/unni-naengmyeon/brand/banners">입간판·픽업존</Link>
         </nav>
       </div>
     </header>
