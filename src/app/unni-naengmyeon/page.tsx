@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     description: "성신여대 앞에서 시작하는 배달전문 냉면 브랜드",
     type: "website",
     locale: "ko_KR",
-    images: [{ url: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp", width: 1600, height: 1000, alt: "황동그릇에 담은 언니냉면 물냉면 연출 이미지" }],
+    images: [{ url: "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp", width: 1456, height: 1092, alt: "황동그릇에 붉은 다대기와 고명을 담은 언니냉면 물냉면" }],
   },
   icons: {
     icon: [{ url: "/brands/unni-naengmyeon/mark.svg", type: "image/svg+xml" }],
@@ -49,7 +49,7 @@ type MenuItem = {
 
 const BAEMIN_MENU_URL = "https://s.baemin.com/2b000l0sq2E18";
 const TOPPING_DESCRIPTION = "땅콩 + 깨 + 무김치 + 오이 + 계란 (다대기가 소량 들어가는 메뉴에요 :))";
-const BRASS_WATER_IMAGE = "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp";
+const WATER_MENU_IMAGE = "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
 
 function getMenuImage(name: string) {
   if (name.includes("돈까스")) return "/brands/unni-naengmyeon/menu/naengmyeon-donkatsu.webp";
@@ -57,7 +57,7 @@ function getMenuImage(name: string) {
   if (name.includes("명태") || name.includes("비냉") || name.includes("비빔") || name.includes("불냉")) {
     return "/brands/unni-naengmyeon/menu/bibim-naengmyeon.webp";
   }
-  if (name.includes("냉면")) return BRASS_WATER_IMAGE;
+  if (name.includes("냉면")) return WATER_MENU_IMAGE;
   return null;
 }
 
@@ -134,7 +134,13 @@ function MenuList({ items }: { items: MenuItem[] }) {
           <article className={styles.fullMenuItem} key={`${item.name}-${index}`}>
             {menuImage && (
               <div className={styles.menuThumb}>
-                <Image src={menuImage} alt={`${item.name} 메뉴 이미지`} fill sizes="96px" />
+                <Image
+                  className={menuImage === WATER_MENU_IMAGE ? styles.waterMenuCrop : undefined}
+                  src={menuImage}
+                  alt={`${item.name} 메뉴 이미지`}
+                  fill
+                  sizes="96px"
+                />
               </div>
             )}
             <div className={styles.menuItemCopy}>
@@ -190,13 +196,14 @@ export default function UnniNaengmyeonPage() {
           <div className={styles.heroVisual}>
             <div className={styles.heroBadge}><b>ICE COLD</b><span>끝까지 시원하게</span></div>
             <Image
-              src={BRASS_WATER_IMAGE}
-              alt="황동그릇에 얼음 육수와 메밀면을 담은 물냉면 연출 이미지"
+              className={styles.waterMenuCrop}
+              src={WATER_MENU_IMAGE}
+              alt="황동그릇에 땅콩, 깨, 무김치, 오이, 계란과 붉은 다대기를 담은 물냉면"
               fill
               priority
               sizes="(max-width: 900px) 100vw, 55vw"
             />
-            <span className={styles.imageDisclaimer}>메뉴 연출 이미지</span>
+            <span className={styles.imageDisclaimer}>실제 메뉴 이미지</span>
           </div>
         </div>
         <div className={styles.marquee} aria-label="언니냉면 브랜드 키워드">
@@ -213,8 +220,9 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
-              src={BRASS_WATER_IMAGE}
-              alt="언니 물냉면"
+              className={styles.waterMenuCrop}
+              src={WATER_MENU_IMAGE}
+              alt="붉은 다대기와 고명이 보이는 언니 물냉면"
               fill
               sizes="(max-width: 900px) 100vw, 50vw"
             />
