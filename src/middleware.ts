@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get("host") || "";
   const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
+  const isUnniDomain = hostname === "unni.newtalk.kr";
 
   // Backward compatibility for E2E URLs generated before the public asset
   // path was corrected. Preserve the token and redirect query parameters.
@@ -17,6 +18,14 @@ export async function middleware(request: NextRequest) {
     const e2eAuthUrl = request.nextUrl.clone();
     e2eAuthUrl.pathname = "/e2e-auth.html";
     return NextResponse.rewrite(e2eAuthUrl);
+  }
+
+  // unni.newtalk.kr 호스트: 루트 → /unni-naengmyeon rewrite, 모든 경로 인증 없이 통과
+  if (isUnniDomain) {
+    if (pathname === "/") {
+      return NextResponse.rewrite(new URL("/unni-naengmyeon", request.url));
+    }
+    return NextResponse.next();
   }
 
   // kakaobot.newtalk.kr 호스트: /kakaobot/* 만 허용
