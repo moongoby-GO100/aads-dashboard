@@ -8,9 +8,26 @@ const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get("host") || "";
-  const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
-  const isFoodBiz = hostname.includes("fb.newtalk.kr");
+  const hostname = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const isKakaobot = hostname === "kakaobot.newtalk.kr";
+  const isFoodBiz = hostname === "fb.newtalk.kr";
+  const isUnniNaengmyeon = hostname === "unni.newtalk.kr";
+
+  // 언니냉면 전용 도메인: 브라우저 URL은 루트로 유지하면서 공개 페이지를 제공한다.
+  // AADS 내부 화면은 이 호스트에 노출하지 않고 언니냉면 홈으로 돌려보낸다.
+  if (isUnniNaengmyeon) {
+    if (pathname === "/") {
+      return NextResponse.rewrite(new URL("/unni-naengmyeon", request.url));
+    }
+
+    const allowed = ["/unni-naengmyeon", "/brands", "/api/v1/unni-naengmyeon"]
+      .some((prefix) => pathname.startsWith(prefix));
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    return NextResponse.next();
+  }
 
   if (pathname === "/apps/yeoljeong-finance" || pathname === "/apps/yeoljeong-finance/") {
     return NextResponse.redirect(new URL("/apps/yeoljeong-finance/index.html", request.url));

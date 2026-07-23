@@ -1333,3 +1333,15 @@
   - 양 운영 슬롯의 Next.js 번들에서 generation guard 식별자 `previousExecutionId` 포함을 확인했다.
   - 자동 프론트 QA는 `UNKNOWN`으로 통과 처리하지 않았다. 저장된 E2E 계정은 CEO 소유 대상 세션에 접근할 수 없어 상태 API 404/메시지 0건을 반환했으며, PC Agent도 offline이라 실제 CEO 클릭 E2E는 미실행이다. 8개 상태 전이 테스트, DB 순서, 운영 번들·HTTP·컨테이너 검증으로 대체했다.
 - 상태: 코드·회귀 테스트·HANDOVER·커밋·push·blue-green 배포·운영 검증 완료. CEO 권한 브라우저에서 실제 질문 1건을 보내는 수동 확인만 권한/PC Agent 제약으로 미실행이다.
+
+## 2026-07-23 09:51 KST - 언니냉면 전용 도메인 전환
+
+- CEO 요청: 언니냉면 홈페이지 대표 URL을 `https://unni.newtalk.kr`로 변경한다.
+- 사전 실측: DNS A 레코드와 Cloudflare HTTPS 연결은 이미 정상이나, 루트 요청이 AADS 로그인으로 HTTP 307 전환되고 있었다.
+- 변경:
+  - `src/middleware.ts`: `unni.newtalk.kr/`을 `/unni-naengmyeon`으로 내부 rewrite하고, 해당 호스트에서 AADS 내부 경로는 루트로 돌려보낸다. 기존 AADS 공개 경로는 유지한다.
+  - `src/components/ClientLayout.tsx`: 전용 도메인을 공개·사이드바 비노출 호스트로 판정해 클라이언트 인증 리다이렉트를 방지한다.
+  - `src/app/unni-naengmyeon/page.tsx`: metadata base, canonical, Open Graph URL을 `https://unni.newtalk.kr/`로 변경한다.
+  - `src/app/layout.tsx`: 전용 도메인에 언니냉면 테마·아이콘을 적용하고 AADS 서비스워커 신규 등록을 제외한다.
+- 검증: 대상 ESLint, `npx tsc --noEmit`, `git diff --check`, Next.js production build 통과. 로컬 운영 모드의 `Host: unni.newtalk.kr` 재현에서 루트 HTTP 200, 언니냉면 제목·canonical·주소, 메뉴 이미지 HTTP 200을 확인했다. 전용 호스트 `/admin`은 `/`로 307 차단되고 기존 AADS 루트 인증 307 및 `/unni-naengmyeon` 공개 200 동작은 유지됐다.
+- 운영 영향/롤백: 대시보드 호스트 라우팅과 메타데이터만 변경하며 백엔드·DB·DNS·nginx 파일 변경은 없다. 문제 시 본 커밋 revert 또는 직전 dashboard blue-green 슬롯으로 전환한다.

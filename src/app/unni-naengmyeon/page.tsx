@@ -6,15 +6,17 @@ import styles from "./page.module.css";
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://aads.newtalk.kr"),
+  metadataBase: new URL("https://unni.newtalk.kr"),
   title: "언니냉면 | 성신여대 배달 냉면",
   applicationName: "언니냉면",
   description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다. 황동그릇에 담은 물냉면과 매콤한 비빔냉면 메뉴를 만나보세요.",
   keywords: ["언니냉면", "성신여대 냉면", "성북구 냉면", "배달 냉면", "물냉면", "비빔냉면"],
+  alternates: { canonical: "/" },
   openGraph: {
     title: "언니냉면 | 언니가 제대로 말아주는 냉면",
     description: "성신여대 앞에서 시작하는 배달전문 냉면 브랜드",
     type: "website",
+    url: "/",
     locale: "ko_KR",
     images: [{ url: BRAND_LOGO, width: 1254, height: 1254, alt: "바가지머리와 냉면 그릇 사이에 언니냉면 글씨와 면발을 결합한 컨셉 H 로고" }],
   },
