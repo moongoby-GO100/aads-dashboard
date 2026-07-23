@@ -318,6 +318,26 @@ const pickupConcepts = [
     title: <>언니냉면<em>배달·포장 픽업존</em></>,
     guide: "주문번호 확인 후 픽업",
   },
+  {
+    id: "p6",
+    name: "나이트 라이더 B-2 · 냉면 스포트라이트",
+    summary: "P5의 타공 안전영역은 유지하면서 실제 물냉면을 하단에 크게 드러낸 사진형 수정안. 유리 너머에서도 메뉴와 픽업 목적을 즉시 인지하도록 구성했습니다.",
+    image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
+    tone: "pickupB2Food",
+    eyebrow: "DELIVERY · TAKE OUT",
+    title: <>언니냉면<em>배달·포장 픽업존</em></>,
+    guide: "주문번호 확인 후 픽업",
+  },
+  {
+    id: "p7",
+    name: "나이트 라이더 B-3 · 볼드 픽업",
+    summary: "상호·픽업 안내를 가장 먼저 읽히게 하고, 오른쪽 물냉면 사진을 보조 비주얼로 둔 간결한 고대비안. 배달기사 동선 안내에 집중한 추가안입니다.",
+    image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
+    tone: "pickupB3Bold",
+    eyebrow: "DELIVERY · TAKE OUT",
+    title: <>언니냉면<em>배달·포장 픽업존</em></>,
+    guide: "주문번호 확인 후 픽업",
+  },
 ];
 
 export const metadata: Metadata = {
@@ -507,6 +527,7 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
 function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number] }) {
   const isB1 = concept.id === "p4";
   const isPrintB1 = concept.id === "p5";
+  const isPrintFood = concept.id === "p6" || concept.id === "p7";
   return (
     <article className={styles.pickupConcept}>
       <div><span>INDOOR {concept.id.toUpperCase()}</span><h3>{concept.name}</h3><p>{concept.summary}</p></div>
@@ -520,18 +541,18 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
         />
         <div className={styles.pickupShade} />
         <div className={styles.pickupInner}>
-          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1} />
+          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} />
           <span>{concept.eyebrow}</span>
           <h4>{concept.title}</h4>
           <strong>{concept.guide}</strong>
         </div>
-        {!isB1 && !isPrintB1 && <ProductionGuides square />}
-        {isPrintB1 && <ProductionGuides square holes />}
+        {!isB1 && !isPrintB1 && !isPrintFood && <ProductionGuides square />}
+        {(isPrintB1 || isPrintFood) && <ProductionGuides square holes />}
       </div>
       <DownloadLink file={`indoor-${concept.id}.png`}>{concept.name} PNG</DownloadLink>
-      {isPrintB1 && <>
-        <DownloadLink file="indoor-p5-glass-pickup-300dpi.png" print>300DPI 인쇄용 다운로드</DownloadLink>
-        <DownloadLink file="indoor-p5-glass-pickup-hole-guide-300dpi.png" print>타공 위치 가이드 다운로드</DownloadLink>
+      {(isPrintB1 || isPrintFood) && <>
+        <DownloadLink file={`indoor-${concept.id}-glass-pickup-300dpi.png`} print>300DPI 인쇄용 다운로드</DownloadLink>
+        <DownloadLink file={`indoor-${concept.id}-glass-pickup-hole-guide-300dpi.png`} print>타공 위치 가이드 다운로드</DownloadLink>
       </>}
     </article>
   );
@@ -544,8 +565,8 @@ export default function UnniBannerConceptsPage() {
       <section className={styles.intro}>
         <span>OUTDOOR + INDOOR SIGNAGE</span>
         <h1>길에서는 찾기 쉽고,<br />유리에서는 바로 픽업</h1>
-        <p>실외 600×1800mm 양면 입간판 9안과 실내 유리 부착용 600×600mm 픽업존 4안입니다. B-1은 메뉴 정보를, B-2는 실제 냉면 사진을 전면에 크게 보여 주도록 구성했고 모두 나이트 라이더 픽업존 톤을 유지합니다.</p>
-        <div><b>9 OUTDOOR</b><b>18 SIDES</b><b>4 INDOOR</b><b>600×1800 / 600×600</b></div>
+        <p>실외 600×1800mm 양면 입간판 9안과 실내 유리 부착용 600×600mm 픽업존 7안입니다. B-1은 메뉴 정보를, B-2는 실제 냉면 사진을 전면에 크게 보여 주도록 구성했고 모두 나이트 라이더 픽업존 톤을 유지합니다.</p>
+        <div><b>9 OUTDOOR</b><b>18 SIDES</b><b>7 INDOOR</b><b>600×1800 / 600×600</b></div>
       </section>
 
       <section className={styles.recommend}>
@@ -558,7 +579,7 @@ export default function UnniBannerConceptsPage() {
       <div className={styles.concepts}>{outdoorConcepts.map((concept) => <OutdoorConceptCard key={concept.id} concept={concept} />)}</div>
 
       <section className={`${styles.sectionIntro} ${styles.indoorIntro}`}>
-        <span>02 · INDOOR GLASS</span><h2>600 × 600 픽업존</h2><p>실내 유리 부착을 전제로 문구를 크게 줄이고, `언니냉면 배달/포장 픽업존`을 모든 안에 동일하게 고정했습니다. P5는 실외 B-1의 나이트 라이더 톤을 유지하면서 300DPI·4개 타공 안전영역을 반영한 인쇄용 안입니다.</p>
+        <span>02 · INDOOR GLASS</span><h2>600 × 600 픽업존</h2><p>실내 유리 부착을 전제로 문구를 크게 줄이고, `언니냉면 배달/포장 픽업존`을 모든 안에 동일하게 고정했습니다. P5는 타공 안전형, P6는 실제 냉면 사진을 크게 살린 사진형, P7은 상호·픽업 목적을 먼저 읽히게 한 고대비형 인쇄용 안입니다.</p>
       </section>
       <section className={styles.pickupGrid}>{pickupConcepts.map((concept) => <PickupConceptCard key={concept.id} concept={concept} />)}</section>
 
@@ -567,13 +588,13 @@ export default function UnniBannerConceptsPage() {
         <div className={styles.specGrid}>
           <div><b>요청 상품 유형</b><span>600×1800 실외 양면 배너 · 세부 사양은 판매자 확인 필요</span></div>
           <div><b>실외 완성 규격</b><span>600 × 1800mm · 양면 16면 구성</span></div>
-          <div><b>실내 완성 규격</b><span>600 × 600mm · 유리 부착용 5안</span></div>
+          <div><b>실내 완성 규격</b><span>600 × 600mm · 유리 부착용 7안</span></div>
           <div><b>가공 유보영역</b><span>실외 상·하단 80mm, 사방 중요정보 30mm 안쪽 배치</span></div>
-          <div><b>P5 인쇄 원본</b><span>7,087 × 7,087px · 300DPI · RGB PNG · Pretendard 폰트 고정</span></div>
-          <div><b>P5 임시 타공 기준</b><span>4곳 Ø10mm · 각 모서리 중심선에서 25mm · 중요 정보 사방 35mm 안쪽</span></div>
+          <div><b>P5·P6·P7 인쇄 원본</b><span>각 7,087 × 7,087px · 300DPI · RGB PNG · Pretendard 폰트 고정</span></div>
+          <div><b>임시 타공 기준</b><span>4곳 Ø10mm · 각 모서리 중심선에서 25mm · 중요 정보 사방 35mm 안쪽</span></div>
           <div><b>발주 전 필수</b><span>판매처 원본 템플릿에서 타공 수·좌표·봉미싱·도련·CMYK 프로파일 최종 확인</span></div>
         </div>
-        <p className={styles.warning}>P5의 타공 좌표는 판매처 템플릿 미확보 상태에서 적용한 임시 기준입니다. 인쇄용 PNG는 가이드선을 제외한 최종 아트워크이며, 별도 타공 가이드 PNG를 함께 내려받아 업체 템플릿과 대조해 주세요. 업체가 다른 타공 규격을 요구하면 가이드 기준에 맞춰 재출력해야 합니다.</p>
+        <p className={styles.warning}>P5·P6·P7의 타공 좌표는 판매처 템플릿 미확보 상태에서 적용한 임시 기준입니다. 인쇄용 PNG는 가이드선을 제외한 최종 아트워크이며, 별도 타공 가이드 PNG를 함께 내려받아 업체 템플릿과 대조해 주세요. 업체가 다른 타공 규격을 요구하면 가이드 기준에 맞춰 재출력해야 합니다.</p>
       </section>
     </main>
   );

@@ -8,6 +8,7 @@ const outputRoot = path.join(root, "public/brands/unni-naengmyeon/banners-202607
 const pageUrl = process.env.UNNI_BANNER_URL || "http://127.0.0.1:3100/unni-naengmyeon/brand/banners";
 const printPixels = 7087; // 600mm at 300DPI, rounded to the nearest whole pixel.
 const printDensity = 300;
+const conceptIds = (process.env.UNNI_INDOOR_IDS || "p5,p6,p7").split(",").map((id) => id.trim()).filter(Boolean);
 
 await fs.mkdir(outputRoot, { recursive: true });
 
@@ -15,7 +16,7 @@ async function writePng(sourcePath, outputPath) {
   const image = sharp(sourcePath);
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height || Math.abs(metadata.width - printPixels) > 1 || Math.abs(metadata.height - printPixels) > 1) {
-    throw new Error(`Unexpected P5 artwork dimensions: ${metadata.width}×${metadata.height}`);
+    throw new Error(`Unexpected indoor artwork dimensions: ${metadata.width}×${metadata.height}`);
   }
   await image
     // Chromium can round a CSS width to one additional output pixel. Normalize
@@ -48,6 +49,13 @@ async function writeHoleGuide(artworkPath, outputPath) {
     .toFile(outputPath);
 }
 
+async function writePreview(artworkPath, id) {
+  await sharp(artworkPath)
+    .resize(1200, 1200, { fit: "fill" })
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(root, `public/brands/unni-naengmyeon/banners-20260722/print/indoor-${id}.png`));
+}
+
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({
@@ -57,30 +65,28 @@ try {
   await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 120_000 });
   await page.waitForFunction(() => document.fonts.status === "loaded", null, { timeout: 30_000 });
 
-  const banner = page.locator('[data-export="indoor-p5"]');
-  await banner.evaluate((element, pixels) => {
-    const target = element;
-    target.style.width = `${pixels}px`;
-    target.style.height = `${pixels}px`;
-    target.style.maxWidth = "none";
-    target.style.aspectRatio = "auto";
-  }, printPixels);
-  await banner.locator("img").evaluateAll((images) => Promise.all(images.map((image) => image.decode().catch(() => undefined))));
-  await page.waitForTimeout(500);
+  for (const id of conceptIds) {
+    const banner = page.locator(`[data-export="indoor-${id}"]`);
+    await banner.evaluate((element, pixels) => {
+      const target = element;
+      target.style.width = `${pixels}px`;
+      target.style.height = `${pixels}px`;
+      target.style.maxWidth = "none";
+      target.style.aspectRatio = "auto";
+    }, printPixels);
+    await banner.locator("img").evaluateAll((images) => Promise.all(images.map((image) => image.decode().catch(() => undefined))));
+    await page.waitForTimeout(500);
 
-  const artworkTemp = path.join(outputRoot, ".indoor-p5-artwork.png");
-  await page.addStyleTag({ content: '[data-export="indoor-p5"] [class*="guides"] { display: none !important; }' });
-  await banner.screenshot({ path: artworkTemp, animations: "disabled", timeout: 180_000 });
-  await writePng(artworkTemp, path.join(outputRoot, "indoor-p5-glass-pickup-300dpi.png"));
-  await fs.unlink(artworkTemp);
-  console.log("rendered indoor P5 300DPI artwork");
-
-  console.log("rendering indoor P5 hole guide");
-  await writeHoleGuide(
-    path.join(outputRoot, "indoor-p5-glass-pickup-300dpi.png"),
-    path.join(outputRoot, "indoor-p5-glass-pickup-hole-guide-300dpi.png"),
-  );
-  console.log("rendered indoor P5 300DPI hole guide");
+    const artworkTemp = path.join(outputRoot, `.indoor-${id}-artwork.png`);
+    await page.addStyleTag({ content: `[data-export="indoor-${id}"] [class*="guides"] { display: none !important; }` });
+    await banner.screenshot({ path: artworkTemp, animations: "disabled", timeout: 180_000 });
+    const artworkPath = path.join(outputRoot, `indoor-${id}-glass-pickup-300dpi.png`);
+    await writePng(artworkTemp, artworkPath);
+    await fs.unlink(artworkTemp);
+    await writeHoleGuide(artworkPath, path.join(outputRoot, `indoor-${id}-glass-pickup-hole-guide-300dpi.png`));
+    await writePreview(artworkPath, id);
+    console.log(`rendered indoor ${id.toUpperCase()} 300DPI artwork and hole guide`);
+  }
 } finally {
   await browser.close();
 }
