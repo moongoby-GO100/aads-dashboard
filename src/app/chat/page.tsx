@@ -2094,9 +2094,9 @@ export default function ChatPage() {
   // ── Theme / layout ──
   const [theme, setTheme] = useState<Theme>("dark");
   const [leftOpen, setLeftOpen] = useState(true);
-  // Keep the conversation area dominant when a chat session first opens.
-  // Users can still expand the artifact panel explicitly when they need it.
-  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("mini");
+  // Open at the compact 420px artifact view shown in the reference UI.
+  // This intentionally does not restore a previously expanded panel on reload.
+  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("report");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
@@ -3591,9 +3591,9 @@ export default function ChatPage() {
       setQueueCount(0);
     }
     if (isSessionIdChange) {
-      // Every session opens with the narrow artifact rail. Do not carry an
-      // expanded panel over from the previously viewed session.
-      setArtifactMode("mini");
+      // Every session opens with the compact 420px artifact view. Do not carry
+      // an expanded or collapsed panel over from the previously viewed session.
+      setArtifactMode("full");
       // 세션 전환 시 edit state 초기화
       setEditingMsgId(null);
       setEditText("");

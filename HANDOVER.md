@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 - Chat artifact panel compact-mode ledger reconciliation
+- 기준 화면: 세션을 새 창에서 열거나 새로고침하거나 다른 세션으로 전환할 때 우측 아티팩트 내용을 숨기는 48px 레일이 아니라, 두 번째 참고 이미지처럼 내용이 보이는 compact `full` 모드(420px)로 시작한다.
+- 재발 원인: 운영 릴리스 브랜치는 `full` 420px로 수정됐지만 정식 `main`에는 이전 `mini` 48px 패치가 남아 있어 다음 일반 배포에서 동작이 다시 뒤집힐 수 있었다.
+- 조치: `src/app/chat/page.tsx`의 최초 상태와 세션 ID 전환 초기화를 모두 `full`로 통일했다. `ChatArtifactPanel.tsx`의 `full=420px`, `mini=48px` 폭 계약은 유지한다.
+- 검증 기준: TypeScript, 프로덕션 빌드, 운영 컨테이너 health/HTTP 200, 인증 브라우저 새로고침 후 아티팩트 본문 노출을 확인한다.
+
 ## 2026-07-23 10:19 KST - E2E auth callback asset image guard
 - 원인: `src/middleware.ts`는 `/e2e-auth.html`을 공개 경로로 허용했지만, 운영 blue/green 이미지의 `/app/public`에 정적 콜백 파일이 누락돼 신규 PC Agent 로그인 복구가 `/login`으로 되돌아갈 수 있었다.
 - 반영: `Dockerfile`에서 `public/e2e-auth.html`을 builder에 명시적으로 복사하고 non-empty 검증을 추가했으며, runner 이미지에도 동일 파일을 명시적으로 복사한다.
