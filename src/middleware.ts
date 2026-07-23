@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
@@ -10,6 +10,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hostname = request.headers.get("host") || "";
   const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
+
+  // Backward compatibility for E2E URLs generated before the public asset
+  // path was corrected. Preserve the token and redirect query parameters.
+  if (pathname === "/static/e2e-auth.html") {
+    const e2eAuthUrl = request.nextUrl.clone();
+    e2eAuthUrl.pathname = "/e2e-auth.html";
+    return NextResponse.rewrite(e2eAuthUrl);
+  }
 
   // kakaobot.newtalk.kr 호스트: /kakaobot/* 만 허용
   if (isKakaobot) {
