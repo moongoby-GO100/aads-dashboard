@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 09:52 KST - Chat artifact panel opens as narrow rail
+- 대상: 채팅 세션을 처음 열거나 다른 세션으로 이동할 때 우측 아티팩트 패널이 전체 폭(420px)으로 열려 대화 영역을 가리는 동작.
+- 반영: `src/app/chat/page.tsx`의 `artifactMode` 초기값을 `mini`로 변경하고, 실제 세션 ID가 바뀔 때도 `mini`로 초기화해 48px 아티팩트 레일로 시작하도록 했다. 사용자가 아티팩트 또는 보고서 보기를 누르면 기존처럼 전체 폭으로 확장된다.
+- 검증: stale `.next/types`를 별도 `/tmp` 경로로 보관한 뒤 `npx tsc --noEmit` 통과. `npm run build` 통과(57개 라우트 생성).
+- 범위 제외: 기존 사용자 변경 `public/manager/env_unknown.json`은 수정·커밋 대상에서 제외한다.
+
 ## 2026-06-18 10:39 KST - Personal Assistant voice UX final verification correction
 - 배경: CEO가 이전 완료보고의 커밋/푸시/배포/문서 상태 충돌을 지적했고, 채팅 개인비서 UX/음성 입력/일반 사용자 분리 상태를 최종 재검증하라고 지시했다.
 - 정정:
