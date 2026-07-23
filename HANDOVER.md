@@ -431,3 +431,10 @@
   - 외부 HTML에서 제목 `언니냉면 | 성신여대 배달 냉면`, canonical `https://unni.newtalk.kr`, 주소 `동소문로 90 1층`, `외할머니 명태회냉면`, `냉면 + 수제돈까스`를 확인했다.
   - 대표 메뉴 이미지는 HTTP 200, `image/jpeg`, 1,755,446바이트다. `/admin`은 `307 https://unni.newtalk.kr/`로 차단되고 기존 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200을 유지한다.
   - 자동 Visual QA는 `UNKNOWN`이라 통과로 간주하지 않았다. CEO용 캡처 도구는 timeout, 호스트에는 Playwright/Chromium 실행 파일이 없어 화면 캡처는 미실행했으며 공개 HTTP·HTML·정적 자산·양 슬롯·Nginx 검증으로 대체했다.
+
+## 2026-07-23 13:24 KST - unni B-1 300DPI download source integration
+
+- 원인: 운영 정적 경로에는 B-1 300DPI PNG가 배치되어 다운로드가 가능했지만, `main` 소스에는 다운로드 링크와 원본 두 파일이 없어 다음 일반 dashboard 재배포 시 누락될 위험이 있었다.
+- 조치: 배너 페이지의 B-1 앞·뒷면에 300DPI 다운로드 링크를 추가하고 `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/`에 앞면 77,157,245바이트, 뒷면 38,277,235바이트 PNG를 포함했다.
+- 범위: `src/app/unni-naengmyeon/brand/banners/page.tsx`, 300DPI PNG 두 파일과 본 HANDOVER 기록만 반영했다. 기존 `public/manager/env_unknown.json` 변경은 제외해 보존했다.
+- 롤백: 본 통합 커밋을 revert하면 다운로드 링크와 저장소 원본만 제거된다. 현재 운영 정적 파일은 별도 경로에 유지되므로 즉시 다운로드 장애를 유발하지 않는다.
