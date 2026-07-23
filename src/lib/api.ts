@@ -135,7 +135,8 @@ function handle401Redirect(): void {
     localStorage.removeItem("aads_token");
     document.cookie = "aads_token=; path=/; max-age=0";
   } catch {}
-  const cur = window.location.pathname + window.location.search;
+  // Preserve hash-based chat session IDs across an expired-login round trip.
+  const cur = window.location.pathname + window.location.search + window.location.hash;
   if (!cur.startsWith("/login")) {
     const next = encodeURIComponent(cur);
     window.location.href = `/login?next=${next}&reason=session_expired`;
