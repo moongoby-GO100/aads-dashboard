@@ -384,3 +384,17 @@
 - 확인: 운영 `llm_models` 레지스트리에는 478개 모델이 있고, 기존 채팅/토론 UI는 `/llm-models?active_only=true`만 호출해 실행 가능 모델만 표시했다.
 - 반영: `src/app/chat/page.tsx`, `src/components/chat/ModelSelector.tsx`, `src/components/chat/DiscussionPanel.tsx`가 `/llm-models` 전체 레지스트리를 읽도록 변경했다. 실행 가능하지 않은 모델은 드롭다운에 `(비활성)`으로 표시하고 disabled 처리해 등록 현황은 보이되 실수 선택은 막는다.
 - 검증: `npx eslint src/components/chat/ModelSelector.tsx src/components/chat/DiscussionPanel.tsx src/app/chat/page.tsx` 통과. 기존 `src/app/chat/page.tsx` 경고 22건은 남아 있으나 신규 error는 없다.
+
+## 2026-07-23 10:38 KST - unni.newtalk.kr public domain cutover
+
+- 대상: 언니냉면 홈페이지의 대표 URL을 `https://unni.newtalk.kr`로 전환하고 기존 `https://aads.newtalk.kr/unni-naengmyeon` 경로를 호환 유지했다.
+- 반영:
+  - `src/middleware.ts`에서 `unni.newtalk.kr` 루트 요청을 `/unni-naengmyeon`으로 내부 rewrite한다.
+  - nginx의 `unni.newtalk.kr` HTTPS 프록시와 기존 대시보드 호스트 라우팅을 적용했다.
+  - 코드 커밋 `bade060` (`feat: unni.newtalk.kr domain routing with public access`)을 원격 `main`에 푸시하고 dashboard blue-green 슬롯에 반영했다.
+- 검증:
+  - `https://unni.newtalk.kr/` → `HTTP/2 200`, `x-middleware-rewrite: /unni-naengmyeon`.
+  - 공개 HTML에서 언니냉면 제목, canonical/OG URL, NAS 메뉴 이미지와 메뉴 설명을 확인했다.
+  - `https://unni.newtalk.kr/admin`, `/assistant` → `307 /`로 차단되고, 기존 `https://aads.newtalk.kr/unni-naengmyeon` → `HTTP/2 200`을 확인했다.
+  - `aads-dashboard:3100`, `aads-dashboard-green:3101` 양 슬롯은 Docker health 기준 healthy다.
+- 주의: Browser Bridge 스크린샷은 2회 timeout되어 브라우저 캡처 대신 공개 HTTP, HTML, 정적 자산, 컨테이너 health 검증으로 대체했다. `public/manager/env_unknown.json`의 기존 미커밋 변경은 이번 커밋에서 제외해 보존했다.
