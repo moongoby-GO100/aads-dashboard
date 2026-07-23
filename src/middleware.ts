@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "/braming/shared", "/unni-naengmyeon", "/brands", "/fonts", "/apps", "/static", "/screenshots", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
@@ -8,8 +8,9 @@ const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get("host") || "";
-  const isKakaobot = hostname.includes("kakaobot.newtalk.kr");
+  const hostname = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const isKakaobot = hostname === "kakaobot.newtalk.kr";
+  const isFoodBiz = hostname === "fb.newtalk.kr";
   const isUnniDomain = hostname === "unni.newtalk.kr";
 
   // Backward compatibility for E2E URLs generated before the public asset
@@ -20,12 +21,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(e2eAuthUrl);
   }
 
-  // unni.newtalk.kr 호스트: 루트 → /unni-naengmyeon rewrite, 모든 경로 인증 없이 통과
+  // 언니냉면 전용 도메인은 공개 브랜드 경로만 제공하고 AADS 내부 화면은 노출하지 않는다.
   if (isUnniDomain) {
     if (pathname === "/") {
       return NextResponse.rewrite(new URL("/unni-naengmyeon", request.url));
     }
+
+    const allowed = ["/unni-naengmyeon", "/brands", "/api/v1/unni-naengmyeon"]
+      .some((prefix) => pathname.startsWith(prefix));
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
     return NextResponse.next();
+  }
+
+  if (pathname === "/apps/yeoljeong-finance" || pathname === "/apps/yeoljeong-finance/") {
+    return NextResponse.redirect(new URL("/apps/yeoljeong-finance/index.html", request.url));
+  }
+
+  if (isFoodBiz && pathname === "/") {
+    return NextResponse.redirect(new URL("/apps/yeoljeong-finance/index.html", request.url));
   }
 
   // kakaobot.newtalk.kr 호스트: /kakaobot/* 만 허용
@@ -58,7 +74,7 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get("aads_token")?.value;
   if (!token) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 

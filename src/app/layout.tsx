@@ -7,9 +7,10 @@ export async function generateViewport(): Promise<Viewport> {
   const headersList = await headers();
   const host = headersList.get("host") || "";
   const isKakaobot = host.includes("kakaobot");
+  const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
 
   return {
-    themeColor: isKakaobot ? "#FFE812" : "#00d4ff",
+    themeColor: isKakaobot ? "#FFE812" : isUnniNaengmyeon ? "#f45d48" : "#00d4ff",
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
@@ -21,6 +22,19 @@ export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
   const host = headersList.get("host") || "";
   const isKakaobot = host.includes("kakaobot");
+  const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
+
+  if (isUnniNaengmyeon) {
+    return {
+      title: "언니냉면 | 성신여대 배달 냉면",
+      description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다.",
+      icons: {
+        icon: [{ url: "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png", type: "image/png" }],
+        apple: [{ url: "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png" }],
+      },
+      appleWebApp: { capable: true, statusBarStyle: "default", title: "언니냉면" },
+    };
+  }
 
   return {
     title: isKakaobot ? "카카오봇 — AI 메시지 서비스" : "AADS Dashboard",
@@ -42,14 +56,20 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const headersList = await headers();
+  const host = headersList.get("host") || "";
+  const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
+
   return (
     <html lang="ko">
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}` }} />
+        {!isUnniNaengmyeon && (
+          <script dangerouslySetInnerHTML={{ __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}` }} />
+        )}
       </head>
       <body>
-        <ClientLayout>{children}</ClientLayout>
+        <ClientLayout isPublicHost={isUnniNaengmyeon}>{children}</ClientLayout>
       </body>
     </html>
   );

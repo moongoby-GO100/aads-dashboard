@@ -30,13 +30,20 @@ function isInternalAdminPath(pathname: string): boolean {
   ));
 }
 
-export default function ClientLayout({ children }: { children: React.ReactNode }) {
+export default function ClientLayout({
+  children,
+  isPublicHost = false,
+}: {
+  children: React.ReactNode;
+  isPublicHost?: boolean;
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isKakaobot] = useState(() =>
     typeof window !== "undefined" && window.location.hostname.includes("kakaobot"),
   );
+  const isUnniNaengmyeon = isPublicHost;
   const pathname = usePathname();
   const router = useRouter();
 
@@ -48,9 +55,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       pathname === "/login" ||
       pathname === "/signup" ||
       pathname.startsWith("/invite/accept") ||
+      pathname.startsWith("/unni-naengmyeon") ||
       pathname.startsWith("/kakaobot");
 
-    if (publicPath || isKakaobot) return;
+    if (publicPath || isKakaobot || isUnniNaengmyeon) return;
 
     getMe()
       .then((user) => {
@@ -65,7 +73,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         if (!cancelled) setAuthChecked(true);
       });
     return () => { cancelled = true; };
-  }, [isKakaobot, pathname, router]);
+  }, [isKakaobot, isUnniNaengmyeon, pathname, router]);
 
   const hideSidebar =
     pathname === "/login" ||
@@ -73,8 +81,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     pathname.startsWith("/invite/accept") ||
     pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||
+    pathname.startsWith("/unni-naengmyeon") ||
     pathname.startsWith("/kakaobot") ||
-    isKakaobot;
+    isKakaobot ||
+    isUnniNaengmyeon;
 
   if (hideSidebar) {
     return <>{children}</>;

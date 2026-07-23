@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220" role="img" aria-labelledby="title desc">
+  <title id="title">언니냉면 로고</title>
+  <desc id="desc">산뜻한 산호색 냉면 그릇과 언니냉면 한글 워드마크</desc>
+  <g fill="none" fill-rule="evenodd">
+    <path fill="#F45D48" d="M28 74c0-22.1 17.9-40 40-40h112c22.1 0 40 17.9 40 40v72c0 22.1-17.9 40-40 40H68c-22.1 0-40-17.9-40-40V74Z"/>
+    <path fill="#FFF8EA" d="M63 82h122c0 38.7-27.3 70-61 70s-61-31.3-61-70Z"/>
+    <path stroke="#FFF8EA" stroke-linecap="round" stroke-width="10" d="M72 65h104"/>
+    <path stroke="#173E35" stroke-linecap="round" stroke-width="7" d="M91 96c20 17 47 17 67 0M104 119c13 9 27 9 40 0"/>
+    <path fill="#173E35" d="M100 49c0-9 7.2-16 16-16h16c8.8 0 16 7 16 16H100Z"/>
+    <text x="250" y="121" fill="#173E35" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="80" font-weight="900" letter-spacing="-5">언니냉면</text>
+    <text x="255" y="169" fill="#F45D48" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="24" font-weight="800" letter-spacing="6">SISTER'S NAENGMYEON</text>
+  </g>
+</svg>

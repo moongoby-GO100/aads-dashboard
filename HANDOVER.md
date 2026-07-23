@@ -412,3 +412,16 @@
   - `aads-dashboard:3100`, `aads-dashboard-green:3101` 양 슬롯은 Docker health 기준 healthy이며 `AADS_RELEASE_SHA=ffd6d6f69a81`로 일치한다.
   - nginx에 중복 등록된 `unni.newtalk.kr` 서버 블록 1세트를 제거하고 `nginx -t` 통과 후 무중단 reload했다. `conflicting server name` 경고는 제거됐다.
 - 주의: Browser Bridge 스크린샷은 2회 timeout되어 브라우저 캡처 대신 공개 HTTP, HTML, 정적 자산, 컨테이너 health 검증으로 대체했다. `public/manager/env_unknown.json`의 기존 미커밋 변경은 이번 커밋에서 제외해 보존했다. 언니냉면 전용 페이지는 별도 브랜치/compose overlay로 배포되므로 일반 dashboard `main` 배포 시 전용 릴리스를 다시 동기화해야 한다.
+
+## 2026-07-23 12:26 KST - unni.newtalk.kr main release integration
+
+- 장애: 일반 dashboard `main@785acadb4b00` 배포 후 `https://unni.newtalk.kr/`이 다시 HTTP 404를 반환했다.
+- 원인: `main`에는 전용 도메인 middleware rewrite만 병합되어 있었고, rewrite 대상인 `/unni-naengmyeon` 페이지와 `public/brands/unni-naengmyeon` 자산은 전용 브랜치에만 남아 있었다.
+- 조치:
+  - 최신 `main` 기준 격리 브랜치에 언니냉면 홈페이지·브랜드 페이지·최종 메뉴/로고/입간판 자산을 통합했다.
+  - `src/middleware.ts`는 전용 호스트의 공개 경로만 허용하고 AADS 내부 경로는 루트로 차단한다. 기존 E2E 호환 rewrite, 매장비서 호스트, 카카오봇 및 인증 redirect query 보존 로직은 유지했다.
+  - `src/app/layout.tsx`, `src/components/ClientLayout.tsx`는 언니냉면 호스트에서 전용 metadata·theme·favicon을 제공하고 AADS 인증/sidebar/service worker를 노출하지 않는다.
+  - 언니냉면 페이지와 자산을 기본 릴리스에 포함해 이후 일반 dashboard 배포에서도 404가 재발하지 않도록 했다.
+- 사전 검증: 대상 ESLint, `npx tsc --noEmit`, `git diff --check`, Next.js 16.1.6 production build를 통과했으며 `/unni-naengmyeon`, `/unni-naengmyeon/brand/logo`, `/unni-naengmyeon/brand/banners`를 포함한 60개 라우트가 생성됐다.
+- 배포 검증 기준: Blue/Green 양 슬롯의 `Host: unni.newtalk.kr` 루트 HTTP 200, 외부 루트 HTTP 200/redirect 0회, 언니냉면 제목·canonical·주소·메뉴 본문 및 대표 이미지 HTTP 200, AADS 내부 경로 307 루트 차단, 양 컨테이너 healthy·동일 release SHA.
+- 롤백: 외부 헬스 또는 홈페이지 E2E 실패 시 Nginx dashboard upstream을 직전 `785acadb4b00` 슬롯로 즉시 되돌리고, 본 커밋을 revert한다.
