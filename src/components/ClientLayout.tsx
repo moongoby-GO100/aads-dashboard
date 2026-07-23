@@ -30,16 +30,20 @@ function isInternalAdminPath(pathname: string): boolean {
   ));
 }
 
-export default function ClientLayout({ children }: { children: React.ReactNode }) {
+export default function ClientLayout({
+  children,
+  isPublicHost = false,
+}: {
+  children: React.ReactNode;
+  isPublicHost?: boolean;
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isKakaobot] = useState(() =>
     typeof window !== "undefined" && window.location.hostname.includes("kakaobot"),
   );
-  const [isUnniNaengmyeon] = useState(() =>
-    typeof window !== "undefined" && window.location.hostname === "unni.newtalk.kr",
-  );
+  const isUnniNaengmyeon = isPublicHost;
   const pathname = usePathname();
   const router = useRouter();
 

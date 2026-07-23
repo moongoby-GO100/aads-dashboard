@@ -1345,3 +1345,4 @@
   - `src/app/layout.tsx`: 전용 도메인에 언니냉면 테마·아이콘을 적용하고 AADS 서비스워커 신규 등록을 제외한다.
 - 검증: 대상 ESLint, `npx tsc --noEmit`, `git diff --check`, Next.js production build 통과. 로컬 운영 모드의 `Host: unni.newtalk.kr` 재현에서 루트 HTTP 200, 언니냉면 제목·canonical·주소, 메뉴 이미지 HTTP 200을 확인했다. 전용 호스트 `/admin`은 `/`로 307 차단되고 기존 AADS 루트 인증 307 및 `/unni-naengmyeon` 공개 200 동작은 유지됐다.
 - 운영 영향/롤백: 대시보드 호스트 라우팅과 메타데이터만 변경하며 백엔드·DB·DNS·nginx 파일 변경은 없다. 문제 시 본 커밋 revert 또는 직전 dashboard blue-green 슬롯으로 전환한다.
+- 실브라우저 보강: 첫 운영 검수에서 SSR 직후 클라이언트 호스트 state가 초기화되기 전에 인증 검사가 시작돼 `/login`으로 늦게 이동하는 경합을 발견했다. `RootLayout`의 서버 호스트 판정을 `ClientLayout` prop으로 전달해 최초 hydration부터 공개 호스트로 고정하고 인증 호출 자체를 차단한다.

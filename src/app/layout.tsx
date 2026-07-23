@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         )}
       </head>
       <body>
-        <ClientLayout>{children}</ClientLayout>
+        <ClientLayout isPublicHost={isUnniNaengmyeon}>{children}</ClientLayout>
       </body>
     </html>
   );
