@@ -345,12 +345,6 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   }, [desktopPanelWidthPx, screenSize]);
 
   useEffect(() => {
-    if (!sessionId || screenSize !== "desktop") return;
-    setArtifactMode("full");
-    setDesktopPanelWidthPx(ARTIFACT_PANEL_DEFAULT_WIDTH);
-  }, [screenSize, sessionId, setArtifactMode]);
-
-  useEffect(() => {
     if (screenSize !== "desktop") return;
     const handleResize = () => {
       setDesktopPanelWidthPx((current) => clampArtifactPanelWidth(current));

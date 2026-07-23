@@ -1362,6 +1362,8 @@
 - 원인: `ChatArtifactPanel`이 `aads-chat-artifact-panel-width` 값을 초기 폭으로 복원하고, `ChatPage`의 초기 모드가 `wide`였다.
 - 조치: 데스크톱 최초 로드와 세션 전환 시 아티팩트를 `full` 모드·420px로 초기화한다. 같은 화면에서의 넓게 보기와 드래그 폭 조절 기능은 유지한다.
 - 변경 파일: `src/app/chat/page.tsx`, `src/app/chat/ChatArtifactPanel.tsx`.
+- 최종 보강: 패널 내부 effect에서 세션 변경 직후 동기 `setState`를 호출하던 경로를 제거하고, `ChatArtifactPanel`을 세션 ID로 재마운트하여 폭 상태가 항상 기본 420px에서 시작하도록 했다. 이 방식은 React 19의 `set-state-in-effect` 경고와 불필요한 연쇄 렌더를 피한다.
+- 운영 검증 기준: 로그인 브라우저에서 대상 세션을 직접 연 뒤 새로고침 후에도 아티팩트 본문이 노출되는지 확인하고, blue/green의 `AADS_RELEASE_SHA`, 컨테이너 health, 외부 HTTP/API health를 같은 시각에 재확인한다.
 
 ## 2026-07-23 12:16 KST - B-1 600×1800mm 300DPI 인쇄용 PNG 출력
 

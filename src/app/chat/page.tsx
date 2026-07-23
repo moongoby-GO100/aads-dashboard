@@ -10173,6 +10173,7 @@ export default function ChatPage() {
 
       {/* RIGHT ARTIFACT PANEL */}
       <ChatArtifactPanel
+        key={activeSession?.id ?? "no-session"}
         screenSize={screenSize} showArtifactPanel={showArtifactPanel}
         artifactMode={artifactMode} setArtifactMode={setArtifactMode}
         mobileOverlay={mobileOverlay} setMobileOverlay={setMobileOverlay}
