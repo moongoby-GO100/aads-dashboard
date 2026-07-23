@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 18:xx KST - 언니냉면 나이트 라이더 B-2 사진형 300DPI 추가
+- CEO 요청: 냉면 사진이 크게 보이는 나이트 라이더 `B-2` 실외 600×1800mm 양면 시안을 만들고, 홈페이지 배너 페이지에서 인쇄용 300DPI로 내려받을 수 있게 반영한다.
+- 변경:
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`: B-2를 신규 실외 시안으로 추가했다. B-1의 딥그린·화이트·코랄 픽업존 정보 계층과 뒷면 단품 6종·세트 5종은 유지하고, 전면 중앙에 물냉면 사진을 크게 배치했다. 앞·뒷면 웹 PNG와 300DPI 다운로드 링크도 B-2 카드에 추가했다.
+  - `src/app/unni-naengmyeon/brand/banners/page.module.css`: B-2 전면 전용 사진 스포트라이트, 가독성 높은 상호·픽업존 조판, B-1과 동일한 뒷면 메뉴 원고 스타일을 추가했다.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/outdoor-b2-front.png`, `outdoor-b2-back.png`: 홈페이지 미리보기용 1,200×3,600px PNG를 생성했다.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/outdoor-b2-front.png`, `outdoor-b2-back.png`: 7,087×21,260px, 300DPI, sRGB PNG로 생성했다.
+- 검증:
+  - `git diff --check`, 대상 TSX ESLint, `npx tsc --noEmit` 통과.
+  - B-2 앞·뒷면을 Playwright 원고에서 렌더링하고 축소 육안검수했다. 전면의 냉면 사진·상호·픽업존과 뒷면의 메뉴·가격·하단 로고 모두 잘림 없이 표시된다.
+  - Sharp metadata로 앞·뒷면 모두 7,087×21,260px · 300DPI · sRGB · ICC profile 포함을 확인했다.
+- 인쇄 유의: 파일 캔버스·텍스트는 300DPI이나 전면 사진은 기존 웹용 원본을 활용했다. 근접 관찰 품질이 필요한 경우 별도 고해상도 음식 원본으로 교체해야 한다. RGB PNG이므로 발주 전 업체의 CMYK·도련·타공 템플릿과 최종 대조가 필요하다.
+- 배포 상태: 커밋·push·전용 도메인 배포·공개 HTTP 검증은 이 항목 작성 시점에 아직 진행 전이다.
+
 ## 2026-07-23 08:15 KST - 언니냉면 NAS 실메뉴 이미지 반영
 - CEO 요청: `\\newtalk_nas\RnR\★사업자별 서류\사업자별\언니냉면\메뉴`의 실제 메뉴 사진을 찾아 언니냉면 사이트에 반영한다.
 - 원본 확인:

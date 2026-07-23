@@ -79,28 +79,41 @@
 .backPickup b { font-size: 3.1cqw; }
 .backPickup strong { color: var(--coral); font-size: 6.1cqw; }
 .night .frontShade, .nightB1 .frontShade, .nightD1 .frontShade, .nightD2 .frontShade, .premium .frontShade { background: linear-gradient(180deg, rgba(5,26,23,.96) 0%, rgba(5,26,23,.82) 45%, rgba(5,26,23,.18) 69%, rgba(5,26,23,.88) 100%); }
-.night.front, .nightB1.front, .nightD1.front, .nightD2.front, .premium.front { color: white; }
-.night .frontCopy h3, .nightB1 .frontCopy h3, .nightD1 .frontCopy h3, .nightD2 .frontCopy h3, .premium .frontCopy h3 { color: white; }
-.night.back, .nightB1.back, .nightD1.back, .nightD2.back, .premium.back { color: white; background: var(--green); }
-.night .backShade, .nightB1 .backShade, .nightD1 .backShade, .nightD2 .backShade, .premium .backShade { background: linear-gradient(180deg, rgba(5,26,23,.96), rgba(5,26,23,.88) 56%, rgba(5,26,23,.72)); }
-.night .menuBoard, .nightB1 .menuBoard, .nightD1 .menuBoard, .nightD2 .menuBoard, .premium .menuBoard { background: rgba(255,248,234,.96); color: var(--green); }
+.night.front, .nightB1.front, .nightB2.front, .nightD1.front, .nightD2.front, .premium.front { color: white; }
+.night .frontCopy h3, .nightB1 .frontCopy h3, .nightB2 .frontCopy h3, .nightD1 .frontCopy h3, .nightD2 .frontCopy h3, .premium .frontCopy h3 { color: white; }
+.night.back, .nightB1.back, .nightB2.back, .nightD1.back, .nightD2.back, .premium.back { color: white; background: var(--green); }
+.night .backShade, .nightB1 .backShade, .nightB2 .backShade, .nightD1 .backShade, .nightD2 .backShade, .premium .backShade { background: linear-gradient(180deg, rgba(5,26,23,.96), rgba(5,26,23,.88) 56%, rgba(5,26,23,.72)); }
+.night .menuBoard, .nightB1 .menuBoard, .nightB2 .menuBoard, .nightD1 .menuBoard, .nightD2 .menuBoard, .premium .menuBoard { background: rgba(255,248,234,.96); color: var(--green); }
 .b1Feature .frontCopy { margin-top: 9cqw; }
 .b1Feature .frontCopy h3 { font-size: 20.5cqw; line-height: .82; letter-spacing: -.035em; }
 .b1Feature .frontCopy h3 em { display: block; margin-top: 5cqw; font-size: .62em; letter-spacing: .025em; }
 .b1Feature .frontCopy p { margin-top: 5cqw; font-size: 3.8cqw; }
 .b1Feature .direction { margin-top: 7cqw; padding-block: 5cqw; font-size: 7cqw; letter-spacing: .025em; }
+.nightB2.front { background: #071f1b; }
+.nightB2.front .coverImage { opacity: .2; object-position: 50% 48%; transform: scale(1.06); }
+.nightB2.front .frontShade { background: linear-gradient(180deg, rgba(3,22,19,.99) 0%, rgba(3,22,19,.96) 42%, rgba(3,22,19,.8) 100%); }
+.b2PhotoSpotlight { position: absolute; z-index: 0; top: 59cqw; right: 6cqw; left: 6cqw; height: 116cqw; overflow: hidden; border: 1.3cqw solid #fff8ea; border-radius: 4cqw; box-shadow: 0 3.8cqw 10cqw rgba(0,0,0,.38); }
+.b2PhotoSpotlight::after { content: "시원한 물냉면"; position: absolute; right: 0; bottom: 0; left: 0; padding: 2.2cqw 3cqw; background: linear-gradient(transparent, rgba(3,22,19,.88)); color: white; font-size: 4cqw; font-weight: 950; letter-spacing: -.035em; }
+.b2PhotoSpotlight img { object-fit: cover; object-position: 68% 50%; }
+.b2Feature.front .bannerInner { padding: 7.8cqw 8cqw 5.4cqw; }
+.b2Feature .frontCopy { margin-top: 6cqw; }
+.b2Feature .frontCopy h3 { font-size: 15.8cqw; line-height: .86; letter-spacing: -.065em; }
+.b2Feature .frontCopy h3 em { display: block; margin-top: 2.6cqw; color: var(--coral); font-size: .5em; letter-spacing: -.04em; }
+.b2Feature .frontCopy p { margin-top: 3cqw; font-size: 3.7cqw; }
+.b2Feature.front .direction { margin-top: auto; padding-block: 4.6cqw; font-size: 6.5cqw; }
+.b2Feature.front .frontFooterLogo { margin-top: 3.2cqw; }
 .frontFooterLogo { margin-top: auto; }
 .frontFooterLogo .bannerLogo { justify-content: center; gap: 2.2cqw; }
 .frontFooterLogo .bannerLogo img { width: 9.5cqw; height: 9.5cqw; border-radius: 1.8cqw; }
 .frontFooterLogo .bannerLogo strong { font-size: 7.2cqw; letter-spacing: -.035em; }
-.b1Feature.back .bannerInner { padding: 5.5cqw 6cqw 4.8cqw; }
-.b1Feature.back .bannerLogo { gap: 1.8cqw; }
-.b1Feature.back .bannerLogo img { width: 13cqw; height: 13cqw; border-radius: 2cqw; }
-.b1Feature.back .bannerLogo strong { font-size: 7.4cqw; letter-spacing: -.045em; }
-.b1Feature .backCopy { margin-top: 2.6cqw; }
-.b1Feature .backCopy > span { font-size: 2.3cqw; }
-.b1Feature .backCopy h3 { margin-top: 1.5cqw; font-size: 8.8cqw; line-height: .92; letter-spacing: -.04em; }
-.b1Feature .backCopy h3 em { display: block; margin-top: .8cqw; }
+.b1Feature.back .bannerInner, .b2Feature.back .bannerInner { padding: 5.5cqw 6cqw 4.8cqw; }
+.b1Feature.back .bannerLogo, .b2Feature.back .bannerLogo { gap: 1.8cqw; }
+.b1Feature.back .bannerLogo img, .b2Feature.back .bannerLogo img { width: 13cqw; height: 13cqw; border-radius: 2cqw; }
+.b1Feature.back .bannerLogo strong, .b2Feature.back .bannerLogo strong { font-size: 7.4cqw; letter-spacing: -.045em; }
+.b1Feature .backCopy, .b2Feature .backCopy { margin-top: 2.6cqw; }
+.b1Feature .backCopy > span, .b2Feature .backCopy > span { font-size: 2.3cqw; }
+.b1Feature .backCopy h3, .b2Feature .backCopy h3 { margin-top: 1.5cqw; font-size: 8.8cqw; line-height: .92; letter-spacing: -.04em; }
+.b1Feature .backCopy h3 em, .b2Feature .backCopy h3 em { display: block; margin-top: .8cqw; }
 .b1MenuStack { display: grid; gap: 3.2cqw; margin-top: 3.3cqw; }
 .b1MenuSection { margin-top: 0; padding: 3.2cqw 3.6cqw; border-radius: 3cqw; }
 .b1MenuSection > span { margin-bottom: 1.2cqw; font-size: 3.3cqw; line-height: 1.2; letter-spacing: .065em; }
