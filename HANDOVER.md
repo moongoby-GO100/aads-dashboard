@@ -438,3 +438,13 @@
 - 조치: 배너 페이지의 B-1 앞·뒷면에 300DPI 다운로드 링크를 추가하고 `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/`에 앞면 77,157,245바이트, 뒷면 38,277,235바이트 PNG를 포함했다.
 - 범위: `src/app/unni-naengmyeon/brand/banners/page.tsx`, 300DPI PNG 두 파일과 본 HANDOVER 기록만 반영했다. 기존 `public/manager/env_unknown.json` 변경은 제외해 보존했다.
 - 롤백: 본 통합 커밋을 revert하면 다운로드 링크와 저장소 원본만 제거된다. 현재 운영 정적 파일은 별도 경로에 유지되므로 즉시 다운로드 장애를 유발하지 않는다.
+
+## 2026-07-23 14:09 KST - unni.newtalk.kr 도메인 전환 및 green 슬롯 배포 완료
+
+- unni.newtalk.kr DNS/HTTPS 연결 확인, nginx server block 추가 완료
+- middleware.ts에 unni.newtalk.kr 호스트 감지 → 루트 / → /unni-naengmyeon rewrite, 인증 생략
+- layout.tsx/ClientLayout.tsx hydration 대응: data-unni-domain 속성 전달, 인증 체크 생략
+- green 슬롯(3101) Docker 빌드 성공, nginx upstream green active 전환 완료
+- 검증: unni.newtalk.kr 루트 200, /admin 307 차단, aads.newtalk.kr/unni-naengmyeon 200 호환 유지
+- NAS 메뉴 이미지 9종 모두 HTTP 200 확인
+- Release: a643fe1 (dashboard), green active(3101), blue standby(3100)
