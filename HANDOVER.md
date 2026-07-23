@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 11:55 KST - Chat artifact compact-width final ledger correction
+- 최종 요구사항: 첫 번째 참고 이미지의 과도하게 넓어진 아티팩트 패널을 사용하지 않고, 두 번째 참고 이미지처럼 본문이 보이는 compact `full` 모드(420px)로 연다.
+- 적용 시점: 브라우저 새 창/직접 URL 진입, 하드 새로고침, 세션 ID 전환 모두 `full`로 초기화하며 이전 세션의 넓어진 폭을 승계하지 않는다.
+- 원장 정정: `mini` 48px 레일을 기본값으로 둔 `32f7ed4`는 중간 시도이고, 정식 `main`의 `8252aed`가 이를 420px compact 모드로 교정했다. 운영 컨테이너와 정식 `main` SHA가 달랐던 상태는 본 기록 이후 정식 `main` Blue/Green 재배포로 일치시킨다.
+- 완료 판정: `main == origin/main == Blue AADS_RELEASE_SHA == Green AADS_RELEASE_SHA`, TypeScript/프로덕션 빌드 통과, 공개 HTTP 정상, 인증 브라우저 하드 새로고침 후 패널 본문 노출을 모두 확인해야 한다.
+
 ## 2026-07-23 - Chat artifact panel compact-mode ledger reconciliation
 - 기준 화면: 세션을 새 창에서 열거나 새로고침하거나 다른 세션으로 전환할 때 우측 아티팩트 내용을 숨기는 48px 레일이 아니라, 두 번째 참고 이미지처럼 내용이 보이는 compact `full` 모드(420px)로 시작한다.
 - 재발 원인: 운영 릴리스 브랜치는 `full` 420px로 수정됐지만 정식 `main`에는 이전 `mini` 48px 패치가 남아 있어 다음 일반 배포에서 동작이 다시 뒤집힐 수 있었다.
