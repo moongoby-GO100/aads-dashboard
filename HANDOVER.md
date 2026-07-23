@@ -425,3 +425,9 @@
 - 사전 검증: 대상 ESLint, `npx tsc --noEmit`, `git diff --check`, Next.js 16.1.6 production build를 통과했으며 `/unni-naengmyeon`, `/unni-naengmyeon/brand/logo`, `/unni-naengmyeon/brand/banners`를 포함한 60개 라우트가 생성됐다.
 - 배포 검증 기준: Blue/Green 양 슬롯의 `Host: unni.newtalk.kr` 루트 HTTP 200, 외부 루트 HTTP 200/redirect 0회, 언니냉면 제목·canonical·주소·메뉴 본문 및 대표 이미지 HTTP 200, AADS 내부 경로 307 루트 차단, 양 컨테이너 healthy·동일 release SHA.
 - 롤백: 외부 헬스 또는 홈페이지 E2E 실패 시 Nginx dashboard upstream을 직전 `785acadb4b00` 슬롯로 즉시 되돌리고, 본 커밋을 revert한다.
+- 운영 반영·검증 (2026-07-23 12:34~12:41 KST):
+  - 앱 릴리스 `f6766a172e02`를 Blue에 먼저 빌드해 내부 헬스 통과 후 Nginx를 Blue로 전환했고, Green standby도 같은 릴리스로 동기화했다. 양 컨테이너는 `healthy`다.
+  - `docker exec aads-nginx nginx -t` 통과. 외부 루트는 HTTP 200, redirect 0회, `text/html; charset=utf-8`이며 Blue/Green 직접 요청도 각각 HTTP 200이다.
+  - 외부 HTML에서 제목 `언니냉면 | 성신여대 배달 냉면`, canonical `https://unni.newtalk.kr`, 주소 `동소문로 90 1층`, `외할머니 명태회냉면`, `냉면 + 수제돈까스`를 확인했다.
+  - 대표 메뉴 이미지는 HTTP 200, `image/jpeg`, 1,755,446바이트다. `/admin`은 `307 https://unni.newtalk.kr/`로 차단되고 기존 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200을 유지한다.
+  - 자동 Visual QA는 `UNKNOWN`이라 통과로 간주하지 않았다. CEO용 캡처 도구는 timeout, 호스트에는 Playwright/Chromium 실행 파일이 없어 화면 캡처는 미실행했으며 공개 HTTP·HTML·정적 자산·양 슬롯·Nginx 검증으로 대체했다.
