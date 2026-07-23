@@ -288,7 +288,7 @@ const pickupConcepts = [
     id: "p4",
     name: "나이트 라이더 B-1",
     summary: "실외 B-1의 딥그린·화이트·코랄 고대비를 실내 픽업존에 맞춘 신규 추천안",
-    image: "../concept-b-bold-food.png",
+    image: `${ASSET_ROOT}/concept-b-bold-food.png`,
     tone: "pickupB1",
     eyebrow: "DELIVERY · TAKE OUT",
     title: <>언니냉면<em>배달·포장 픽업존</em></>,
@@ -478,7 +478,13 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
     <article className={styles.pickupConcept}>
       <div><span>INDOOR {concept.id.toUpperCase()}</span><h3>{concept.name}</h3><p>{concept.summary}</p></div>
       <div className={`${styles.pickupBanner} ${styles[concept.tone]}`} data-export={`indoor-${concept.id}`}>
-        <Image className={styles.pickupImage} src={`${ASSET_ROOT}/pickup/${concept.image}`} alt="" fill sizes="600px" />
+        <Image
+          className={styles.pickupImage}
+          src={concept.image.startsWith("/") ? concept.image : `${ASSET_ROOT}/pickup/${concept.image}`}
+          alt=""
+          fill
+          sizes="600px"
+        />
         <div className={styles.pickupShade} />
         <div className={styles.pickupInner}>
           <BannerLogo inverse={concept.id === "p2" || isB1} />
