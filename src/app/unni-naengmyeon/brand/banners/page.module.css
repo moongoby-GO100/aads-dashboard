@@ -179,8 +179,26 @@
 .pickupB1 .pickupInner h4 { margin-top: 2.4cqw; color: white; font-size: 15.5cqw; letter-spacing: -.035em; line-height: .82; }
 .pickupB1 .pickupInner h4 em { margin-top: 4.5cqw; color: #ff715d; font-size: .55em; letter-spacing: -.02em; line-height: 1.05; }
 .pickupB1 .pickupInner > strong { padding: 3.1cqw 2.5cqw; border: .35cqw solid rgba(255,255,255,.28); background: white; color: var(--green); font-size: 4.1cqw; letter-spacing: .01em; }
+.pickupB1Print { color: white; background: #071f1b; }
+.pickupB1Print .pickupImage { object-position: 50% 62%; transform: scale(1.18); opacity: .56; }
+.pickupB1Print .pickupShade { background: radial-gradient(circle at 78% 78%, rgba(244,93,72,.34), transparent 28%), linear-gradient(135deg, rgba(3,22,19,.99) 0%, rgba(3,22,19,.94) 52%, rgba(3,22,19,.64) 100%); }
+.pickupB1Print .pickupInner { padding: 10.2cqw 10.5cqw; }
+.pickupB1Print .pickupInner .bannerLogo { gap: 3.2cqw; }
+.pickupB1Print .pickupInner .bannerLogo img { width: 15.5cqw; height: 15.5cqw; border-radius: 2.6cqw; }
+.pickupB1Print .pickupInner .bannerLogo strong { font-size: 10.7cqw; letter-spacing: -.035em; }
+.pickupB1Print .pickupInner > span { margin-top: 11cqw; color: #ff715d; font-size: 3.2cqw; font-weight: 950; letter-spacing: .19em; }
+.pickupB1Print .pickupInner h4 { margin-top: 3.3cqw; color: white; font-size: 15.8cqw; letter-spacing: -.04em; line-height: .82; }
+.pickupB1Print .pickupInner h4 em { margin-top: 5cqw; color: #ff715d; font-size: .52em; letter-spacing: -.025em; line-height: 1.05; }
+.pickupB1Print .pickupInner > strong { right: 10.5cqw; bottom: 10.2cqw; left: 10.5cqw; padding: 3.35cqw 2.5cqw; border: .35cqw solid rgba(255,255,255,.32); border-radius: 2.1cqw; background: white; color: var(--green); font-size: 4.3cqw; letter-spacing: .01em; }
 .squareGuides { inset: 2.5cqw; }
 .squareGuides::before, .squareGuides::after { display: none; }
+.holeGuides { inset: 5.83cqw; border-color: rgba(255,113,93,.82); }
+.holeGuides i { position: absolute; width: 1.67cqw; height: 1.67cqw; border: .3cqw solid rgba(255,113,93,.96); border-radius: 50%; background: rgba(255,255,255,.2); box-shadow: 0 0 0 .35cqw rgba(3,22,19,.55); }
+.holeTopLeft { top: -2.5cqw; left: -2.5cqw; }
+.holeTopRight { top: -2.5cqw; right: -2.5cqw; }
+.holeBottomLeft { bottom: -2.5cqw; left: -2.5cqw; }
+.holeBottomRight { right: -2.5cqw; bottom: -2.5cqw; }
+.holeGuides .safeLabel { right: .5cqw; bottom: .5cqw; background: rgba(255,255,255,.9); color: #aa392b; font-size: 1.5cqw; }
 .productionNote { width: min(1120px, calc(100% - 40px)); margin: 0 auto 100px; padding: 42px; border-radius: 28px; background: white; box-shadow: 0 18px 60px rgba(23,62,53,.08); }
 .productionNote h2 { margin: 0 0 26px; font-size: 30px; }
 .specGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid rgba(23,62,53,.12); }

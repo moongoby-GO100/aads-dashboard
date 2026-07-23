@@ -294,6 +294,16 @@ const pickupConcepts = [
     title: <>언니냉면<em>배달·포장 픽업존</em></>,
     guide: "주문번호 확인 후 픽업",
   },
+  {
+    id: "p5",
+    name: "나이트 라이더 B-1 · 글라스 픽업",
+    summary: "B-1의 딥그린·코랄 대비를 유지하고, 유리 부착과 4개 타공을 고려해 핵심 안내를 중앙 안전영역에 집중한 인쇄용 신규안",
+    image: `${ASSET_ROOT}/concept-b-bold-food.png`,
+    tone: "pickupB1Print",
+    eyebrow: "DELIVERY · TAKE OUT",
+    title: <>언니냉면<em>배달·포장 픽업존</em></>,
+    guide: "주문번호 확인 후 픽업",
+  },
 ];
 
 export const metadata: Metadata = {
@@ -310,14 +320,18 @@ function BannerLogo({ inverse = false }: { inverse?: boolean }) {
   );
 }
 
-function DownloadLink({ file, children }: { file: string; children: React.ReactNode }) {
+function DownloadLink({ file, children, print = false }: { file: string; children: React.ReactNode; print?: boolean }) {
+  if (print) {
+    return <a className={styles.download} href={`${ASSET_ROOT}/print/300dpi/${file}`} download>{children}</a>;
+  }
   return <a className={styles.download} href={`${ASSET_ROOT}/print/${file}`} download>{children}</a>;
 }
 
-function ProductionGuides({ square = false }: { square?: boolean }) {
+function ProductionGuides({ square = false, holes = false }: { square?: boolean; holes?: boolean }) {
   return (
-    <div className={`${styles.guides} ${square ? styles.squareGuides : ""}`} aria-hidden="true">
-      <span className={styles.safeLabel}>{square ? "사방 30mm 안전영역" : "상·하 80mm 가공 유보 / 사방 30mm 안전영역"}</span>
+    <div className={`${styles.guides} ${square ? styles.squareGuides : ""} ${holes ? styles.holeGuides : ""}`} aria-hidden="true">
+      {holes && <><i className={styles.holeTopLeft} /><i className={styles.holeTopRight} /><i className={styles.holeBottomLeft} /><i className={styles.holeBottomRight} /></>}
+      <span className={styles.safeLabel}>{holes ? "타공 가이드: Ø10mm · 중심 25mm / 중요정보 사방 35mm 안쪽" : square ? "사방 30mm 안전영역" : "상·하 80mm 가공 유보 / 사방 30mm 안전영역"}</span>
     </div>
   );
 }
@@ -474,6 +488,7 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
 
 function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number] }) {
   const isB1 = concept.id === "p4";
+  const isPrintB1 = concept.id === "p5";
   return (
     <article className={styles.pickupConcept}>
       <div><span>INDOOR {concept.id.toUpperCase()}</span><h3>{concept.name}</h3><p>{concept.summary}</p></div>
@@ -487,14 +502,19 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
         />
         <div className={styles.pickupShade} />
         <div className={styles.pickupInner}>
-          <BannerLogo inverse={concept.id === "p2" || isB1} />
+          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1} />
           <span>{concept.eyebrow}</span>
           <h4>{concept.title}</h4>
           <strong>{concept.guide}</strong>
         </div>
-        {!isB1 && <ProductionGuides square />}
+        {!isB1 && !isPrintB1 && <ProductionGuides square />}
+        {isPrintB1 && <ProductionGuides square holes />}
       </div>
       <DownloadLink file={`indoor-${concept.id}.png`}>{concept.name} PNG</DownloadLink>
+      {isPrintB1 && <>
+        <DownloadLink file="indoor-p5-glass-pickup-300dpi.png" print>300DPI 인쇄용 다운로드</DownloadLink>
+        <DownloadLink file="indoor-p5-glass-pickup-hole-guide-300dpi.png" print>타공 위치 가이드 다운로드</DownloadLink>
+      </>}
     </article>
   );
 }
@@ -520,7 +540,7 @@ export default function UnniBannerConceptsPage() {
       <div className={styles.concepts}>{outdoorConcepts.map((concept) => <OutdoorConceptCard key={concept.id} concept={concept} />)}</div>
 
       <section className={`${styles.sectionIntro} ${styles.indoorIntro}`}>
-        <span>02 · INDOOR GLASS</span><h2>600 × 600 픽업존</h2><p>실내 유리 부착을 전제로 문구를 크게 줄이고, `언니냉면 배달/포장 픽업존`을 모든 안에 동일하게 고정했습니다. P4는 실외 B-1의 배경과 고대비 색상을 그대로 연결한 안입니다.</p>
+        <span>02 · INDOOR GLASS</span><h2>600 × 600 픽업존</h2><p>실내 유리 부착을 전제로 문구를 크게 줄이고, `언니냉면 배달/포장 픽업존`을 모든 안에 동일하게 고정했습니다. P5는 실외 B-1의 나이트 라이더 톤을 유지하면서 300DPI·4개 타공 안전영역을 반영한 인쇄용 안입니다.</p>
       </section>
       <section className={styles.pickupGrid}>{pickupConcepts.map((concept) => <PickupConceptCard key={concept.id} concept={concept} />)}</section>
 
@@ -529,12 +549,13 @@ export default function UnniBannerConceptsPage() {
         <div className={styles.specGrid}>
           <div><b>요청 상품 유형</b><span>600×1800 실외 양면 배너 · 세부 사양은 판매자 확인 필요</span></div>
           <div><b>실외 완성 규격</b><span>600 × 1800mm · 양면 16면 구성</span></div>
-          <div><b>실내 완성 규격</b><span>600 × 600mm · 유리 부착용 4안</span></div>
+          <div><b>실내 완성 규격</b><span>600 × 600mm · 유리 부착용 5안</span></div>
           <div><b>가공 유보영역</b><span>실외 상·하단 80mm, 사방 중요정보 30mm 안쪽 배치</span></div>
-          <div><b>현재 파일</b><span>RGB PNG 시안 · 웹/PNG 동일 Pretendard 폰트 고정</span></div>
+          <div><b>P5 인쇄 원본</b><span>7,087 × 7,087px · 300DPI · RGB PNG · Pretendard 폰트 고정</span></div>
+          <div><b>P5 임시 타공 기준</b><span>4곳 Ø10mm · 각 모서리 중심선에서 25mm · 중요 정보 사방 35mm 안쪽</span></div>
           <div><b>발주 전 필수</b><span>판매처 원본 템플릿에서 타공 수·좌표·봉미싱·도련·CMYK 프로파일 최종 확인</span></div>
         </div>
-        <p className={styles.warning}>네이버 상세페이지가 로그인·자동접근 차단 상태여서 정확한 구멍 좌표와 접수 파일 형식은 미확정입니다. 현재 점선은 안전한 임시 가이드이며, 판매자에게 받은 AI/PDF 템플릿으로 최종 치환해야 인쇄 사고를 막을 수 있습니다.</p>
+        <p className={styles.warning}>P5의 타공 좌표는 판매처 템플릿 미확보 상태에서 적용한 임시 기준입니다. 인쇄용 PNG는 가이드선을 제외한 최종 아트워크이며, 별도 타공 가이드 PNG를 함께 내려받아 업체 템플릿과 대조해 주세요. 업체가 다른 타공 규격을 요구하면 가이드 기준에 맞춰 재출력해야 합니다.</p>
       </section>
     </main>
   );

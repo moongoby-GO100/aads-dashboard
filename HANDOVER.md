@@ -1385,3 +1385,17 @@
 - 검증: 대상 ESLint, TypeScript, production build를 통과했다. 1,200×1,200px 인쇄 PNG를 직접 렌더링하고 육안검수해 글자 잘림·겹침·불필요한 방향 표시가 없음을 확인했다.
 - 운영 브라우저 검수에서 상대 상위 경로(`pickup/../`)를 Next.js 이미지 최적화기가 HTTP 400으로 거부하는 문제를 발견해, P4 배경을 절대 정적 경로로 교정했다.
 - 롤백: 본 커밋을 revert하거나 직전 dashboard 슬롯으로 전환한다.
+
+## 2026-07-23 14:28 KST - 실내 유리 P5 B-1 인쇄·타공 원본 추가
+
+- CEO 요청: 실내 유리 부착용 INDOOR 배너를 실외 B-1 나이트 라이더 톤으로 새로 만들고, 300DPI 인쇄 파일과 타공 고려본을 배너 페이지에서 내려받을 수 있게 반영한다.
+- 변경:
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`: `INDOOR P5 · 나이트 라이더 B-1 글라스 픽업`을 추가했다. `언니냉면 / 배달·포장 픽업존 / 주문번호 확인 후 픽업`을 중앙에 크게 두고, 일반 PNG·300DPI 인쇄 원본·타공 가이드의 세 링크를 제공한다.
+  - `src/app/unni-naengmyeon/brand/banners/page.module.css`: P5의 딥그린·화이트·코랄 B-1 계열 조판과 웹 미리보기용 사방 안전영역·4개 타공 가이드를 추가했다.
+  - `scripts/render-unni-indoor-p5-print.mjs`: Pretendard가 적용된 웹 원고를 7,087×7,087px으로 렌더링하고, 별도 SVG 오버레이로 타공 가이드 파일을 재현 출력한다.
+- 출력물:
+  - `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/indoor-p5-glass-pickup-300dpi.png` — 가이드선 없는 최종 아트워크.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/indoor-p5-glass-pickup-hole-guide-300dpi.png` — 업체 대조용 타공 가이드.
+- 규격·임시 가공 기준: 두 파일 모두 7,087×7,087px, sRGB PNG, 300DPI 메타데이터(600×600mm). 타공은 4곳 Ø10mm, 각 모서리 중심선에서 25mm, 주요 정보는 사방 35mm 안쪽으로 배치했다.
+- 검증: Sharp metadata에서 두 파일의 픽셀·DPI·sRGB·ICC 프로필을 확인했고, 900px 축소본에서 가이드 없는 인쇄 원본과 별도 타공 원의 위치를 육안 검수했다. 로컬 정적 다운로드 URL은 두 파일 모두 HTTP 200이다.
+- 제한/롤백: 업체 공식 템플릿의 타공 수·좌표·도련·CMYK 프로필은 아직 미확정이므로 P5 가이드 파일은 임시 기준이다. 업체 템플릿이 다르면 스크립트 상수만 조정해 재출력한다. 문제 시 본 커밋 revert 또는 직전 dashboard 슬롯으로 전환한다.
