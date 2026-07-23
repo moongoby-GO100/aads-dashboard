@@ -1347,3 +1347,11 @@
 - 운영 영향/롤백: 대시보드 호스트 라우팅과 메타데이터만 변경하며 백엔드·DB·DNS·nginx 파일 변경은 없다. 문제 시 본 커밋 revert 또는 직전 dashboard blue-green 슬롯으로 전환한다.
 - 실브라우저 보강: 첫 운영 검수에서 SSR 직후 클라이언트 호스트 state가 초기화되기 전에 인증 검사가 시작돼 `/login`으로 늦게 이동하는 경합을 발견했다. `RootLayout`의 서버 호스트 판정을 `ClientLayout` prop으로 전달해 최초 hydration부터 공개 호스트로 고정하고 인증 호출 자체를 차단한다.
 - 운영 반영·최종 검증 (2026-07-23 10:13~10:15 KST): hydration 보강 릴리스 `e4f35d7c03d9`를 dashboard blue-green으로 배포했다. green(3101) active, blue(3100) standby이며 양 슬롯 모두 healthy·동일 release다. 외부 루트는 HTTP 200/redirect 0회, Playwright 브라우저 최종 URL은 `https://unni.newtalk.kr/`, 이미지 응답 15건은 모두 HTTP 200이고 자연 크기 0인 이미지가 없었다. 제목·canonical·동소문로 90 1층·메뉴 본문과 실제 첫 화면 렌더도 확인했다. 자동 QA `UNKNOWN`은 통과로 간주하지 않고 이 실브라우저 검증으로 대체했다.
+
+## 2026-07-23 10:24~10:35 KST - 언니냉면 전용 도메인 최종 ledger 정합성 복구
+
+- 재실측 결과 전용 브랜치와 원격은 `97df9998772a`에서 일치했으나, 10:24 KST에 별도 `main` 릴리스 `30d22cecf8f8`가 dashboard blue-green 배포를 시작해 10:26 KST부터 `https://unni.newtalk.kr/`이 로그인으로 HTTP 307 이동하는 회귀가 발생했다.
+- 공유 배포 락과 선행 배포 완료를 확인한 뒤 전용 worktree의 `deploy.sh`와 `docker-compose.unni-release.yml`을 사용해 `97df9998772a`를 다시 무중단 배포했다. 10:33:11 KST에 green(3101) 전환 및 blue(3100) standby 동기화가 완료됐고, 양 컨테이너 모두 `healthy`와 동일 `AADS_RELEASE_SHA=97df9998772a`를 반환했다.
+- 외부 검증에서 `https://unni.newtalk.kr/`은 HTTP 200, redirect 0회, canonical `https://unni.newtalk.kr`, 제목 `언니냉면 | 성신여대 배달 냉면`, 주소 `동소문로 90 1층`을 반환했다. 기존 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200, AADS 루트 인증 307은 유지됐다.
+- Playwright 모바일 390×844 전 페이지 스크롤 검증에서 이미지 19/19 로드, broken/pending 0, HTTP 오류·request failure 0, 가로 overflow 없음, 상단 header `position: fixed`, 주소·브랜드 본문 노출을 확인했다. 자동 QA `UNKNOWN`은 통과로 간주하지 않고 이 수동 브라우저 검증으로 대체했다.
+- 재발 위험: 기본 `main` 브랜치에는 아직 언니냉면 전용 도메인 커밋이 병합되지 않아 일반 dashboard 배포가 전용 사이트를 다시 덮어쓸 수 있다. 전용 릴리스 worktree/compose overlay를 유지하며, 후속으로 충돌 검수 후 `main` 통합 또는 호스트별 독립 배포 분리가 필요하다.
