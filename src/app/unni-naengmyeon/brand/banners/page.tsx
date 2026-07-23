@@ -433,6 +433,7 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
             {!isB1 && <ProductionGuides />}
           </div>
           <DownloadLink file={`outdoor-${concept.id}-front.png`}>{concept.id.toUpperCase()} 앞면 PNG</DownloadLink>
+          {isB1 && <><br /><a className={styles.download} href="/brands/unni-naengmyeon/banners-20260722/print/300dpi/outdoor-b1-front.png" download>300DPI 인쇄용 다운로드 (74MB)</a></>}
         </div>
         <div>
           <div className={`${styles.banner} ${styles[concept.tone]} ${isFeaturedNight ? styles.featuredNight : ""} ${isB1 ? styles.b1Feature : ""} ${styles.back}`} data-export={`outdoor-${concept.id}-back`}>
@@ -454,6 +455,7 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
             {!isB1 && <ProductionGuides />}
           </div>
           <DownloadLink file={`outdoor-${concept.id}-back.png`}>{concept.id.toUpperCase()} 뒷면 PNG</DownloadLink>
+          {isB1 && <><br /><a className={styles.download} href="/brands/unni-naengmyeon/banners-20260722/print/300dpi/outdoor-b1-back.png" download>300DPI 인쇄용 다운로드 (38MB)</a></>}
         </div>
       </div>
     </article>

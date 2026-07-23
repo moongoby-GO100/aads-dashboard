@@ -1362,3 +1362,15 @@
 - 원인: `ChatArtifactPanel`이 `aads-chat-artifact-panel-width` 값을 초기 폭으로 복원하고, `ChatPage`의 초기 모드가 `wide`였다.
 - 조치: 데스크톱 최초 로드와 세션 전환 시 아티팩트를 `full` 모드·420px로 초기화한다. 같은 화면에서의 넓게 보기와 드래그 폭 조절 기능은 유지한다.
 - 변경 파일: `src/app/chat/page.tsx`, `src/app/chat/ChatArtifactPanel.tsx`.
+
+## 2026-07-23 12:16 KST - B-1 600×1800mm 300DPI 인쇄용 PNG 출력
+
+- CEO 요청: 운영 배너 페이지의 B-1 앞·뒷면을 600×1800mm, 300DPI로 즉시 다운로드할 수 있게 제작한다.
+- 출력물:
+  - `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/outdoor-b1-front.png`
+  - `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/outdoor-b1-back.png`
+- 규격: 앞·뒷면 각각 7,087×21,260px, PNG sRGB, 300DPI 메타데이터. 픽셀 반올림 기준 실물 크기는 약 600.0×1,800.0mm다.
+- 렌더링: 기존 B-1 HTML/CSS 원고와 Pretendard 폰트를 8배 고밀도 브라우저 캔버스로 출력한 뒤 최종 실사이즈 픽셀로 정규화했다. `scripts/render-unni-banner-assets.mjs`에 출력 폴더·목표 픽셀·DPI·렌더 배율 환경변수를 추가해 재현 가능하게 했다.
+- 검증: Sharp metadata로 양면의 픽셀·DPI·색공간을 확인했고, 900px 축소 교정본을 육안 검수해 하단 공백·잘림·겹침 없이 앞면 로고/픽업존 및 뒷면 단품 6종/세트 5종/하단 픽업존이 모두 노출되는 것을 확인했다.
+- 인쇄 주의: 출력 파일의 캔버스와 글자는 300DPI지만 일부 음식 사진·배경은 기존 웹 원본을 확대 사용하므로 원본 사진의 실제 세부 해상도는 300DPI보다 낮다. 대형 실외 배너의 통상 관람거리에는 사용할 수 있으나, 발주 전 인쇄업체의 CMYK·재단·타공 템플릿 확인이 필요하다.
+- 다운로드 반영: `https://unni.newtalk.kr/unni-naengmyeon/brand/banners`의 B-1 앞·뒷면 카드에 동일 출처 정적 파일 다운로드 링크를 추가했다. 기존 `aads.newtalk.kr/exports/*` 링크가 메인 페이지로 리다이렉트되던 문제를 제거했다.
