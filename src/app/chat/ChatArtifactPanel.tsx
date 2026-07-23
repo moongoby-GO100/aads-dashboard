@@ -5,6 +5,18 @@ import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
 
+const ARTIFACT_PANEL_MIN_WIDTH = 420;
+const ARTIFACT_PANEL_DEFAULT_WIDTH = ARTIFACT_PANEL_MIN_WIDTH;
+const ARTIFACT_PANEL_MAX_FALLBACK = 1180;
+
+const clampArtifactPanelWidth = (width: number) => {
+  const viewportMax =
+    typeof window !== "undefined"
+      ? Math.max(ARTIFACT_PANEL_MIN_WIDTH, Math.floor(window.innerWidth * 0.82))
+      : ARTIFACT_PANEL_MAX_FALLBACK;
+  return Math.min(viewportMax, Math.max(ARTIFACT_PANEL_MIN_WIDTH, Math.round(width)));
+};
+
 interface AgendaItem {
   id: string;
   project: string;
@@ -167,6 +179,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [tabBarWidth, setTabBarWidth] = useState(420);
+  // Reloads and session changes remount this panel at 420px. Manual widening
+  // and drag resizing remain available for the current session only.
+  const [desktopPanelWidthPx, setDesktopPanelWidthPx] = useState(ARTIFACT_PANEL_DEFAULT_WIDTH);
+  const [isResizingArtifactPanel, setIsResizingArtifactPanel] = useState(false);
   // 배지 펄스 애니메이션 상태
   const [pulsedTabs, setPulsedTabs] = useState<Set<string>>(new Set());
   const prevArtifactCountsRef = useRef<Record<string, number>>({});
@@ -322,6 +338,44 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       .catch(() => setAgendaItems([]))
       .finally(() => setAgendaLoading(false));
   }, [artifactTab, sessionId]);
+
+  useEffect(() => {
+    if (screenSize !== "desktop") return;
+    const handleResize = () => {
+      setDesktopPanelWidthPx((current) => clampArtifactPanelWidth(current));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [screenSize]);
+
+  const startArtifactPanelResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (screenSize !== "desktop" || artifactMode === "mini" || artifactMode === "hidden") return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = desktopPanelWidthPx;
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    setIsResizingArtifactPanel(true);
+
+    const handleMove = (pointerEvent: PointerEvent) => {
+      setDesktopPanelWidthPx(clampArtifactPanelWidth(startWidth + startX - pointerEvent.clientX));
+    };
+    const handleUp = () => {
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+      setIsResizingArtifactPanel(false);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+  }, [artifactMode, desktopPanelWidthPx, screenSize]);
+
   const tabBarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = tabBarRef.current;
@@ -333,6 +387,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     return () => ro.disconnect();
   }, []);
   const showTabLabel = tabBarWidth >= 320;
+  const desktopPanelWidth =
+    artifactMode === "mini" || artifactMode === "hidden"
+      ? "48px"
+      : `${desktopPanelWidthPx}px`;
 
   // artifactCounts 변경 감지 → 증가한 탭에 펄스 트리거
   useEffect(() => {
@@ -364,15 +422,17 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     {(showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden")) && (
       <div
         style={{
-          width: screenSize !== "desktop" ? "380px" : artifactMode === "full" ? "420px" : "48px",
-          minWidth: screenSize !== "desktop" ? "380px" : artifactMode === "full" ? "420px" : "48px",
+          width: screenSize !== "desktop" ? "min(100vw, 420px)" : desktopPanelWidth,
+          minWidth: screenSize !== "desktop" ? "min(100vw, 420px)" : desktopPanelWidth,
+          maxWidth: screenSize !== "desktop" ? "100vw" : "82vw",
           background: "var(--ct-sb)",
           borderLeft: "1px solid var(--ct-border)",
           display: "flex",
           flexDirection: "column",
-          transition: "width 0.3s, min-width 0.3s, transform 0.3s",
+          transition: isResizingArtifactPanel ? "none" : "width 0.3s, min-width 0.3s, transform 0.3s",
           overflow: "hidden",
           flexShrink: 0,
+          position: "relative",
           // On non-desktop, position as overlay
           ...(screenSize !== "desktop"
             ? {
@@ -387,7 +447,38 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             : {}),
         }}
       >
-        {artifactMode === "full" || screenSize !== "desktop" ? (
+        {screenSize === "desktop" && artifactMode !== "mini" && artifactMode !== "hidden" && (
+          <div
+            aria-label="아티팩트 패널 폭 조절"
+            title="드래그해서 아티팩트 패널 폭 조절"
+            role="separator"
+            aria-orientation="vertical"
+            onPointerDown={startArtifactPanelResize}
+            style={{
+              position: "absolute",
+              left: "-4px",
+              top: 0,
+              bottom: 0,
+              width: "8px",
+              cursor: "col-resize",
+              zIndex: 5,
+              touchAction: "none",
+              background: isResizingArtifactPanel ? "rgba(108,99,255,0.24)" : "transparent",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: "3px",
+                top: 0,
+                bottom: 0,
+                width: "2px",
+                background: isResizingArtifactPanel ? "var(--ct-accent)" : "rgba(255,255,255,0.12)",
+              }}
+            />
+          </div>
+        )}
+        {(artifactMode === "wide" || artifactMode === "full") || screenSize !== "desktop" ? (
           <>
             {/* Artifact header */}
             <div
@@ -416,6 +507,30 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   </span>
                 )}
               </div>
+              {screenSize === "desktop" && (
+                <button
+                  onClick={() => {
+                    const nextMode = artifactMode === "wide" ? "full" : "wide";
+                    setArtifactMode(nextMode);
+                    setDesktopPanelWidthPx(
+                      clampArtifactPanelWidth(nextMode === "wide" ? 980 : ARTIFACT_PANEL_DEFAULT_WIDTH),
+                    );
+                  }}
+                  title={artifactMode === "wide" ? "보통 폭으로 보기" : "넓게 보기"}
+                  style={{
+                    background: artifactMode === "wide" ? "var(--ct-accent)" : "var(--ct-hover)",
+                    border: "1px solid var(--ct-border)",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    color: artifactMode === "wide" ? "#fff" : "var(--ct-text2)",
+                    fontSize: "11px",
+                    padding: "4px 8px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  넓게
+                </button>
+              )}
               <button
                 onClick={() =>
                   screenSize === "desktop"

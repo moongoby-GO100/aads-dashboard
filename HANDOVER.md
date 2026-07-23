@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-07-23 14:21 KST - Chat artifact compact-width release ledger reconciliation
+- 불일치 실측: 운영 Blue/Green은 기능 브랜치 `c1b0978`을 실행했지만 정식 `origin/main`은 `cd491bd`여서 이전 완료보고의 커밋·푸시·배포 원장이 일치하지 않았다.
+- 정식 `main` 보강: 새 창/새로고침/세션 전환 시 아티팩트 패널을 `full` 420px로 초기화하고, 패널을 세션 ID로 재마운트해 이전 세션 폭을 승계하지 않는다.
+- 기능 보존: 같은 세션 안에서는 `넓게` 버튼(980px), 420px 이상 드래그 폭 조절, `mini` 48px 접기를 유지한다. 저장된 과거 폭은 초기값으로 복원하지 않는다.
+- 완료 기준: 관련 파일만 커밋·원격 `main` 푸시, TypeScript/프로덕션 빌드 통과, Blue/Green `AADS_RELEASE_SHA`와 `origin/main` 일치, 컨테이너 health 및 공개 HTTP 확인. 인증 브라우저 검증 실패 시 사유와 API/번들 대체 검증을 명시한다.
+
 ## 2026-07-23 11:55 KST - Chat artifact compact-width final ledger correction
 - 최종 요구사항: 첫 번째 참고 이미지의 과도하게 넓어진 아티팩트 패널을 사용하지 않고, 두 번째 참고 이미지처럼 본문이 보이는 compact `full` 모드(420px)로 연다.
 - 적용 시점: 브라우저 새 창/직접 URL 진입, 하드 새로고침, 세션 ID 전환 모두 `full`로 초기화하며 이전 세션의 넓어진 폭을 승계하지 않는다.
