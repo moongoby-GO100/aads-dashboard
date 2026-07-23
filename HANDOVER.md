@@ -391,10 +391,12 @@
 - 반영:
   - `src/middleware.ts`에서 `unni.newtalk.kr` 루트 요청을 `/unni-naengmyeon`으로 내부 rewrite한다.
   - nginx의 `unni.newtalk.kr` HTTPS 프록시와 기존 대시보드 호스트 라우팅을 적용했다.
-  - 코드 커밋 `bade060` (`feat: unni.newtalk.kr domain routing with public access`)을 원격 `main`에 푸시하고 dashboard blue-green 슬롯에 반영했다.
+  - 기본 브랜치 라우팅 커밋 `bade060` (`feat: unni.newtalk.kr domain routing with public access`)을 원격 `main`에 푸시했다.
+  - 실제 dashboard blue-green 양 슬롯은 언니냉면 전체 페이지·자산·호스트 격리가 포함된 전용 릴리스 `ffd6d6f69a81`로 동기화했다.
 - 검증:
   - `https://unni.newtalk.kr/` → `HTTP/2 200`, `x-middleware-rewrite: /unni-naengmyeon`.
   - 공개 HTML에서 언니냉면 제목, canonical/OG URL, NAS 메뉴 이미지와 메뉴 설명을 확인했다.
   - `https://unni.newtalk.kr/admin`, `/assistant` → `307 /`로 차단되고, 기존 `https://aads.newtalk.kr/unni-naengmyeon` → `HTTP/2 200`을 확인했다.
-  - `aads-dashboard:3100`, `aads-dashboard-green:3101` 양 슬롯은 Docker health 기준 healthy다.
-- 주의: Browser Bridge 스크린샷은 2회 timeout되어 브라우저 캡처 대신 공개 HTTP, HTML, 정적 자산, 컨테이너 health 검증으로 대체했다. `public/manager/env_unknown.json`의 기존 미커밋 변경은 이번 커밋에서 제외해 보존했다.
+  - `aads-dashboard:3100`, `aads-dashboard-green:3101` 양 슬롯은 Docker health 기준 healthy이며 `AADS_RELEASE_SHA=ffd6d6f69a81`로 일치한다.
+  - nginx에 중복 등록된 `unni.newtalk.kr` 서버 블록 1세트를 제거하고 `nginx -t` 통과 후 무중단 reload했다. `conflicting server name` 경고는 제거됐다.
+- 주의: Browser Bridge 스크린샷은 2회 timeout되어 브라우저 캡처 대신 공개 HTTP, HTML, 정적 자산, 컨테이너 health 검증으로 대체했다. `public/manager/env_unknown.json`의 기존 미커밋 변경은 이번 커밋에서 제외해 보존했다. 언니냉면 전용 페이지는 별도 브랜치/compose overlay로 배포되므로 일반 dashboard `main` 배포 시 전용 릴리스를 다시 동기화해야 한다.
