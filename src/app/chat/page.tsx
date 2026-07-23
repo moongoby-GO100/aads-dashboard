@@ -2288,7 +2288,9 @@ export default function ChatPage() {
   // ── Theme / layout ──
   const [theme, setTheme] = useState<Theme>("dark");
   const [leftOpen, setLeftOpen] = useState(true);
-  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("wide");
+  // Start every page load at the compact, readable artifact width.
+  // The user can still opt into wide mode from the artifact header.
+  const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("report");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
@@ -3982,6 +3984,8 @@ export default function ChatPage() {
       setQueueCount(0);
     }
     if (isSessionIdChange) {
+      // Do not carry a wide artifact panel from the previous session.
+      setArtifactMode("full");
       // 세션 전환 시 edit state 초기화
       setEditingMsgId(null);
       setEditText("");

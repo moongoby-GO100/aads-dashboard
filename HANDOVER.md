@@ -1355,3 +1355,10 @@
 - 외부 검증에서 `https://unni.newtalk.kr/`은 HTTP 200, redirect 0회, canonical `https://unni.newtalk.kr`, 제목 `언니냉면 | 성신여대 배달 냉면`, 주소 `동소문로 90 1층`을 반환했다. 기존 `https://aads.newtalk.kr/unni-naengmyeon`은 HTTP 200, AADS 루트 인증 307은 유지됐다.
 - Playwright 모바일 390×844 전 페이지 스크롤 검증에서 이미지 19/19 로드, broken/pending 0, HTTP 오류·request failure 0, 가로 overflow 없음, 상단 header `position: fixed`, 주소·브랜드 본문 노출을 확인했다. 자동 QA `UNKNOWN`은 통과로 간주하지 않고 이 수동 브라우저 검증으로 대체했다.
 - 재발 위험: 기본 `main` 브랜치에는 아직 언니냉면 전용 도메인 커밋이 병합되지 않아 일반 dashboard 배포가 전용 사이트를 다시 덮어쓸 수 있다. 전용 릴리스 worktree/compose overlay를 유지하며, 후속으로 충돌 검수 후 `main` 통합 또는 호스트별 독립 배포 분리가 필요하다.
+
+## 2026-07-23 - 채팅 아티팩트 기본 폭 420px 고정
+
+- 증상: 채팅 세션을 새로 열거나 새로고침하면 과거에 저장된 아티팩트 폭과 `wide` 모드가 복원되어, 아티팩트가 약 760px 이상을 점유하고 중앙 대화창이 지나치게 좁아졌다.
+- 원인: `ChatArtifactPanel`이 `aads-chat-artifact-panel-width` 값을 초기 폭으로 복원하고, `ChatPage`의 초기 모드가 `wide`였다.
+- 조치: 데스크톱 최초 로드와 세션 전환 시 아티팩트를 `full` 모드·420px로 초기화한다. 같은 화면에서의 넓게 보기와 드래그 폭 조절 기능은 유지한다.
+- 변경 파일: `src/app/chat/page.tsx`, `src/app/chat/ChatArtifactPanel.tsx`.

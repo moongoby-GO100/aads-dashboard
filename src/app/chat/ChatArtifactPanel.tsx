@@ -32,8 +32,8 @@ const artifactStandaloneHref = (artifact: Artifact) => {
 };
 
 const ARTIFACT_PANEL_WIDTH_STORAGE_KEY = "aads-chat-artifact-panel-width";
-const ARTIFACT_PANEL_DEFAULT_WIDTH = 760;
 const ARTIFACT_PANEL_MIN_WIDTH = 420;
+const ARTIFACT_PANEL_DEFAULT_WIDTH = ARTIFACT_PANEL_MIN_WIDTH;
 const ARTIFACT_PANEL_MAX_FALLBACK = 1180;
 
 const clampArtifactPanelWidth = (width: number) => {
@@ -207,13 +207,9 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [tabBarWidth, setTabBarWidth] = useState(420);
-  const [desktopPanelWidthPx, setDesktopPanelWidthPx] = useState(() => {
-    if (typeof window === "undefined") return ARTIFACT_PANEL_DEFAULT_WIDTH;
-    const saved = Number(window.localStorage.getItem(ARTIFACT_PANEL_WIDTH_STORAGE_KEY));
-    return Number.isFinite(saved) && saved > 0
-      ? clampArtifactPanelWidth(saved)
-      : ARTIFACT_PANEL_DEFAULT_WIDTH;
-  });
+  // A reload must always return to the compact 420px layout. Persisting a
+  // previously widened value made the artifact panel dominate new chats.
+  const [desktopPanelWidthPx, setDesktopPanelWidthPx] = useState(ARTIFACT_PANEL_DEFAULT_WIDTH);
   const [isResizingArtifactPanel, setIsResizingArtifactPanel] = useState(false);
   // 배지 펄스 애니메이션 상태
   const [pulsedTabs, setPulsedTabs] = useState<Set<string>>(new Set());
@@ -347,6 +343,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     if (screenSize !== "desktop") return;
     window.localStorage.setItem(ARTIFACT_PANEL_WIDTH_STORAGE_KEY, String(desktopPanelWidthPx));
   }, [desktopPanelWidthPx, screenSize]);
+
+  useEffect(() => {
+    if (!sessionId || screenSize !== "desktop") return;
+    setArtifactMode("full");
+    setDesktopPanelWidthPx(ARTIFACT_PANEL_DEFAULT_WIDTH);
+  }, [screenSize, sessionId, setArtifactMode]);
 
   useEffect(() => {
     if (screenSize !== "desktop") return;
