@@ -312,7 +312,7 @@ const pickupConcepts = [
     id: "p5",
     name: "나이트 라이더 B-1 · 글라스 픽업",
     summary: "B-1의 딥그린·코랄 대비를 유지하고, 유리 부착과 4개 타공을 고려해 핵심 안내를 중앙 안전영역에 집중한 인쇄용 신규안",
-    image: `${ASSET_ROOT}/concept-b-bold-food.png`,
+    image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
     tone: "pickupB1Print",
     eyebrow: "DELIVERY · TAKE OUT",
     title: <>언니냉면<em>배달·포장 픽업존</em></>,
@@ -345,10 +345,10 @@ export const metadata: Metadata = {
   description: "실외 600×1800mm 양면 입간판 8안과 실내 유리용 600×600mm 픽업존 4안입니다.",
 };
 
-function BannerLogo({ inverse = false }: { inverse?: boolean }) {
+function BannerLogo({ inverse = false, showSymbol = true }: { inverse?: boolean; showSymbol?: boolean }) {
   return (
     <div className={`${styles.bannerLogo} ${inverse ? styles.inverseLogo : ""}`}>
-      <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />
+      {showSymbol && <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />}
       <strong>언니냉면</strong>
     </div>
   );
@@ -540,8 +540,9 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
           sizes="600px"
         />
         <div className={styles.pickupShade} />
+        {isPrintB1 && <div className={styles.p5TopArtifactMask} aria-hidden="true" />}
         <div className={styles.pickupInner}>
-          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} />
+          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} showSymbol={!isPrintB1} />
           <span>{concept.eyebrow}</span>
           <h4>{concept.title}</h4>
           <strong>{concept.guide}</strong>

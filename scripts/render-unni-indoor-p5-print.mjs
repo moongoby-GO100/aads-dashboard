@@ -12,19 +12,29 @@ const conceptIds = (process.env.UNNI_INDOOR_IDS || "p5,p6,p7").split(",").map((i
 
 await fs.mkdir(outputRoot, { recursive: true });
 
-async function writePng(sourcePath, outputPath) {
+async function writePng(sourcePath, outputPath, { removeTopLeftPreview = false } = {}) {
   const image = sharp(sourcePath);
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height || Math.abs(metadata.width - printPixels) > 1 || Math.abs(metadata.height - printPixels) > 1) {
     throw new Error(`Unexpected indoor artwork dimensions: ${metadata.width}×${metadata.height}`);
   }
-  await image
+  const normalized = image
     // Chromium can round a CSS width to one additional output pixel. Normalize
     // that harmless rounding variance to the print specification exactly.
-    .resize(printPixels, printPixels, { fit: "fill" })
-    .withMetadata({ density: printDensity })
-    .png({ compressionLevel: 9 })
-    .toFile(outputPath);
+    .resize(printPixels, printPixels, { fit: "fill" });
+  // Some legacy B-1 background exports include a tiny preview of the whole
+  // design in their top-left corner. Remove it in the final print asset as a
+  // defensive output step; the live P5 layout also masks that region.
+  if (removeTopLeftPreview) {
+    normalized.composite([{
+      input: {
+        create: { width: 1300, height: 600, channels: 4, background: "#031613" },
+      },
+      top: 0,
+      left: 0,
+    }]);
+  }
+  await normalized.withMetadata({ density: printDensity }).png({ compressionLevel: 9 }).toFile(outputPath);
 }
 
 async function writeHoleGuide(artworkPath, outputPath) {
@@ -81,7 +91,7 @@ try {
     await page.addStyleTag({ content: `[data-export="indoor-${id}"] [class*="guides"] { display: none !important; }` });
     await banner.screenshot({ path: artworkTemp, animations: "disabled", timeout: 180_000 });
     const artworkPath = path.join(outputRoot, `indoor-${id}-glass-pickup-300dpi.png`);
-    await writePng(artworkTemp, artworkPath);
+    await writePng(artworkTemp, artworkPath, { removeTopLeftPreview: id === "p5" });
     await fs.unlink(artworkTemp);
     await writeHoleGuide(artworkPath, path.join(outputRoot, `indoor-${id}-glass-pickup-hole-guide-300dpi.png`));
     await writePreview(artworkPath, id);

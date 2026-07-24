@@ -1428,3 +1428,10 @@
 - 출력물: P6·P7 각각 최종 아트워크와 타공 가이드가 `public/brands/unni-naengmyeon/banners-20260722/print/300dpi/`에 있으며, Sharp metadata로 7,087×7,087px·300DPI·sRGB를 확인했다.
 - 검증: 대상 ESLint, `git diff --check`, Next.js production build, 로컬 배너 페이지 및 P6/P7 인쇄 원본 HTTP 200, 축소 육안 검수를 완료했다.
 - 인쇄 주의: 글자·캔버스는 300DPI이나 냉면 사진은 기존 웹 원본을 확대 사용했다. 발주 전 업체의 CMYK·도련·타공 템플릿을 받은 뒤 최종 변환·좌표 대조가 필요하다.
+
+## 2026-07-24 - INDOOR P5 상단 축소 이미지 제거
+
+- CEO 요청: `나이트 라이더 B-1 · 글라스 픽업` 300DPI 다운로드 원본의 상단 작은 축소 이미지를 제거한다.
+- 변경: P5만 공용 로고 심볼을 숨겨 워드마크만 남기고, 배경을 깨끗한 냉면 사진 원본으로 교체했다. 웹 조판의 상단 좌측 마스킹과 인쇄 렌더러의 방어적 정리 단계를 함께 적용해, 브라우저 미리보기·일반 PNG·300DPI 아트워크·타공 가이드에서 같은 축소 이미지를 제거한다.
+- 재출력: `indoor-p5.png`, `indoor-p5-glass-pickup-300dpi.png`, `indoor-p5-glass-pickup-hole-guide-300dpi.png`.
+- 검증: 두 300DPI 파일은 각각 7,087×7,087px·300DPI이며, 상단 좌측 원본 픽셀 크롭과 축소본에서 불필요한 축소 이미지가 없음을 확인했다. 대상 ESLint·`git diff --check`·Next.js production build를 통과했다.

@@ -195,6 +195,7 @@
 .pickupB1Print { color: white; background: #071f1b; }
 .pickupB1Print .pickupImage { object-position: 50% 62%; transform: scale(1.18); opacity: .56; }
 .pickupB1Print .pickupShade { background: radial-gradient(circle at 78% 78%, rgba(244,93,72,.34), transparent 28%), linear-gradient(135deg, rgba(3,22,19,.99) 0%, rgba(3,22,19,.94) 52%, rgba(3,22,19,.64) 100%); }
+.p5TopArtifactMask { position: absolute; z-index: 0; top: 0; left: 0; width: 20%; height: 12%; background: #031613; }
 .pickupB1Print .pickupInner { padding: 10.2cqw 10.5cqw; }
 .pickupB1Print .pickupInner .bannerLogo { gap: 3.2cqw; }
 .pickupB1Print .pickupInner .bannerLogo img { width: 15.5cqw; height: 15.5cqw; border-radius: 2.6cqw; }
