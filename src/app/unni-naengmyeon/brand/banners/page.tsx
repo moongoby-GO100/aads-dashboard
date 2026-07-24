@@ -527,12 +527,14 @@ function OutdoorConceptCard({ concept }: { concept: OutdoorConcept }) {
 
 function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number] }) {
   const isB1 = concept.id === "p4";
+  const isPrintP4 = concept.id === "p4";
   const isPrintB1 = concept.id === "p5";
   const isPrintFood = concept.id === "p6" || concept.id === "p7";
+  const isPrintReady = isPrintP4 || isPrintB1 || isPrintFood;
   return (
     <article className={styles.pickupConcept}>
       <div><span>INDOOR {concept.id.toUpperCase()}</span><h3>{concept.name}</h3><p>{concept.summary}</p></div>
-      <div className={`${styles.pickupBanner} ${styles[concept.tone]}`} data-export={`indoor-${concept.id}`}>
+      <div className={`${styles.pickupBanner} ${styles[concept.tone]} ${isPrintP4 ? styles.p4Print : ""}`} data-export={`indoor-${concept.id}`}>
         <Image
           className={styles.pickupImage}
           src={concept.image.startsWith("/") ? concept.image : `${ASSET_ROOT}/pickup/${concept.image}`}
@@ -541,7 +543,7 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
           sizes="600px"
         />
         <div className={styles.pickupShade} />
-        {isPrintB1 && <div className={styles.p5TopArtifactMask} aria-hidden="true" />}
+        {(isPrintP4 || isPrintB1) && <div className={styles.p5TopArtifactMask} aria-hidden="true" />}
         <div className={styles.pickupInner}>
           <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} showSymbol={!isPrintB1} />
           <span>{concept.eyebrow}</span>
@@ -549,10 +551,10 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
           <strong>{concept.guide}</strong>
         </div>
         {!isB1 && !isPrintB1 && !isPrintFood && <ProductionGuides square />}
-        {(isPrintB1 || isPrintFood) && <ProductionGuides square holes />}
+        {isPrintReady && <ProductionGuides square holes />}
       </div>
       <DownloadLink file={`indoor-${concept.id}.png`}>{concept.name} PNG</DownloadLink>
-      {(isPrintB1 || isPrintFood) && <>
+      {isPrintReady && <>
         <DownloadLink file={`indoor-${concept.id}-glass-pickup-300dpi.png`} print>300DPI 인쇄용 다운로드</DownloadLink>
         <DownloadLink file={`indoor-${concept.id}-glass-pickup-hole-guide-300dpi.png`} print>타공 위치 가이드 다운로드</DownloadLink>
       </>}

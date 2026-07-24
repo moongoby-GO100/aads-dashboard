@@ -9,7 +9,7 @@ const pageUrl = process.env.UNNI_BANNER_URL || "http://127.0.0.1:3100/unni-naeng
 const printPixels = 7087; // 600mm at 300DPI, rounded to the nearest whole pixel.
 const printDensity = 300;
 const renderPixels = Number(process.env.UNNI_PRINT_RENDER_PIXELS || printPixels);
-const conceptIds = (process.env.UNNI_INDOOR_IDS || "p5,p6,p7").split(",").map((id) => id.trim()).filter(Boolean);
+const conceptIds = (process.env.UNNI_INDOOR_IDS || "p4,p5,p6,p7").split(",").map((id) => id.trim()).filter(Boolean);
 
 await fs.mkdir(outputRoot, { recursive: true });
 
@@ -29,7 +29,7 @@ async function writePng(sourcePath, outputPath, { removeTopLeftPreview = false }
   if (removeTopLeftPreview) {
     normalized.composite([{
       input: {
-        create: { width: 1300, height: 600, channels: 4, background: "#031613" },
+        create: { width: 2100, height: 820, channels: 4, background: "#031613" },
       },
       top: 0,
       left: 0,
@@ -95,7 +95,7 @@ try {
     await page.addStyleTag({ content: `[data-export="indoor-${id}"] [class*="guides"] { display: none !important; }` });
     await banner.screenshot({ path: artworkTemp, animations: "disabled", timeout: 180_000 });
     const artworkPath = path.join(outputRoot, `indoor-${id}-glass-pickup-300dpi.png`);
-    await writePng(artworkTemp, artworkPath, { removeTopLeftPreview: id === "p5" });
+    await writePng(artworkTemp, artworkPath, { removeTopLeftPreview: id === "p4" || id === "p5" });
     await fs.unlink(artworkTemp);
     await writeHoleGuide(artworkPath, path.join(outputRoot, `indoor-${id}-glass-pickup-hole-guide-300dpi.png`));
     await writePreview(artworkPath, id);
