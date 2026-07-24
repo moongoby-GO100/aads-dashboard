@@ -123,7 +123,7 @@ export interface Artifact {
   id: string;
   session_id: string;
   workspace_id?: string;
-  artifact_type: "report" | "code" | "chart" | "dashboard" | "text" | "image" | "file" | "table" | "full_response" | "html_preview";
+  artifact_type: "report" | "code" | "chart" | "dashboard" | "text" | "image" | "file" | "table" | "task_card" | "full_response" | "html_preview";
   title: string;
   content: string;
   metadata?: Record<string, unknown>;

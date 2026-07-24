@@ -2925,7 +2925,8 @@ export default function ChatPage() {
     resumeRequestLastAtRef.current.set(key, now);
     return fetch(`${BASE_URL}/chat/sessions/${sessionId}/resume`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` },
+      credentials: "include",
+      headers: authHdrs(),
     })
       .then((r) => r.ok ? r.json() : null)
       .finally(() => {
@@ -3023,7 +3024,7 @@ export default function ChatPage() {
       const replayLastEventId = replayFromStart ? "0" : (lastEventIdRef.current || "0");
       const resp = await fetch(
         `${BASE_URL}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(replayLastEventId)}`,
-        { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: controller.signal },
+        { credentials: "include", headers: authHdrs(), signal: controller.signal },
       );
       if (!resp.ok || !resp.body) throw new Error("execution attach failed");
 
@@ -3466,6 +3467,7 @@ export default function ChatPage() {
     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
     fetch(`${BASE}/chat/workspaces/${activeWs}/roles`, {
+      credentials: "include",
       headers: authHdrs(),
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -4483,6 +4485,7 @@ export default function ChatPage() {
     try {
       const res = await fetch(`${BASE_URL}/image/generate`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json", ...authHdrs() },
         body: JSON.stringify({ prompt: imageGenPrompt }),
       });
@@ -5543,7 +5546,7 @@ export default function ChatPage() {
                 currentExecutionIdRef.current
                   ? `${BASE_URL}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`
                   : `${BASE_URL}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
-                { headers: { "Authorization": `Bearer ${localStorage.getItem("aads_token") || ""}` }, signal: resumeAbort.signal }
+                { credentials: "include", headers: authHdrs(), signal: resumeAbort.signal }
               );
             } catch (resumeFetchErr) {
               clearTimeout(resumeTimeout);
@@ -5890,6 +5893,7 @@ export default function ChatPage() {
     if (activeSession) {
       fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
         method: "POST",
+        credentials: "include",
         headers: { ...authHdrs() },
       }).catch(() => {});
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
@@ -5934,6 +5938,7 @@ export default function ChatPage() {
     setBgPartialContent("");
     fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
       method: "POST",
+      credentials: "include",
       headers: { ...authHdrs() },
     }).catch(() => {});
     const sid = activeSession.id;
@@ -5965,6 +5970,7 @@ export default function ChatPage() {
       // 1) 기존 메시지 + AI 응답 삭제
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
         method: "DELETE",
+        credentials: "include",
         headers: { ...authHdrs() },
       });
       if (res.ok) {
@@ -5995,6 +6001,7 @@ export default function ChatPage() {
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
         method: "DELETE",
+        credentials: "include",
         headers: { ...authHdrs() },
       });
       if (res.ok) {
@@ -6059,6 +6066,7 @@ export default function ChatPage() {
     try {
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate?mode=${encodeURIComponent(mode)}`, {
         method: "POST",
+        credentials: "include",
         headers: { ...authHdrs() },
         signal: abortCtrl.current.signal,
       });
@@ -6458,7 +6466,7 @@ export default function ChatPage() {
   // 전체 세션에서 사용 중인 태그 목록 수집
   const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
   const filteredArtifacts = useMemo(() => artifacts.filter((a) => {
-    if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table";
+    if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table" || a.artifact_type === "task_card";
     if (artifactTab === "dialog") return a.artifact_type === "full_response";
     if (artifactTab === "code") return a.artifact_type === "code";
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
@@ -6496,10 +6504,11 @@ export default function ChatPage() {
   // OHVIS 3-Tier: task_card SSE 이벤트 수신 시 아티팩트 자동 갱신
   useEffect(() => {
     const handler = () => {
-      if (!sessionId || artifactFetchingRef.current) return;
+      const currentSessionId = activeSession?.id;
+      if (!currentSessionId || artifactFetchingRef.current) return;
       artifactFetchingRef.current = true;
       setTimeout(() => {
-        chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionId}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
+        chatApi<Artifact[]>(`/chat/artifacts?session_id=${currentSessionId}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
           .then((items) => {
             setArtifactListTruncated(items.length > CHAT_ARTIFACT_RENDER_LIMIT);
             setArtifacts(items.slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
@@ -6510,7 +6519,7 @@ export default function ChatPage() {
     };
     window.addEventListener("ohvis-task-update", handler);
     return () => window.removeEventListener("ohvis-task-update", handler);
-  }, [sessionId]);
+  }, [activeSession?.id]);
 
   const artifactCounts: Record<string, number> = useMemo(() => ({
     report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table" || a.artifact_type === "task_card").length,
@@ -8914,18 +8923,16 @@ export default function ChatPage() {
                 onClick={async () => {
                   try {
                     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
-                    const token = localStorage.getItem("aads_token");
-                    const headers: Record<string, string> = { "Content-Type": "application/json" };
-                    if (token) headers["Authorization"] = `Bearer ${token}`;
+                    const headers: Record<string, string> = { "Content-Type": "application/json", ...authHdrs() };
                     // 현재 순서 조회
-                    const cur = await fetch(`${BASE}/settings/auth-keys`, { headers }).then(r => r.json());
+                    const cur = await fetch(`${BASE}/settings/auth-keys`, { credentials: "include", headers }).then(r => r.json());
                     const keys = cur?.keys || [];
                     const currentPrimary = keys?.[0];
                     const nextKey = keys?.find((k: AuthKeyStatus) => k?.key_name && k.key_name !== currentPrimary?.key_name) || keys?.[1];
                     if (!nextKey?.key_name) return;
                     // 순서 변경
                     await fetch(`${BASE}/settings/auth-keys`, {
-                      method: "POST", headers, body: JSON.stringify({ primary: nextKey.key_name }),
+                      method: "POST", credentials: "include", headers, body: JSON.stringify({ primary: nextKey.key_name }),
                     });
                     await fetchKeyStatus();
                   } catch { /* ignore */ }

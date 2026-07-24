@@ -8,8 +8,18 @@ export function getToken(): string | null {
   if (token) {
     const secure = window.location.protocol === 'https:' ? '; Secure' : '';
     document.cookie = `aads_token=${token}; path=/; max-age=${24 * 7 * 3600}; SameSite=Lax${secure}`;
+    return token;
   }
-  return token;
+  const cookieToken = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("aads_token="))
+    ?.split("=")[1];
+  if (cookieToken) {
+    const decoded = decodeURIComponent(cookieToken);
+    localStorage.setItem("aads_token", decoded);
+    return decoded;
+  }
+  return null;
 }
 
 export function authHdrs(): Record<string, string> {
@@ -37,6 +47,7 @@ function handleChat401(): void {
 export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...opts,
+    credentials: opts?.credentials ?? "include",
     headers: {
       "Content-Type": "application/json",
       ...authHdrs(),
@@ -76,6 +87,7 @@ export async function uploadChatFile(file: File, sessionId: string): Promise<{
   formData.append("file", file);
   const res = await fetch(`${BASE_URL}/chat/files/upload?session_id=${sessionId}&uploaded_by=user`, {
     method: "POST",
+    credentials: "include",
     headers: { ...authHdrs() },
     body: formData,
   });

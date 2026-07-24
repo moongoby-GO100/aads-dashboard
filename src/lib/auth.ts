@@ -92,7 +92,15 @@ export function syncTokenCookieFromStorage(): string | null {
   if (typeof window === "undefined") return null;
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) setTokenCookie(token);
-  return token;
+  if (token) return token;
+  const cookieToken = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${TOKEN_KEY}=`))
+    ?.split("=")[1];
+  if (!cookieToken) return null;
+  const decoded = decodeURIComponent(cookieToken);
+  localStorage.setItem(TOKEN_KEY, decoded);
+  return decoded;
 }
 
 function clearTokenCookie() {

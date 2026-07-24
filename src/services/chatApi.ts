@@ -8,12 +8,21 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("aads_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) return { Authorization: `Bearer ${token}` };
+  const cookieToken = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("aads_token="))
+    ?.split("=")[1];
+  if (!cookieToken) return {};
+  const decoded = decodeURIComponent(cookieToken);
+  localStorage.setItem("aads_token", decoded);
+  return { Authorization: `Bearer ${decoded}` };
 }
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
+    credentials: options?.credentials ?? "include",
     headers: {
       "Content-Type": "application/json",
       ...getAuthHeaders(),
@@ -224,6 +233,7 @@ export const chatApi = {
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
       signal,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...getAuthHeaders(),

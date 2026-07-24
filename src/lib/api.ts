@@ -122,7 +122,15 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("aads_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) return { Authorization: `Bearer ${token}` };
+  const cookieToken = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("aads_token="))
+    ?.split("=")[1];
+  if (!cookieToken) return {};
+  const decoded = decodeURIComponent(cookieToken);
+  localStorage.setItem("aads_token", decoded);
+  return { Authorization: `Bearer ${decoded}` };
 }
 
 // AADS-AUTH-401: 401 응답 시 토큰 정리 + 로그인 페이지 리다이렉트 (중복 실행 방지)
@@ -146,6 +154,7 @@ function handle401Redirect(): void {
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
+    credentials: options?.credentials ?? "include",
     headers: {
       "Content-Type": "application/json",
       ...getAuthHeaders(),
