@@ -103,7 +103,9 @@ export interface SSEChunk {
     // Gemini 재시도 등 스트림 초기화
     | "stream_reset"
     // LLM/provider retry progress updates
-    | "retry_progress";
+    | "retry_progress"
+    // OHVIS 3-Tier task events
+    | "task_plan" | "task_update" | "task_card";
   content?: string;
   message?: ChatMessage;
   summary?: string;
@@ -118,6 +120,10 @@ export interface SSEChunk {
   model?: string;
   cost?: string;
   intent?: string;
+  // OHVIS 3-Tier task fields
+  task_id?: string;
+  task_status?: string;
+  steps?: Array<{label: string; status: string}>;
   // thinking
   thinking?: string;
   thinking_summary?: string;

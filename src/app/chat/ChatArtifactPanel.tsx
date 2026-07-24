@@ -2,6 +2,7 @@
 import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
+import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
 
@@ -697,7 +698,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 .filter(({ a }) => {
                   const ms = !searchQuery || a.title.toLowerCase().includes(searchQuery.toLowerCase());
                   const mt = !typeFilter || a.artifact_type === typeFilter ||
-                    (typeFilter === "report" && (a.artifact_type === "report" || a.artifact_type === "text")) ||
+                    (typeFilter === "report" && (a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "task_card")) ||
                     (typeFilter === "other" && !["report", "text", "code", "table", "full_response"].includes(a.artifact_type));
                   return ms && mt;
                 });
@@ -1229,6 +1230,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         table: "\ud83d\udcca \ud45c",
                         image: "\ud83d\uddbc\ufe0f \uc774\ubbf8\uc9c0",
                         file: "\ud83d\udcce \ud30c\uc77c",
+                        task_card: "\ud83d\udccb \uc791\uc5c5",
                       };
                       const label = typeLabel[displayArtifact.artifact_type] || "\ud83d\udcc4 \ubb38\uc11c";
                       if (chars < 10) return null;
@@ -1325,6 +1327,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         >
                           {displayArtifact.content}
                         </pre>
+                      ) : displayArtifact.artifact_type === "task_card" ? (
+                        <TaskCard content={displayArtifact.content} />
                       ) : (
                         <MarkdownBlock text={displayArtifact.content} />
                       )}

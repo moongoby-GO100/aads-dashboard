@@ -5172,6 +5172,7 @@ export default function ChatPage() {
                             file: "📎 파일이 저장되었습니다",
                             table: "📋 테이블이 저장되었습니다",
                             html_preview: "🖼️ HTML 미리보기가 저장되었습니다",
+                            task_card: "📋 작업 카드가 저장되었습니다",
                           };
                           const firstType = added[0].artifact_type;
                           const msg = typeLabels[firstType] ?? "📁 아티팩트가 저장되었습니다";
@@ -6492,8 +6493,27 @@ export default function ChatPage() {
     setRoleKey(nextRole);
   }, [activeWs, activeSession, activeWsObj, getWorkspaceDefaultRole, roleLabels]);
 
+  // OHVIS 3-Tier: task_card SSE 이벤트 수신 시 아티팩트 자동 갱신
+  useEffect(() => {
+    const handler = () => {
+      if (!sessionId || artifactFetchingRef.current) return;
+      artifactFetchingRef.current = true;
+      setTimeout(() => {
+        chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionId}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
+          .then((items) => {
+            setArtifactListTruncated(items.length > CHAT_ARTIFACT_RENDER_LIMIT);
+            setArtifacts(items.slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+          })
+          .catch(() => {})
+          .finally(() => { artifactFetchingRef.current = false; });
+      }, 600);
+    };
+    window.addEventListener("ohvis-task-update", handler);
+    return () => window.removeEventListener("ohvis-task-update", handler);
+  }, [sessionId]);
+
   const artifactCounts: Record<string, number> = useMemo(() => ({
-    report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table").length,
+    report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table" || a.artifact_type === "task_card").length,
     dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,

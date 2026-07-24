@@ -441,6 +441,20 @@ export function useChatSSE() {
                   // 429 재시도 — 인플레이스 카운트 업데이트 (delta 아님)
                   setState((s) => ({ ...s, researchProgress: chunk.content || "⏳ 재시도 중..." }));
 
+                } else if (chunk.type === "task_plan") {
+                  // OHVIS Tier 1: 즉시 계획 응답
+                  const planText = `📋 **작업 계획**\n${chunk.content || ""}`;
+                  fullText += planText + "\n\n";
+                  tokenBufferRef.current.push(planText + "\n\n");
+                  startRenderLoop();
+                  updateStreamText(sessionId, fullText);
+
+                } else if (chunk.type === "task_update" || chunk.type === "task_card") {
+                  // OHVIS Tier 2/3: 태스크 카드 업데이트 → 모니터 리프레시
+                  window.dispatchEvent(new CustomEvent("ohvis-task-update", {
+                    detail: { taskId: chunk.task_id, status: chunk.task_status, steps: chunk.steps }
+                  }));
+
                 } else if (chunk.type === "done") {
                   sawTerminalEvent = true;
                   finalizeStream(chunk);
