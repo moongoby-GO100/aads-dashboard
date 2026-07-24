@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-07-24 14:02 KST - INDOOR P4 로고마크 상단 잘림 보정
+- CEO 요청: `indoor-p4-glass-pickup-300dpi.png`의 좌상단 로고마크 상단부가 잘려 보이는 문제를 빠르게 수정한다.
+- 원인: P4 인쇄 렌더에서 기존 로고 PNG의 상단 헤어 영역이 로고 박스 위 경계에 붙어 보였고, 좌상단에는 이전 미니 프리뷰 잔상이 남아 있었다.
+- 반영:
+  - `public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles-p4-safe.png`: P4 전용 안전 로고 PNG를 추가했다.
+  - `src/app/unni-naengmyeon/brand/banners/page.tsx`, `page.module.css`: P4에서만 안전 로고와 내부 패딩을 쓰도록 조정했다.
+  - `scripts/render-unni-indoor-p5-print.mjs`: P4 300DPI 출력 후 실측 좌표의 로고 박스를 안전 로고로 후처리하고, 기존 좌상단 제한 마스크는 P5에만 적용되도록 보강했다.
+  - `public/brands/unni-naengmyeon/banners-20260722/print/indoor-p4.png`, `print/300dpi/indoor-p4-glass-pickup-300dpi.png`, `print/300dpi/indoor-p4-glass-pickup-hole-guide-300dpi.png`를 재출력했다.
+- 검증:
+  - 로컬 3200 개발 서버 기준으로 P4를 렌더한 뒤, 최종 산출물에는 Sharp 직접 합성으로 안전 로고·타공 가이드·1,200px 미리보기를 재생성했다.
+  - Sharp metadata로 P4 원본·타공 가이드가 7,087×7,087px · 300DPI · sRGB PNG임을 확인했다. 웹 미리보기는 1,200×1,200px PNG다.
+  - 1,200px 미리보기 전체와 좌상단 확대 크롭을 육안 검수해 미니 프리뷰 잔상 제거, 로고마크 상단 여백 확보, 주요 텍스트 잘림 없음 확인.
+- 상태: 로컬 파일 수정·재출력·문서 기록 완료. 커밋·push·운영 배포는 이번 요청에서 명시되지 않아 미실행.
+
 ## 2026-07-23 18:33~18:50 KST - 언니냉면 나이트 라이더 B-2 사진형 300DPI 추가
 - CEO 요청: 냉면 사진이 크게 보이는 나이트 라이더 `B-2` 실외 600×1800mm 양면 시안을 만들고, 홈페이지 배너 페이지에서 인쇄용 300DPI로 내려받을 수 있게 반영한다.
 - 변경:

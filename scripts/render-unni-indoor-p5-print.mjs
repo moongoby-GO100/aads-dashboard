@@ -10,6 +10,7 @@ const printPixels = 7087; // 600mm at 300DPI, rounded to the nearest whole pixel
 const printDensity = 300;
 const renderPixels = Number(process.env.UNNI_PRINT_RENDER_PIXELS || printPixels);
 const conceptIds = (process.env.UNNI_INDOOR_IDS || "p4,p5,p6,p7").split(",").map((id) => id.trim()).filter(Boolean);
+const p4SafeLogoPath = path.join(root, "public/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles-p4-safe.png");
 
 await fs.mkdir(outputRoot, { recursive: true });
 
@@ -60,6 +61,35 @@ async function writeHoleGuide(artworkPath, outputPath) {
     .toFile(outputPath);
 }
 
+async function repairP4Logo(artworkPath) {
+  const boxSize = Math.round(printPixels * 0.14);
+  const boxRadius = Math.round(printPixels * 0.024);
+  const overlayLeft = Math.round(printPixels * 0.105);
+  const overlayTop = Math.round(printPixels * 0.07);
+  const mask = Buffer.from(`<svg width="${boxSize}" height="${boxSize}" xmlns="http://www.w3.org/2000/svg"><rect width="${boxSize}" height="${boxSize}" rx="${boxRadius}" ry="${boxRadius}" fill="#fff"/></svg>`);
+  const roundedLogo = await sharp(p4SafeLogoPath)
+    .resize(boxSize, boxSize, { fit: "fill" })
+    .composite([{ input: mask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+  const repaired = `${artworkPath}.repaired.png`;
+  await sharp(artworkPath)
+    .composite([
+      {
+        input: {
+          create: { width: Math.round(printPixels * 0.22), height: Math.round(printPixels * 0.066), channels: 4, background: "#031613" },
+        },
+        left: 0,
+        top: 0,
+      },
+      { input: roundedLogo, left: overlayLeft, top: overlayTop },
+    ])
+    .withMetadata({ density: printDensity })
+    .png({ compressionLevel: 9 })
+    .toFile(repaired);
+  await fs.rename(repaired, artworkPath);
+}
+
 async function writePreview(artworkPath, id) {
   await sharp(artworkPath)
     .resize(1200, 1200, { fit: "fill" })
@@ -95,7 +125,10 @@ try {
     await page.addStyleTag({ content: `[data-export="indoor-${id}"] [class*="guides"] { display: none !important; }` });
     await banner.screenshot({ path: artworkTemp, animations: "disabled", timeout: 180_000 });
     const artworkPath = path.join(outputRoot, `indoor-${id}-glass-pickup-300dpi.png`);
-    await writePng(artworkTemp, artworkPath, { removeTopLeftPreview: id === "p4" || id === "p5" });
+    await writePng(artworkTemp, artworkPath, { removeTopLeftPreview: id === "p5" });
+    if (id === "p4") {
+      await repairP4Logo(artworkPath);
+    }
     await fs.unlink(artworkTemp);
     await writeHoleGuide(artworkPath, path.join(outputRoot, `indoor-${id}-glass-pickup-hole-guide-300dpi.png`));
     await writePreview(artworkPath, id);

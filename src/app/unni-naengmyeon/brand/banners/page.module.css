@@ -193,6 +193,7 @@
 .pickupB1 .pickupInner h4 em { margin-top: 4.5cqw; color: #ff715d; font-size: .55em; letter-spacing: -.02em; line-height: 1.05; }
 .pickupB1 .pickupInner > strong { padding: 3.1cqw 2.5cqw; border: .35cqw solid rgba(255,255,255,.28); background: white; color: var(--green); font-size: 4.1cqw; letter-spacing: .01em; }
 .p4Print .pickupInner { padding: 7cqw 10.5cqw 10.2cqw; }
+.p4Print .pickupInner .bannerLogo img { padding: 1.4cqw; background: white; object-fit: contain !important; object-position: center top !important; }
 .p4Print .pickupInner > strong { right: 10.5cqw; bottom: 10.2cqw; left: 10.5cqw; }
 .pickupB1Print { color: white; background: #071f1b; }
 .pickupB1Print .pickupImage { object-position: 50% 62%; transform: scale(1.18); opacity: .56; }

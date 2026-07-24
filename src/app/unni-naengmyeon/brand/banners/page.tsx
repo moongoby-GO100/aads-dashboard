@@ -5,6 +5,7 @@ import styles from "./page.module.css";
 
 const ASSET_ROOT = "/brands/unni-naengmyeon/banners-20260722";
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
+const BRAND_LOGO_P4_SAFE = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles-p4-safe.png";
 
 type ConceptTone = "classic" | "night" | "nightB1" | "nightB2" | "nightD1" | "nightD2" | "ice" | "premium" | "coral";
 
@@ -346,10 +347,10 @@ export const metadata: Metadata = {
   description: "실외 600×1800mm 양면 입간판 8안과 실내 유리용 600×600mm 픽업존 4안입니다.",
 };
 
-function BannerLogo({ inverse = false, showSymbol = true }: { inverse?: boolean; showSymbol?: boolean }) {
+function BannerLogo({ inverse = false, showSymbol = true, logoSrc = BRAND_LOGO }: { inverse?: boolean; showSymbol?: boolean; logoSrc?: string }) {
   return (
     <div className={`${styles.bannerLogo} ${inverse ? styles.inverseLogo : ""}`}>
-      {showSymbol && <Image src={BRAND_LOGO} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />}
+      {showSymbol && <Image src={logoSrc} alt="언니냉면 컨셉 H 로고" width={1254} height={1254} />}
       <strong>언니냉면</strong>
     </div>
   );
@@ -545,7 +546,7 @@ function PickupConceptCard({ concept }: { concept: typeof pickupConcepts[number]
         <div className={styles.pickupShade} />
         {(isPrintP4 || isPrintB1) && <div className={styles.p5TopArtifactMask} aria-hidden="true" />}
         <div className={styles.pickupInner}>
-          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} showSymbol={!isPrintB1} />
+          <BannerLogo inverse={concept.id === "p2" || isB1 || isPrintB1 || isPrintFood} showSymbol={!isPrintB1} logoSrc={isPrintP4 ? BRAND_LOGO_P4_SAFE : BRAND_LOGO} />
           <span>{concept.eyebrow}</span>
           <h4>{concept.title}</h4>
           <strong>{concept.guide}</strong>
