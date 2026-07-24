@@ -73,7 +73,10 @@ try {
     viewport: { width: renderPixels + 160, height: renderPixels + 160 },
     deviceScaleFactor: 1,
   });
-  await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 120_000 });
+  // The banner page may keep development-only connections open. Rendering only
+  // needs the DOM, fonts, and decoded images below; waiting for a permanently
+  // idle network can therefore stall print export without improving output.
+  await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
   await page.waitForFunction(() => document.fonts.status === "loaded", null, { timeout: 30_000 });
 
   for (const id of conceptIds) {
