@@ -6,7 +6,8 @@ export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   const token = localStorage.getItem("aads_token");
   if (token) {
-    document.cookie = `aads_token=${token}; path=/; max-age=${24 * 7 * 3600}; SameSite=Lax`;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `aads_token=${token}; path=/; max-age=${24 * 7 * 3600}; SameSite=Lax${secure}`;
   }
   return token;
 }

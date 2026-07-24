@@ -20,6 +20,14 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aads_token");
+      document.cookie = "aads_token=; path=/; max-age=0";
+      window.location.href = "/login?redirect=" + encodeURIComponent(window.location.pathname);
+    }
+    throw new Error("인증 만료");
+  }
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
