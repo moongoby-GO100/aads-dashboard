@@ -1469,3 +1469,10 @@
 - 원인: P4 전용 안전 로고 `concept-h-wordmark-noodles-p4-safe.png`의 검정 마크 중심이 원본 1,254px 정사각형 기준으로 약 148px 아래에 있었다. 흰 박스와 타공 위치, 배너 문구는 정상이다.
 - 변경: 안전 로고 PNG의 검정 마크 중심 오프셋을 0px로 보정하고, P4 산출물 `indoor-p4.png`, `indoor-p4-glass-pickup-300dpi.png`, `indoor-p4-glass-pickup-hole-guide-300dpi.png`만 재출력했다.
 - 검증: Sharp metadata에서 P4 인쇄 원본이 7,087×7,087px·300DPI를 유지하는 것을 확인했고, 로고 확대 크롭으로 흰 박스 내부 중앙 정렬을 육안 검수했다.
+
+## 2026-07-24 14:48 KST - 언니냉면 등록용 JPG 로고 다운로드 추가
+- CEO 요청: `560 x 560 이상의 정사각형 이미지, 900KB 이하, JPG만 등록 가능` 조건에 맞는 로고 파일을 `https://unni.newtalk.kr/unni-naengmyeon/brand/logo`에서 다운로드할 수 있게 반영한다.
+- 생성 파일: `public/brands/unni-naengmyeon/logo-downloads/unni-naengmyeon-logo-1000-square.jpg`.
+- 규격: 기존 컨셉 H 메인 로고 PNG를 흰 배경으로 평탄화해 1,000×1,000px 정사각형 JPEG로 변환했다. 파일 크기는 39,351 bytes(약 38KB)로 900KB 제한 이하이다.
+- 변경: 로고 가이드 페이지의 USAGE 영역 상단에 `등록 조건 맞춤 로고 파일` 다운로드 카드를 추가하고, 동일 출처 JPG 다운로드 링크를 연결했다.
+- 검증 기준: Sharp metadata로 width/height/format/size를 확인하고, production build 및 공개 URL HTTP 200으로 최종 확인한다.
