@@ -4,6 +4,7 @@ import BrandNav from "../BrandNav";
 import styles from "./page.module.css";
 
 const LOGO_ROOT = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722";
+const DOWNLOAD_ROOT = "/brands/unni-naengmyeon/logo-downloads";
 
 const logoVariants = [
   { file: "concept-d-front-bowlcut-bowl.png", name: "D · 정면 바가지머리" },
@@ -43,6 +44,16 @@ export default function UnniLogoGuidePage() {
           <span>USAGE</span>
           <h2 id="logo-rules">멀리서도 한 번에<br />언니냉면답게</h2>
         </div>
+        <article className={styles.registrationDownload}>
+          <div>
+            <b>REGISTRATION JPG</b>
+            <h3>등록 조건 맞춤 로고</h3>
+            <p>560×560 이상 정사각형, 900KB 이하, JPG 업로드 조건에 맞춘 파일입니다.</p>
+          </div>
+          <a href={`${DOWNLOAD_ROOT}/unni-naengmyeon-logo-1000-square.jpg`} download>
+            JPG 다운로드
+          </a>
+        </article>
         <div className={styles.ruleGrid}>
           <article><b>01</b><h3>기본 조합</h3><p>컨셉 H 심볼 오른쪽에 굵은 `언니냉면` 워드마크를 배치합니다.</p></article>
           <article><b>02</b><h3>최소 여백</h3><p>로고 바깥에 글자 높이의 절반 이상 여백을 확보합니다.</p></article>

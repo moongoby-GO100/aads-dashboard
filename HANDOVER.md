@@ -455,3 +455,11 @@
 - 검증: unni.newtalk.kr 루트 200, /admin 307 차단, aads.newtalk.kr/unni-naengmyeon 200 호환 유지
 - NAS 메뉴 이미지 9종 모두 HTTP 200 확인
 - Release: a643fe1 (dashboard), green active(3101), blue standby(3100)
+
+## 2026-07-24 15:04 KST - unni logo registration JPG download
+
+- 원인: 로고 가이드에는 PNG 원본 열기만 제공되어, 560×560 이상 정사각형·900KB 이하·JPG 전용 등록 조건을 바로 만족하는 다운로드 파일이 없었다.
+- 조치: 컨셉 H 메인 로고 PNG를 흰 배경 1000×1000 JPEG로 변환해 `public/brands/unni-naengmyeon/logo-downloads/unni-naengmyeon-logo-1000-square.jpg`에 추가했다.
+- 조치: `/unni-naengmyeon/brand/logo`의 USAGE 영역에 등록 조건 맞춤 JPG 다운로드 카드를 추가했다.
+- 검증 기준: 공개 페이지 HTTP 200, JPG HTTP 200 및 `image/jpeg`, 실제 다운로드 파일 metadata `1000×1000`, 900KB 이하, Next.js build 통과.
+- 롤백: 본 변경 커밋을 revert하면 다운로드 카드와 JPG 원본만 제거된다. 기존 로고 가이드와 PNG 아카이브는 유지된다.
