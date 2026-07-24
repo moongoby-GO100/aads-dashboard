@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-07-24 17:25 KST - OHVIS TaskCard and artifact panel deployment closeout
+
+- 배경: OHVIS 3-Tier P0-P2 구현 중 대시보드가 작업 결과를 일반 채팅 메시지에 섞지 않고 작업 카드와 아티팩트 패널로 표시하도록 마감했다.
+- 조치: `TaskCard`, `ChatArtifactPanel`, 채팅 페이지 상태 병합, SSE 이벤트 수신, chat API 클라이언트를 커밋 `2364c21`로 `origin/main`에 반영했다.
+- 운영 상태: dashboard Blue(3100)와 Green(3101)은 모두 healthy이며 양 슬롯의 `AADS_RELEASE_SHA`는 `2364c2120eae`다. 공개 `/chat`은 로그인 리다이렉트 HTTP 307로 응답한다.
+- 검증: Next.js production build는 성공했고, 변경 파일 한정 ESLint는 오류 0건이다. 운영 번들에 `TaskCard`, `task_progress`, `task_complete`, `오비스 판단` 문자열이 포함됨을 확인했다.
+- 남은 리스크: 전체 `npm run lint`는 기존 전역 ESLint 오류 261건으로 실패한다. `public/manager/env_5.json`은 이번 작업 범위 밖 미추적 파일로 보존했다. 인증 브라우저 E2E는 미수행이며 API/컨테이너 검증으로 대체했다.
+
 ## 2026-07-23 14:21 KST - Chat artifact compact-width release ledger reconciliation
 - 불일치 실측: 운영 Blue/Green은 기능 브랜치 `c1b0978`을 실행했지만 정식 `origin/main`은 `cd491bd`여서 이전 완료보고가 브랜치별 커밋·푸시·배포 원장을 구분하지 않았다.
 - 정식 `main` 보강: 새 창/새로고침/세션 전환 시 아티팩트 패널을 `full` 420px로 초기화하고, 패널을 세션 ID로 재마운트해 이전 세션 폭을 승계하지 않는다.
