@@ -321,8 +321,8 @@ const pickupConcepts = [
   {
     id: "p6",
     name: "나이트 라이더 B-2 · 냉면 스포트라이트",
-    summary: "P5의 타공 안전영역은 유지하면서 실제 물냉면을 하단에 크게 드러낸 사진형 수정안. 유리 너머에서도 메뉴와 픽업 목적을 즉시 인지하도록 구성했습니다.",
-    image: "/brands/unni-naengmyeon/hero-naengmyeon-brass-v2.webp",
+    summary: "B-1 글라스 픽업(P5)과 같은 물냉면 사진을 사용하되, 타공 안전영역 안에서 사진을 더 선명하게 드러낸 인쇄용 스포트라이트 수정안입니다.",
+    image: "/brands/unni-naengmyeon/hero-naengmyeon-b1-pickup.webp",
     tone: "pickupB2Food",
     eyebrow: "DELIVERY · TAKE OUT",
     title: <>언니냉면<em>배달·포장 픽업존</em></>,

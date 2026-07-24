@@ -8,6 +8,7 @@ const outputRoot = path.join(root, "public/brands/unni-naengmyeon/banners-202607
 const pageUrl = process.env.UNNI_BANNER_URL || "http://127.0.0.1:3100/unni-naengmyeon/brand/banners";
 const printPixels = 7087; // 600mm at 300DPI, rounded to the nearest whole pixel.
 const printDensity = 300;
+const renderPixels = Number(process.env.UNNI_PRINT_RENDER_PIXELS || printPixels);
 const conceptIds = (process.env.UNNI_INDOOR_IDS || "p5,p6,p7").split(",").map((id) => id.trim()).filter(Boolean);
 
 await fs.mkdir(outputRoot, { recursive: true });
@@ -15,7 +16,7 @@ await fs.mkdir(outputRoot, { recursive: true });
 async function writePng(sourcePath, outputPath, { removeTopLeftPreview = false } = {}) {
   const image = sharp(sourcePath);
   const metadata = await image.metadata();
-  if (!metadata.width || !metadata.height || Math.abs(metadata.width - printPixels) > 1 || Math.abs(metadata.height - printPixels) > 1) {
+  if (!metadata.width || !metadata.height || Math.abs(metadata.width - renderPixels) > 1 || Math.abs(metadata.height - renderPixels) > 1) {
     throw new Error(`Unexpected indoor artwork dimensions: ${metadata.width}×${metadata.height}`);
   }
   const normalized = image
@@ -69,7 +70,7 @@ async function writePreview(artworkPath, id) {
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({
-    viewport: { width: printPixels + 160, height: printPixels + 160 },
+    viewport: { width: renderPixels + 160, height: renderPixels + 160 },
     deviceScaleFactor: 1,
   });
   await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 120_000 });
@@ -83,7 +84,7 @@ try {
       target.style.height = `${pixels}px`;
       target.style.maxWidth = "none";
       target.style.aspectRatio = "auto";
-    }, printPixels);
+    }, renderPixels);
     await banner.locator("img").evaluateAll((images) => Promise.all(images.map((image) => image.decode().catch(() => undefined))));
     await page.waitForTimeout(500);
 
