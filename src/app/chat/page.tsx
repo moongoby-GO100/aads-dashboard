@@ -129,7 +129,7 @@ function isProviderCapacityOrLimitText(value: string): boolean {
 
 const LEGACY_CANONICAL_DISPLAY_MODEL_ID: Record<string, string> = {
   "claude-sonnet": "claude-sonnet-4-6",
-  "claude-opus": "claude-opus-4-7",
+  "claude-opus": "claude-opus-5",
   "claude-opus-46": "claude-opus-4-6",
   "claude-haiku": "claude-haiku-4-5-20251001",
 };
@@ -141,6 +141,8 @@ const LEGACY_MODEL_ID_ALIASES: Record<string, string> = {
   "claude-3-5-sonnet-20241022": "claude-sonnet",
   "claude-3-sonnet-20240229": "claude-sonnet",
   "claude-2.1": "claude-sonnet",
+  "claude-opus-5": "claude-opus",
+  "claude-opus-4-8": "claude-opus",
   "claude-opus-4-7": "claude-opus",
   "claude-opus-4-5": "claude-opus",
   "claude-3-opus-20240229": "claude-opus",
