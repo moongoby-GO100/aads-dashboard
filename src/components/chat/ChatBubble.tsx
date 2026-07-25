@@ -327,6 +327,7 @@ export default function ChatBubble({
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
+  const [autoExpanded, setAutoExpanded] = useState(false);
 
   const isUser = message.role === "user";
   const rawContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
@@ -493,6 +494,20 @@ export default function ChatBubble({
         >
           {isStreaming && !displayContent ? (
             <span className="animate-pulse" style={{ color: "var(--text-secondary)" }}>···</span>
+          ) : intent === "auto_reaction" ? (
+            autoExpanded ? (
+              <>
+                <button className="text-xs mb-2 cursor-pointer" style={{ color: "#06b6d4" }} onClick={() => setAutoExpanded(false)}>▼ 접기</button>
+                <MarkdownContent content={displayContent} />
+              </>
+            ) : (
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAutoExpanded(true)}>
+                <span className="text-xs truncate" style={{ color: "#06b6d4", maxWidth: "90%" }}>
+                  {displayContent.slice(0, 120)}
+                </span>
+                <span className="text-xs flex-shrink-0" style={{ color: "var(--text-secondary)" }}>▶ 펼치기</span>
+              </div>
+            )
           ) : (
             <MarkdownContent content={displayContent} />
           )}
