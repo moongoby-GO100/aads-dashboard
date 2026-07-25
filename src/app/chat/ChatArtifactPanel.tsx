@@ -7,7 +7,7 @@ import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
 
 const ARTIFACT_PANEL_MIN_WIDTH = 420;
-const ARTIFACT_PANEL_DEFAULT_WIDTH = ARTIFACT_PANEL_MIN_WIDTH;
+const ARTIFACT_PANEL_DEFAULT_WIDTH = 600;
 const ARTIFACT_PANEL_MAX_FALLBACK = 1180;
 
 const clampArtifactPanelWidth = (width: number) => {

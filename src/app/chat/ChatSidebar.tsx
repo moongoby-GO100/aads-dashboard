@@ -47,6 +47,7 @@ export interface ChatSidebarProps {
   setSearch: (v: string) => void;
   createSession: () => void;
   deleteSession: (id: string) => void;
+  deleteWorkspace?: (id: string) => void;
   setShowAddProject: (v: boolean) => void;
   theme: Theme;
   toggleTheme: () => void;
@@ -65,7 +66,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
     filteredSessions, renaming, setRenaming, commitRename,
     activeSession, onSessionSelect, isInitialLoadRef,
     onSessionContextMenu, search, setSearch,
-    createSession, deleteSession, setShowAddProject, theme, toggleTheme,
+    createSession, deleteSession, deleteWorkspace, setShowAddProject, theme, toggleTheme,
     tagFilter, setTagFilter, allTags,
   } = props;
 
@@ -236,36 +237,58 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
             {workspaces.map((ws) => (
               <div key={ws.id} style={{ marginBottom: "4px" }}>
                 {/* Workspace header */}
-                <button
-                  onClick={() => onWorkspaceToggle(ws.id)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "7px 10px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.5px",
-                    textTransform: "uppercase",
-                    background: "none",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    color: activeWs === ws.id
-                      ? "var(--ct-accent)"
-                      : expandedWorkspaceIds.includes(ws.id)
-                        ? "var(--ct-text)"
-                        : "var(--ct-text2)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <span>{ws.icon || "📁"}</span>
-                  <span style={{ flex: 1 }}>{ws.name}</span>
-                  <span style={{ fontSize: "10px" }}>
-                    {expandedWorkspaceIds.includes(ws.id) ? "▾" : "▸"}
-                  </span>
-                </button>
+                <div style={{ display: "flex", alignItems: "center", borderRadius: "6px" }} className="ws-header-row">
+                  <button
+                    onClick={() => onWorkspaceToggle(ws.id)}
+                    style={{
+                      flex: 1,
+                      textAlign: "left",
+                      padding: "7px 10px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      letterSpacing: "0.5px",
+                      textTransform: "uppercase",
+                      background: "none",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      color: activeWs === ws.id
+                        ? "var(--ct-accent)"
+                        : expandedWorkspaceIds.includes(ws.id)
+                          ? "var(--ct-text)"
+                          : "var(--ct-text2)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span>{ws.icon || "📁"}</span>
+                    <span style={{ flex: 1 }}>{ws.name}</span>
+                    <span style={{ fontSize: "10px" }}>
+                      {expandedWorkspaceIds.includes(ws.id) ? "▾" : "▸"}
+                    </span>
+                  </button>
+                  {deleteWorkspace && (
+                    <button
+                      title="프로젝트 삭제"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`"${ws.name}" 프로젝트와 모든 세션을 삭제하시겠습니까?`))
+                          deleteWorkspace(ws.id);
+                      }}
+                      style={{
+                        width: "22px", height: "22px",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "none", borderRadius: "4px",
+                        background: "none", color: "var(--ct-text2)",
+                        cursor: "pointer", fontSize: "11px", opacity: 0.4,
+                        flexShrink: 0, marginRight: "2px",
+                      }}
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
 
                 {/* Sessions */}
                 {expandedWorkspaceIds.includes(ws.id) && (() => {

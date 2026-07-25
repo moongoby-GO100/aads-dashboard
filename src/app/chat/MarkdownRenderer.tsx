@@ -240,6 +240,46 @@ type CodeRendererProps = React.ComponentPropsWithoutRef<"code"> & {
   node?: unknown;
 };
 
+
+// ── File path detection ──
+const _FILE_EXT_RE = /\.(py|tsx?|jsx?|json|md|ya?ml|sh|sql|css|html|txt|conf|cfg|ini|toml|log|csv)$/i;
+const _FILE_PATH_RE = /^(\/root\/|app\/|src\/|\.\/|\.\.\\/|scripts\/|tests\/|docs\/|components\/|services\/|routers\/|public\/)/;
+const _IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|ico|bmp)$/i;
+function _isFilePath(t: string) { const s = t.trim(); return _FILE_EXT_RE.test(s) || _FILE_PATH_RE.test(s); }
+function _isImagePath(t: string) { return _IMAGE_EXT_RE.test(t.trim()); }
+
+function FilePathChip({ text, children }: { text: string; children: React.ReactNode }) {
+  const [copied, setCopied] = React.useState(false);
+  const isImg = _isImagePath(text);
+  return (
+    <code
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      title={copied ? "\u2705 \ubcf5\uc0ac\ub428" : "\ud074\ub9ad\ud558\uc5ec \ubcf5\uc0ac"}
+      style={{
+        background: copied ? "rgba(34,197,94,0.15)" : "rgba(108,99,255,0.12)",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        fontFamily: "monospace",
+        fontSize: "90%",
+        cursor: "pointer",
+        color: copied ? "#22c55e" : "var(--ct-accent)",
+        borderBottom: copied ? "1px solid #22c55e" : "1px dashed var(--ct-accent)",
+        transition: "all 0.2s",
+        userSelect: "none",
+      }}
+    >
+      {isImg ? "\ud83d\uddbc" : "\ud83d\udcc4"} {copied ? "\ubcf5\uc0ac\ub428" : children}
+    </code>
+  );
+}
+
 const createMarkdownComponents = (linkColor?: string, inlineMode = false): Components => ({
   p({ children }) {
     if (inlineMode) return <>{children}</>;
@@ -399,6 +439,10 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
     const isInline = Boolean(inline) || (!className && !rawCode.includes("\n"));
 
     if (isInline) {
+      const _codeText = String(children ?? "").trim();
+      if (_isFilePath(_codeText)) {
+        return <FilePathChip text={_codeText}>{children}</FilePathChip>;
+      }
       return (
         <code
           {...rest}

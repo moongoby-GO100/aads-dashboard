@@ -4449,6 +4449,14 @@ export default function ChatPage() {
     setContextMenu(null);
   }
 
+  async function deleteWorkspace(id: string) {
+    try {
+      await chatApi(`/chat/workspaces/${id}`, { method: "DELETE" });
+      setWorkspaces((prev) => prev.filter((w) => w.id !== id));
+      if (activeWs === id) { setActiveSession(null); setMessages([]); }
+    } catch { /* ignore */ }
+  }
+
   async function togglePin(session: ChatSession) {
     try {
       const updated = await chatApi<ChatSession>(`/chat/sessions/${session.id}`, {
@@ -7459,6 +7467,7 @@ export default function ChatPage() {
         onSessionContextMenu={onSessionContextMenu}
         search={search} setSearch={setSearch}
         createSession={openCreateSessionModal} deleteSession={deleteSession}
+        deleteWorkspace={deleteWorkspace}
         setShowAddProject={setShowAddProject}
         theme={theme} toggleTheme={toggleTheme}
         tagFilter={tagFilter} setTagFilter={setTagFilter} allTags={allTags}
