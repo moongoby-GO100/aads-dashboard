@@ -261,7 +261,7 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      title={copied ? "\u2705 \ubcf5\uc0ac\ub428" : "\ud074\ub9ad\ud558\uc5ec \ubcf5\uc0ac"}
+      title={copied ? "✅ 복사됨" : "클릭하여 복사"}
       style={{
         background: copied ? "rgba(34,197,94,0.15)" : "rgba(108,99,255,0.12)",
         padding: "2px 6px",
@@ -275,7 +275,7 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
         userSelect: "none",
       }}
     >
-      {isImg ? "\ud83d\uddbc" : "\ud83d\udcc4"} {copied ? "\ubcf5\uc0ac\ub428" : children}
+      {isImg ? "🖼️" : "📄"} {copied ? "복사됨" : children}
     </code>
   );
 }
