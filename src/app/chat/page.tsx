@@ -3073,6 +3073,13 @@ export default function ChatPage() {
             } else if (ev.type === "model_fallback") {
               if (activeSessionRef.current === attachSessionId) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
               continue;
+            } else if (ev.type === "task_plan") {
+              if (activeSessionRef.current === attachSessionId) {
+                const planMsg = ev.content || "\u2705 요청을 수신했습니다. 분석 중...";
+                setStreamBuf(planMsg);
+                setToolStatus(planMsg);
+              }
+              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
@@ -5123,6 +5130,13 @@ export default function ChatPage() {
             } else if (ev.type === "model_fallback") {
               if (!isStale()) setToolStatus(ev.content || `⚠️ ${ev.from_model} → ${ev.to_model} 전환 중...`);
               continue;
+            } else if (ev.type === "task_plan") {
+              if (!isStale()) {
+                const planMsg = ev.content || "\u2705 요청을 수신했습니다. 분석 중...";
+                setStreamBuf(planMsg);
+                setToolStatus(planMsg);
+              }
+              continue;
             } else if (ev.type === "delta" && typeof ev.content === "string") {
               let deltaContent = ev.content;
               if (isProviderCapacityOrLimitText(deltaContent)) {
@@ -6111,6 +6125,13 @@ export default function ChatPage() {
             }
             if (ev.type === "heartbeat") { resetSseTimeout(); continue; }
             resetSseTimeout();
+            } else if (ev.type === "task_plan") {
+              if (!isStale()) {
+                const planMsg = ev.content || "\u2705 요청을 수신했습니다. 분석 중...";
+                setStreamBuf(planMsg);
+                setToolStatus(planMsg);
+              }
+              continue;
             if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
