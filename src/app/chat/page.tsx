@@ -6125,13 +6125,14 @@ export default function ChatPage() {
             }
             if (ev.type === "heartbeat") { resetSseTimeout(); continue; }
             resetSseTimeout();
-            } else if (ev.type === "task_plan") {
+            if (ev.type === "task_plan") {
               if (!isStale()) {
                 const planMsg = ev.content || "\u2705 요청을 수신했습니다. 분석 중...";
                 setStreamBuf(planMsg);
                 setToolStatus(planMsg);
               }
               continue;
+            }
             if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
