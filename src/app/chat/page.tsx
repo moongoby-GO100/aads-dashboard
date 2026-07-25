@@ -6133,6 +6133,7 @@ export default function ChatPage() {
               }
               continue;
             }
+            }
             if (ev.type === "delta" && typeof ev.content === "string") {
               if (isProviderCapacityOrLimitText(ev.content)) {
                 if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
