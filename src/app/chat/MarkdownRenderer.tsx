@@ -243,7 +243,7 @@ type CodeRendererProps = React.ComponentPropsWithoutRef<"code"> & {
 
 // ── File path detection ──
 const _FILE_EXT_RE = /\.(py|tsx?|jsx?|json|md|ya?ml|sh|sql|css|html|txt|conf|cfg|ini|toml|log|csv)$/i;
-const _FILE_PATH_RE = /^(\/root\/|app\/|src\/|\.\/|\.\.\\/|scripts\/|tests\/|docs\/|components\/|services\/|routers\/|public\/)/;
+const _FILE_PATH_RE = /^(\/root\/|app\/|src\/|\.\/|\.\.\/|scripts\/|tests\/|docs\/|components\/|services\/|routers\/|public\/)/;
 const _IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|ico|bmp)$/i;
 function _isFilePath(t: string) { const s = t.trim(); return _FILE_EXT_RE.test(s) || _FILE_PATH_RE.test(s); }
 function _isImagePath(t: string) { return _IMAGE_EXT_RE.test(t.trim()); }
