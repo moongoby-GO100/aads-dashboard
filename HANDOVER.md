@@ -471,3 +471,11 @@
 - 조치: `/unni-naengmyeon/brand/logo`의 USAGE 영역에 등록 조건 맞춤 JPG 다운로드 카드를 추가했다.
 - 검증 기준: 공개 페이지 HTTP 200, JPG HTTP 200 및 `image/jpeg`, 실제 다운로드 파일 metadata `1000×1000`, 900KB 이하, Next.js build 통과.
 - 롤백: 본 변경 커밋을 revert하면 다운로드 카드와 JPG 원본만 제거된다. 기존 로고 가이드와 PNG 아카이브는 유지된다.
+
+## 2026-07-26 08:54 KST - chat scroll jump on question send
+
+- 원인: 질문 전송 직후 사용자 메시지와 streaming placeholder가 추가되는 동안 브라우저 기본 scroll anchoring이 장문 메시지 중간을 기준점으로 잡고, 동시에 상단 근접 자동 이전 대화 로드와 여러 직접 `scrollTop` 보정 경로가 경합해 채팅창이 상단으로 이동할 수 있었다.
+- 조치: `src/app/chat/page.tsx`에 공통 `scrollToMessagesBottom()` 보정 함수를 추가하고, 질문 전송 시작 시 8초 동안 이전 대화 자동 로드를 억제하며 하단 모드를 명시했다. 스트리밍 완료·폴링 복구·브리핑·중지 경로의 직접 스크롤 보정을 공통 함수로 통합했다.
+- 조치: 메시지 스크롤 컨테이너의 `overflowAnchor`를 `none`으로 바꾸고 하단 sentinel만 앵커 후보로 남겨, 장문 응답 DOM 높이 재계산 시 상단 메시지가 임의 기준점이 되지 않도록 했다.
+- 검증: `npx tsc --noEmit` 통과, `npm run build` 통과. 배포 후 `/chat` HTTP 200, 대시보드 컨테이너 healthy, 릴리스 SHA 확인이 필요하다.
+- 롤백: 본 변경 커밋을 revert하고 직전 dashboard 릴리스로 Blue/Green 전환하면 스크롤 정책을 이전 상태로 복구할 수 있다.
