@@ -522,3 +522,12 @@
   - 전체 `npm run lint`는 기존 대시보드 전역 오류 261건으로 실패했으며, 이번 변경 파일 대상 ESLint는 통과했다.
   - Browser Bridge `capture_screenshot`은 timeout되어 시각 캡처는 미완료이며, HTTP/HTML/build 검증으로 대체했다.
 - 롤백: 본 변경 커밋을 revert하면 조리법 페이지와 홈 상단 링크가 제거된다. 기존 언니냉면 메뉴/이미지/문의 페이지는 유지된다.
+
+## 2026-07-26 18:33 KST - chat scroll jump final deployment ledger closeout
+
+- 요청: 채팅창에서 질문하면 스크롤이 상단으로 이동되는 현상 조치 완료 보고가 commit/push/deploy/document 원장과 충돌한다는 지적에 따라 실제 원장을 재검증했다.
+- 코드 상태: 스크롤 조치 커밋 `074eaff5d524`는 이후 문서 보정 및 언니냉면 조리법 커밋을 거쳐 `origin/main` 최신 `49caaf9cf8b5`에 포함되어 있다. `src/app/chat/page.tsx`에는 질문 전송 직후 하단 고정, 이전 대화 prepend 위치 보존, 메시지 컨테이너 `overflowAnchor: none`, 하단 sentinel anchor가 반영되어 있다.
+- 검증: `npx tsc --noEmit` 통과. 외부 `https://aads.newtalk.kr/chat`, active `127.0.0.1:3101/chat`, standby `127.0.0.1:3100/chat`는 인증 보호 경로로 `307 /login?redirect=%2Fchat`를 반환했다.
+- 배포: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260726-182251.log` 기준 `18:31:59 KST` Blue/Green 배포 완료. Active는 green `3101`, standby는 blue `3100`이며 양 컨테이너 모두 `AADS_RELEASE_SHA=49caaf9cf8b5`, Docker health `healthy`다.
+- 정정: 이전 중간 보고의 `fee516f0fa70` 배포 완료 표기는 당시 기준으로는 스크롤 조치가 포함된 릴리스였지만, 최신 `origin/main`과 운영 active SHA가 다를 수 있어 최종 완료 보고 근거로는 부족했다. 최종 완료 기준은 이번 `49caaf9cf8b5` 배포 로그와 양 슬롯 SHA 일치로 보정한다.
+- 미검증: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 자동 QA 인증 누락으로 미실행이다. 코드/타입검사/HTTP/컨테이너/SHA 검증으로 대체했다.
