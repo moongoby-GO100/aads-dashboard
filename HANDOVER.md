@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 08:55 KST - Chat SSE replay duplicate guard follow-up
+
+- 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 대형 세션 렌더 완화 후에도 질문 중 브라우저 멈춤, 스크롤 상단 이동, 중복 응답 체감이 재발했다.
+- 실측: 대상 세션은 assistant 1,310건/user 791건, assistant 본문 합계 2,876,744자, user 본문 합계 186,381자였다.
+- 원인: 대형 세션 DOM/Markdown 완화는 반영됐지만, 일반 전송 재연결 경로에서 `currentExecutionIdRef`가 있고 `last_event_id`가 비어 있으면 `/chat/executions/{id}/events?last_event_id=0`으로 과거 이벤트를 처음부터 다시 받을 수 있었다.
+- 조치: `src/app/chat/page.tsx`에 SSE delta overlap guard를 추가하고, 일반 전송/실행 attach/재연결/재생성 루프에 이벤트 ID 중복 무시와 delta 중복 병합 방지를 적용했다.
+- 조치: `last_event_id`가 없을 때는 execution replay 대신 session `stream-resume` offset 경로를 사용해 이미 화면에 표시된 partial 뒤에 과거 delta가 다시 붙지 않게 했다.
+- 검증: `npx tsc --noEmit`, `npm run build` 통과.
+
 ## 2026-07-27 08:12 KST - Chat 7a1b residual freeze/scroll mitigation
 
 - 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 이전 P0 패치 후에도 질문 시 브라우저 멈춤과 스크롤 상단 이동이 재발했다.

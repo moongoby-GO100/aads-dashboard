@@ -256,6 +256,19 @@ function normalizedMessageContent(message: ChatMessage): string {
   return (message.content || "").trim();
 }
 
+function appendSseDeltaWithoutReplayDuplication(existing: string, delta: string): string {
+  if (!delta) return existing;
+  if (!existing) return delta;
+  if (existing.endsWith(delta)) return existing;
+  const maxOverlap = Math.min(existing.length, delta.length, 2000);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    if (existing.endsWith(delta.slice(0, overlap))) {
+      return existing + delta.slice(overlap);
+    }
+  }
+  return existing + delta;
+}
+
 function isFinalizedSyntheticAssistantMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
   if (!message.id.startsWith("ai-")) return false;
@@ -3140,7 +3153,7 @@ export default function ChatPage() {
                 setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
                 continue;
               }
-              full += ev.content;
+              full = appendSseDeltaWithoutReplayDuplication(full, ev.content);
               setStreamBuf(full);
               if (toolStatusRef.current) setToolStatus(null);
             } else if (ev.type === "heartbeat") {
@@ -5041,6 +5054,9 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let buf = "";
       let accumulatedToolCalls: ChatToolEvent[] = [];
+      const seenStreamEventIds = new Set<string>();
+      let currentStreamEventId = "";
+      let skipStreamEvent = false;
 
       // Phase4: 토큰 버퍼링 — SSE 끊김 시에도 표시 지속 (2초 분량 선행 버퍼)
       const _tokenQueue: string[] = [];
@@ -5088,8 +5104,15 @@ export default function ChatPage() {
         for (const line of lines) {
           if (isStale()) break;
           // Phase4: Redis Stream entry ID 캡처 (Last-Event-ID 재연결용)
-          if (line.startsWith("id:")) { lastEventIdRef.current = line.slice(3).trim(); continue; }
+          if (line.startsWith("id:")) {
+            currentStreamEventId = line.slice(3).trim();
+            skipStreamEvent = Boolean(currentStreamEventId && seenStreamEventIds.has(currentStreamEventId));
+            if (currentStreamEventId) seenStreamEventIds.add(currentStreamEventId);
+            lastEventIdRef.current = currentStreamEventId;
+            continue;
+          }
           if (!line.startsWith("data: ")) continue;
+          if (skipStreamEvent) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
           let sseError: Error | null = null;
@@ -5209,14 +5232,18 @@ export default function ChatPage() {
                 aiCaptureRequestedRef.current = true;
                 deltaContent = deltaContent.replace(/\[SCREEN_CAPTURE_REQUEST\]/g, "");
               }
-              full += deltaContent;
+              const nextFull = appendSseDeltaWithoutReplayDuplication(full, deltaContent);
+              const appendedDelta = nextFull.length > full.length ? nextFull.slice(full.length) : "";
+              full = nextFull;
               // Phase4: 버퍼에 토큰 추가 → 드레인 타이머가 30ms 간격으로 표시
-              _tokenQueue.push(deltaContent);
-              _startDrain();
+              if (appendedDelta) {
+                _tokenQueue.push(appendedDelta);
+                _startDrain();
+              }
               if (toolStatusRef.current && !isStale()) setToolStatus(null);
             } else if (ev.type === "token" && typeof ev.text === "string") {
               // legacy fallback
-              full += ev.text;
+              full = appendSseDeltaWithoutReplayDuplication(full, ev.text);
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               streamGotFinal = true;
@@ -5620,10 +5647,12 @@ export default function ChatPage() {
             const resumeTimeout = setTimeout(() => resumeAbort.abort(), 120000);
             let resumeResp: Response;
             try {
+              const knownLastEventId = (lastEventIdRef.current || "").trim();
+              const resumeUrl = currentExecutionIdRef.current && knownLastEventId
+                ? `${BASE_URL}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(knownLastEventId)}`
+                : `${BASE_URL}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(knownLastEventId)}`;
               resumeResp = await fetch(
-                currentExecutionIdRef.current
-                  ? `${BASE_URL}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(lastEventIdRef.current || "0")}`
-                  : `${BASE_URL}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(lastEventIdRef.current)}`,
+                resumeUrl,
                 { credentials: "include", headers: authHdrs(), signal: resumeAbort.signal }
               );
             } catch (resumeFetchErr) {
@@ -5636,6 +5665,9 @@ export default function ChatPage() {
             const resumeReader = resumeResp.body.getReader();
             const resumeDecoder = new TextDecoder();
             let resumeBuf = "";
+            const seenResumeEventIds = new Set<string>();
+            let currentResumeEventId = "";
+            let skipResumeEvent = false;
 
             while (true) {
               const { done: rDone, value: rVal } = await resumeReader.read();
@@ -5646,8 +5678,15 @@ export default function ChatPage() {
 
               for (const rLine of rLines) {
                 // Phase4: Redis Stream entry ID 캡처 (재연결 체인용)
-                if (rLine.startsWith("id:")) { lastEventIdRef.current = rLine.slice(3).trim(); continue; }
+                if (rLine.startsWith("id:")) {
+                  currentResumeEventId = rLine.slice(3).trim();
+                  skipResumeEvent = Boolean(currentResumeEventId && seenResumeEventIds.has(currentResumeEventId));
+                  if (currentResumeEventId) seenResumeEventIds.add(currentResumeEventId);
+                  lastEventIdRef.current = currentResumeEventId;
+                  continue;
+                }
                 if (!rLine.startsWith("data: ")) continue;
+                if (skipResumeEvent) continue;
                 try {
                   const rev = JSON.parse(rLine.slice(6).trim());
                   if (rev.type === "delta" && rev.content) {
@@ -5655,7 +5694,7 @@ export default function ChatPage() {
                       if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
                       continue;
                     }
-                    full += rev.content;
+                    full = appendSseDeltaWithoutReplayDuplication(full, rev.content);
                     if (!isStale()) {
                       setStreamBuf(full);
                       setToolStatus(null); // 재연결 성공 — 인디케이터 제거
@@ -6149,6 +6188,9 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let buf = "";
+      const seenRegenEventIds = new Set<string>();
+      let currentRegenEventId = "";
+      let skipRegenEvent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -6161,8 +6203,15 @@ export default function ChatPage() {
         for (const line of lines) {
           if (isStale()) break;
           // Phase4: Redis Stream entry ID 캡처
-          if (line.startsWith("id:")) { lastEventIdRef.current = line.slice(3).trim(); continue; }
+          if (line.startsWith("id:")) {
+            currentRegenEventId = line.slice(3).trim();
+            skipRegenEvent = Boolean(currentRegenEventId && seenRegenEventIds.has(currentRegenEventId));
+            if (currentRegenEventId) seenRegenEventIds.add(currentRegenEventId);
+            lastEventIdRef.current = currentRegenEventId;
+            continue;
+          }
           if (!line.startsWith("data: ")) continue;
+          if (skipRegenEvent) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") continue;
           try {
@@ -6194,10 +6243,10 @@ export default function ChatPage() {
                 if (!isStale()) setToolStatus("🔄 모델 용량 제한 감지 — 자동 재시도 중...");
                 continue;
               }
-              full += ev.content;
+              full = appendSseDeltaWithoutReplayDuplication(full, ev.content);
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "token" && typeof ev.text === "string") {
-              full += ev.text;
+              full = appendSseDeltaWithoutReplayDuplication(full, ev.text);
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               regenGotFinal = true;
