@@ -629,3 +629,32 @@
 - 미포함:
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋/배포 대상에서 제외한다.
 - 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 조리법 접근 제어와 A4 출력 버튼 변경을 이전 상태로 되돌릴 수 있다.
+
+## 2026-07-27 06:50 KST - unni recipe direct FB login routing
+
+- 요청: 직원용 레시피 페이지가 아직 AADS 로그인 페이지로 이동하는 문제를 확인하고, FB 로그인 권한으로 로그인한 뒤 레시피 페이지로 복귀하도록 즉시 수정.
+- 원인:
+  - 이전 FB 권한 전환은 tenant 검사까지는 변경했지만, 비로그인 보호 미들웨어가 여전히 1차 redirect를 `/login?redirect=/unni-naengmyeon/recipes`로 반환했다.
+  - `fb.newtalk.kr/login`은 운영에서 FB 매장비서 앱으로 302되고 있었지만, 사용자 입장에서는 `/login` 중간 경로 때문에 AADS 로그인으로 보일 수 있었다.
+- 조치:
+  - `src/middleware.ts`에 `FOOD_BIZ_LOGIN_PATH=/static/apps/yeoljeong-finance/index.html`을 추가하고, `/unni-naengmyeon/recipes` 비로그인 접근을 FB 매장비서 로그인 앱으로 직접 redirect하도록 변경했다.
+  - `fb.newtalk.kr/login?redirect=...` 요청도 같은 FB 매장비서 정적앱으로 redirect하도록 명시했다.
+  - `src/app/unni-naengmyeon/recipes/page.tsx`의 서버 렌더 fallback 로그인 URL도 `https://fb.newtalk.kr/static/apps/yeoljeong-finance/index.html?redirect=/unni-naengmyeon/recipes`로 통일했다.
+- 검증:
+  - `npx eslint src/middleware.ts src/app/unni-naengmyeon/recipes/page.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성.
+  - 로컬 production 재현 `Host: fb.newtalk.kr /unni-naengmyeon/recipes`는 `307 /static/apps/yeoljeong-finance/index.html?redirect=%2Funni-naengmyeon%2Frecipes` 확인.
+  - 로컬 production 재현 `Host: fb.newtalk.kr /login?redirect=/unni-naengmyeon/recipes`도 같은 FB 정적앱으로 redirect 확인.
+- 배포/운영 검증:
+  - 커밋 `d6e900bc3364`를 `origin/main`에 푸시했다.
+  - 배포 로그 `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260727-064239.log` 기준 `06:49:28 KST` Blue/Green 배포 성공. active는 blue `3100`, standby는 green `3101`.
+  - 양 컨테이너 `aads-dashboard`, `aads-dashboard-green`은 Docker health `healthy`, `AADS_RELEASE_SHA=d6e900bc3364`로 일치했다.
+  - 외부 `https://fb.newtalk.kr/unni-naengmyeon/recipes` 비로그인 요청은 `307 /static/apps/yeoljeong-finance/index.html?redirect=%2Funni-naengmyeon%2Frecipes` 확인.
+  - 외부 redirect follow 결과 최종 `HTTP 200`, HTML title `매장비서`, 로그인 문구 확인.
+- 미검증:
+  - `capture_screenshot`은 timeout으로 실패해 브라우저 캡처는 미실행이다. 외부 HTTP/HTML/컨테이너/SHA 검증으로 대체했다.
+  - 배포 스크립트 Step 7 프론트엔드 QA는 `UNKNOWN`으로 종료되어 통과 근거로 쓰지 않는다.
+- 미포함:
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋/배포 대상에서 제외하고 보존했다.
+- 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 레시피 로그인 redirect를 이전 `/login` 경유 방식으로 되돌릴 수 있다.
