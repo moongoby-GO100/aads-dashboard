@@ -1262,10 +1262,12 @@ const MessageItem = memo(function MessageItem({
 
   return (
     <div
+      data-message-id={msg.id}
       className="ct-msg-enter group"
       style={{
         display: "flex",
         justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+        overflowAnchor: "none" as never,
         ...(msg.branch_id ? { marginLeft: "24px", borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "12px" } : {}),
       }}
     >
@@ -2403,12 +2405,14 @@ export default function ChatPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
   const isNearBottomRef = useRef(true);
+  const userScrollPauseUntilRef = useRef(0);
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
   const scrollToMessagesBottom = useCallback((force = false) => {
     const scroll = () => {
       const container = messagesContainerRef.current;
       if (!container) return;
+      if (!force && Date.now() < userScrollPauseUntilRef.current) return;
       if (!force && !isNearBottomRef.current) return;
       container.scrollTop = container.scrollHeight;
     };
@@ -2825,6 +2829,12 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
     const prevScrollTop = container?.scrollTop || 0;
+    const anchor = container
+      ? Array.from(container.querySelectorAll<HTMLElement>("[data-message-id]"))
+        .find((el) => el.offsetTop + el.offsetHeight >= container.scrollTop)
+      : null;
+    const anchorId = anchor?.dataset.messageId || null;
+    const anchorOffset = anchor ? anchor.offsetTop - (container?.scrollTop || 0) : 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
       `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
     ).catch(() => null);
@@ -2839,7 +2849,15 @@ export default function ChatPage() {
       });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (container) container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
+          if (!container) return;
+          const nextAnchor = anchorId
+            ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorId)}"]`)
+            : null;
+          if (nextAnchor) {
+            container.scrollTop = nextAnchor.offsetTop - anchorOffset;
+          } else {
+            container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
+          }
         });
       });
     } else {
@@ -3039,7 +3057,16 @@ export default function ChatPage() {
     mergeCooldownUntilRef.current = Date.now() + 5000;
 
     try {
-      const replayLastEventId = replayFromStart ? "0" : (lastEventIdRef.current || "0");
+      const existingRenderedContent = (streamBufRef.current || bgPartialContentRef.current || "").trim();
+      const knownLastEventId = (lastEventIdRef.current || "").trim();
+      if (replayFromStart && existingRenderedContent) {
+        replayFromStart = false;
+      }
+      if (!replayFromStart && !knownLastEventId && existingRenderedContent) {
+        return;
+      }
+      const replayLastEventId = replayFromStart ? "0" : knownLastEventId;
+      if (!replayLastEventId) return;
       const resp = await fetch(
         `${BASE_URL}/chat/executions/${executionId}/events?last_event_id=${encodeURIComponent(replayLastEventId)}`,
         { credentials: "include", headers: authHdrs(), signal: controller.signal },
@@ -3050,6 +3077,9 @@ export default function ChatPage() {
       const decoder = new TextDecoder();
       let buf = "";
       let full = streamBufRef.current || bgPartialContentRef.current || "";
+      const seenReplayEventIds = new Set<string>();
+      let currentReplayEventId = "";
+      let skipReplayEvent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -3060,10 +3090,14 @@ export default function ChatPage() {
 
         for (const line of lines) {
           if (line.startsWith("id:")) {
-            lastEventIdRef.current = line.slice(3).trim();
+            currentReplayEventId = line.slice(3).trim();
+            skipReplayEvent = Boolean(currentReplayEventId && seenReplayEventIds.has(currentReplayEventId));
+            if (currentReplayEventId) seenReplayEventIds.add(currentReplayEventId);
+            lastEventIdRef.current = currentReplayEventId;
             continue;
           }
           if (!line.startsWith("data: ")) continue;
+          if (skipReplayEvent) continue;
           try {
             const ev = JSON.parse(line.slice(6).trim());
             // [PATCH-B] attachExecutionReplay full SSE 핸들러 — sendMessage와 동등
@@ -3732,10 +3766,8 @@ export default function ChatPage() {
           toolCount: status.tool_count,
           lastTool: status.last_tool,
         }));
-        if (_exec_id_for_attach) {
-          const shouldReplayFromStart = !status.partial_content;
-          if (shouldReplayFromStart) lastEventIdRef.current = "0";
-          attachExecutionReplay(fetchSid, _exec_id_for_attach, shouldReplayFromStart);
+        if (_exec_id_for_attach && (status.last_event_id || status.partial_content)) {
+          attachExecutionReplay(fetchSid, _exec_id_for_attach, false);
         }
       } else if (status.just_completed) {
         // 방금 완료 → placeholder 제외하고 메시지 로드
@@ -3909,6 +3941,7 @@ export default function ChatPage() {
     if (!container) return;
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+      if (!isNearBottomRef.current) userScrollPauseUntilRef.current = Date.now() + 4000;
       // 맨 위 근접 시 이전 메시지 자동 로드
       if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && !streamingRef.current && !finalizingRef.current && Date.now() >= mergeCooldownUntilRef.current && Date.now() >= suppressOlderLoadUntilRef.current) {
         loadingOlderRef.current = true;
@@ -4239,10 +4272,8 @@ export default function ChatPage() {
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
           const _exec_id_for_attach = ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null);
-          if (_exec_id_for_attach) {
-            const shouldReplayFromStart = !ss.partial_content;
-            if (shouldReplayFromStart) lastEventIdRef.current = "0";
-            attachExecutionReplay(sid, _exec_id_for_attach, shouldReplayFromStart);
+          if (_exec_id_for_attach && (ss.last_event_id || ss.partial_content)) {
+            attachExecutionReplay(sid, _exec_id_for_attach, false);
           }
         }
         // STREAMING-STUCK 안전장치: 서버/프론트가 streaming이어도 토큰/이벤트/placeholder

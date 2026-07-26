@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-07-26 19:41 KST - Chat streaming replay and scroll stability P0
+
+- 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 응답 중 브라우저 멈춤, 스크롤 상하 점프, 이전/중복 assistant 응답 표시가 반복됐다.
+- 실측: 대상 세션은 메시지 2,081건, 총 2,926,736자, 최대 단일 메시지 68,782자이며 DB에 `streaming_placeholder` 1건과 `running` execution 1건이 남아 있었다.
+- 반영: `src/app/chat/page.tsx`에서 `last_event_id=0` 강제 replay를 차단하고, partial/last_event_id가 있을 때만 execution SSE에 attach한다. replay 이벤트 ID 중복은 클라이언트에서 무시한다.
+- 스크롤: 메시지 row를 브라우저 scroll anchor 대상에서 제외하고, 사용자 스크롤 중 자동 하단 이동을 4초간 억제한다. 이전 대화 prepend는 첫 visible message anchor+offset으로 보정한다.
+- 검증: `npx tsc --noEmit` 통과, `npm run build` 통과.
+- 범위 제외: 기존 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 수정·커밋 대상에서 제외한다.
+
 ## 2026-07-24 17:25 KST - OHVIS TaskCard and artifact panel deployment closeout
 
 - 배경: OHVIS 3-Tier P0-P2 구현 중 대시보드가 작업 결과를 일반 채팅 메시지에 섞지 않고 작업 카드와 아티팩트 패널로 표시하도록 마감했다.
