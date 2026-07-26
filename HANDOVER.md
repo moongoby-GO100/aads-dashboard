@@ -685,3 +685,22 @@
   - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성 확인.
   - `git diff --check -- src/middleware.ts src/app/unni-naengmyeon/recipes/page.tsx` 통과.
 - 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 레시피 보호 쿠키를 이전 공용 토큰 기준으로 되돌릴 수 있다.
+
+## 2026-07-27 07:31 KST - unni recipe FB token deployment verification
+
+- 배포:
+  - 커밋 `4794bf642f69`를 `dashboard-write/main` 및 `origin/main`에 푸시했다.
+  - 대시보드 blue-green 배포를 실행해 active를 blue `3100`으로 전환했다.
+  - 배포 스크립트는 standby green 이미지 unpack 직후 `130`으로 종료되어 standby 완료 로그가 남지 않았다. 후속으로 `AADS_RELEASE_SHA=4794bf642f69 docker compose -f docker-compose.prod.yml --profile green up -d --build --no-deps aads-dashboard-green`을 실행해 standby를 수동 동기화했다.
+- 운영 검증:
+  - `aads-dashboard`와 `aads-dashboard-green` 모두 Docker health `healthy`.
+  - 양 컨테이너 `AADS_RELEASE_SHA=4794bf642f69` 일치.
+  - nginx upstream active는 blue `127.0.0.1:3100`, green `3101`은 backup.
+  - `https://unni.newtalk.kr/unni-naengmyeon/recipes`는 `307 https://fb.newtalk.kr/unni-naengmyeon/recipes`.
+  - `https://fb.newtalk.kr/unni-naengmyeon/recipes` 비로그인 요청은 `307 /static/apps/yeoljeong-finance/index.html?redirect=%2Funni-naengmyeon%2Frecipes`.
+  - `Cookie: aads_token=dummy`만 있는 요청도 동일하게 FB 로그인 앱으로 이동하여 AADS 공용 쿠키만으로는 레시피 접근이 열리지 않는다.
+- 미검증:
+  - 실제 FB 계정 비밀번호 입력 E2E는 수행하지 않았다. 공개 HTTP redirect, 운영 HTML, 컨테이너 SHA/health로 대체 검증했다.
+- 작업트리:
+  - 배포 전 대시보드 무관 dirty 파일을 stash로 격리했다.
+  - 배포 중 다른 프로세스가 `public/manager/env_unknown.json`, `src/app/chat/page.tsx`, `public/manager/env_5.json` 변경을 다시 만든 상태라 stash pop은 충돌 방지를 위해 중단됐고, stash `pre-unni-fb-token-deploy-20260727`은 보존했다.
