@@ -531,3 +531,12 @@
 - 배포: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260726-182251.log` 기준 `18:31:59 KST` Blue/Green 배포 완료. Active는 green `3101`, standby는 blue `3100`이며 양 컨테이너 모두 `AADS_RELEASE_SHA=49caaf9cf8b5`, Docker health `healthy`다.
 - 정정: 이전 중간 보고의 `fee516f0fa70` 배포 완료 표기는 당시 기준으로는 스크롤 조치가 포함된 릴리스였지만, 최신 `origin/main`과 운영 active SHA가 다를 수 있어 최종 완료 보고 근거로는 부족했다. 최종 완료 기준은 이번 `49caaf9cf8b5` 배포 로그와 양 슬롯 SHA 일치로 보정한다.
 - 미검증: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 자동 QA 인증 누락으로 미실행이다. 코드/타입검사/HTTP/컨테이너/SHA 검증으로 대체했다.
+
+## 2026-07-26 18:44 KST - chat scroll deployment ledger audit
+
+- 재확인 사유: 이전 자동 완료보고 검증기가 workspace ledger의 과거 미완료 항목을 섞어 "미완료 344건"을 표시했으므로, 실제 Git/컨테이너/HTTP/문서 상태를 다시 분리 확인했다.
+- Git 원장: `HEAD`, `origin/main`, `dashboard-write/main`은 모두 `efbb634a13722dd52349c3ab49297ec2e0dc1b4a`였고, 최종 커밋 메시지는 `docs(chat): close scroll deployment ledger`였다.
+- 운영 원장: `aads-dashboard`와 `aads-dashboard-green`은 모두 Docker health `healthy`였고, 양 컨테이너의 `AADS_RELEASE_SHA`는 `efbb634a1372`로 일치했다.
+- 배포 로그: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260726-183504.log` 기준 `18:41:48 KST`에 blue active 전환, green standby 동기화, release 확인이 완료됐다. Step 7 QA는 Bearer 인증 누락으로 `UNKNOWN`이라 통과 근거로 쓰지 않는다.
+- 검증: `npx tsc --noEmit`, `git diff --check`, 외부 `https://aads.newtalk.kr/login` HTTP 200, 외부 `https://aads.newtalk.kr/chat` 인증 보호 307 redirect, blue `127.0.0.1:3100/login` HTTP 200, green `127.0.0.1:3101/login` HTTP 200을 확인했다.
+- 작업트리: 스크롤 조치와 무관한 `public/manager/env_unknown.json`, `public/manager/env_5.json`만 별도 사용자 변경으로 남아 있었고, 배포 산출물에 섞이지 않도록 보호 대상이다.
