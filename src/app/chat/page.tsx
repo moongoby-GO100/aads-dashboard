@@ -2101,7 +2101,7 @@ export default function ChatPage() {
   // Open at the compact 420px artifact view shown in the reference UI.
   // This intentionally does not restore a previously expanded panel on reload.
   const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
-  const [artifactTab, setArtifactTab] = useState<ArtifactTab>("report");
+  const [artifactTab, setArtifactTab] = useState<ArtifactTab>("agenda");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -3655,6 +3655,7 @@ export default function ChatPage() {
       // Every session opens with the compact 420px artifact view. Do not carry
       // an expanded or collapsed panel over from the previously viewed session.
       setArtifactMode("full");
+      setArtifactTab("agenda");
       // 세션 전환 시 edit state 초기화
       setEditingMsgId(null);
       setEditText("");
@@ -7722,6 +7723,32 @@ export default function ChatPage() {
               ⬇ 내보내기
             </button>
           )}
+
+          <button
+            onClick={() => {
+              setArtifactTab("agenda");
+              setSelectedArtifactIdx(0);
+              if (screenSize !== "desktop") {
+                setMobileOverlay("artifact");
+              } else {
+                setArtifactMode("full");
+              }
+            }}
+            title="아이디어 메모 창 열기"
+            style={{
+              padding: "5px 10px",
+              fontSize: "12px",
+              background: artifactTab === "agenda" ? "var(--ct-accent)" : "var(--ct-hover)",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              color: artifactTab === "agenda" ? "#fff" : "var(--ct-text2)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            📋 아이디어 메모
+          </button>
 
           {/* Artifact toggle */}
           <button

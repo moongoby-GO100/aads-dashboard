@@ -572,7 +572,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 {(
                   [
                     { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
-                    { key: "agenda" as ArtifactTab, icon: "📋", label: "아젠다" },
+                    { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
                     { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                     { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
@@ -815,7 +815,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     if (filtered.length === 0) {
                       return (
                         <div style={{ color: "var(--ct-text2)", fontSize: "12px", textAlign: "center", paddingTop: "20px" }}>
-                          현재 세션에 연결된 아젠다가 없습니다
+                          현재 세션에 연결된 아이디어 메모가 없습니다
                         </div>
                       );
                     }
@@ -1418,20 +1418,20 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
           >
             {(
               [
-                { key: "log" as ArtifactTab, icon: "🔧" },
-                { key: "agenda" as ArtifactTab, icon: "📋" },
-                { key: "report" as ArtifactTab, icon: "📄" },
-                { key: "dialog" as ArtifactTab, icon: "💬" },
-                { key: "code" as ArtifactTab, icon: "💻" },
-                { key: "html_preview" as ArtifactTab, icon: "🖼️" },
-                { key: "chart" as ArtifactTab, icon: "📊" },
-                { key: "tasks" as ArtifactTab, icon: "⚡" },
+                { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
+                { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
+                { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
+                { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
+                { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
+                { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
               ]
             ).map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => { setArtifactTab(tab.key); setArtifactMode("full"); setSelectedArtifactIdx(0); }}
-                title={tab.key}
+                title={tab.label}
                 style={{
                   width: "36px",
                   height: "36px",
@@ -1460,6 +1460,21 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       minWidth: '14px',
                       textAlign: 'center',
                     }}>{artifactCounts[tab.key]}</span>
+                  )}
+                  {tab.key === "agenda" && agendaItems.length > 0 && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-8px',
+                      fontSize: '9px',
+                      background: 'var(--ct-accent)',
+                      color: '#fff',
+                      borderRadius: '6px',
+                      padding: '0 4px',
+                      lineHeight: '14px',
+                      minWidth: '14px',
+                      textAlign: 'center',
+                    }}>{agendaItems.length}</span>
                   )}
                 </span>
               </button>

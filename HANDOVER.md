@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-07-26 20:42 KST - Chat idea memo panel restore
+
+- 배경: 채팅창에서 아이디어 메모 창이 사라져 보인다는 CEO 지시가 있었다.
+- 원인: 아이디어 메모는 기존 `agenda` 탭으로 남아 있었지만 라벨이 `아젠다`로 노출되고, 기본 진입 탭이 보고서였으며, 패널 미니 상태에서는 아이콘 툴팁도 영문 key로만 표시돼 사용자가 메모 창을 찾기 어려웠다.
+- 조치: `src/app/chat/page.tsx`에서 채팅 진입·세션 전환 시 기본 아티팩트 탭을 `agenda`로 열고, 상단 툴바에 `아이디어 메모` 직접 열기 버튼을 추가했다.
+- 조치: `src/app/chat/ChatArtifactPanel.tsx`에서 `아젠다` 라벨/빈 상태 문구를 `아이디어 메모`로 교체하고, 미니 패널 아이콘 툴팁과 메모 수 배지를 보강했다.
+- 검증: `npx tsc --noEmit` 통과, `npm run build` 통과. 서버68 health 정상.
+- 범위 제외: 기존 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 수정·커밋 대상에서 제외한다.
+
 ## 2026-07-26 19:41 KST - Chat streaming replay and scroll stability P0
 
 - 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 응답 중 브라우저 멈춤, 스크롤 상하 점프, 이전/중복 assistant 응답 표시가 반복됐다.
