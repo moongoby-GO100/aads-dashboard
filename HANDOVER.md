@@ -1,5 +1,15 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 07:18 KST - Chat large-session freeze and scroll-loop mitigation
+
+- 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 질문 시 브라우저 멈춤, 스크롤 상단 이동, 중복 응답 체감이 재발했다.
+- 실측: 대상 세션은 assistant 1,306건/user 786건, assistant 본문 합계 2,822,636자, 최신 40건만 assistant 52,057자이며 `interrupted` execution 83건이 남아 있었다.
+- 원인: 기존 replay/anchor 패치는 반영됐지만, 상단 근접 자동 과거 로드와 마지막 대형 assistant 전체 Markdown 자동 펼침이 대형 세션에서 렌더 비용과 scroll anchoring 루프를 계속 유발할 수 있었다.
+- 조치: `src/app/chat/page.tsx`에서 스크롤 상단 자동 과거 로드를 제거하고, 과거 메시지는 `이전 대화 불러오기` 버튼으로만 로드하게 했다.
+- 조치: 실시간 스트리밍 Markdown 렌더는 최근 6,000자만 렌더하고, 마지막 assistant도 8,000자를 넘으면 자동 전체 펼침 대신 접힌 미리보기로 시작하게 했다.
+- 검증: `npm exec tsc -- --noEmit` 통과, `npm run build` 통과.
+- 범위 제외: 기존 `public/manager/env_unknown.json`, `public/manager/env_5.json`, 언니냉면 관련 미커밋 파일은 수정·커밋 대상에서 제외한다.
+
 ## 2026-07-26 20:42 KST - Chat idea memo panel restore
 
 - 배경: 채팅창에서 아이디어 메모 창이 사라져 보인다는 CEO 지시가 있었다.

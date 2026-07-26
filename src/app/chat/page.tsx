@@ -1232,6 +1232,8 @@ const MessageItem = memo(function MessageItem({
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
 }: MessageItemProps) {
+  const LIVE_STREAM_RENDER_LIMIT = 6000;
+  const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 8000;
   // reply_to_id가 있으면 원본 메시지 찾기
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
@@ -1255,10 +1257,13 @@ const MessageItem = memo(function MessageItem({
   const effectiveToolsOpen = forceToolsOpen || toolsOpen;
   // P1: 긴 보고서 접이식 상태
   const [contentCollapsed, setContentCollapsed] = useState(
-    () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
+    () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && (!isLastAssistantMsg || msg.content.length > LAST_ASSISTANT_AUTO_OPEN_LIMIT)
   );
-  const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant");
+  const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant" && msg.content.length <= LAST_ASSISTANT_AUTO_OPEN_LIMIT);
   const effectiveContentCollapsed = isStreamingPlaceholder || forceContentOpen ? false : contentCollapsed;
+  const displayedStreamingContent = streamingContent && streamingContent.length > LIVE_STREAM_RENDER_LIMIT
+    ? `... 앞 ${streamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${streamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
+    : streamingContent;
 
   return (
     <div
@@ -1601,9 +1606,9 @@ const MessageItem = memo(function MessageItem({
                   </div>
                 </details>
               ) : null}
-              {streamingContent ? (
+              {displayedStreamingContent ? (
                 <>
-                  <MarkdownBlock text={streamingContent} />
+                  <MarkdownBlock text={displayedStreamingContent} />
                   <span style={{
                     display: "inline-block", width: "2px", height: "14px",
                     background: "var(--ct-accent)", marginLeft: "2px",
@@ -3935,7 +3940,7 @@ export default function ChatPage() {
     return () => clearTimeout(timer);
   }, [activeSession?.id, messages.length, streaming]);
 
-  // 스크롤 이벤트로 near-bottom 감지 + 맨 위 도달 시 이전 메시지 자동 로드
+  // 스크롤 이벤트로 near-bottom 감지. 과거 메시지는 버튼으로만 로드해 대형 세션의 scroll anchoring 루프를 막는다.
   const loadingOlderRef = useRef(false);
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -3943,15 +3948,10 @@ export default function ChatPage() {
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       if (!isNearBottomRef.current) userScrollPauseUntilRef.current = Date.now() + 4000;
-      // 맨 위 근접 시 이전 메시지 자동 로드
-      if (container.scrollTop < 80 && hasMoreMessages && !loadingOlderRef.current && !isInitialLoadRef.current && !streamingRef.current && !finalizingRef.current && Date.now() >= mergeCooldownUntilRef.current && Date.now() >= suppressOlderLoadUntilRef.current) {
-        loadingOlderRef.current = true;
-        loadOlderMessages().finally(() => { loadingOlderRef.current = false; });
-      }
     };
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [hasMoreMessages, loadOlderMessages]);
+  }, []);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
