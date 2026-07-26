@@ -690,12 +690,12 @@
 
 - 배포:
   - 커밋 `4794bf642f69`를 `dashboard-write/main` 및 `origin/main`에 푸시했다.
-  - 대시보드 blue-green 배포를 실행해 active를 blue `3100`으로 전환했다.
-  - 배포 스크립트는 standby green 이미지 unpack 직후 `130`으로 종료되어 standby 완료 로그가 남지 않았다. 후속으로 `AADS_RELEASE_SHA=4794bf642f69 docker compose -f docker-compose.prod.yml --profile green up -d --build --no-deps aads-dashboard-green`을 실행해 standby를 수동 동기화했다.
+  - 대시보드 blue-green 배포를 실행해 새 릴리스를 반영했다.
+  - 배포 스크립트는 standby green 이미지 unpack 직후 `130`으로 종료되어 standby 완료 로그가 남지 않았다. 후속으로 `AADS_RELEASE_SHA=4794bf642f69 docker compose -f docker-compose.prod.yml --profile green up -d --build --no-deps aads-dashboard-green`을 실행해 green을 수동 동기화했고, `AADS_RELEASE_SHA=4794bf642f69 docker compose -f docker-compose.prod.yml up -d --no-build --no-deps aads-dashboard`로 blue 슬롯도 재기동했다.
 - 운영 검증:
   - `aads-dashboard`와 `aads-dashboard-green` 모두 Docker health `healthy`.
   - 양 컨테이너 `AADS_RELEASE_SHA=4794bf642f69` 일치.
-  - nginx upstream active는 blue `127.0.0.1:3100`, green `3101`은 backup.
+  - nginx upstream active는 green `127.0.0.1:3101`, blue `3100`은 backup.
   - `https://unni.newtalk.kr/unni-naengmyeon/recipes`는 `307 https://fb.newtalk.kr/unni-naengmyeon/recipes`.
   - `https://fb.newtalk.kr/unni-naengmyeon/recipes` 비로그인 요청은 `307 /static/apps/yeoljeong-finance/index.html?redirect=%2Funni-naengmyeon%2Frecipes`.
   - `Cookie: aads_token=dummy`만 있는 요청도 동일하게 FB 로그인 앱으로 이동하여 AADS 공용 쿠키만으로는 레시피 접근이 열리지 않는다.
