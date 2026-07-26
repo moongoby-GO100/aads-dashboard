@@ -7,7 +7,9 @@
 - 원인: 기존 replay/anchor 패치는 반영됐지만, 상단 근접 자동 과거 로드와 마지막 대형 assistant 전체 Markdown 자동 펼침이 대형 세션에서 렌더 비용과 scroll anchoring 루프를 계속 유발할 수 있었다.
 - 조치: `src/app/chat/page.tsx`에서 스크롤 상단 자동 과거 로드를 제거하고, 과거 메시지는 `이전 대화 불러오기` 버튼으로만 로드하게 했다.
 - 조치: 실시간 스트리밍 Markdown 렌더는 최근 6,000자만 렌더하고, 마지막 assistant도 8,000자를 넘으면 자동 전체 펼침 대신 접힌 미리보기로 시작하게 했다.
-- 검증: `npm exec tsc -- --noEmit` 통과, `npm run build` 통과.
+- 조치: 대형 세션에서는 채팅 DOM 렌더 cap을 최근 40개로 낮춰 2,000건 이상 세션의 브라우저 메인스레드 부하를 줄였다.
+- 조치: 기존 미커밋 상태였던 `src/app/chat/MarkdownRenderer.tsx`의 `React.memo` 닫힘 구문 오류를 보정해 Docker 빌드 차단을 해소했다.
+- 검증: `npm exec tsc -- --noEmit` 통과, `npm run build`는 컴파일/정적 생성 통과 후 trace 수집 중 143으로 종료되어 Docker 배포 빌드로 최종 검증한다.
 - 범위 제외: 기존 `public/manager/env_unknown.json`, `public/manager/env_5.json`, 언니냉면 관련 미커밋 파일은 수정·커밋 대상에서 제외한다.
 
 ## 2026-07-26 20:42 KST - Chat idea memo panel restore

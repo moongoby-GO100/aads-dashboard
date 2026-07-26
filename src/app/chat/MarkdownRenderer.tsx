@@ -494,7 +494,7 @@ function InlineMd({ text, linkColor }: { text: string; linkColor?: string }) {
   );
 }
 
-function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }) {
+const MarkdownBlock = React.memo(function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }) {
   const components = useMemo(() => createMarkdownComponents(linkColor, false), [linkColor]);
 
   return (
@@ -511,6 +511,6 @@ function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 export { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock };

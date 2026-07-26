@@ -6798,7 +6798,7 @@ export default function ChatPage() {
       i++;
     }
     // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
-    const MAX_RENDER = 150;
+    const MAX_RENDER = messages.length > 500 ? 40 : 150;
     const capped = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
