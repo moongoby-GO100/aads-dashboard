@@ -1272,7 +1272,7 @@ const MessageItem = memo(function MessageItem({
       style={{
         display: "flex",
         justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-        overflowAnchor: "none" as never,
+        overflowAnchor: "auto" as never,
         ...(msg.branch_id ? { marginLeft: "24px", borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "12px" } : {}),
       }}
     >
@@ -7782,7 +7782,6 @@ export default function ChatPage() {
           style={{
             flex: 1,
             overflowY: "auto",
-            overflowAnchor: "none" as never,
             padding: screenSize === "mobile" ? "12px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
