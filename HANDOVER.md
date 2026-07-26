@@ -596,3 +596,27 @@
   - `capture_screenshot`은 `[Errno 7] Argument list too long: 'ssh'`로 실패해 브라우저 캡처는 미실행이다. 외부 HTTP/HTML/컨테이너/SHA 검증으로 대체했다.
   - 배포 스크립트 Step 7 프론트엔드 QA는 `UNKNOWN`으로 종료되어 통과 근거로 쓰지 않는다.
 - 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 오픈 CTA 변경을 이전 상태로 되돌릴 수 있다.
+
+## 2026-07-26 20:13 KST - unni recipe FB tenant access and A4 print
+
+- 요청: 언니냉면 조리법 페이지를 AADS `is_internal_admin` 권한이 아니라 FB 권한으로 접근하게 수정하고, 레시피를 A4 출력/PDF 저장이 가능하게 정리.
+- 확인:
+  - DB 기준 FB 운영 tenant는 `yeoljeong-gukbap` / `열정국밥 운영관리` / `customer` / `active`이다.
+  - 기존 조리법 보호는 `aads_token` + `/auth/me` + `is_internal_admin` 검사였고, 공개 홈페이지 링크도 `aads.newtalk.kr/login`으로 연결되어 있었다.
+- 조치:
+  - `src/middleware.ts`: `unni.newtalk.kr/unni-naengmyeon/recipes` 접근을 `https://fb.newtalk.kr/unni-naengmyeon/recipes`로 전환했다.
+  - `src/app/unni-naengmyeon/page.tsx`: 직원용 조리법 링크를 FB 도메인으로 변경했다.
+  - `src/app/unni-naengmyeon/recipes/page.tsx`: 서버 렌더 보호 조건을 `fb.newtalk.kr` 호스트 + `yeoljeong-gukbap` active tenant 멤버십 + `owner/admin/member` role로 변경했다. 비로그인은 FB 로그인으로, 권한 불일치는 FB 운영 홈으로 이동한다.
+  - `src/app/unni-naengmyeon/recipes/RecipePrintActions.tsx`: A4 출력/PDF 저장 버튼을 추가했다.
+  - `src/app/unni-naengmyeon/recipes/page.module.css`: `@page A4`와 print 전용 여백, 글자 크기, 카드 분할 방지, 버튼 숨김 스타일을 추가했다.
+- 검증:
+  - 대상 ESLint `npx eslint src/middleware.ts src/app/unni-naengmyeon/page.tsx src/app/unni-naengmyeon/recipes/page.tsx src/app/unni-naengmyeon/recipes/RecipePrintActions.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성.
+  - 로컬 production server `127.0.0.1:3210`에서 `Host: unni.newtalk.kr /` HTTP 200 확인.
+  - 로컬 production server에서 `Host: unni.newtalk.kr /unni-naengmyeon/recipes`는 `307 https://fb.newtalk.kr/unni-naengmyeon/recipes` 확인.
+  - 로컬 production server에서 `Host: fb.newtalk.kr /unni-naengmyeon/recipes` 비로그인 요청은 `307 /login?redirect=%2Funni-naengmyeon%2Frecipes` 확인.
+  - 대표 메뉴 이미지 `nas-water-naengmyeon.jpg`는 HTTP 200 확인.
+- 미포함:
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋/배포 대상에서 제외한다.
+- 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 조리법 접근 제어와 A4 출력 버튼 변경을 이전 상태로 되돌릴 수 있다.

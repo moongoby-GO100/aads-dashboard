@@ -5,6 +5,7 @@ import styles from "./page.module.css";
 
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
 const BAEMIN_ORDER_URL = "https://s.baemin.com/lX000J2aj8vt4";
+const RECIPE_GUIDE_URL = "https://fb.newtalk.kr/unni-naengmyeon/recipes";
 const BAEMIN_SHOP_NO = "14948203";
 
 export const metadata: Metadata = {
@@ -181,7 +182,7 @@ export default function UnniNaengmyeonPage() {
           </a>
           <nav className={styles.nav} aria-label="주요 메뉴">
             <a href="#menu">메뉴</a>
-            <a href="https://aads.newtalk.kr/login?redirect=/unni-naengmyeon/recipes">직원용 조리법</a>
+            <a href={RECIPE_GUIDE_URL}>직원용 조리법</a>
             <div className={styles.navGroup}>
               <button type="button" aria-haspopup="true">브랜드 <span aria-hidden="true">⌄</span></button>
               <div className={styles.navDropdown}>

@@ -6,6 +6,7 @@ const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/
 
 const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$/;
 const UNNI_RECIPE_PATH = "/unni-naengmyeon/recipes";
+const FOOD_BIZ_RECIPE_URL = "https://fb.newtalk.kr/unni-naengmyeon/recipes";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -29,9 +30,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (pathname === UNNI_RECIPE_PATH || pathname.startsWith(`${UNNI_RECIPE_PATH}/`)) {
-      const loginUrl = new URL("https://aads.newtalk.kr/login");
-      loginUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL(`${FOOD_BIZ_RECIPE_URL}${request.nextUrl.search}`));
     }
 
     const allowed = ["/unni-naengmyeon", "/brands", "/api/v1/unni-naengmyeon"]

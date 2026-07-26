@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import RecipePrintActions from "./RecipePrintActions";
 import styles from "./page.module.css";
 
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
@@ -11,9 +13,14 @@ const BIBIM_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-bibim-bul-naengmyeon.
 const POLLACK_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-pollack-naengmyeon.jpg";
 const MUKSABAL_IMAGE = "/brands/unni-naengmyeon/menu/nas-muksabal.jpg";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const FOOD_BIZ_HOST = "fb.newtalk.kr";
+const FOOD_BIZ_LOGIN_URL = "https://fb.newtalk.kr/login?redirect=/unni-naengmyeon/recipes";
+const FOOD_BIZ_RECIPE_URL = "https://fb.newtalk.kr/unni-naengmyeon/recipes";
+const FOOD_BIZ_HOME_URL = "https://fb.newtalk.kr/apps/yeoljeong-finance/index.html";
+const FOOD_BIZ_TENANT_SLUG = "yeoljeong-gukbap";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://unni.newtalk.kr"),
+  metadataBase: new URL("https://fb.newtalk.kr"),
   title: "언니냉면 조리법 | 레시피 가이드",
   description: "언니냉면 성신여대점의 면 삶기, 냉면, 묵사발, 사이드 메뉴 조리 기준입니다.",
   alternates: { canonical: "/unni-naengmyeon/recipes" },
@@ -34,10 +41,52 @@ type StepRecipe = {
   steps: string[];
 };
 
-async function requireInternalAdmin() {
+type AuthUser = {
+  tenant?: {
+    slug?: string;
+    name?: string;
+    kind?: string;
+    status?: string;
+  } | null;
+  membership?: {
+    role?: string;
+    status?: string;
+  } | null;
+  tenant_role?: string | null;
+};
+
+function isLocalHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function hasFoodBizRecipeAccess(user: AuthUser) {
+  const tenant = user.tenant;
+  const membership = user.membership;
+  const tenantSlug = String(tenant?.slug || "").toLowerCase();
+  const tenantName = String(tenant?.name || "");
+  const tenantKind = String(tenant?.kind || "").toLowerCase();
+  const tenantStatus = String(tenant?.status || "").toLowerCase();
+  const membershipStatus = String(membership?.status || "").toLowerCase();
+  const role = String(user.tenant_role || membership?.role || "").toLowerCase();
+
+  const isFoodBizTenant = tenantSlug === FOOD_BIZ_TENANT_SLUG || (
+    tenantKind === "customer" && tenantName.includes("열정국밥")
+  );
+  const isActive = tenantStatus === "active" && membershipStatus === "active";
+  const hasStaffRole = ["owner", "admin", "member"].includes(role);
+
+  return isFoodBizTenant && isActive && hasStaffRole;
+}
+
+async function requireFoodBizRecipeAccess() {
+  const hostname = ((await headers()).get("host") || "").split(":")[0].toLowerCase();
+  if (hostname && hostname !== FOOD_BIZ_HOST && !isLocalHost(hostname)) {
+    redirect(FOOD_BIZ_RECIPE_URL);
+  }
+
   const token = (await cookies()).get("aads_token")?.value;
   if (!token) {
-    redirect("/login?redirect=/unni-naengmyeon/recipes");
+    redirect(FOOD_BIZ_LOGIN_URL);
   }
 
   let response: Response;
@@ -47,16 +96,16 @@ async function requireInternalAdmin() {
       cache: "no-store",
     });
   } catch {
-    redirect("/login?redirect=/unni-naengmyeon/recipes");
+    redirect(FOOD_BIZ_LOGIN_URL);
   }
 
   if (!response.ok) {
-    redirect("/login?redirect=/unni-naengmyeon/recipes");
+    redirect(FOOD_BIZ_LOGIN_URL);
   }
 
   const user = await response.json();
-  if (!user?.is_internal_admin) {
-    redirect("/chat");
+  if (!hasFoodBizRecipeAccess(user)) {
+    redirect(FOOD_BIZ_HOME_URL);
   }
 }
 
@@ -165,7 +214,7 @@ function RecipeCard({ recipe, index }: { recipe: StepRecipe; index: number }) {
 }
 
 export default async function UnniRecipePage() {
-  await requireInternalAdmin();
+  await requireFoodBizRecipeAccess();
 
   return (
     <main className={styles.page}>
@@ -175,7 +224,7 @@ export default async function UnniRecipePage() {
           <span>언니냉면</span>
         </Link>
         <nav aria-label="언니냉면 조리법 메뉴">
-          <Link href="/unni-naengmyeon">홈</Link>
+          <Link href="https://unni.newtalk.kr">홈</Link>
           <a href="#noodle">면삶기</a>
           <a href="#main-recipes">주메뉴</a>
           <a href="#side-recipes">사이드</a>
@@ -193,6 +242,7 @@ export default async function UnniRecipePage() {
           <p>달걀 반쪽 → 무김치 → 오이 → 깨가루 → 땅콩가루</p>
           <small>토핑은 순서대로 예쁘게 올립니다.</small>
         </div>
+        <RecipePrintActions />
       </section>
 
       <section className={styles.noodleSection} id="noodle">
@@ -232,7 +282,7 @@ export default async function UnniRecipePage() {
       </section>
 
       <footer className={styles.footer}>
-        <Link href="/unni-naengmyeon">언니냉면 홈페이지로 돌아가기</Link>
+        <Link href="https://unni.newtalk.kr">언니냉면 홈페이지로 돌아가기</Link>
         <span>서울특별시 성북구 동소문로 90 1층</span>
       </footer>
     </main>
