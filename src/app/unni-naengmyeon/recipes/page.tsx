@@ -84,7 +84,7 @@ async function requireFoodBizRecipeAccess() {
     redirect(FOOD_BIZ_RECIPE_URL);
   }
 
-  const token = (await cookies()).get("aads_token")?.value;
+  const token = (await cookies()).get("fb_access_token")?.value;
   if (!token) {
     redirect(FOOD_BIZ_LOGIN_URL);
   }

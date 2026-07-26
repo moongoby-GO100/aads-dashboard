@@ -658,3 +658,20 @@
 - 미포함:
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋/배포 대상에서 제외하고 보존했다.
 - 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 레시피 로그인 redirect를 이전 `/login` 경유 방식으로 되돌릴 수 있다.
+
+## 2026-07-27 07:18 KST - unni recipe FB access token enforcement
+
+- 요청: 직원용 레시피 페이지가 AADS 로그인/권한이 아니라 FB 로그인 권한으로만 접근되고, 로그인 후 레시피 페이지로 돌아오도록 완료 상태를 재검증 및 보완.
+- 확인:
+  - 이전 커밋은 비로그인 redirect를 FB 매장비서 앱으로 보냈지만, 레시피 보호 토큰은 여전히 `aads_token`을 읽고 있었다.
+  - 운영 HTTP 기준 `https://unni.newtalk.kr/unni-naengmyeon/recipes`는 `https://fb.newtalk.kr/unni-naengmyeon/recipes`로 이동하고, 비로그인 상태에서는 FB 매장비서 정적앱으로 이동한다.
+- 조치:
+  - `src/middleware.ts`: `/unni-naengmyeon/recipes` 보호 쿠키를 `aads_token`에서 `fb_access_token`으로 변경했다.
+  - `src/app/unni-naengmyeon/recipes/page.tsx`: 서버 렌더 권한 검증도 `fb_access_token` Bearer 토큰만 사용하도록 변경했다.
+  - FB 매장비서 앱에서 로그인/회원가입/초대수락 시 `fb_access_token` 쿠키를 함께 발급하도록 aads-server에 별도 커밋으로 반영했다.
+- 검증:
+  - `npm run lint -- src/middleware.ts src/app/unni-naengmyeon/recipes/page.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성 확인.
+  - `git diff --check -- src/middleware.ts src/app/unni-naengmyeon/recipes/page.tsx` 통과.
+- 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 레시피 보호 쿠키를 이전 공용 토큰 기준으로 되돌릴 수 있다.

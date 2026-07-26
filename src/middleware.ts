@@ -88,7 +88,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === UNNI_RECIPE_PATH || pathname.startsWith(`${UNNI_RECIPE_PATH}/`)) {
-    const token = request.cookies.get("aads_token")?.value;
+    const token = request.cookies.get("fb_access_token")?.value;
     if (!token) {
       return NextResponse.redirect(foodBizLoginUrl(request));
     }
