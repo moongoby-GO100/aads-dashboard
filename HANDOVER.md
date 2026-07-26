@@ -493,5 +493,6 @@
 - 원인 정정: 이전 보고에서 "이전 대화 prepend 시 기존 scrollTop까지 포함해 위치 보존"이라고 했지만 실제 운영 코드는 `container.scrollTop = container.scrollHeight - prevScrollHeight`만 적용되어 기존 오프셋을 보존하지 않았다. 또한 초기 로드 `ResizeObserver`가 3초 동안 사용자 wheel/touch/pointer 입력과 관계없이 하단 고정을 유지해 질문 전송 직후 DOM 재배치와 경합할 수 있었다.
 - 조치: `src/app/chat/page.tsx`의 이전 대화 로드 보정을 `newScrollHeight - prevScrollHeight + prevScrollTop`으로 변경해 prepend 전후 같은 메시지 위치를 유지하도록 했다. 초기 로드 scroll stabilizer는 3초에서 0.8초로 줄이고, 사용자가 wheel/touch/pointer 입력을 시작하면 즉시 해제하도록 변경했다.
 - 검증: `npx tsc --noEmit`, `git diff --check`, `npm run build`를 통과했다. 빌드는 Next.js 16.1.6 기준 60개 route 생성까지 성공했다.
-- 배포 기준: 본 변경 커밋을 dashboard `main`에 푸시하고 Blue/Green 대시보드에 배포한 뒤 양 컨테이너 `AADS_RELEASE_SHA`, `/chat` HTTP 307 인증 보호 응답, Docker health, 운영 번들 내 변경 문자열 확인으로 완료 판정한다.
-- 미검증 예정: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 수동 E2E는 별도 브라우저 인증이 필요하다.
+- 배포 검증: 커밋 `074eaff5d524`를 dashboard `main`에 푸시했고 Blue/Green 배포 스크립트가 green active / blue standby 동기화와 release 확인을 완료했다. 양 컨테이너는 `healthy`, `AADS_RELEASE_SHA=074eaff5d524`였고 `/chat` 및 대상 세션 URL은 인증 보호 `307 /login?redirect=...`를 반환했다.
+- 번들 검증: 양 슬롯 운영 번들에서 `overflowAnchor:"none"`, `touchstart`, `pointerdown`, `setTimeout(r,800)` 토큰을 확인해 이번 scroll stabilizer 변경이 배포 번들에 포함된 것을 확인했다.
+- 미검증: E2E Vault 계정 `e2e_auto@aads.dev` 로그인 테스트가 `failed`로 종료되어 인증된 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 수동 E2E는 미완료다. 코드/빌드/운영 번들/컨테이너/HTTP 검증으로 대체했다.
