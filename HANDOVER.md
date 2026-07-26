@@ -479,3 +479,11 @@
 - 조치: 메시지 스크롤 컨테이너의 `overflowAnchor`를 `none`으로 바꾸고 하단 sentinel만 앵커 후보로 남겨, 장문 응답 DOM 높이 재계산 시 상단 메시지가 임의 기준점이 되지 않도록 했다.
 - 검증: `npx tsc --noEmit` 통과, `npm run build` 통과. 배포 후 `/chat` HTTP 200, 대시보드 컨테이너 healthy, 릴리스 SHA 확인이 필요하다.
 - 롤백: 본 변경 커밋을 revert하고 직전 dashboard 릴리스로 Blue/Green 전환하면 스크롤 정책을 이전 상태로 복구할 수 있다.
+
+## 2026-07-26 09:16 KST - chat scroll jump deployment verification
+
+- 추가 확인: dashboard `main`, `origin/main`, `dashboard-write/main`이 `e203c91815e0c8050aa8772bed839b8e9570fac5`로 일치했고, 양 대시보드 컨테이너의 `AADS_RELEASE_SHA`도 `e203c91815e0`로 일치했다.
+- 운영 검증: `aads-dashboard`와 `aads-dashboard-green`은 Docker health 기준 모두 healthy이며, Nginx dashboard upstream은 green `3101` active / blue `3100` backup 구조다. `/chat` 외부 요청은 인증 보호 때문에 `307 /login?redirect=%2Fchat`이 정상 반환됐다.
+- 번들 검증: 운영 컨테이너 번들에서 `overflowAnchor:"none"`이 확인되어 메시지 컨테이너의 브라우저 기본 scroll anchoring 비활성화가 배포 반영됐다.
+- 재검증: `npx tsc --noEmit`, `npm run build`, `git diff --check`, `python3 -m py_compile /root/aads/aads-server/app/services/chat_service.py`를 통과했다.
+- 미검증: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 미실행이다. 캡처 도구의 저장 URL은 HTML을 반환해 이미지 판독에 실패했으므로, 코드/빌드/운영 번들/컨테이너/HTTP 검증으로 대체했다.
