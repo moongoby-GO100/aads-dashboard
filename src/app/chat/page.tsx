@@ -1232,8 +1232,8 @@ const MessageItem = memo(function MessageItem({
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
 }: MessageItemProps) {
-  const LIVE_STREAM_RENDER_LIMIT = 6000;
-  const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 8000;
+  const LIVE_STREAM_RENDER_LIMIT = 3000;
+  const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 3000;
   // reply_to_id가 있으면 원본 메시지 찾기
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
@@ -1272,7 +1272,7 @@ const MessageItem = memo(function MessageItem({
       style={{
         display: "flex",
         justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-        overflowAnchor: "auto" as never,
+        overflowAnchor: "none" as never,
         ...(msg.branch_id ? { marginLeft: "24px", borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "12px" } : {}),
       }}
     >
@@ -6719,7 +6719,7 @@ export default function ChatPage() {
 
   type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[] };
   const displayData = useMemo(() => {
-    const sorted = [...messages]
+    const sortedAll = [...messages]
       .filter(m => {
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") return false;
@@ -6730,6 +6730,8 @@ export default function ChatPage() {
         return true;
       })
       .sort((a, b) => { const ta = new Date(a.created_at || 0).getTime(); const tb = new Date(b.created_at || 0).getTime(); if (ta !== tb) return ta - tb; if (a.role === "user" && b.role === "assistant") return -1; if (a.role === "assistant" && b.role === "user") return 1; return 0; });
+    const renderSourceLimit = sortedAll.length > 500 ? 120 : 220;
+    const sorted = sortedAll.length > renderSourceLimit ? sortedAll.slice(-renderSourceLimit) : sortedAll;
     const display: DisplayItem[] = [];
     let i = 0;
     while (i < sorted.length) {
@@ -6805,7 +6807,7 @@ export default function ChatPage() {
       const isSystemMsg = m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
       return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
     })?.msg.id;
-    return { display: capped, lastAssistantId, totalCount: display.length };
+    return { display: capped, lastAssistantId, totalCount: sortedAll.length };
   }, [messages]);
 
   // PERF: O(1) lookup maps
@@ -7809,7 +7811,7 @@ export default function ChatPage() {
             </button>
           )}
           {/* P0-4: 세션 요약 카드 — 세션에 메시지가 있을 때 최초 진입 시 표시 */}
-          {activeSession?.id && messages.length > 0 && (
+          {activeSession?.id && messages.length > 0 && (activeSession.message_count ?? messages.length) < 200 && (
             <SessionSummaryCard sessionId={activeSession.id} />
           )}
 

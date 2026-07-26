@@ -1,5 +1,16 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 08:12 KST - Chat 7a1b residual freeze/scroll mitigation
+
+- 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 이전 P0 패치 후에도 질문 시 브라우저 멈춤과 스크롤 상단 이동이 재발했다.
+- 실측: 2026-07-27 08:06 KST 기준 대상 세션은 assistant 1,310건/user 791건, assistant 본문 합계 2,854,159자, 최대 단일 assistant 68,782자, `interrupted` execution 85건이다.
+- 원인: 기존 SSE replay/scroll guard는 반영됐지만, 대형 세션에서 전체 message 배열 정렬·중복 그룹화, 장문 streaming Markdown, 메시지 row의 browser scroll anchoring, 비동기 SessionSummaryCard 삽입이 남은 멈춤/상단 이동 조건이었다.
+- 조치: `src/app/chat/page.tsx`에서 live streaming Markdown tail 렌더 상한을 6,000자에서 3,000자로 낮추고, 마지막 assistant 자동 전체 펼침 기준을 8,000자에서 3,000자로 낮췄다.
+- 조치: 메시지 row를 browser scroll anchor 후보에서 제외하고, displayData 계산은 500건 초과 대형 세션에서 최근 120건만 group/dedupe 대상으로 삼도록 제한했다. 화면 DOM cap은 기존 최근 40건 정책을 유지한다.
+- 조치: message_count 200건 이상 세션에서는 상단 비동기 `SessionSummaryCard`를 렌더하지 않아 초기 하단 정렬 후 상단 높이 변화가 스크롤을 흔드는 경로를 차단했다.
+- 검증: `npx tsc --noEmit`, `git diff --check -- src/app/chat/page.tsx`, `npm run build` 통과.
+- 범위 제외: 기존 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 수정·커밋 대상에서 제외한다.
+
 ## 2026-07-27 07:18 KST - Chat large-session freeze and scroll-loop mitigation
 
 - 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 질문 시 브라우저 멈춤, 스크롤 상단 이동, 중복 응답 체감이 재발했다.
