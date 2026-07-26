@@ -504,3 +504,21 @@
 - 운영 검증 기준: 최종 완료 판정은 배포 후 `git fetch --all --prune`, `git rev-parse HEAD origin/main dashboard-write/main`, 양 컨테이너 `AADS_RELEASE_SHA`, `docker ps`, `curl https://aads.newtalk.kr/login`, `curl https://aads.newtalk.kr/chat` 결과가 일치할 때로 한다.
 - 정적 검증: `npx tsc --noEmit`, `npm run build`, `git diff --check -- src/app/chat/page.tsx HANDOVER.md`를 통과했다. Next.js 빌드는 60개 route 생성을 완료했다.
 - 미검증: QA Step 7은 API Bearer 인증 누락으로 `UNKNOWN`이라 통과 근거로 쓰지 않는다. 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 아직 미완료다.
+
+## 2026-07-26 18:21 KST - unni recipe guide page
+
+- 요청: CEO가 제공한 언니냉면 주메뉴/사이드 메뉴 조리법을 사이트에 반영.
+- 조치:
+  - `/unni-naengmyeon/recipes` 공개 라우트를 추가하고 면삶기, 물냉면, 비빔냉면, 언니냉면, 불냉면, 명태회냉면, 묵사발, 사이드 메뉴 조리 기준을 단계형 카드로 정리했다.
+  - 기존 언니냉면 홈페이지 상단 메뉴에 `조리법` 링크를 추가했다.
+  - 메뉴 이미지 자산은 기존 NAS 반영본 중 물냉면, 비빔/불냉면, 명태회냉면, 묵사발 이미지만 조리 참고 이미지로 연결했다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+  - 대상 파일 ESLint `npx eslint src/app/unni-naengmyeon/page.tsx src/app/unni-naengmyeon/recipes/page.tsx` 통과.
+  - 전체 `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` 포함 61개 route 생성.
+  - 로컬 production server `127.0.0.1:3013`에서 `Host: unni.newtalk.kr` 기준 `/`, `/unni-naengmyeon`, `/unni-naengmyeon/recipes` 모두 HTTP 200 확인. HTML에 `조리법 가이드`, `물냉면`, 홈 `조리법` 링크 포함 확인.
+- 주의:
+  - 조리 g/cc/시간이 포함된 운영 정보가 공개 페이지에 노출된다. 외부 노출을 원하지 않으면 middleware/API auth가 걸린 내부 직원용 경로로 전환해야 한다.
+  - 전체 `npm run lint`는 기존 대시보드 전역 오류 261건으로 실패했으며, 이번 변경 파일 대상 ESLint는 통과했다.
+  - Browser Bridge `capture_screenshot`은 timeout되어 시각 캡처는 미완료이며, HTTP/HTML/build 검증으로 대체했다.
+- 롤백: 본 변경 커밋을 revert하면 조리법 페이지와 홈 상단 링크가 제거된다. 기존 언니냉면 메뉴/이미지/문의 페이지는 유지된다.

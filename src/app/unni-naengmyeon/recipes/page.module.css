@@ -1,0 +1,389 @@
+.page {
+  --cream: #fff8ea;
+  --paper: #fffcf5;
+  --coral: #f45d48;
+  --coral-dark: #d94232;
+  --green: #173e35;
+  --green-soft: #28584c;
+  --ink: #18322c;
+  --muted: #6c746f;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  line-height: 1.6;
+}
+
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  min-height: 84px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 10px max(24px, calc((100% - 1160px) / 2));
+  border-bottom: 1px solid rgba(23, 62, 53, .12);
+  background: rgba(255, 248, 234, .94);
+  backdrop-filter: blur(16px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 950;
+  letter-spacing: -.06em;
+}
+
+.brand img {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  object-fit: cover;
+  mix-blend-mode: multiply;
+}
+
+.header nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.header nav a {
+  padding: 9px 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .7fr);
+  gap: 48px;
+  align-items: end;
+  padding: 96px max(24px, calc((100% - 1160px) / 2)) 76px;
+  background: var(--cream);
+}
+
+.heroCopy > span,
+.sectionHeading > span {
+  display: block;
+  color: var(--coral);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: .18em;
+}
+
+.hero h1 {
+  margin: 16px 0 20px;
+  font-size: clamp(52px, 6vw, 86px);
+  font-weight: 950;
+  letter-spacing: -.07em;
+  line-height: 1.04;
+}
+
+.hero p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.heroPanel {
+  display: grid;
+  gap: 8px;
+  padding: 32px;
+  border-radius: 24px;
+  background: var(--green);
+  color: white;
+  box-shadow: 0 20px 55px rgba(23, 62, 53, .14);
+}
+
+.heroPanel b {
+  color: #f7b8aa;
+  font-size: 13px;
+  letter-spacing: .08em;
+}
+
+.heroPanel p {
+  color: white;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  line-height: 1.35;
+}
+
+.heroPanel small {
+  color: rgba(255, 255, 255, .68);
+  font-size: 12px;
+}
+
+.noodleSection,
+.recipeSection {
+  padding: 86px max(24px, calc((100% - 1160px) / 2));
+}
+
+.recipeSection {
+  padding-top: 60px;
+}
+
+.sectionHeading {
+  margin-bottom: 30px;
+}
+
+.sectionHeading h2 {
+  margin: 8px 0 0;
+  font-size: clamp(34px, 4vw, 54px);
+  font-weight: 950;
+  letter-spacing: -.06em;
+  line-height: 1.15;
+}
+
+.noodleSteps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: noodle;
+}
+
+.noodleSteps li {
+  min-height: 190px;
+  padding: 28px 22px;
+  border: 1px solid rgba(23, 62, 53, .12);
+  border-radius: 22px;
+  background: white;
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 780;
+  box-shadow: 0 14px 36px rgba(23, 62, 53, .06);
+  counter-increment: noodle;
+}
+
+.noodleSteps li::before {
+  content: counter(noodle, decimal-leading-zero);
+  display: block;
+  margin-bottom: 24px;
+  color: var(--coral);
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: .12em;
+}
+
+.recipeGrid,
+.sideGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.recipeCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(23, 62, 53, .12);
+  border-radius: 24px;
+  background: white;
+  box-shadow: 0 15px 42px rgba(23, 62, 53, .06);
+}
+
+.recipeImage {
+  position: relative;
+  height: 230px;
+  overflow: hidden;
+  background: #e8e3d8;
+}
+
+.recipeImage img {
+  object-fit: cover;
+  transform: scale(1.45);
+  transform-origin: 50% 47%;
+}
+
+.recipeBody {
+  padding: 26px 28px 30px;
+}
+
+.recipeIndex {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--coral);
+  color: white;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .08em;
+}
+
+.recipeTitleRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed rgba(23, 62, 53, .18);
+}
+
+.recipeTitleRow h3 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 950;
+  letter-spacing: -.05em;
+}
+
+.recipeTitleRow small {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #fee7dc;
+  color: var(--coral-dark);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.recipeCard ol {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding-left: 22px;
+  color: var(--green-soft);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.recipeCard li::marker {
+  color: var(--coral);
+  font-weight: 950;
+}
+
+.sideGrid .recipeCard {
+  display: flex;
+}
+
+.sideGrid .recipeBody {
+  width: 100%;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 44px max(24px, calc((100% - 1160px) / 2));
+  background: #102f29;
+  color: rgba(255, 255, 255, .7);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.footer a {
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .header {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 18px;
+  }
+
+  .brand {
+    font-size: 22px;
+  }
+
+  .brand img {
+    width: 46px;
+    height: 46px;
+  }
+
+  .header nav {
+    width: 100%;
+    gap: 18px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 70px 20px 52px;
+  }
+
+  .hero h1 {
+    font-size: 52px;
+  }
+
+  .hero p {
+    font-size: 16px;
+  }
+
+  .noodleSection,
+  .recipeSection {
+    padding: 64px 18px;
+  }
+
+  .noodleSteps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recipeGrid,
+  .sideGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero h1 {
+    font-size: 44px;
+  }
+
+  .heroPanel {
+    padding: 24px;
+  }
+
+  .heroPanel p {
+    font-size: 20px;
+  }
+
+  .noodleSteps {
+    grid-template-columns: 1fr;
+  }
+
+  .noodleSteps li {
+    min-height: 0;
+  }
+
+  .recipeImage {
+    height: 190px;
+  }
+
+  .recipeBody {
+    padding: 22px 20px 24px;
+  }
+
+  .recipeTitleRow {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
