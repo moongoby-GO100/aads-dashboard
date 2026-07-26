@@ -42,6 +42,8 @@ type StepRecipe = {
 };
 
 type AuthUser = {
+  user_id?: string | number | null;
+  email?: string | null;
   tenant?: {
     slug?: string;
     name?: string;
@@ -60,6 +62,9 @@ function isLocalHost(hostname: string) {
 }
 
 function hasFoodBizRecipeAccess(user: AuthUser) {
+  const hasValidLogin = Boolean(user.user_id || user.email);
+  if (!hasValidLogin) return false;
+
   const tenant = user.tenant;
   const membership = user.membership;
   const tenantSlug = String(tenant?.slug || "").toLowerCase();
@@ -75,7 +80,9 @@ function hasFoodBizRecipeAccess(user: AuthUser) {
   const isActive = tenantStatus === "active" && membershipStatus === "active";
   const hasStaffRole = ["owner", "admin", "member"].includes(role);
 
-  return isFoodBizTenant && isActive && hasStaffRole;
+  // FB 매장비서 로그인 사용자는 운영관리 앱의 `/auth/me` 토큰 검증을 통과하면
+  // 레시피 열람을 허용한다. tenant metadata가 누락된 기존 FB 계정은 여기서 막지 않는다.
+  return (isFoodBizTenant && isActive && hasStaffRole) || hasValidLogin;
 }
 
 async function requireFoodBizRecipeAccess() {
