@@ -12,7 +12,10 @@ const WATER_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-water-naengmyeon.jpg"
 const BIBIM_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-bibim-bul-naengmyeon.jpg";
 const POLLACK_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-pollack-naengmyeon.jpg";
 const MUKSABAL_IMAGE = "/brands/unni-naengmyeon/menu/nas-muksabal.jpg";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const CONFIGURED_API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = CONFIGURED_API_BASE.startsWith("http")
+  ? CONFIGURED_API_BASE
+  : "https://aads.newtalk.kr/api/v1";
 const FOOD_BIZ_HOST = "fb.newtalk.kr";
 const FOOD_BIZ_LOGIN_URL = "https://fb.newtalk.kr/static/apps/yeoljeong-finance/index.html?redirect=/unni-naengmyeon/recipes";
 const FOOD_BIZ_RECIPE_URL = "https://fb.newtalk.kr/unni-naengmyeon/recipes";
