@@ -540,3 +540,20 @@
 - 배포 로그: `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260726-183504.log` 기준 `18:41:48 KST`에 blue active 전환, green standby 동기화, release 확인이 완료됐다. Step 7 QA는 Bearer 인증 누락으로 `UNKNOWN`이라 통과 근거로 쓰지 않는다.
 - 검증: `npx tsc --noEmit`, `git diff --check`, 외부 `https://aads.newtalk.kr/login` HTTP 200, 외부 `https://aads.newtalk.kr/chat` 인증 보호 307 redirect, blue `127.0.0.1:3100/login` HTTP 200, green `127.0.0.1:3101/login` HTTP 200을 확인했다.
 - 작업트리: 스크롤 조치와 무관한 `public/manager/env_unknown.json`, `public/manager/env_5.json`만 별도 사용자 변경으로 남아 있었고, 배포 산출물에 섞이지 않도록 보호 대상이다.
+
+## 2026-07-26 19:04 KST - unni recipe guide access protection
+
+- 요청: CEO 권장 조치 승인에 따라 언니냉면 조리법 페이지의 공개 접근을 차단하고 직원용/관리자용으로 전환.
+- 조치:
+  - `src/middleware.ts`에서 `/unni-naengmyeon/recipes`를 공개 예외보다 먼저 검사해 비로그인 접근을 AADS 로그인으로 리다이렉트하도록 했다.
+  - `unni.newtalk.kr` 도메인에서 조리법 경로 요청 시 `https://aads.newtalk.kr/login?redirect=/unni-naengmyeon/recipes`로 이동시켜 브랜드 공개 도메인에는 내부 조리법을 직접 노출하지 않도록 했다.
+  - `src/app/unni-naengmyeon/recipes/page.tsx`에서 서버 렌더 시 `auth/me`를 호출해 `is_internal_admin` 사용자만 레시피 본문을 렌더링하도록 했다. 인증 실패는 로그인, 내부 관리자 아님은 `/chat`으로 이동한다.
+  - `src/app/unni-naengmyeon/page.tsx` 상단 링크 문구를 `직원용 조리법`으로 변경하고 AADS 로그인 URL로 연결했다.
+- 검증:
+  - 대상 ESLint `npx eslint src/middleware.ts src/app/unni-naengmyeon/page.tsx src/app/unni-naengmyeon/recipes/page.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes`가 dynamic route로 생성됨.
+  - 로컬 production server `127.0.0.1:3040`에서 `Host: unni.newtalk.kr /` HTTP 200 확인.
+  - 로컬 production server에서 `Host: unni.newtalk.kr /unni-naengmyeon/recipes` 비로그인 요청은 `307 https://aads.newtalk.kr/login?redirect=%2Funni-naengmyeon%2Frecipes` 확인.
+  - 로컬 production server에서 `Host: aads.newtalk.kr /unni-naengmyeon/recipes` 비로그인 요청은 `307 /login?redirect=%2Funni-naengmyeon%2Frecipes`, 가짜 쿠키 요청도 `307 /login?redirect=/unni-naengmyeon/recipes` 확인.
+- 롤백: 본 변경 커밋을 revert하면 조리법 페이지는 이전처럼 공개 경로로 되돌아간다.

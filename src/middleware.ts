@@ -5,6 +5,7 @@ const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$/;
+const UNNI_RECIPE_PATH = "/unni-naengmyeon/recipes";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -25,6 +26,12 @@ export async function middleware(request: NextRequest) {
   if (isUnniDomain) {
     if (pathname === "/") {
       return NextResponse.rewrite(new URL("/unni-naengmyeon", request.url));
+    }
+
+    if (pathname === UNNI_RECIPE_PATH || pathname.startsWith(`${UNNI_RECIPE_PATH}/`)) {
+      const loginUrl = new URL("https://aads.newtalk.kr/login");
+      loginUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
     }
 
     const allowed = ["/unni-naengmyeon", "/brands", "/api/v1/unni-naengmyeon"]
@@ -62,6 +69,16 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/kakaobot", request.url));
     }
     // kakaobot 허용 경로는 인증 없이 통과
+    return NextResponse.next();
+  }
+
+  if (pathname === UNNI_RECIPE_PATH || pathname.startsWith(`${UNNI_RECIPE_PATH}/`)) {
+    const token = request.cookies.get("aads_token")?.value;
+    if (!token) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
+    }
     return NextResponse.next();
   }
 

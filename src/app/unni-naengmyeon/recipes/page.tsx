@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import styles from "./page.module.css";
 
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
@@ -8,6 +10,7 @@ const WATER_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-water-naengmyeon.jpg"
 const BIBIM_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-bibim-bul-naengmyeon.jpg";
 const POLLACK_MENU_IMAGE = "/brands/unni-naengmyeon/menu/nas-pollack-naengmyeon.jpg";
 const MUKSABAL_IMAGE = "/brands/unni-naengmyeon/menu/nas-muksabal.jpg";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://unni.newtalk.kr"),
@@ -30,6 +33,32 @@ type StepRecipe = {
   note?: string;
   steps: string[];
 };
+
+async function requireInternalAdmin() {
+  const token = (await cookies()).get("aads_token")?.value;
+  if (!token) {
+    redirect("/login?redirect=/unni-naengmyeon/recipes");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    redirect("/login?redirect=/unni-naengmyeon/recipes");
+  }
+
+  if (!response.ok) {
+    redirect("/login?redirect=/unni-naengmyeon/recipes");
+  }
+
+  const user = await response.json();
+  if (!user?.is_internal_admin) {
+    redirect("/chat");
+  }
+}
 
 const noodleSteps = [
   "찬물에 면을 한번 씻어서 삶는다.",
@@ -135,7 +164,9 @@ function RecipeCard({ recipe, index }: { recipe: StepRecipe; index: number }) {
   );
 }
 
-export default function UnniRecipePage() {
+export default async function UnniRecipePage() {
+  await requireInternalAdmin();
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
