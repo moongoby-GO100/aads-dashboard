@@ -7,6 +7,13 @@ const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/
 const PUBLIC_REPORT_FILE = /^\/reports\/[^/]+\.(?:html|htm|pdf|txt|md|csv|json)$/;
 const UNNI_RECIPE_PATH = "/unni-naengmyeon/recipes";
 const FOOD_BIZ_RECIPE_URL = "https://fb.newtalk.kr/unni-naengmyeon/recipes";
+const FOOD_BIZ_LOGIN_PATH = "/static/apps/yeoljeong-finance/index.html";
+
+function foodBizLoginUrl(request: NextRequest) {
+  const loginUrl = new URL(FOOD_BIZ_LOGIN_PATH, request.url);
+  loginUrl.searchParams.set("redirect", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return loginUrl;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -46,6 +53,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/apps/yeoljeong-finance/index.html", request.url));
   }
 
+  if (isFoodBiz && pathname === "/login") {
+    const loginUrl = new URL(FOOD_BIZ_LOGIN_PATH, request.url);
+    const redirectPath = request.nextUrl.searchParams.get("redirect") || request.nextUrl.searchParams.get("next");
+    if (redirectPath) {
+      loginUrl.searchParams.set("redirect", redirectPath);
+    }
+    return NextResponse.redirect(loginUrl);
+  }
+
   if (isFoodBiz && pathname === "/") {
     return NextResponse.redirect(new URL("/apps/yeoljeong-finance/index.html", request.url));
   }
@@ -74,9 +90,7 @@ export async function middleware(request: NextRequest) {
   if (pathname === UNNI_RECIPE_PATH || pathname.startsWith(`${UNNI_RECIPE_PATH}/`)) {
     const token = request.cookies.get("aads_token")?.value;
     if (!token) {
-      const loginUrl = new URL("/login", request.url);
-      loginUrl.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(foodBizLoginUrl(request));
     }
     return NextResponse.next();
   }
