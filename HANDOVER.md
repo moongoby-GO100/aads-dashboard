@@ -487,3 +487,11 @@
 - 번들 검증: 운영 컨테이너 번들에서 `overflowAnchor:"none"`이 확인되어 메시지 컨테이너의 브라우저 기본 scroll anchoring 비활성화가 배포 반영됐다.
 - 재검증: `npx tsc --noEmit`, `npm run build`, `git diff --check`, `python3 -m py_compile /root/aads/aads-server/app/services/chat_service.py`를 통과했다.
 - 미검증: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 미실행이다. 캡처 도구의 저장 URL은 HTML을 반환해 이미지 판독에 실패했으므로, 코드/빌드/운영 번들/컨테이너/HTTP 검증으로 대체했다.
+
+## 2026-07-26 09:28 KST - chat scroll jump follow-up fix
+
+- 원인 정정: 이전 보고에서 "이전 대화 prepend 시 기존 scrollTop까지 포함해 위치 보존"이라고 했지만 실제 운영 코드는 `container.scrollTop = container.scrollHeight - prevScrollHeight`만 적용되어 기존 오프셋을 보존하지 않았다. 또한 초기 로드 `ResizeObserver`가 3초 동안 사용자 wheel/touch/pointer 입력과 관계없이 하단 고정을 유지해 질문 전송 직후 DOM 재배치와 경합할 수 있었다.
+- 조치: `src/app/chat/page.tsx`의 이전 대화 로드 보정을 `newScrollHeight - prevScrollHeight + prevScrollTop`으로 변경해 prepend 전후 같은 메시지 위치를 유지하도록 했다. 초기 로드 scroll stabilizer는 3초에서 0.8초로 줄이고, 사용자가 wheel/touch/pointer 입력을 시작하면 즉시 해제하도록 변경했다.
+- 검증: `npx tsc --noEmit`, `git diff --check`, `npm run build`를 통과했다. 빌드는 Next.js 16.1.6 기준 60개 route 생성까지 성공했다.
+- 배포 기준: 본 변경 커밋을 dashboard `main`에 푸시하고 Blue/Green 대시보드에 배포한 뒤 양 컨테이너 `AADS_RELEASE_SHA`, `/chat` HTTP 307 인증 보호 응답, Docker health, 운영 번들 내 변경 문자열 확인으로 완료 판정한다.
+- 미검증 예정: 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 수동 E2E는 별도 브라우저 인증이 필요하다.

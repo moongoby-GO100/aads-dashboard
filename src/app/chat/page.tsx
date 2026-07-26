@@ -2824,6 +2824,7 @@ export default function ChatPage() {
     if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
     const container = messagesContainerRef.current;
     const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
       `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
     ).catch(() => null);
@@ -2837,7 +2838,9 @@ export default function ChatPage() {
         return [...unique, ...prev];
       });
       requestAnimationFrame(() => {
-        if (container) container.scrollTop = container.scrollHeight - prevScrollHeight;
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
+        });
       });
     } else {
       setHasMoreMessages(false);
@@ -3929,13 +3932,22 @@ export default function ChatPage() {
         scrollToMessagesBottom(true);
       });
       observer.observe(container);
-      // 3초 후 자동 해제 (초기 로드 완료)
-      const timeout = setTimeout(() => {
+      const releaseInitialScrollLock = () => {
         observer.disconnect();
         isInitialLoadRef.current = false;
-        isNearBottomRef.current = true;
-      }, 3000);
-      return () => { observer.disconnect(); clearTimeout(timeout); };
+        isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+      };
+      container.addEventListener("wheel", releaseInitialScrollLock, { passive: true, once: true });
+      container.addEventListener("touchstart", releaseInitialScrollLock, { passive: true, once: true });
+      container.addEventListener("pointerdown", releaseInitialScrollLock, { passive: true, once: true });
+      const timeout = setTimeout(releaseInitialScrollLock, 800);
+      return () => {
+        observer.disconnect();
+        clearTimeout(timeout);
+        container.removeEventListener("wheel", releaseInitialScrollLock);
+        container.removeEventListener("touchstart", releaseInitialScrollLock);
+        container.removeEventListener("pointerdown", releaseInitialScrollLock);
+      };
     } else if (isNearBottomRef.current) {
       // near-bottom이면 메시지 교체(merge/replace) 시에도 하단 고정 (DOM 재배치 스크롤 점프 방지)
       scrollToMessagesBottom();
