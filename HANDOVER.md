@@ -574,7 +574,16 @@
   - `npx eslint src/app/unni-naengmyeon/page.tsx` 통과.
   - `npx tsc --noEmit` 통과.
   - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon` 포함 61개 route 생성.
-- 배포 예정:
-  - 이번 변경은 `src/app/unni-naengmyeon/page.tsx`와 `HANDOVER.md`만 커밋 대상이다.
-  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 배포 이미지에 섞이지 않도록 배포 동안 임시 stash 후 복원한다.
+- 배포/운영 검증:
+  - 커밋 `bb19b8534e6f`를 `dashboard-write/main`과 `origin/main`에 푸시했다.
+  - 배포 로그 `/root/aads/aads-dashboard/deploy-logs/dashboard-deploy-20260726-191836.log` 기준 `19:25:46 KST` Blue/Green 배포 성공. active는 green `3101`, standby는 blue `3100`.
+  - 양 컨테이너 `aads-dashboard`, `aads-dashboard-green`은 Docker health `healthy`, `AADS_RELEASE_SHA=bb19b8534e6f`로 일치했다.
+  - 외부 `https://unni.newtalk.kr/`는 HTTP 200, `x-middleware-rewrite: /unni-naengmyeon` 확인.
+  - 운영 HTML에서 `s.baemin.com/lX000J2aj8vt4` 10회, `배민 주문하기` 4회, `NOW OPEN ON BAEMIN` 2회, `index, follow` 2회 확인.
+  - 운영 HTML에서 `입점 준비`, `준비 중`, `COMING SOON`, `오픈 전`, `곧 찾아` 문구 없음.
+  - `https://unni.newtalk.kr/unni-naengmyeon/recipes` 비로그인 요청은 `307 https://aads.newtalk.kr/login?redirect=%2Funni-naengmyeon%2Frecipes`로 보호 유지.
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 배포 동안 임시 stash 후 원위치 복원했다.
+- 미검증:
+  - `capture_screenshot`은 `[Errno 7] Argument list too long: 'ssh'`로 실패해 브라우저 캡처는 미실행이다. 외부 HTTP/HTML/컨테이너/SHA 검증으로 대체했다.
+  - 배포 스크립트 Step 7 프론트엔드 QA는 `UNKNOWN`으로 종료되어 통과 근거로 쓰지 않는다.
 - 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 오픈 CTA 변경을 이전 상태로 되돌릴 수 있다.
