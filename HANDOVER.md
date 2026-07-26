@@ -557,3 +557,24 @@
   - 로컬 production server에서 `Host: unni.newtalk.kr /unni-naengmyeon/recipes` 비로그인 요청은 `307 https://aads.newtalk.kr/login?redirect=%2Funni-naengmyeon%2Frecipes` 확인.
   - 로컬 production server에서 `Host: aads.newtalk.kr /unni-naengmyeon/recipes` 비로그인 요청은 `307 /login?redirect=%2Funni-naengmyeon%2Frecipes`, 가짜 쿠키 요청도 `307 /login?redirect=/unni-naengmyeon/recipes` 확인.
 - 롤백: 본 변경 커밋을 revert하면 조리법 페이지는 이전처럼 공개 경로로 되돌아간다.
+
+## 2026-07-26 19:13 KST - unni baemin official launch update
+
+- 요청: CEO가 전달한 배민 오픈 링크 `https://s.baemin.com/lX000J2aj8vt4`를 확인하고 언니냉면 사이트를 정식 오픈 운영 상태로 수정.
+- 확인:
+  - 단축 링크 `https://s.baemin.com/lX000J2aj8vt4`는 서버 HEAD 요청에서 502를 반환했으나, 리다이렉트 대상은 `https://www.baemin.com/shopDetail?shopDetail_shopNo=14948203&bm_rfr=SHARE&shopDetail_campaignId=-1`로 확인했다.
+  - 배민 직접 URL은 CloudFront/ALB 봇 차단으로 403을 반환했다. 사이트에는 CEO가 공유한 단축 링크를 공식 주문 CTA로 사용한다.
+- 조치:
+  - `src/app/unni-naengmyeon/page.tsx`에 배민 주문 링크 상수를 추가하고 헤더, 히어로, 위치, 주문 섹션 CTA를 모두 배민 주문 링크로 연결했다.
+  - 기존 `배민 입점 준비 중`, `COMING SOON`, `오픈 전 업데이트 예정` 문구를 정식 오픈/주문 가능 문구로 교체했다.
+  - 공개 홈페이지 metadata description을 배민 주문 중심으로 갱신하고 robots를 `index: true, follow: true`로 변경했다.
+  - 직원용 조리법 보호는 그대로 유지했다.
+- 검증:
+  - 고객 화면 대상 준비중 문구 검색 `rg "입점 준비|준비 중|COMING SOON|오픈 전|곧 찾아"` 결과 없음.
+  - `npx eslint src/app/unni-naengmyeon/page.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon` 포함 61개 route 생성.
+- 배포 예정:
+  - 이번 변경은 `src/app/unni-naengmyeon/page.tsx`와 `HANDOVER.md`만 커밋 대상이다.
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 배포 이미지에 섞이지 않도록 배포 동안 임시 stash 후 복원한다.
+- 롤백: 본 변경 커밋을 revert하고 dashboard blue/green 배포를 재실행하면 오픈 CTA 변경을 이전 상태로 되돌릴 수 있다.

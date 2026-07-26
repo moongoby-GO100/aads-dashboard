@@ -4,12 +4,14 @@ import InquiryForm from "./InquiryForm";
 import styles from "./page.module.css";
 
 const BRAND_LOGO = "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png";
+const BAEMIN_ORDER_URL = "https://s.baemin.com/lX000J2aj8vt4";
+const BAEMIN_SHOP_NO = "14948203";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://unni.newtalk.kr"),
   title: "언니냉면 | 성신여대 배달 냉면",
   applicationName: "언니냉면",
-  description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다. 황동그릇에 담은 물냉면과 매콤한 비빔냉면 메뉴를 만나보세요.",
+  description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다. 배달의민족에서 물냉면, 비빔냉면, 명태회냉면과 든든한 세트 메뉴를 주문해 보세요.",
   keywords: ["언니냉면", "성신여대 냉면", "성북구 냉면", "배달 냉면", "물냉면", "비빔냉면"],
   alternates: { canonical: "/" },
   openGraph: {
@@ -25,7 +27,7 @@ export const metadata: Metadata = {
     apple: [{ url: BRAND_LOGO }],
   },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "언니냉면" },
-  robots: { index: false, follow: false },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
@@ -189,9 +191,10 @@ export default function UnniNaengmyeonPage() {
               </div>
             </div>
             <a href="#location">매장 안내</a>
+            <a href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문</a>
             <a href="#inquiry">문의</a>
           </nav>
-          <span className={styles.headerCta} aria-disabled="true">배민 입점 준비 중</span>
+          <a className={styles.headerCta} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문하기</a>
         </div>
       </header>
 
@@ -201,14 +204,14 @@ export default function UnniNaengmyeonPage() {
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}>SUNGSHIN WOMEN&apos;S UNIV. · DELIVERY ONLY</span>
             <h1>언니가 제대로<br /><em>말아주는 냉면</em></h1>
-            <p>시원하게 당기는 날도, 매콤하게 풀고 싶은 날도.<br className={styles.desktopBreak} /> 성신여대 앞 언니냉면이 곧 찾아갑니다.</p>
+            <p>시원하게 당기는 날도, 매콤하게 풀고 싶은 날도.<br className={styles.desktopBreak} /> 성신여대 앞 언니냉면을 배민에서 바로 주문하세요.</p>
             <div className={styles.heroActions}>
-              <a className={styles.primaryButton} href="#menu">메뉴 미리보기 <ArrowIcon /></a>
+              <a className={styles.primaryButton} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문하기 <ArrowIcon /></a>
               <a className={styles.textButton} href="#location"><PinIcon /> 성신여대점 위치</a>
             </div>
             <div className={styles.openingNote}>
               <span className={styles.pulse} aria-hidden="true" />
-              언니냉면 메뉴 준비 중
+              배달의민족 정식 오픈 · 매장번호 {BAEMIN_SHOP_NO}
             </div>
           </div>
           <div className={styles.heroVisual}>
@@ -233,7 +236,7 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.sectionHeading}>
           <span>OUR MENU</span>
           <h2>익숙한 메뉴 그대로,<br />이제 언니냉면으로</h2>
-          <p>전달해 주신 배민 메뉴를 기준으로 이름과 구성을 언니냉면에 맞춰 반영했습니다.</p>
+          <p>배달의민족 오픈 메뉴를 기준으로 대표 냉면과 세트 구성을 한눈에 확인할 수 있게 정리했습니다.</p>
         </div>
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
@@ -284,7 +287,7 @@ export default function UnniNaengmyeonPage() {
             <MenuList items={[...extras, ...drinks]} />
           </section>
         </div>
-        <p className={styles.menuNotice}>가격은 전달된 배민 메뉴 화면 기준입니다. 사진은 원본 메뉴와 구성이 일치하는 항목에만 표시하며, 할인·선택 옵션·판매 여부는 실제 주문 화면에서 달라질 수 있습니다.</p>
+        <p className={styles.menuNotice}>가격과 판매 여부는 배달의민족 주문 화면에서 최종 확인해 주세요. 사진은 원본 메뉴와 구성이 일치하는 항목에만 표시합니다.</p>
       </section>
 
       <section className={styles.storySection} id="story">
@@ -316,7 +319,7 @@ export default function UnniNaengmyeonPage() {
               <p>성신여대 앞 · 배달전문 냉면 브랜드</p>
             </div>
           </div>
-          <div className={styles.locationStatus} aria-label="언니냉면 배민 입점 준비 중"><span /> 배민 입점 준비 중</div>
+          <a className={styles.locationStatus} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer" aria-label="언니냉면 배민 주문 페이지 열기"><span /> 배민에서 주문 가능 <ArrowIcon /></a>
         </div>
       </section>
 
@@ -337,10 +340,10 @@ export default function UnniNaengmyeonPage() {
 
       <section className={styles.orderSection} id="order">
         <div className={styles.orderBowl} aria-hidden="true"><span /><span /><span /></div>
-        <p>BAEMIN COMING SOON</p>
-        <h2>언니냉면 배민 입점을<br />준비하고 있습니다</h2>
-        <span>언니냉면 주문 페이지가 등록되면 공식 주문 링크를 이곳에 연결하겠습니다.</span>
-        <span className={styles.orderButton} aria-disabled="true">입점 준비 중</span>
+        <p>NOW OPEN ON BAEMIN</p>
+        <h2>언니냉면을<br />배민에서 주문하세요</h2>
+        <span>성신여대점 배달전문 냉면 브랜드 언니냉면이 정식 오픈했습니다.</span>
+        <a className={styles.orderButton} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문 페이지 열기 <ArrowIcon /></a>
       </section>
 
       <footer className={styles.footer}>
@@ -350,7 +353,7 @@ export default function UnniNaengmyeonPage() {
         </div>
         <div className={styles.footerInfo}>
           <p>서울특별시 성북구 동소문로 90 1층</p>
-          <p>사업자 정보 및 고객센터는 오픈 전 업데이트 예정</p>
+          <p>배달의민족 매장번호 {BAEMIN_SHOP_NO} · 주문 및 배달 정보는 배민 주문 화면 기준</p>
           <small>© 2026 UNNI NAENGMYEON. ALL RIGHTS RESERVED.</small>
         </div>
       </footer>
