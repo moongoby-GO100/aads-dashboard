@@ -496,3 +496,11 @@
 - 배포 검증: 커밋 `074eaff5d524`를 dashboard `main`에 푸시했고 Blue/Green 배포 스크립트가 green active / blue standby 동기화와 release 확인을 완료했다. 양 컨테이너는 `healthy`, `AADS_RELEASE_SHA=074eaff5d524`였고 `/chat` 및 대상 세션 URL은 인증 보호 `307 /login?redirect=...`를 반환했다.
 - 번들 검증: 양 슬롯 운영 번들에서 `overflowAnchor:"none"`, `touchstart`, `pointerdown`, `setTimeout(r,800)` 토큰을 확인해 이번 scroll stabilizer 변경이 배포 번들에 포함된 것을 확인했다.
 - 미검증: E2E Vault 계정 `e2e_auto@aads.dev` 로그인 테스트가 `failed`로 종료되어 인증된 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 수동 E2E는 미완료다. 코드/빌드/운영 번들/컨테이너/HTTP 검증으로 대체했다.
+
+## 2026-07-26 09:46 KST - chat scroll jump ledger reconciliation
+
+- 원장 보정: 이전 완료 보고의 commit/push/deploy/document 상태가 실제 ledger와 충돌할 수 있어 `git fetch --all --prune` 후 dashboard `HEAD`, `origin/main`, `dashboard-write/main`을 재확인했다. 세 ref 모두 `465ff93ead70cb853be90c73d179c6e6af9b5fda`로 일치한다.
+- 운영 검증: dashboard active slot은 `aads-dashboard:3100`이며 `aads-dashboard`와 `aads-dashboard-green` 모두 Docker health 기준 `healthy`다. 양 컨테이너의 `AADS_RELEASE_SHA`는 `465ff93ead70`로 현재 Git HEAD와 일치한다.
+- HTTP 검증: `https://aads.newtalk.kr/login`은 `200`, `https://aads.newtalk.kr/chat`은 인증 보호에 따라 `307 /login?redirect=%2Fchat`을 반환했다.
+- 정적 검증: `npx tsc --noEmit`, `npm run build`, `git diff --check -- src/app/chat/page.tsx HANDOVER.md`를 통과했다. Next.js 빌드는 60개 route 생성을 완료했다.
+- 미검증: QA Step 7은 API Bearer 인증 누락으로 `UNKNOWN`이라 통과 근거로 쓰지 않는다. 인증된 CEO 브라우저에서 실제 질문 전송 후 스크롤 위치를 눈으로 확인하는 E2E는 아직 미완료다.
