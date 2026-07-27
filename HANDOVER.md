@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 09:30 KST - Chat d19a session initial merge and scroll stabilization
+
+- 배경: CEO가 세션 `d19a0e9e-f96f-4c83-8367-20de50762364`에서 스크롤 이상과 반복 응답 체감을 보고했다.
+- 실측: 대상 세션은 메시지 357건이며 최근 50건 중 assistant 32건, partial/interrupted 계열 5건이 포함됐다. 완전 동일 assistant 본문 중복은 2그룹뿐이어서 대량 DB 중복보다 화면 병합/중단응답 노출 문제가 우세했다.
+- 원인: 세션 초기 로드와 빈 화면 500ms 재시도 경로가 `mergeServerMessagesPreservingLocal()`을 우회해, 같은 execution/시작문을 가진 interrupted partial과 최종 assistant가 동시에 렌더될 수 있었다.
+- 조치: `src/app/chat/page.tsx`에서 초기 로드 첫 세트와 자동 재시도 세트도 모두 `mergeServerMessagesPreservingLocal()`을 통과시켜 assistant 중복 접기/우선순위 병합을 동일하게 적용한다.
+- 검증: `npx tsc --noEmit` 통과. 운영 배포 후 대상 세션 새로고침/질문 시 상단 이동과 반복 표시 재발 여부를 확인한다.
+
 ## 2026-07-27 09:22 KST - Chat large-session initial scroll anchoring hardening
 
 - 배경: CEO가 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 질문 시 브라우저 멈춤과 스크롤 상단 이동이 계속 재발한다고 보고했고, 이전 완료 보고가 커밋/푸시/배포/문서 원장과 충돌했다.

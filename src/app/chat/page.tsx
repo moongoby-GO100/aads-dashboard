@@ -3731,7 +3731,7 @@ export default function ChatPage() {
             setMessages((prev) => (
               prev.length > 0
                 ? mergeServerMessagesPreservingLocal(prev, finalMsgs)
-                : finalMsgs
+                : mergeServerMessagesPreservingLocal([], finalMsgs)
             ));
             // 2번: rate_limited 메시지가 있으면 자동 폴링 활성화 (CEO 수동 재전송 불필요)
             if (processed.some(m => m.intent === "rate_limited") && !waitingBgRef.current) {
@@ -3945,7 +3945,8 @@ export default function ChatPage() {
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
-            setMessages(surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true }));
+            const processed = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
+            setMessages((prev) => mergeServerMessagesPreservingLocal(prev, processed));
           }
         })
         .catch(() => {});
