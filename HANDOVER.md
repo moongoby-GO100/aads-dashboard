@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 09:10 KST - Chat idea memo manual input and management
+
+- 배경: CEO가 채팅창의 아이디어 메모를 직접 입력하고 확인·관리할 수 있게 해 달라고 지시했다.
+- 원인: 아이디어 메모 탭은 `agenda` 목록 조회만 제공했고, 채팅 패널 안에서 직접 등록·수정·상태 변경하는 UI가 없었다.
+- 조치: `src/app/chat/ChatArtifactPanel.tsx`에 직접 입력 폼을 추가해 제목, 내용, 우선순위를 입력하고 현재 세션에 연결된 `ceo_agenda` 메모로 저장하게 했다.
+- 조치: 기존 메모 목록에서 상세 펼침, 수정 모드, 우선순위/상태 편집, 빠른 상태 변경, 새로고침, 오류 표시를 지원한다.
+- 검증: `npx tsc --noEmit`, `npm run build` 통과.
+- 범위 제외: DB 스키마 변경 없음. 기존 `/api/v1/agenda` CRUD를 사용한다.
+
 ## 2026-07-27 08:55 KST - Chat SSE replay duplicate guard follow-up
 
 - 배경: 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 대형 세션 렌더 완화 후에도 질문 중 브라우저 멈춤, 스크롤 상단 이동, 중복 응답 체감이 재발했다.

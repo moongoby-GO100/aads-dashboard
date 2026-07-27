@@ -19,7 +19,7 @@ const clampArtifactPanelWidth = (width: number) => {
 };
 
 interface AgendaItem {
-  id: string;
+  id: string | number;
   project: string;
   title: string;
   summary: string;
@@ -322,23 +322,137 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   // 아젠다 상태
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
   const [agendaLoading, setAgendaLoading] = useState(false);
+  const [agendaSaving, setAgendaSaving] = useState(false);
+  const [agendaError, setAgendaError] = useState<string | null>(null);
   const [agendaFilter, setAgendaFilter] = useState<string>("전체");
   const [expandedAgendaId, setExpandedAgendaId] = useState<string | null>(null);
+  const [agendaDraftTitle, setAgendaDraftTitle] = useState("");
+  const [agendaDraftSummary, setAgendaDraftSummary] = useState("");
+  const [agendaDraftPriority, setAgendaDraftPriority] = useState("P2");
+  const [editingAgendaId, setEditingAgendaId] = useState<string | null>(null);
+  const [agendaEditTitle, setAgendaEditTitle] = useState("");
+  const [agendaEditSummary, setAgendaEditSummary] = useState("");
+  const [agendaEditPriority, setAgendaEditPriority] = useState("P2");
+  const [agendaEditStatus, setAgendaEditStatus] = useState("논의중");
 
-  useEffect(() => {
-    if (artifactTab !== "agenda") return;
+  const loadAgendaItems = useCallback(async () => {
     if (!sessionId) {
       setAgendaItems([]);
       return;
     }
     setAgendaLoading(true);
+    setAgendaError(null);
     const qs = `?source_session_id=${encodeURIComponent(sessionId)}&limit=50`;
-    fetch(`${BASE_URL}/agenda/${qs}`, { headers: authHdrs() })
-      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
-      .then((data) => setAgendaItems(data.items ?? []))
-      .catch(() => setAgendaItems([]))
-      .finally(() => setAgendaLoading(false));
-  }, [artifactTab, sessionId]);
+    try {
+      const res = await fetch(`${BASE_URL}/agenda/${qs}`, { headers: authHdrs(), credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setAgendaItems(data.items ?? []);
+    } catch (e) {
+      setAgendaItems([]);
+      setAgendaError((e as Error).message || "아이디어 메모를 불러오지 못했습니다.");
+    } finally {
+      setAgendaLoading(false);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (artifactTab !== "agenda") return;
+    void loadAgendaItems();
+  }, [artifactTab, loadAgendaItems]);
+
+  const resetAgendaDraft = useCallback(() => {
+    setAgendaDraftTitle("");
+    setAgendaDraftSummary("");
+    setAgendaDraftPriority("P2");
+  }, []);
+
+  const createAgendaMemo = useCallback(async () => {
+    if (!sessionId || agendaSaving) return;
+    const title = agendaDraftTitle.trim();
+    const summary = agendaDraftSummary.trim();
+    if (!title && !summary) {
+      setAgendaError("제목이나 내용을 입력해 주십시오.");
+      return;
+    }
+    setAgendaSaving(true);
+    setAgendaError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/agenda/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHdrs() },
+        body: JSON.stringify({
+          project: "AADS",
+          title: title || summary.split("\n")[0].slice(0, 80) || "아이디어 메모",
+          summary,
+          priority: agendaDraftPriority,
+          tags: ["idea_memo", "chat"],
+          created_by: "CEO",
+          source_session_id: sessionId,
+        }),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      resetAgendaDraft();
+      await loadAgendaItems();
+    } catch (e) {
+      setAgendaError((e as Error).message || "아이디어 메모 저장 실패");
+    } finally {
+      setAgendaSaving(false);
+    }
+  }, [agendaDraftPriority, agendaDraftSummary, agendaDraftTitle, agendaSaving, loadAgendaItems, resetAgendaDraft, sessionId]);
+
+  const startAgendaEdit = useCallback((item: AgendaItem) => {
+    setEditingAgendaId(String(item.id));
+    setExpandedAgendaId(String(item.id));
+    setAgendaEditTitle(item.title ?? "");
+    setAgendaEditSummary(item.summary ?? "");
+    setAgendaEditPriority(item.priority ?? "P2");
+    setAgendaEditStatus(item.status ?? "논의중");
+    setAgendaError(null);
+  }, []);
+
+  const cancelAgendaEdit = useCallback(() => {
+    setEditingAgendaId(null);
+    setAgendaError(null);
+  }, []);
+
+  const updateAgendaMemo = useCallback(async (agendaId: string | number, patch?: Partial<Pick<AgendaItem, "title" | "summary" | "status" | "priority">>) => {
+    if (agendaSaving) return;
+    const payload = patch ?? {
+      title: agendaEditTitle.trim(),
+      summary: agendaEditSummary.trim(),
+      priority: agendaEditPriority,
+      status: agendaEditStatus,
+      caller_role: "CEO",
+      caller_project: "AADS",
+    };
+    if (!patch && !payload.title && !payload.summary) {
+      setAgendaError("제목이나 내용을 입력해 주십시오.");
+      return;
+    }
+    setAgendaSaving(true);
+    setAgendaError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/agenda/${agendaId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHdrs() },
+        body: JSON.stringify({
+          ...payload,
+          caller_role: "CEO",
+          caller_project: "AADS",
+        }),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      setEditingAgendaId(null);
+      await loadAgendaItems();
+    } catch (e) {
+      setAgendaError((e as Error).message || "아이디어 메모 수정 실패");
+    } finally {
+      setAgendaSaving(false);
+    }
+  }, [agendaEditPriority, agendaEditStatus, agendaEditSummary, agendaEditTitle, agendaSaving, loadAgendaItems]);
 
   useEffect(() => {
     if (screenSize !== "desktop") return;
@@ -783,9 +897,139 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 <ArtifactTaskMonitor sessionId={activeSession?.id} />
               ) : artifactTab === "agenda" ? (
                 <div>
+                  <div style={{
+                    background: "var(--ct-card)",
+                    border: "1px solid var(--ct-border)",
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    marginBottom: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ flex: 1, fontSize: "12px", fontWeight: 700, color: "var(--ct-text)" }}>
+                        직접 아이디어 메모
+                      </span>
+                      <button
+                        onClick={() => void loadAgendaItems()}
+                        disabled={agendaLoading}
+                        title="아이디어 메모 새로고침"
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-border)",
+                          background: "var(--ct-hover)",
+                          color: "var(--ct-text2)",
+                          fontSize: "11px",
+                          cursor: agendaLoading ? "wait" : "pointer",
+                        }}
+                      >
+                        새로고침
+                      </button>
+                    </div>
+                    <input
+                      value={agendaDraftTitle}
+                      onChange={(e) => setAgendaDraftTitle(e.target.value)}
+                      placeholder="메모 제목"
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "7px 9px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-input)",
+                        color: "var(--ct-text)",
+                        fontSize: "12px",
+                        outline: "none",
+                      }}
+                    />
+                    <textarea
+                      value={agendaDraftSummary}
+                      onChange={(e) => setAgendaDraftSummary(e.target.value)}
+                      placeholder="메모 내용"
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "8px 9px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--ct-border)",
+                        background: "var(--ct-input)",
+                        color: "var(--ct-text)",
+                        fontSize: "12px",
+                        lineHeight: 1.5,
+                        resize: "vertical",
+                        outline: "none",
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <select
+                        value={agendaDraftPriority}
+                        onChange={(e) => setAgendaDraftPriority(e.target.value)}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-border)",
+                          background: "var(--ct-input)",
+                          color: "var(--ct-text)",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {["P0", "P1", "P2", "P3"].map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                      <button
+                        onClick={() => void createAgendaMemo()}
+                        disabled={agendaSaving || (!agendaDraftTitle.trim() && !agendaDraftSummary.trim())}
+                        style={{
+                          flex: 1,
+                          padding: "7px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-accent)",
+                          background: agendaSaving ? "var(--ct-hover)" : "var(--ct-accent)",
+                          color: "#fff",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: agendaSaving ? "wait" : "pointer",
+                          opacity: (!agendaDraftTitle.trim() && !agendaDraftSummary.trim()) ? 0.5 : 1,
+                        }}
+                      >
+                        {agendaSaving ? "저장 중..." : "메모 저장"}
+                      </button>
+                      <button
+                        onClick={resetAgendaDraft}
+                        disabled={agendaSaving}
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--ct-border)",
+                          background: "transparent",
+                          color: "var(--ct-text2)",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        비우기
+                      </button>
+                    </div>
+                    {agendaError && (
+                      <div style={{
+                        border: "1px solid rgba(239,68,68,0.35)",
+                        background: "rgba(239,68,68,0.1)",
+                        color: "#fca5a5",
+                        borderRadius: "6px",
+                        padding: "6px 8px",
+                        fontSize: "11px",
+                        lineHeight: 1.4,
+                        wordBreak: "break-word",
+                      }}>
+                        {agendaError}
+                      </div>
+                    )}
+                  </div>
                   {/* 상태 필터 칩 */}
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
-                    {["전체", "논의중", "진행중", "결정", "완료"].map((s) => (
+                    {["전체", "논의중", "진행중", "보류", "결정", "완료"].map((s) => (
                       <button
                         key={s}
                         onClick={() => setAgendaFilter(s)}
@@ -820,13 +1064,15 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       );
                     }
                     return filtered.map((item) => {
-                      const isExpanded = expandedAgendaId === item.id;
+                      const itemId = String(item.id);
+                      const isExpanded = expandedAgendaId === itemId;
+                      const isEditingAgenda = editingAgendaId === itemId;
                       const statusColor = AGENDA_STATUS_COLORS[item.status] ?? "#6b7280";
                       const priorityColor = AGENDA_PRIORITY_COLORS[item.priority] ?? "#6b7280";
                       return (
                         <div
                           key={item.id}
-                          onClick={() => setExpandedAgendaId(isExpanded ? null : item.id)}
+                          onClick={() => setExpandedAgendaId(isExpanded ? null : itemId)}
                           style={{
                             background: "var(--ct-card)",
                             border: "1px solid var(--ct-border)",
@@ -836,6 +1082,110 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                             cursor: "pointer",
                           }}
                         >
+                          {isEditingAgenda ? (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+                            >
+                              <input
+                                value={agendaEditTitle}
+                                onChange={(e) => setAgendaEditTitle(e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  boxSizing: "border-box",
+                                  padding: "7px 9px",
+                                  borderRadius: "6px",
+                                  border: "1px solid var(--ct-border)",
+                                  background: "var(--ct-input)",
+                                  color: "var(--ct-text)",
+                                  fontSize: "12px",
+                                }}
+                              />
+                              <textarea
+                                value={agendaEditSummary}
+                                onChange={(e) => setAgendaEditSummary(e.target.value)}
+                                rows={5}
+                                style={{
+                                  width: "100%",
+                                  boxSizing: "border-box",
+                                  padding: "8px 9px",
+                                  borderRadius: "6px",
+                                  border: "1px solid var(--ct-border)",
+                                  background: "var(--ct-input)",
+                                  color: "var(--ct-text)",
+                                  fontSize: "12px",
+                                  lineHeight: 1.5,
+                                  resize: "vertical",
+                                }}
+                              />
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <select
+                                  value={agendaEditPriority}
+                                  onChange={(e) => setAgendaEditPriority(e.target.value)}
+                                  style={{
+                                    padding: "6px 8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--ct-border)",
+                                    background: "var(--ct-input)",
+                                    color: "var(--ct-text)",
+                                    fontSize: "12px",
+                                  }}
+                                >
+                                  {["P0", "P1", "P2", "P3"].map((p) => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                                <select
+                                  value={agendaEditStatus}
+                                  onChange={(e) => setAgendaEditStatus(e.target.value)}
+                                  style={{
+                                    flex: 1,
+                                    padding: "6px 8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--ct-border)",
+                                    background: "var(--ct-input)",
+                                    color: "var(--ct-text)",
+                                    fontSize: "12px",
+                                  }}
+                                >
+                                  {["논의중", "진행중", "보류", "결정", "완료", "폐기"].map((s) => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </div>
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button
+                                  onClick={() => void updateAgendaMemo(item.id)}
+                                  disabled={agendaSaving}
+                                  style={{
+                                    flex: 1,
+                                    padding: "7px 10px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--ct-accent)",
+                                    background: "var(--ct-accent)",
+                                    color: "#fff",
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                    cursor: agendaSaving ? "wait" : "pointer",
+                                  }}
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  onClick={cancelAgendaEdit}
+                                  disabled={agendaSaving}
+                                  style={{
+                                    padding: "7px 10px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--ct-border)",
+                                    background: "transparent",
+                                    color: "var(--ct-text2)",
+                                    fontSize: "12px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                          <>
                           <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "4px" }}>
                             <span style={{
                               fontSize: "10px", fontWeight: 700, color: "#fff",
@@ -874,7 +1224,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           {isExpanded && (
                             <div style={{ fontSize: "12px", color: "var(--ct-text2)", lineHeight: "1.6" }}>
                               {item.summary && (
-                                <div style={{ marginBottom: "6px" }}>{item.summary}</div>
+                                <div style={{ marginBottom: "8px", whiteSpace: "pre-wrap" }}>{item.summary}</div>
                               )}
                               {item.decision && (
                                 <div style={{
@@ -885,7 +1235,46 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   {item.decision}
                                 </div>
                               )}
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}
+                              >
+                                <button
+                                  onClick={() => startAgendaEdit(item)}
+                                  style={{
+                                    padding: "4px 8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid var(--ct-border)",
+                                    background: "var(--ct-hover)",
+                                    color: "var(--ct-text2)",
+                                    fontSize: "11px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  수정
+                                </button>
+                                {["논의중", "진행중", "보류", "완료"].filter((s) => s !== item.status).map((s) => (
+                                  <button
+                                    key={s}
+                                    onClick={() => void updateAgendaMemo(item.id, { status: s })}
+                                    disabled={agendaSaving}
+                                    style={{
+                                      padding: "4px 8px",
+                                      borderRadius: "6px",
+                                      border: "1px solid var(--ct-border)",
+                                      background: "transparent",
+                                      color: "var(--ct-text2)",
+                                      fontSize: "11px",
+                                      cursor: agendaSaving ? "wait" : "pointer",
+                                    }}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
+                          )}
+                          </>
                           )}
                         </div>
                       );
