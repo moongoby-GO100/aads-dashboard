@@ -43,9 +43,10 @@ body {
 /* C3: Pull-to-refresh 방지 + 스크롤 성능 */
 .ct-messages-scroll {
   overscroll-behavior-y: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
-  contain: layout paint;
-  will-change: transform;
+  contain: paint;
 }
 
 /* C1: 사이드바/아티팩트 오버레이 트랜지션 */

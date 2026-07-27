@@ -1,5 +1,15 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 23:00 KST - Chat global reply scroll stabilization for d19a recurrence
+
+- 배경: CEO가 세션 `d19a0e9e-f96f-4c83-8367-20de50762364`에서 질문 응답 중 스크롤이 상단으로 이동하고 반복 응답처럼 보이는 현상이 계속 난다고 보고했다.
+- 실측: 대상 세션은 assistant 228건/user 136건, assistant 본문 합계 986,333자, 최신 `chat_turn_executions`에 `running` 1건이 있었고, 최신 assistant `streaming_placeholder` 5,383자가 계속 병합 대상이었다.
+- 원인: 응답 생성 중 status/message polling이 `setMessages`를 반복 호출하고, 기존 auto-scroll effect가 일반 polling/merge에도 하단 스크롤을 실행해 Chrome scroll anchoring 및 대형 Markdown 재배치와 충돌할 수 있었다.
+- 조치: `src/app/chat/page.tsx`에 질문 전송 후 3분 동안만 하단 stick 상태를 유지하는 `bottomStickUntilRef`를 추가하고, 사용자가 직접 위로 스크롤하면 즉시 해제되게 했다.
+- 조치: 메시지 변경 effect는 streaming/waiting 응답 중 새 메시지가 추가될 때만 하단 보정을 수행하고, 일반 polling/merge 교체는 스크롤 위치를 건드리지 않게 했다.
+- 조치: 메시지 스크롤 컨테이너에 `overflow-anchor: none`, `scrollbar-gutter: stable`, `scrollBehavior: auto`를 적용하고 transform layer 힌트를 제거했다.
+- 검증: `npx tsc --noEmit`, `npm run build` 통과.
+
 ## 2026-07-27 09:30 KST - Chat d19a session initial merge and scroll stabilization
 
 - 배경: CEO가 세션 `d19a0e9e-f96f-4c83-8367-20de50762364`에서 스크롤 이상과 반복 응답 체감을 보고했다.

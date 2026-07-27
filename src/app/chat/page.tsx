@@ -2424,6 +2424,7 @@ export default function ChatPage() {
   const isInitialLoadRef = useRef(true);
   const isNearBottomRef = useRef(true);
   const userScrollPauseUntilRef = useRef(0);
+  const bottomStickUntilRef = useRef(0);
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
   const scrollToMessagesBottom = useCallback((force = false) => {
@@ -2432,7 +2433,7 @@ export default function ChatPage() {
       if (!container) return;
       if (!force && Date.now() < userScrollPauseUntilRef.current) return;
       if (!force && !isNearBottomRef.current) return;
-      container.scrollTop = container.scrollHeight;
+      container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
     };
     requestAnimationFrame(() => {
       scroll();
@@ -3961,7 +3962,10 @@ export default function ChatPage() {
     if (!container) return;
     const handleScroll = () => {
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
-      if (!isNearBottomRef.current) userScrollPauseUntilRef.current = Date.now() + 4000;
+      if (!isNearBottomRef.current) {
+        userScrollPauseUntilRef.current = Date.now() + 4000;
+        bottomStickUntilRef.current = 0;
+      }
     };
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
@@ -3997,9 +4001,17 @@ export default function ChatPage() {
         container.removeEventListener("touchstart", releaseInitialScrollLock);
         container.removeEventListener("pointerdown", releaseInitialScrollLock);
       };
-    } else if (isNearBottomRef.current) {
-      // near-bottom이면 메시지 교체(merge/replace) 시에도 하단 고정 (DOM 재배치 스크롤 점프 방지)
-      scrollToMessagesBottom();
+    } else {
+      const bottomStickActive = Date.now() < bottomStickUntilRef.current;
+      const activeReply = streamingRef.current || waitingBgRef.current;
+      if (bottomStickActive && activeReply && Date.now() >= userScrollPauseUntilRef.current) {
+        isNearBottomRef.current = true;
+        scrollToMessagesBottom(true);
+      } else if (isNearBottomRef.current && activeReply && _grew) {
+        // 응답 생성 중 새 메시지가 추가되는 경우에만 하단을 유지한다.
+        // 일반 polling/merge로 기존 메시지가 교체될 때는 스크롤 위치를 건드리지 않는다.
+        scrollToMessagesBottom();
+      }
     }
   }, [messages, scrollToMessagesBottom]); // streamBuf 의존성 제거!
 
@@ -4723,6 +4735,8 @@ export default function ChatPage() {
     suppressOlderLoadUntilRef.current = Date.now() + 8000;
     isInitialLoadRef.current = false;
     isNearBottomRef.current = true;
+    userScrollPauseUntilRef.current = 0;
+    bottomStickUntilRef.current = Date.now() + 180000;
 
     // 이미지 생성 명령 감지: "이미지: [설명]" 또는 "/img [설명]"
     const imgMatch = content.match(/^(?:이미지[:：]\s*|\/img\s+)(.+)/i);
@@ -7835,6 +7849,8 @@ export default function ChatPage() {
           style={{
             flex: 1,
             overflowY: "auto",
+            overflowAnchor: "none" as never,
+            scrollBehavior: "auto",
             padding: screenSize === "mobile" ? "12px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
