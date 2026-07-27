@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-07-28 05:58 KST - chat submit visibility and scroll stabilization
+
+- Request: In session `d19a0e9e-f96f-4c83-8367-20de50762364`, submitting a question during an active response made the scroll jump upward and the submitted question appear to disappear, forcing the CEO to ask again.
+- Findings:
+  - The session had a live `running` execution and a DB-saved `streaming_placeholder`, so new input entered the interrupt/additional-instruction path.
+  - The backend saves queued interrupts as `[추가 지시] ...`, while the dashboard local echo compared the unprefixed text. This could prevent local/user echo and DB row from merging cleanly.
+  - Runner/system messages were included in the render cap before being hidden, allowing large sessions with many automatic messages to push visible user messages out of the rendered window.
+- Changes:
+  - `src/app/chat/page.tsx`: normalize plain `[추가 지시]` prefixes when matching queued interrupt local echoes with DB rows.
+  - `src/app/chat/page.tsx`: immediately refetch and merge the latest DB messages after interrupt queue acceptance, preserving the visible user instruction.
+  - `src/app/chat/page.tsx`: restore the input field if interrupt persistence fails instead of silently clearing it.
+  - `src/app/chat/page.tsx`: filter runner/system messages before visible chat render limits are calculated.
+- Verification:
+  - `npx tsc --noEmit` passed.
+  - `npm run build` passed with 61 app routes generated.
+- Deployment:
+  - Pending at time of this note. Commit, push, and dashboard blue-green deployment must follow before reporting production completion.
+
 ## 2026-07-27 23:00 KST - Chat global reply scroll stabilization for d19a recurrence
 
 - 배경: CEO가 세션 `d19a0e9e-f96f-4c83-8367-20de50762364`에서 질문 응답 중 스크롤이 상단으로 이동하고 반복 응답처럼 보이는 현상이 계속 난다고 보고했다.

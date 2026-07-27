@@ -205,7 +205,28 @@ type ChatToolEvent = NonNullable<ChatMessage["tools_called"]>[number];
 function normalizeQueuedInterruptDisplayContent(content: string): string {
   return String(content || "")
     .replace(/^💬\s*\*\*\[추가 지시\]\*\*\s*/, "")
+    .replace(/^\[추가 지시\]\s*/, "")
     .trim();
+}
+
+function isRunnerChatMessage(message: ChatMessage): boolean {
+  return message.role === "assistant" && (
+    message.content?.includes("[Pipeline Runner]") ||
+    message.content?.includes("[Runner]") ||
+    (message.content?.startsWith("Step ") && message.content?.includes("runner-")) ||
+    message.content?.includes("pipeline_runner_approve") ||
+    message.content?.includes("배포 검증 5단계")
+  );
+}
+
+function isHiddenSystemChatMessage(message: ChatMessage): boolean {
+  return (
+    message.intent === "auto_reaction" ||
+    message.intent === "pipeline_c" ||
+    isRunnerChatMessage(message) ||
+    (message.role === "user" && message.intent === "system_trigger") ||
+    (message.role === "user" && message.content?.startsWith("[시스템]"))
+  );
 }
 
 function classifyDesignRequest(text: string): string {
@@ -3359,14 +3380,7 @@ export default function ChatPage() {
   }, [modelAliasMap, patchCachedSession, sidebarSessionsByWorkspace]);
 
   // Runner 응답 판별 — intent 또는 컨텐츠 패턴으로 소급 적용
-  const isRunnerMsg = (m: ChatMessage) =>
-    m.role === "assistant" && (
-      m.content?.includes("[Pipeline Runner]") ||
-      m.content?.includes("[Runner]") ||
-      (m.content?.startsWith("Step ") && m.content?.includes("runner-")) ||
-      m.content?.includes("pipeline_runner_approve") ||
-      m.content?.includes("배포 검증 5단계")
-    );
+  const isRunnerMsg = isRunnerChatMessage;
 
   // 시스템 메시지 목록 (로그 탭용)
   const systemMessages = messages.filter(
@@ -4840,10 +4854,23 @@ export default function ChatPage() {
             }, 0);
             return;
           }
+          void chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
+            `/chat/messages?session_id=${activeSessionObjRef.current?.id}&limit=10&include_streaming=true`
+          )
+            .then((result) => {
+              const fresh = surfaceDbSavedStreamingPlaceholders(result.messages || [], { keepEmpty: true });
+              setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+            })
+            .catch(() => {});
           // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
           setQueueCount(msgQueueRef.current.length);
         }).catch((e: unknown) => {
           console.warn("interrupt push failed, keeping in queue for retry:", e);
+          setInput(interruptContent);
+          chatInputRef.current?.setValue(interruptContent);
+          setYellowWarning("추가 지시 저장 실패 — 입력창에 복원했습니다. 다시 전송해 주십시오.");
+          if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+          yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 7000);
         });
       }
       // 추가 지시 접수 안내
@@ -6786,6 +6813,7 @@ export default function ChatPage() {
   const displayData = useMemo(() => {
     const sortedAll = [...messages]
       .filter(m => {
+        if (isHiddenSystemChatMessage(m)) return false;
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") return false;
         if (isShortInterruptionPlaceholder(m)) return false;
@@ -6869,7 +6897,7 @@ export default function ChatPage() {
     const capped = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
-      const isSystemMsg = m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.content?.startsWith("[시스템]"));
+      const isSystemMsg = isHiddenSystemChatMessage(m);
       return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
     })?.msg.id;
     return { display: capped, lastAssistantId, totalCount: sortedAll.length };
@@ -8074,7 +8102,7 @@ export default function ChatPage() {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 시스템 메시지: 접이식 한 줄 표시
               // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
-              const isSystemMsg = msg.intent === "auto_reaction" || msg.intent === "pipeline_c" || isRunnerMsg(msg) || (msg.role === "user" && msg.content?.startsWith("[시스템]"));
+              const isSystemMsg = isHiddenSystemChatMessage(msg);
               if (isSystemMsg) return null;
               return (
                 <React.Fragment key={msg.render_id || msg.id || idx}>
