@@ -16,7 +16,12 @@
   - `npx tsc --noEmit` passed.
   - `npm run build` passed with 61 app routes generated.
 - Deployment:
-  - Pending at time of this note. Commit, push, and dashboard blue-green deployment must follow before reporting production completion.
+  - Commit `cfba926bee31` was pushed to `main`.
+  - Dashboard blue-green deployment completed at 2026-07-28 06:07 KST.
+  - Active slot after deployment: green. Standby blue was rebuilt and synchronized to the same release.
+  - Runtime verification: `aads-dashboard` and `aads-dashboard-green` both reported `AADS_RELEASE_SHA=cfba926bee31` and Docker health `healthy`.
+  - External unauthenticated `/chat` probe returned `HTTP/2 307` to `/login?redirect=%2Fchat`, confirming the dashboard route is served behind auth.
+  - Step 7 dashboard QA returned `UNKNOWN`; it was not used as a pass condition.
 
 ## 2026-07-27 23:00 KST - Chat global reply scroll stabilization for d19a recurrence
 
