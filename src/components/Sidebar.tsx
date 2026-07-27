@@ -38,6 +38,7 @@ const navItems = [
   { href: "/admin/model-routing", label: "모델 라우팅", icon: "🧭", adminOnly: true },
   { href: "/admin/model-parity", label: "모델 패리티", icon: "⚖️", adminOnly: true },
   { href: "/admin/deploy", label: "배포 현황", icon: "🚀", adminOnly: true },
+  { href: "/admin/loops", label: "루프 관리", icon: "🔁", adminOnly: true },
   { href: "/admin/sessions", label: "세션 리플레이", icon: "📹", adminOnly: true },
   { href: "/admin/emergency", label: "Emergency", icon: "🚨", adminOnly: true },
   { href: "/server-status", label: "Server Status", icon: "🖥️", adminOnly: true },
