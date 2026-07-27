@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-07-27 09:22 KST - Chat large-session initial scroll anchoring hardening
+
+- 배경: CEO가 세션 `7a1b186e-e71f-41c5-bd7b-e5926f41b4d9`에서 질문 시 브라우저 멈춤과 스크롤 상단 이동이 계속 재발한다고 보고했고, 이전 완료 보고가 커밋/푸시/배포/문서 원장과 충돌했다.
+- 실측: 대상 세션은 `chat_messages` 2,101건, assistant 1,310건/user 791건, 본문 합계 3,063,125자, 최대 단일 메시지 68,782자이며 현재 `chat_turn_executions`에 `running` 상태는 없었다.
+- 원인: SSE replay 중복 방지와 대형 세션 렌더 cap은 반영됐지만, 초기 로드 `ResizeObserver`가 DOM 높이 변화마다 force scroll을 호출했고 하단 sentinel이 browser scroll anchor 후보로 남아 대형 Markdown/이미지 렌더 중 스크롤 보정 개입 여지가 있었다.
+- 조치: `src/app/chat/page.tsx`에서 초기 `ResizeObserver`가 initial lock 해제 후 동작하지 않게 막고, force scroll 대신 near-bottom/user pause guard를 통과하는 일반 하단 스크롤을 사용하게 했다.
+- 조치: `messagesEndRef` sentinel의 `overflowAnchor`를 `none`으로 바꿔 브라우저가 하단 sentinel을 임의 scroll anchor로 잡아 상단/하단 점프를 유발하는 경로를 줄였다.
+- 검증: `npx tsc --noEmit` 통과. 운영 배포 후 `/chat` 307 인증 리다이렉트, blue/green 컨테이너 healthy, 배포 로그를 확인해야 완료로 본다.
+
 ## 2026-07-27 09:10 KST - Chat idea memo manual input and management
 
 - 배경: CEO가 채팅창의 아이디어 메모를 직접 입력하고 확인·관리할 수 있게 해 달라고 지시했다.

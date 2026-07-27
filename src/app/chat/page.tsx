@@ -3976,7 +3976,8 @@ export default function ChatPage() {
       container.scrollTop = container.scrollHeight;
       // PERF: ResizeObserver로 DOM 변화 감지 (setInterval 50ms → 이벤트 기반)
       const observer = new ResizeObserver(() => {
-        scrollToMessagesBottom(true);
+        if (!isInitialLoadRef.current) return;
+        scrollToMessagesBottom();
       });
       observer.observe(container);
       const releaseInitialScrollLock = () => {
@@ -8207,7 +8208,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div ref={messagesEndRef} style={{ overflowAnchor: "auto" as never, minHeight: 1 }} />
+          <div ref={messagesEndRef} style={{ overflowAnchor: "none" as never, minHeight: 1 }} />
         </div>
 
         {/* Input Area */}
