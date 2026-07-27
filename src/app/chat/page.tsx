@@ -2446,6 +2446,7 @@ export default function ChatPage() {
   const isNearBottomRef = useRef(true);
   const userScrollPauseUntilRef = useRef(0);
   const bottomStickUntilRef = useRef(0);
+  const localQuestionEchoIdsRef = useRef<Set<string>>(new Set());
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
   const scrollToMessagesBottom = useCallback((force = false) => {
@@ -2461,6 +2462,14 @@ export default function ChatPage() {
       requestAnimationFrame(scroll);
     });
   }, []);
+  const settleScrollAfterMessageMerge = useCallback(() => {
+    if (Date.now() < userScrollPauseUntilRef.current) return;
+    if (Date.now() < bottomStickUntilRef.current) {
+      scrollToMessagesBottom(true);
+      return;
+    }
+    scrollToMessagesBottom();
+  }, [scrollToMessagesBottom]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2803,12 +2812,12 @@ export default function ChatPage() {
           if (streamingRef.current && !hasServerDraft) return prev;
           return prev.length > 0 ? mergeServerMessagesPreservingLocal(prev, finalMsgs) : finalMsgs;
         });
-        scrollToMessagesBottom();
+        settleScrollAfterMessageMerge();
       }).catch(() => {});
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
     return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
-  }, [scrollToMessagesBottom]);
+  }, [settleScrollAfterMessageMerge]);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
@@ -4103,17 +4112,17 @@ export default function ChatPage() {
           });
         }
       } catch { /* polling fallback */ }
-      scrollToMessagesBottom();
+      settleScrollAfterMessageMerge();
 
     }, 800);
     return () => clearTimeout(timer);
-  }, [streaming, scrollToMessagesBottom]);
+  }, [streaming, settleScrollAfterMessageMerge]);
 
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
     if (!briefing || isInitialLoadRef.current) return;
-    scrollToMessagesBottom();
-  }, [briefing, scrollToMessagesBottom]);
+    settleScrollAfterMessageMerge();
+  }, [briefing, settleScrollAfterMessageMerge]);
 
   // ── 백그라운드 메시지 폴링 (Pipeline Runner / Agent 완료 메시지 실시간 수신) ──
   // P1-FIX: waitingBgResponse=true→1초, 아니면 5초 폴링
@@ -4229,7 +4238,7 @@ export default function ChatPage() {
           }
           setStreaming(false); setStreamBuf("");
           // scroll: isNearBottomRef preserved — user scroll position respected
-          scrollToMessagesBottom();
+          settleScrollAfterMessageMerge();
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -4265,7 +4274,7 @@ export default function ChatPage() {
           }
           setStreaming(false); setStreamBuf("");
           // scroll: preserve user position
-          scrollToMessagesBottom();
+          settleScrollAfterMessageMerge();
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -4406,7 +4415,7 @@ export default function ChatPage() {
                   setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
                 // scroll: preserve user position
-                scrollToMessagesBottom();
+                settleScrollAfterMessageMerge();
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -4450,11 +4459,11 @@ export default function ChatPage() {
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
-        scrollToMessagesBottom();
+        settleScrollAfterMessageMerge();
       } catch { /* 폴링 실패 무시 */ }
     }, 5000); // 5초 간격: 브라우저 부하 감소
     return () => { cancelled = true; clearInterval(iv); };
-  }, [activeSession?.id, scrollToMessagesBottom]); // PERF: 의존성을 세션 ID만으로 축소
+  }, [activeSession?.id, settleScrollAfterMessageMerge]); // PERF: 의존성을 세션 ID만으로 축소
 
   // ── Toggle theme ──
   function toggleTheme() {
@@ -4798,6 +4807,8 @@ export default function ChatPage() {
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
     if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
       const interruptContent = content || "(파일 첨부)";
+      const interruptLocalId = `interrupt-${Date.now()}`;
+      localQuestionEchoIdsRef.current.add(interruptLocalId);
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
         ? [...pendingAttachments.current] : [];
@@ -4819,7 +4830,8 @@ export default function ChatPage() {
         );
         if (duplicatePending) return prev;
         return [...prev, {
-          id: `interrupt-${Date.now()}`,
+          id: interruptLocalId,
+          render_id: interruptLocalId,
           session_id: activeSessionObjRef.current?.id || "",
           role: "user" as const,
           content: displayContent,
@@ -4847,10 +4859,9 @@ export default function ChatPage() {
             setStreaming(false);
             setWaitingBgResponse(false);
             setStreamBuf("");
-            setMessages(prev => prev.filter(m => !m.id.startsWith("interrupt-")));
             setYellowWarning("이전 응답 상태를 정리하고 일반 메시지로 즉시 재전송합니다.");
             window.setTimeout(() => {
-              void sendMessage(interruptContent);
+              void sendMessage(interruptContent, undefined, undefined, interruptLocalId);
             }, 0);
             return;
           }
@@ -4952,6 +4963,9 @@ export default function ChatPage() {
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
     };
+    if (userMsg.id.startsWith("tmp-") || userMsg.id.startsWith("interrupt-")) {
+      localQuestionEchoIdsRef.current.add(userMsg.id);
+    }
     // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
     if (_optimisticPending) {
       setMessages(prev => {
@@ -5086,8 +5100,10 @@ export default function ChatPage() {
         };
         // 실패 시 사용자 메시지를 입력창에 복원
         setInput(content); chatInputRef.current?.setValue(content);
-        // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
-        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        if (!_existingMsgId) {
+          // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
+          setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        }
         throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
       }
 
@@ -6894,7 +6910,12 @@ export default function ChatPage() {
     }
     // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
     const MAX_RENDER = messages.length > 500 ? 40 : 150;
-    const capped = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
+    const cappedBase = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
+    const cappedIds = new Set(cappedBase.map((item) => item.msg.id));
+    const protectedLocalQuestions = display
+      .filter((item) => localQuestionEchoIdsRef.current.has(item.msg.id) && !cappedIds.has(item.msg.id))
+      .slice(-5);
+    const capped = [...protectedLocalQuestions, ...cappedBase].sort((a, b) => a.idx - b.idx);
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
       const isSystemMsg = isHiddenSystemChatMessage(m);

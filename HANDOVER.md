@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-07-28 07:08 KST - chat question echo and scroll merge hardening
+
+- Request: Continue the interrupted fix for session `d19a0e9e-f96f-4c83-8367-20de50762364`, where submitting during an active response could jump the scroll upward and make the user's question look lost.
+- Findings:
+  - DB still showed a live `running` execution and one `streaming_placeholder` for the target session at 07:02 KST, so the dashboard correctly entered the interrupt/additional-instruction path.
+  - The interrupt fallback path removed local `interrupt-*` user bubbles before resending as a normal message, creating a visible gap where the question disappeared if queue acceptance failed or stale streaming was cleared.
+  - Tab-focus refetch, streaming safety-net, briefing, and polling completion paths still called chat bottom scrolling after server merges, even when the user was navigating a large session.
+  - Large-session render caps could still drop local transient user echoes if many messages arrived after the local bubble.
+- Changes:
+  - `src/app/chat/page.tsx`: added a protected local question echo registry and preserves up to five local question bubbles across large-session render caps.
+  - `src/app/chat/page.tsx`: stale interrupt fallback now promotes the same local `interrupt-*` bubble into normal send instead of deleting it and recreating the question.
+  - `src/app/chat/page.tsx`: server merge/refetch completion scrolls now pass through a user-scroll/bottom-stick gate instead of unconditional bottom jumps.
+  - `src/app/chat/page.tsx`: failed resend with an existing local echo restores the input without removing the visible question bubble.
+- Verification:
+  - `npx tsc --noEmit` passed.
+  - `npm run build` passed with 62 app routes generated.
+- Deployment:
+  - Pending at the time of this note; commit/deploy after this entry.
+
 ## 2026-07-28 05:58 KST - chat submit visibility and scroll stabilization
 
 - Request: In session `d19a0e9e-f96f-4c83-8367-20de50762364`, submitting a question during an active response made the scroll jump upward and the submitted question appear to disappear, forcing the CEO to ask again.
