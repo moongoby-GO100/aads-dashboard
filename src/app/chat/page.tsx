@@ -357,6 +357,33 @@ function hasIncompleteQualityFlag(message: ChatMessage): boolean {
   );
 }
 
+function numericDetail(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function responseDurationMs(message: ChatMessage): number | null {
+  const details = message.quality_details || {};
+  const directMs = numericDetail(message.response_duration_ms ?? message.duration_ms);
+  if (directMs !== null) return Math.round(directMs);
+  const detailMs = numericDetail(details.response_duration_ms ?? details.duration_ms);
+  if (detailMs !== null) return Math.round(detailMs);
+  const directSec = numericDetail(message.response_duration_sec ?? message.duration_sec);
+  if (directSec !== null) return Math.round(directSec * 1000);
+  const detailSec = numericDetail(details.response_duration_sec ?? details.duration_sec);
+  if (detailSec !== null) return Math.round(detailSec * 1000);
+  return null;
+}
+
+function formatResponseDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const sec = ms / 1000;
+  if (sec < 60) return `${sec.toFixed(sec < 10 ? 1 : 0)}초`;
+  const min = Math.floor(sec / 60);
+  const rem = Math.round(sec % 60);
+  return `${min}분 ${rem}초`;
+}
+
 function isContinuedMessage(message: ChatMessage): boolean {
   return message.intent === "continued";
 }
@@ -1278,6 +1305,7 @@ const MessageItem = memo(function MessageItem({
   const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
   const isVisiblyStreaming = isActiveStreamingPlaceholder;
+  const durationMs = msg.role === "assistant" && !isVisiblyStreaming ? responseDurationMs(msg) : null;
   const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -1964,6 +1992,7 @@ const MessageItem = memo(function MessageItem({
               {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
               {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
               {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
+              {durationMs !== null ? ` · 소요 ${formatResponseDuration(durationMs)}` : ""}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>]</span>}
               {msg.created_at && (
                 <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
@@ -2123,6 +2152,11 @@ const MessageItem = memo(function MessageItem({
   prev.msg.tool_count === next.msg.tool_count &&
   prev.msg.tool_names === next.msg.tool_names &&
   prev.msg.tool_hydration_status === next.msg.tool_hydration_status &&
+  prev.msg.quality_details === next.msg.quality_details &&
+  prev.msg.duration_ms === next.msg.duration_ms &&
+  prev.msg.duration_sec === next.msg.duration_sec &&
+  prev.msg.response_duration_ms === next.msg.response_duration_ms &&
+  prev.msg.response_duration_sec === next.msg.response_duration_sec &&
   prev.isActiveStreaming === next.isActiveStreaming &&
   prev.streamingContent === next.streamingContent &&
   prev.streamingThinking === next.streamingThinking &&
@@ -5377,6 +5411,17 @@ export default function ChatPage() {
                     input_tokens: ev.input_tokens || undefined,
                     output_tokens: ev.output_tokens || undefined,
                     cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                    duration_sec: ev.duration_sec || undefined,
+                    duration_ms: ev.duration_ms || undefined,
+                    response_duration_sec: ev.duration_sec || undefined,
+                    response_duration_ms: ev.duration_ms || undefined,
+                    quality_details: {
+                      ...(existingPh?.quality_details || {}),
+                      response_duration_sec: ev.duration_sec || undefined,
+                      response_duration_ms: ev.duration_ms || undefined,
+                      duration_sec: ev.duration_sec || undefined,
+                      duration_ms: ev.duration_ms || undefined,
+                    },
                     confidence_label: ev.confidence_label || undefined,
                     tools_called: accumulatedToolCalls as ChatMessage["tools_called"],
                     has_tools: accumulatedToolCalls.length > 0,
@@ -6327,6 +6372,16 @@ export default function ChatPage() {
                 input_tokens: ev.input_tokens,
                 output_tokens: ev.output_tokens,
                 cost_usd: ev.cost_usd,
+                duration_sec: ev.duration_sec,
+                duration_ms: ev.duration_ms,
+                response_duration_sec: ev.duration_sec,
+                response_duration_ms: ev.duration_ms,
+                quality_details: {
+                  response_duration_sec: ev.duration_sec,
+                  response_duration_ms: ev.duration_ms,
+                  duration_sec: ev.duration_sec,
+                  duration_ms: ev.duration_ms,
+                },
               };
               setMessages((prev) => {
                 // 기존 메시지의 intent를 regenerated로 변경

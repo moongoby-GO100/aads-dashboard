@@ -44,6 +44,10 @@ export interface ChatMessage {
   cost?: string | number;
   quality_score?: number | null;
   quality_details?: Record<string, unknown> | null;
+  duration_sec?: number;
+  duration_ms?: number;
+  response_duration_sec?: number;
+  response_duration_ms?: number;
   created_at?: string;
   edited_at?: string;
   reply_to_id?: string;
