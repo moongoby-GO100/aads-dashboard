@@ -1305,7 +1305,18 @@ const MessageItem = memo(function MessageItem({
   const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
   const isVisiblyStreaming = isActiveStreamingPlaceholder;
-  const durationMs = msg.role === "assistant" && !isVisiblyStreaming ? responseDurationMs(msg) : null;
+  const [durationTick, setDurationTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (msg.role !== "assistant" || !isVisiblyStreaming) return;
+    const timer = window.setInterval(() => setDurationTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isVisiblyStreaming, msg.role]);
+  const persistedDurationMs = msg.role === "assistant" ? responseDurationMs(msg) : null;
+  const liveDurationMs = msg.role === "assistant" && isVisiblyStreaming
+    ? Math.max(0, durationTick - messageTime(msg))
+    : null;
+  const durationMs = isVisiblyStreaming ? liveDurationMs : persistedDurationMs;
+  const durationLabel = isVisiblyStreaming ? "진행" : "소요";
   const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -1992,7 +2003,7 @@ const MessageItem = memo(function MessageItem({
               {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
               {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
               {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
-              {durationMs !== null ? ` · 소요 ${formatResponseDuration(durationMs)}` : ""}
+              {durationMs !== null ? ` · ${durationLabel} ${formatResponseDuration(durationMs)}` : ""}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>]</span>}
               {msg.created_at && (
                 <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
