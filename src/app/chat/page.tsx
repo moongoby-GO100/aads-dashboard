@@ -1973,7 +1973,7 @@ const MessageItem = memo(function MessageItem({
             )}
           </div>
         )}
-        {msg.role === "assistant" && !isVisiblyStreaming && (
+        {msg.role === "assistant" && (
           <div
             style={{
               fontSize: "11px",
@@ -2003,8 +2003,25 @@ const MessageItem = memo(function MessageItem({
               {(msg.input_tokens || msg.tokens_in) ? ` · ${(msg.input_tokens || msg.tokens_in || 0).toLocaleString()}in` : ""}
               {(msg.output_tokens || msg.tokens_out) ? ` · ${(msg.output_tokens || msg.tokens_out || 0).toLocaleString()}out` : ""}
               {(() => { const c = msg.cost_usd || msg.cost; return c && Number(c) > 0 ? ` · $${Number(c).toFixed(4)}` : ""; })()}
-              {durationMs !== null ? ` · ${durationLabel} ${formatResponseDuration(durationMs)}` : ""}
               {msg.model_used && !['recovered','streaming','stopped','interrupted','semantic_cache'].includes(msg.model_used) && <span>]</span>}
+              {durationMs !== null && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                    padding: "1px 6px",
+                    borderRadius: "8px",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    background: isVisiblyStreaming ? "rgba(59,130,246,0.12)" : "rgba(34,197,94,0.10)",
+                    color: isVisiblyStreaming ? "#3b82f6" : "#22c55e",
+                    border: isVisiblyStreaming ? "1px solid rgba(59,130,246,0.22)" : "1px solid rgba(34,197,94,0.20)",
+                  }}
+                >
+                  {durationLabel} {formatResponseDuration(durationMs)}
+                </span>
+              )}
               {msg.created_at && (
                 <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
                   {new Date(msg.created_at).toLocaleString("ko-KR", {
