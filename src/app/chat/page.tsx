@@ -345,8 +345,24 @@ function endsWithProgressOnlyStatement(message: ChatMessage): boolean {
   return /(?:이제|먼저|다음으로|추가로|바로|곧)?\s*.{0,80}(?:확인|조회|점검|분석|파악|조사|검토|진행|실행|처리|수정|패치|적용|반영|준비)(?:하겠습니다|합니다)\.?\s*$/.test(tail);
 }
 
+function qualityDetailsObject(message: ChatMessage): Record<string, unknown> {
+  const details = message.quality_details;
+  if (!details) return {};
+  if (typeof details === "string") {
+    try {
+      const parsed = JSON.parse(details);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return details;
+}
+
 function hasIncompleteQualityFlag(message: ChatMessage): boolean {
-  const details = message.quality_details || {};
+  const details = qualityDetailsObject(message);
   const violations = Array.isArray(details.completion_contract_violations)
     ? details.completion_contract_violations
     : [];
@@ -363,7 +379,7 @@ function numericDetail(value: unknown): number | null {
 }
 
 function responseDurationMs(message: ChatMessage): number | null {
-  const details = message.quality_details || {};
+  const details = qualityDetailsObject(message);
   const directMs = numericDetail(message.response_duration_ms ?? message.duration_ms);
   if (directMs !== null) return Math.round(directMs);
   const detailMs = numericDetail(details.response_duration_ms ?? details.duration_ms);
@@ -423,7 +439,7 @@ function streamingPlaceholderStatus(
       recoverable: false,
     };
   }
-  const details = message.quality_details || {};
+  const details = qualityDetailsObject(message);
   const reason = String(details.interruption_reason || details.interrupt_reason || "");
   const content = normalizedMessageContent(message);
   const hasContent = content.length > 0 && !isPlaceholderOnlyContent(content);
@@ -5444,7 +5460,7 @@ export default function ChatPage() {
                     response_duration_sec: ev.duration_sec || undefined,
                     response_duration_ms: ev.duration_ms || undefined,
                     quality_details: {
-                      ...(existingPh?.quality_details || {}),
+                      ...(existingPh ? qualityDetailsObject(existingPh) : {}),
                       response_duration_sec: ev.duration_sec || undefined,
                       response_duration_ms: ev.duration_ms || undefined,
                       duration_sec: ev.duration_sec || undefined,

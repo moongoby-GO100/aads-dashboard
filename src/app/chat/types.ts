@@ -43,7 +43,7 @@ export interface ChatMessage {
   tokens_out?: number;
   cost?: string | number;
   quality_score?: number | null;
-  quality_details?: Record<string, unknown> | null;
+  quality_details?: Record<string, unknown> | string | null;
   duration_sec?: number;
   duration_ms?: number;
   response_duration_sec?: number;
