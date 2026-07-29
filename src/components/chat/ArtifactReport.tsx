@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { driveApi } from "@/services/driveApi";
 import { chatApi } from "@/services/chatApi";
+import { isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
 
 // ─── 인라인 마크다운 렌더러 ────────────────────────────────────────────────
 
@@ -24,9 +25,12 @@ function renderInline(text: string, keyPrefix = ""): React.ReactNode {
           style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
       );
     } else if (m[5]) {
+      const linkHref = !isUnsafeLink(m[5]) ? normalizeDocumentHref(m[5]) : "";
       parts.push(
-        <a key={`${keyPrefix}a${idx++}`} href={m[5]} target="_blank" rel="noopener noreferrer"
-          style={{ color: "var(--ct-accent)", textDecoration: "underline" }}>{m[4]}</a>
+        linkHref
+          ? <a key={`${keyPrefix}a${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
+              style={{ color: "var(--ct-accent)", textDecoration: "underline" }}>{m[4]}</a>
+          : <span key={`${keyPrefix}a${idx++}`}>{m[4]}</span>
       );
     } else if (m[6])
       parts.push(<strong key={`${keyPrefix}b${idx++}`} className="font-semibold">{m[6]}</strong>);

@@ -268,6 +268,7 @@ export default function DocsPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [isDesktop, setIsDesktop] = useState(false);
+  const openedDeepLinkRef = useRef<string | null>(null);
 
   const fetchDocs = useCallback(async (force = false) => {
     setLoading(!dataRef.current);
@@ -340,11 +341,18 @@ export default function DocsPage() {
     };
   }, [isResizing]);
 
-  const openFile = async (project: string, file: ListedDocFile) => {
+  const openFile = useCallback(async (project: string, file: ListedDocFile, options?: { updateUrl?: boolean }) => {
     setSelectedFile(file);
     setContentLoading(true);
     setFileContent(null);
     setFileMeta(null);
+    if (options?.updateUrl !== false && typeof window !== "undefined") {
+      const q = new URLSearchParams();
+      q.set("project", project);
+      q.set("base_path", file.base_path);
+      q.set("file_path", file.path);
+      window.history.replaceState(null, "", `/docs?${q.toString()}`);
+    }
     try {
       const r = (await api.getProjectDocContent(project, file.base_path, file.path)) as DocContentResponse;
       setFileContent(r.content || "");
@@ -360,7 +368,7 @@ export default function DocsPage() {
     } finally {
       setContentLoading(false);
     }
-  };
+  }, []);
 
   const filteredProjects =
     data?.projects?.filter((project) => selectedProject === "all" || project.project === selectedProject) || [];
@@ -413,6 +421,30 @@ export default function DocsPage() {
     const labelB = TYPE_LABELS[b] || b;
     return labelA.localeCompare(labelB, "ko");
   });
+
+  useEffect(() => {
+    if (!data?.projects?.length || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const project = params.get("project") || "";
+    const basePath = params.get("base_path") || "";
+    const filePath = params.get("file_path") || "";
+    if (!project || !basePath || !filePath) return;
+
+    const key = `${project}\n${basePath}\n${filePath}`;
+    if (openedDeepLinkRef.current === key) return;
+
+    const projectDocs = data.projects.find((item) => item.project === project);
+    const file = projectDocs?.files.find((item) => item.base_path === basePath && item.path === filePath);
+    if (!file) return;
+
+    openedDeepLinkRef.current = key;
+    setSelectedProject(project);
+    setSelectedType("all");
+    setSelectedFormat("all");
+    setSearch("");
+    void openFile(project, { ...file, project }, { updateUrl: false });
+  }, [data, openFile]);
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>

@@ -7,13 +7,13 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import InlineChart from "@/components/chat/InlineChart";
+import { isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
 
 const isSafeUrl = (url: string) => {
-  const u = url.trim().toLowerCase();
-  return !u.startsWith("javascript:") && !u.startsWith("data:") && !u.startsWith("vbscript:");
+  return !isUnsafeLink(url);
 };
 
-const safeUrlTransform = (url: string) => (isSafeUrl(url) ? url : "");
+const safeUrlTransform = (url: string) => (isSafeUrl(url) ? normalizeDocumentHref(url) : "");
 
 const getLanguage = (className?: string) => {
   const match = /language-([^\s]+)/.exec(className || "");
@@ -299,9 +299,11 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
   },
   a({ href, children }) {
     if (!href || !isSafeUrl(href)) return <span>{children}</span>;
+    const normalizedHref = normalizeDocumentHref(href);
+    if (!normalizedHref) return <span>{children}</span>;
     return (
       <a
-        href={href}
+        href={normalizedHref}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: linkColor || "var(--ct-accent)", textDecoration: "underline", wordBreak: "break-all" }}

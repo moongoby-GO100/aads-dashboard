@@ -14,6 +14,7 @@ import type { ChatMessage } from "@/services/chatApi";
 import SourceCard from "./SourceCard";
 import ConfidenceBadge from "./ConfidenceBadge";
 import InlineChart from "./InlineChart";
+import { normalizeDocumentHref } from "@/lib/documentLinks";
 
 // ─── Inline Markdown Renderer ────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ function renderInline(text: string, key?: number): React.ReactNode {
       );
     } else if (m[5]) {
       // 링크: [text](url) — only allow safe URLs
-      const linkHref = isSafeUrl(m[5]) ? m[5] : "#";
+      const linkHref = isSafeUrl(m[5]) ? normalizeDocumentHref(m[5]) : "#";
       parts.push(
         <a key={`a${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
           style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[4]}</a>
@@ -78,8 +79,9 @@ function renderInline(text: string, key?: number): React.ReactNode {
       );
     else if (m[9]) {
       // plain URL 자동 링크 변환
+      const linkHref = normalizeDocumentHref(m[9]);
       parts.push(
-        <a key={`au${key}-${idx++}`} href={m[9]} target="_blank" rel="noopener noreferrer"
+        <a key={`au${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
           style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[9]}</a>
       );
     }

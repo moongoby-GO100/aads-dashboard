@@ -804,3 +804,24 @@
 - 작업트리:
   - 배포 전 대시보드 무관 dirty 파일을 stash로 격리했다.
   - 배포 중 다른 프로세스가 `public/manager/env_unknown.json`, `src/app/chat/page.tsx`, `public/manager/env_5.json` 변경을 다시 만든 상태라 stash pop은 충돌 방지를 위해 중단됐고, stash `pre-unni-fb-token-deploy-20260727`은 보존했다.
+
+## 2026-07-28 07:34 KST - chat report document deep links
+
+- 요청: 중단된 대시보드 수정 작업을 이어서 진행.
+- 확인:
+  - 대시보드 작업트리에는 기존 무관 변경 `public/manager/env_unknown.json`이 있었고, 서버 레포에도 여러 미커밋 변경이 있어 이번 작업 범위에서 제외했다.
+  - 채팅/리포트 마크다운에 표시되는 로컬 절대 경로 문서 링크가 브라우저에서 직접 열리지 않는 구조였다.
+- 조치:
+  - `src/lib/documentLinks.ts`를 추가해 `/root/aads/...`, `/root/kis-autotrade-v4/...`, `/data/shortflow/docs`, `/srv/newtalk-v2/docs` 문서 경로를 `/docs?project=...&base_path=...&file_path=...` 딥링크로 변환하도록 했다.
+  - `src/app/docs/page.tsx`가 `project/base_path/file_path` 쿼리를 읽어 해당 문서를 자동 선택하고, 사용자가 파일을 열 때 현재 URL도 갱신하도록 했다.
+  - `src/app/chat/MarkdownRenderer.tsx`, `src/components/chat/ArtifactReport.tsx`, `src/components/chat/ChatBubble.tsx`에서 마크다운 링크와 자동 URL 링크에 동일한 변환을 적용했다.
+  - `javascript:`, `data:`, `vbscript:` 링크 차단은 유지하고, `:라인번호`는 `line` 쿼리로 분리해 `file_path` 오염을 막았다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+  - `npx eslint src/lib/documentLinks.ts src/app/docs/page.tsx src/app/chat/MarkdownRenderer.tsx src/components/chat/ArtifactReport.tsx src/components/chat/ChatBubble.tsx`는 오류 0건, 기존 이미지 태그 경고 3건.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/docs` route 포함 62개 app route 생성 확인.
+  - 전체 `npm run lint`는 기존 누적 오류 261건 때문에 실패했으며, 이번 변경 파일 오류는 없음.
+- 미완료:
+  - 커밋, 푸시, 배포는 CEO의 별도 지시 전까지 수행하지 않았다.
+  - 브라우저 E2E 캡처는 수행하지 않았다.
+- 롤백: 위 5개 코드 변경과 `src/lib/documentLinks.ts` 추가분, 본 HANDOVER 항목을 revert하면 이전 링크 동작으로 돌아간다.
