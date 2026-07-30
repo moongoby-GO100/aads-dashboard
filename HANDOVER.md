@@ -15,7 +15,10 @@
   - Local production preview `http://5.104.86.116:3017/unni-naengmyeon` returned HTTP 200.
   - Screenshot checks passed for the hero and menu section.
 - Deployment:
-  - Pending at the time of this note; commit and deploy after this entry.
+  - Feature commit `40a719d9748ba9b2e02e217a65555ee3a9be1fe9` was pushed to `dashboard-write/main`.
+  - Dashboard blue-green deployment completed and both `aads-dashboard` and `aads-dashboard-green` reported release SHA `40a719d9748b`.
+  - External production URL `https://unni.newtalk.kr` returned HTTP 200 and rendered the donkatsu hero/menu content.
+  - Note correction: this deployment status was reconciled after the initial handover entry incorrectly said deployment was pending.
 
 ## 2026-07-28 07:08 KST - chat question echo and scroll merge hardening
 
