@@ -57,6 +57,8 @@ type MenuItem = {
 const TOPPING_DESCRIPTION = "땅콩 + 깨 + 무김치 + 오이 + 계란 (다대기가 소량 들어가는 메뉴에요 :))";
 const MENU_ASSET_ROOT = "/brands/unni-naengmyeon/menu";
 const WATER_MENU_IMAGE = `${MENU_ASSET_ROOT}/nas-water-naengmyeon.jpg`;
+const DONKATSU_MENU_IMAGE = `${MENU_ASSET_ROOT}/naengmyeon-donkatsu.webp`;
+const DONKATSU_SET_IMAGE = DONKATSU_MENU_IMAGE;
 
 function getMenuImage(name: string) {
   // NAS 원본 파일명이 특정하는 메뉴에만 사진을 붙인다. 구성과 다른
@@ -65,7 +67,8 @@ function getMenuImage(name: string) {
   if (name === "물비냉 언니냉면" || name === "물냉면") return WATER_MENU_IMAGE;
   if (name === "비빔냉면" || name === "불냉면") return `${MENU_ASSET_ROOT}/nas-bibim-bul-naengmyeon.jpg`;
   if (name === "처갓집 묵사발") return `${MENU_ASSET_ROOT}/nas-muksabal.jpg`;
-  if (name === "냉면 + 수제돈까스 SET") return `${MENU_ASSET_ROOT}/nas-donkatsu-set.jpg`;
+  if (name === "수제 등심돈까스") return DONKATSU_MENU_IMAGE;
+  if (name === "냉면 + 수제돈까스 SET" || name === "냉면 + 냉면 + 수제돈까스 SET") return DONKATSU_SET_IMAGE;
   if (name === "냉면 + 찐만두 SET") return `${MENU_ASSET_ROOT}/nas-mandu-set.jpg`;
   if (name === "냉면 + 미니전 SET") return `${MENU_ASSET_ROOT}/nas-mini-jeon-set.jpg`;
   if (name === "냉면 + 함박 4P SET") return `${MENU_ASSET_ROOT}/nas-hambak-set.jpg`;
@@ -117,6 +120,12 @@ const sideMenus: MenuItem[] = [
   { name: "미니 김치전 4p", price: "3,500원" },
   { name: "미니 부추전 4p", price: "3,500원" },
   { name: "미니 모듬전 6p", price: "6,000원" },
+];
+
+const donkatsuMenus: MenuItem[] = [
+  { name: "수제 등심돈까스", detail: "바삭하게 튀긴 등심 돈까스 단품", price: "5,500원", badge: "단품" },
+  { name: "냉면 + 수제돈까스 SET", detail: "냉면 1그릇 + 수제 등심돈까스 1p", price: "15,500원", badge: "1인 추천", toppings: true },
+  { name: "냉면 + 냉면 + 수제돈까스 SET", detail: "냉면 2그릇 + 수제 등심돈까스 1p", price: "25,000원", badge: "2인 추천", toppings: true },
 ];
 
 const extras: MenuItem[] = [
@@ -204,8 +213,8 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.heroInner} id="main-content">
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}>SUNGSHIN WOMEN&apos;S UNIV. · DELIVERY ONLY</span>
-            <h1>언니가 제대로<br /><em>말아주는 냉면</em></h1>
-            <p>시원하게 당기는 날도, 매콤하게 풀고 싶은 날도.<br className={styles.desktopBreak} /> 성신여대 앞 언니냉면을 배민에서 바로 주문하세요.</p>
+            <h1>시원한 냉면에<br /><em>바삭한 돈까스까지</em></h1>
+            <p>살얼음 냉면과 등심 돈까스를 한 번에.<br className={styles.desktopBreak} /> 배민에서 바로 주문하세요.</p>
             <div className={styles.heroActions}>
               <a className={styles.primaryButton} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문하기 <ArrowIcon /></a>
               <a className={styles.textButton} href="#location"><PinIcon /> 성신여대점 위치</a>
@@ -216,11 +225,11 @@ export default function UnniNaengmyeonPage() {
             </div>
           </div>
           <div className={styles.heroVisual}>
-            <div className={styles.heroBadge}><b>ICE COLD</b><span>끝까지 시원하게</span></div>
+            <div className={styles.heroBadge}><b>ICE &amp; CRUNCH</b><span>냉면 + 수제돈까스</span></div>
             <Image
-              className={styles.nasMenuCrop}
-              src={WATER_MENU_IMAGE}
-              alt="황동그릇에 땅콩, 깨, 무김치, 오이, 계란과 붉은 다대기를 담은 물냉면"
+              className={styles.donkatsuHeroImage}
+              src={DONKATSU_MENU_IMAGE}
+              alt="언니냉면과 바삭한 수제 등심돈까스 세트"
               fill
               priority
               sizes="(max-width: 900px) 100vw, 55vw"
@@ -229,7 +238,7 @@ export default function UnniNaengmyeonPage() {
           </div>
         </div>
         <div className={styles.marquee} aria-label="언니냉면 브랜드 키워드">
-          <div><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>푸짐한 고명</span><i>◆</i><span>시원하게</span><i>◆</i><span>매콤하게</span><i>◆</i><span>든든하게</span><i>◆</i><span>언니답게</span><i>◆</i><span>배달 한 그릇</span><i>◆</i><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>푸짐한 고명</span></div>
+          <div><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>바삭한 돈까스</span><i>◆</i><span>푸짐한 고명</span><i>◆</i><span>시원하게</span><i>◆</i><span>매콤하게</span><i>◆</i><span>든든하게</span><i>◆</i><span>언니답게</span><i>◆</i><span>배달 한 그릇</span><i>◆</i><span>살얼음 육수</span><i>◆</i><span>수제 다대기</span><i>◆</i><span>바삭한 돈까스</span></div>
         </div>
       </section>
 
@@ -237,8 +246,25 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.sectionHeading}>
           <span>OUR MENU</span>
           <h2>익숙한 메뉴 그대로,<br />이제 언니냉면으로</h2>
-          <p>배달의민족 오픈 메뉴를 기준으로 대표 냉면과 세트 구성을 한눈에 확인할 수 있게 정리했습니다.</p>
+          <p>배달의민족 오픈 메뉴를 기준으로 대표 냉면과 돈까스 구성을 한눈에 확인할 수 있게 정리했습니다.</p>
         </div>
+        <section className={styles.donkatsuFeature} aria-labelledby="donkatsu-menu-title">
+          <div className={styles.donkatsuPhoto}>
+            <Image
+              className={styles.donkatsuFeatureImage}
+              src={DONKATSU_SET_IMAGE}
+              alt="냉면과 수제 등심돈까스 세트 메뉴"
+              fill
+              sizes="(max-width: 900px) 100vw, 42vw"
+            />
+          </div>
+          <div className={styles.donkatsuCopy}>
+            <span>NEW SIDE SET</span>
+            <h3 id="donkatsu-menu-title">돈까스 메뉴 구성</h3>
+            <p>냉면만으로 아쉬운 주문에는 바삭한 수제 등심돈까스를 더했습니다. 단품, 1인 세트, 2인 세트로 선택하기 쉽게 구성했습니다.</p>
+            <MenuList items={donkatsuMenus} />
+          </div>
+        </section>
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
@@ -256,7 +282,7 @@ export default function UnniNaengmyeonPage() {
               <span>언니 비빔냉면</span>
             </div>
             <div className={styles.galleryPhoto}>
-              <Image className={styles.nasMenuCrop} src={`${MENU_ASSET_ROOT}/nas-donkatsu-set.jpg`} alt="언니냉면과 수제돈까스 세트" fill sizes="(max-width: 900px) 50vw, 25vw" />
+              <Image className={styles.nasMenuCrop} src={DONKATSU_SET_IMAGE} alt="언니냉면과 수제돈까스 세트" fill sizes="(max-width: 900px) 50vw, 25vw" />
               <span>냉면 + 수제돈까스</span>
             </div>
           </div>

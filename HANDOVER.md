@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-07-30 16:51 KST - Unni Naengmyeon donkatsu menu and hero update
+
+- Request: Add donkatsu menu composition and reflect a donkatsu main banner photo on the Unni Naengmyeon homepage.
+- Changes:
+  - `src/app/unni-naengmyeon/page.tsx`: changed the hero headline/copy and hero image to the cleaned donkatsu + naengmyeon menu photo.
+  - `src/app/unni-naengmyeon/page.tsx`: added a dedicated donkatsu menu block with standalone, 1-person set, and 2-person set pricing from the existing menu data.
+  - `src/app/unni-naengmyeon/page.tsx`: mapped donkatsu set menu thumbnails to the cleaned web image so Baemin screenshot UI is not exposed in the site.
+  - `src/app/unni-naengmyeon/page.module.css`: added responsive layout and image positioning for the donkatsu feature block.
+- Verification:
+  - `npx eslint src/app/unni-naengmyeon/page.tsx` passed.
+  - `npx tsc --noEmit` passed.
+  - `npm run build` passed with 62 app routes generated.
+  - Local production preview `http://5.104.86.116:3017/unni-naengmyeon` returned HTTP 200.
+  - Screenshot checks passed for the hero and menu section.
+- Deployment:
+  - Pending at the time of this note; commit and deploy after this entry.
+
 ## 2026-07-28 07:08 KST - chat question echo and scroll merge hardening
 
 - Request: Continue the interrupted fix for session `d19a0e9e-f96f-4c83-8367-20de50762364`, where submitting during an active response could jump the scroll upward and make the user's question look lost.
