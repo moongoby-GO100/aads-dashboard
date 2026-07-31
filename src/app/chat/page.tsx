@@ -774,7 +774,10 @@ function findAssistantMessageIndexForFinalization(messages: ChatMessage[], final
     if (finalMessage.render_id && (message.render_id === finalMessage.render_id || message.id === finalMessage.render_id)) return i;
     if (finalMessage.execution_id && message.execution_id === finalMessage.execution_id) return i;
     if (!isAssistantDraftMessage(message)) continue;
-    if (isStreamingPlaceholderMessage(message)) return i;
+    if (isStreamingPlaceholderMessage(message)) {
+      if (finalMessage.execution_id && message.execution_id && finalMessage.execution_id !== message.execution_id) continue;
+      return i;
+    }
     const draftContent = normalizedMessageContent(message);
     if (!draftContent || !finalContent) continue;
     const overlapLen = Math.min(120, draftContent.length, finalContent.length);
@@ -2902,6 +2905,7 @@ export default function ChatPage() {
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
+  const finalizationTimeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const executionAttachAbortRef = useRef<AbortController | null>(null);
   const resumeRequestInFlightRef = useRef<Set<string>>(new Set());
   const resumeRequestLastAtRef = useRef<Map<string, number>>(new Map());
@@ -3054,9 +3058,13 @@ export default function ChatPage() {
   }, []);
 
   const requestServerFinalization = useCallback((sessionId: string, delays: number[] = [0, 500, 1500, 3500, 5000]) => {
+    finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
+    finalizationTimeoutIdsRef.current = [];
+    const execIdAtSchedule = currentExecutionIdRef.current;
     for (const delay of delays) {
-      setTimeout(() => {
+      const tid = setTimeout(() => {
         if (activeSessionRef.current !== sessionId) return;
+        if (currentExecutionIdRef.current !== execIdAtSchedule) return;
         void mergeLatestAssistantFromServer(sessionId)
           .then((message) => {
             if (!message || activeSessionRef.current !== sessionId) return;
@@ -3071,6 +3079,7 @@ export default function ChatPage() {
           })
           .catch(() => {});
       }, delay);
+      finalizationTimeoutIdsRef.current.push(tid);
     }
   }, [mergeLatestAssistantFromServer, refreshTodos]);
 
@@ -5002,6 +5011,8 @@ export default function ChatPage() {
     // P2-2: 분기 모드 캡처 후 초기화
     const _capturedBranch = branchPointRef.current;
     setBranchPoint(null);
+    finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
+    finalizationTimeoutIdsRef.current = [];
     setStreaming(true);
     setStreamBuf("");
     setThinkingBuf("");
