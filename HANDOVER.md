@@ -845,3 +845,22 @@
   - 커밋, 푸시, 배포는 CEO의 별도 지시 전까지 수행하지 않았다.
   - 브라우저 E2E 캡처는 수행하지 않았다.
 - 롤백: 위 5개 코드 변경과 `src/lib/documentLinks.ts` 추가분, 본 HANDOVER 항목을 revert하면 이전 링크 동작으로 돌아간다.
+
+## 2026-08-04 08:07 KST - unni recipe topping and sauce quantities
+
+- 요청: 직원용 레시피 페이지의 기본 토핑 순서와 물냉면/비빔냉면/언니냉면/불냉면/명태회냉면/묵사발 조리 기준을 CEO 최신 지시 기준으로 수정.
+- 조치:
+  - `src/app/unni-naengmyeon/recipes/page.tsx`의 기본 토핑 순서를 `다대기 → 달걀 반쪽 → 무김치 → 오이 → 깨가루 → 땅콩가루`로 변경했다.
+  - 물냉면 다대기를 `30g(큰스푼 기준 반스푼)`, 비빔냉면 다대기를 `150g(큰스푼 기준 3스푼)`, 비빔냉면 곁육수를 `1통 500cc`로 변경했다.
+  - 언니냉면과 명태회냉면 다대기를 각각 `50g(큰스푼 기준 1스푼)`으로 명시했다.
+  - 불냉면은 기존 캡사이신/매운 고춧가루 추가 방식에서 `비빔냉면 동일 준비 + 매운다대기 100g(2스푼) + 다대기 50g(1스푼)` 방식으로 교체했다.
+  - 매운다대기 제조 기준 `육수 300cc + 베트남 고춧가루 100g + 냉면다대기 400g`을 불냉면 카드에 추가했다.
+  - 묵사발은 묵을 냉면그릇에 담고 토핑을 묵 위에 올리며, 육수 500cc는 육수그릇에 담는 방식으로 수정했다. 묵 실온보관 및 냉장보관 시 끊어짐 주의 문구도 추가했다.
+- 검증:
+  - `rg`로 변경 문구 반영 확인.
+  - `npx eslint src/app/unni-naengmyeon/recipes/page.tsx src/app/unni-naengmyeon/recipes/RecipePrintActions.tsx` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성 확인.
+- 미포함:
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`, `src/app/chat/page.tsx`는 이번 변경 범위에서 제외하고 보존했다.
+- 롤백: 본 HANDOVER 항목과 `src/app/unni-naengmyeon/recipes/page.tsx` 변경분을 revert하면 이전 레시피 문구로 돌아간다.
