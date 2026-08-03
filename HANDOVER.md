@@ -856,11 +856,12 @@
   - 불냉면은 기존 캡사이신/매운 고춧가루 추가 방식에서 `비빔냉면 동일 준비 + 매운다대기 100g(2스푼) + 다대기 50g(1스푼)` 방식으로 교체했다.
   - 매운다대기 제조 기준 `육수 300cc + 베트남 고춧가루 100g + 냉면다대기 400g`을 불냉면 카드에 추가했다.
   - 묵사발은 묵을 냉면그릇에 담고 토핑을 묵 위에 올리며, 육수 500cc는 육수그릇에 담는 방식으로 수정했다. 묵 실온보관 및 냉장보관 시 끊어짐 주의 문구도 추가했다.
+  - Docker clean build에서 기존 `src/app/chat/page.tsx`의 `finalizationTimeoutIdsRef` 중복 선언/중복 cleanup 3줄이 컴파일을 차단해, 해당 중복만 제거했다.
 - 검증:
   - `rg`로 변경 문구 반영 확인.
   - `npx eslint src/app/unni-naengmyeon/recipes/page.tsx src/app/unni-naengmyeon/recipes/RecipePrintActions.tsx` 통과.
   - `npx tsc --noEmit` 통과.
   - `npm run build` 통과. Next.js 16.1.6 기준 `/unni-naengmyeon/recipes` dynamic route 생성 확인.
 - 미포함:
-  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`, `src/app/chat/page.tsx`는 이번 변경 범위에서 제외하고 보존했다.
-- 롤백: 본 HANDOVER 항목과 `src/app/unni-naengmyeon/recipes/page.tsx` 변경분을 revert하면 이전 레시피 문구로 돌아간다.
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`은 이번 변경 범위에서 제외하고 보존했다.
+- 롤백: 본 HANDOVER 항목, `src/app/unni-naengmyeon/recipes/page.tsx`, `src/app/chat/page.tsx` 중복 제거 변경분을 revert하면 이전 상태로 돌아간다.

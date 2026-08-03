@@ -2906,7 +2906,6 @@ export default function ChatPage() {
   const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
   const finalizationTimeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const finalizationTimeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const executionAttachAbortRef = useRef<AbortController | null>(null);
   const resumeRequestInFlightRef = useRef<Set<string>>(new Set());
   const resumeRequestLastAtRef = useRef<Map<string, number>>(new Map());
@@ -5012,8 +5011,6 @@ export default function ChatPage() {
     // P2-2: 분기 모드 캡처 후 초기화
     const _capturedBranch = branchPointRef.current;
     setBranchPoint(null);
-    finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
-    finalizationTimeoutIdsRef.current = [];
     finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
     finalizationTimeoutIdsRef.current = [];
     setStreaming(true);
