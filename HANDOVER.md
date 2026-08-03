@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-04 08:31 KST - OHVIS app branding and push notification UI
+
+- Request: Rename the current AADS app to OHVIS and support app notifications for response completion.
+- Changes:
+  - `public/manifest.json` and `src/app/manifest.ts`: PWA name/short name/description changed to OHVIS.
+  - `src/app/layout.tsx`: default metadata and Apple web app title changed to OHVIS while keeping KakaoBot and Unni Naengmyeon host-specific metadata intact.
+  - `src/app/login/page.tsx`, `src/app/signup/page.tsx`, and `src/components/Sidebar.tsx`: visible app brand changed from AADS to OHVIS.
+  - `public/sw.js`: cache namespace changed to OHVIS and Push/notificationclick handlers added.
+  - `src/services/pushNotifications.ts`: browser permission, VAPID lookup, PushManager subscription, server upsert, test push, and local hidden-tab notification helpers added.
+  - `src/app/chat/page.tsx`: response-complete toast now also triggers a local notification when the page is hidden, and the chat header has a bell button to request app notification permission.
+- Backend dependency: server endpoint `/api/v1/notifications/*` and VAPID environment variables must be deployed/configured for real background push delivery.
+- Verification:
+  - Rechecked at 2026-08-04 08:42 KST: `git diff --check -- public/manifest.json public/sw.js src/app/chat/page.tsx src/app/layout.tsx src/app/login/page.tsx src/app/signup/page.tsx src/app/manifest.ts src/components/Sidebar.tsx src/services/pushNotifications.ts HANDOVER.md` passed.
+  - Rechecked at 2026-08-04 08:42 KST: `npx tsc --noEmit --pretty false` passed.
+  - Rechecked at 2026-08-04 08:42 KST: `npx eslint src/services/pushNotifications.ts src/app/chat/page.tsx src/app/layout.tsx src/app/login/page.tsx src/app/signup/page.tsx src/app/manifest.ts src/components/Sidebar.tsx` passed with 0 errors and 21 pre-existing warnings in `src/app/chat/page.tsx`.
+  - Rechecked at 2026-08-04 08:42 KST: `npm run build` passed with 62 app routes generated.
+- Commit/push/deploy: not performed in this step. Existing unrelated dirty files remain in the worktree.
+
 ## 2026-07-30 16:51 KST - Unni Naengmyeon donkatsu menu and hero update
 
 - Request: Add donkatsu menu composition and reflect a donkatsu main banner photo on the Unni Naengmyeon homepage.

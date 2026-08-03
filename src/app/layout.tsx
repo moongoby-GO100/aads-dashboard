@@ -37,8 +37,8 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 
   return {
-    title: isKakaobot ? "카카오봇 — AI 메시지 서비스" : "AADS Dashboard",
-    description: isKakaobot ? "AI 기반 카카오톡 자동 메시지 서비스" : "Autonomous AI Development System — Phase 2 Dashboard",
+    title: isKakaobot ? "카카오봇 - AI 메시지 서비스" : "OHVIS",
+    description: isKakaobot ? "AI 기반 카카오톡 자동 메시지 서비스" : "OHVIS AI Assistant",
     manifest: isKakaobot ? "/manifest-kakaobot.json" : "/manifest.json",
     icons: {
       icon: [
@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
     appleWebApp: {
       capable: true,
       statusBarStyle: "black-translucent",
-      title: isKakaobot ? "카카오봇" : "AADS",
+      title: isKakaobot ? "카카오봇" : "OHVIS",
     },
   };
 }

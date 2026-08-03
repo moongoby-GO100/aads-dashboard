@@ -19,6 +19,12 @@ import DiscussionPanel from "@/components/chat/DiscussionPanel";
 import { useVersionCheck } from "@/hooks/useVersionCheck";
 import UpdateBanner from "@/components/UpdateBanner";
 import { getMe, type CurrentUser } from "@/lib/auth";
+import {
+  getBrowserPushPermission,
+  registerOhvisPushNotifications,
+  showLocalCompletionNotification,
+  type PushNotificationStatus,
+} from "@/services/pushNotifications";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
@@ -2820,6 +2826,7 @@ export default function ChatPage() {
   const bgPartialContentRef = useRef(bgPartialContent);
   useEffect(() => { bgPartialContentRef.current = bgPartialContent; }, [bgPartialContent]);
   const [completionToast, setCompletionToast] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<PushNotificationStatus>("default");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -3512,8 +3519,25 @@ export default function ChatPage() {
     if (now - lastToastTimeRef.current < 5000) return;
     lastToastTimeRef.current = now;
     setCompletionToast(msg);
+    showLocalCompletionNotification(msg);
     if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
     completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
+  }, []);
+
+  useEffect(() => {
+    const status = getBrowserPushPermission();
+    setPushStatus(status);
+    if (status === "granted") {
+      registerOhvisPushNotifications({ requestPermission: false })
+        .then(setPushStatus)
+        .catch(() => setPushStatus("error"));
+    }
+  }, []);
+
+  const enablePushNotifications = useCallback(() => {
+    registerOhvisPushNotifications({ requestPermission: true, sendTest: true })
+      .then(setPushStatus)
+      .catch(() => setPushStatus("error"));
   }, []);
 
   // ── Init theme ──
@@ -7921,6 +7945,38 @@ export default function ChatPage() {
             <option value="quality">완성 우선</option>
             <option value="fast">빠른 완료</option>
           </select>
+
+          <button
+            onClick={enablePushNotifications}
+            disabled={pushStatus === "unsupported" || pushStatus === "denied"}
+            title={
+              pushStatus === "granted"
+                ? "앱 알림 연결됨"
+                : pushStatus === "not_configured"
+                  ? "서버 푸시 키 미설정"
+                  : pushStatus === "denied"
+                    ? "브라우저에서 알림 권한이 차단됨"
+                    : "앱 알림 켜기"
+            }
+            aria-label="앱 알림"
+            style={{
+              width: "30px",
+              height: "30px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "14px",
+              background: pushStatus === "granted" ? "var(--ct-accent)" : "var(--ct-hover)",
+              border: "none",
+              borderRadius: "6px",
+              cursor: pushStatus === "unsupported" || pushStatus === "denied" ? "not-allowed" : "pointer",
+              color: pushStatus === "granted" ? "#fff" : "var(--ct-text2)",
+              flexShrink: 0,
+              opacity: pushStatus === "unsupported" || pushStatus === "denied" ? 0.45 : 1,
+            }}
+          >
+            🔔
+          </button>
 
           {/* Export session */}
           {activeSession && (

@@ -88,7 +88,7 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
       >
         <div className="p-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
           <div>
-            <h1 className="text-lg font-bold" style={{ color: "var(--accent)" }}>AADS</h1>
+            <h1 className="text-lg font-bold" style={{ color: "var(--accent)" }}>OHVIS</h1>
             <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Autonomous AI Dev System</p>
           </div>
           <button

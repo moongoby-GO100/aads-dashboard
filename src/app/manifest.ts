@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AADS Dashboard",
-    short_name: "AADS",
-    description: "Autonomous AI Development System",
+    name: "OHVIS",
+    short_name: "OHVIS",
+    description: "OHVIS AI Assistant",
     start_url: "/chat",
     display: "standalone",
     background_color: "#121228",
