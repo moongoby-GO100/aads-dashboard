@@ -1013,3 +1013,21 @@
 - 배포 주의:
   - 백엔드 `install-ticket` API 배포와 함께 반영되어야 버튼이 정상 동작한다.
   - 실제 운영 E2E는 로그인 사용자로 설치 페이지 접속 후 자동 설치 버튼 클릭, 파일명 `--ticket-...` 포함 여부, PC Agent 첫 실행 후 온라인 상태로 검증한다.
+
+## 2026-08-04 19:52 KST - gomyunghee instagram nopo redesign deploy
+
+- 요청: 고명희냉면 홈페이지 디자인이 노포 감성과 맞지 않아, 현재 감성 사이트 기준으로 벤치마킹해 인스타그램 피드형 UI/UX와 감정적인 노포 무드로 전면 재설계.
+- 조치:
+  - `src/app/gomyunghee-naengmyeon/page.tsx`를 풀스크린 냉면 히어로, 인스타 피드형 메뉴 이미지 그리드, 감성 스토리, 간결한 배달 안내, 문의/주문 CTA 구조로 재작성했다.
+  - 돈까스 메뉴는 냉면 대표 메뉴, 1인 세트, 2인 세트, 사이드, 추가/음료 뒤의 최하단 별도 블록으로 유지했다.
+  - `src/app/gomyunghee-naengmyeon/page.module.css`를 새 클래스 구조에 맞춰 재작성하고 모바일 2열 피드/단일 메뉴 리스트 대응을 추가했다.
+  - `public/brands/gomyunghee-naengmyeon/logo.svg`를 원형 도장형 노포 로고로 교체했다.
+  - 러너가 남긴 미사용 백업 파일 `src/app/gomyunghee-naengmyeon/page.tsx.bak`, `src/app/gomyunghee-naengmyeon/page.module.css.bak`를 제거했다.
+- 검증 예정:
+  - `npx eslint src/app/gomyunghee-naengmyeon/page.tsx src/app/gomyunghee-naengmyeon/InquiryForm.tsx`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - 운영 배포 후 `https://gomyunghee.newtalk.kr/` 외부 HTTP 200, 본문/로고/돈까스 하단 위치 확인.
+- 미포함:
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋 대상에서 제외하고 보존한다.
+- 롤백: 본 변경 커밋을 revert하고 dashboard deploy를 재실행하면 이전 고명희냉면 디자인으로 돌아간다.
