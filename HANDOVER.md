@@ -903,3 +903,22 @@
   - Playwright 스크린샷 검증은 대시보드 의존성에 Playwright가 없어 수행하지 못했다.
   - 현재 작업트리에 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`이 남아 있어 배포 전 선별 커밋이 필요하다.
 - 롤백: 위 신규 라우트/로고 파일과 `src/middleware.ts`, `src/components/ClientLayout.tsx`, `src/app/layout.tsx`, 본 HANDOVER 항목의 변경분을 revert하면 이전 상태로 돌아간다.
+
+## 2026-08-04 09:13 KST - gomyunghee naengmyeon deploy and domain check
+
+- 요청: 고명희냉면 사이트 운영 외부 URL 반영.
+- 조치:
+  - `03edf4c feat: add gomyunghee naengmyeon public site`를 원격 `main`에 push했다.
+  - `bash deploy.sh`로 dashboard blue-green 배포를 수행했고 active 슬롯은 `green`, release는 `03edf4ccc147`이다.
+  - `/etc/nginx/conf.d/aads.conf`에 `gomyunghee.newtalk.kr` 전용 80/443 server block을 추가하고 `aads-nginx`에서 `nginx -t` 및 reload를 수행했다.
+- 검증:
+  - `https://aads.newtalk.kr/gomyunghee-naengmyeon` 외부 HTTP 200 확인.
+  - `https://aads.newtalk.kr/brands/gomyunghee-naengmyeon/logo.svg` 외부 HTTP 200 확인.
+  - 원서버 직접 호출 `Host: gomyunghee.newtalk.kr` 기준 IPv4/IPv6 모두 HTTP 200 및 `/gomyunghee-naengmyeon` rewrite 확인.
+  - deploy script의 자동 visual QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
+- 남은 이슈:
+  - Cloudflare 경유 `https://gomyunghee.newtalk.kr`는 아직 HTTP 403이다. 원서버 직접 호출은 200이므로 서버 코드/nginx보다는 Cloudflare DNS/origin/rule 설정 문제로 분리했다.
+  - 스크린샷 캡처 도구는 timeout으로 실패했다. curl 본문 확인으로 대체했다.
+- 롤백:
+  - 앱 변경은 `03edf4c` revert 후 dashboard deploy.
+  - nginx 변경은 `/etc/nginx/conf.d/aads.conf.bak.pre_gomyunghee_20260804_0911` 복원 후 `docker exec aads-nginx nginx -t && docker exec aads-nginx nginx -s reload`.
