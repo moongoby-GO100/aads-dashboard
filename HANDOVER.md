@@ -934,7 +934,11 @@
   - `curl -I https://gomyunghee.newtalk.kr/` HTTP/2 200 확인.
   - `curl -I https://gomyunghee.newtalk.kr/gomyunghee-naengmyeon` HTTP/2 200 확인.
   - `git rev-parse HEAD`와 `git rev-parse @{u}`가 동일한 `d9dd8d0e2cb0767c8bdf99fe284cc2dd8972b9ab`였음을 확인했다.
+- 최종 반영:
+  - `e729be7 fix: use gomyunghee domain metadata`로 메타 도메인 정정과 본 HANDOVER 항목을 원격 `main`에 push했다.
+  - `bash deploy.sh`로 dashboard blue-green 배포를 수행했고 active 슬롯은 `blue`, release는 `e729be7c26c8`이다.
+  - 배포 후 Cloudflare 경유 `https://gomyunghee.newtalk.kr/` HTTP/2 200, logo.svg HTTP/2 200, canonical/OG URL `https://gomyunghee.newtalk.kr` 확인.
 - 남은 이슈:
-  - 메타 도메인 정정분은 본 항목과 함께 별도 커밋/배포가 필요하다.
+  - deploy script의 자동 frontend QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다. 외부 HTTP/API/컨테이너 health 검증으로 대체했다.
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`은 이번 변경 범위에서 제외하고 보존한다.
 - 롤백: 메타 도메인 정정 커밋을 revert하고 dashboard deploy를 재실행하면 이전 상태로 돌아간다.
