@@ -64,6 +64,10 @@ function resolveApiUrl(pathOrUrl?: string): string {
   return `${BASE_URL.replace(/\/$/, "")}${pathOrUrl.startsWith("/") ? pathOrUrl.replace(/^\/api\/v1/, "") : `/${pathOrUrl}`}`;
 }
 
+function buildPairingDeepLink(pairing: PairingResponse): string {
+  return `aads-agent://pair?payload=${encodeURIComponent(JSON.stringify(pairing.pairing_payload))}`;
+}
+
 export default function MobileAgentPage() {
   const [manifest, setManifest] = useState<AndroidManifest | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -141,6 +145,11 @@ export default function MobileAgentPage() {
     await navigator.clipboard.writeText(text);
     setCopied(name);
     window.setTimeout(() => setCopied(null), 1600);
+  };
+
+  const openPairingDeepLink = () => {
+    if (!pairing) return;
+    window.location.href = buildPairingDeepLink(pairing);
   };
 
   const cardStyle = {
@@ -287,6 +296,13 @@ export default function MobileAgentPage() {
                     style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}
                   >
                     URL 복사
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openPairingDeepLink}
+                    style={{ background: "var(--accent)", color: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontWeight: 800 }}
+                  >
+                    앱에 자동 적용
                   </button>
                   <span style={{ color: "var(--success)", fontSize: 13, alignSelf: "center" }}>{copied ? "복사됨" : ""}</span>
                 </div>
