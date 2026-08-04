@@ -56,6 +56,7 @@ export default function ClientLayout({
       pathname === "/signup" ||
       pathname.startsWith("/invite/accept") ||
       pathname.startsWith("/unni-naengmyeon") ||
+      pathname.startsWith("/gomyunghee-naengmyeon") ||
       pathname.startsWith("/kakaobot");
 
     if (publicPath || isKakaobot || isUnniNaengmyeon) return;
@@ -82,6 +83,7 @@ export default function ClientLayout({
     pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||
     pathname.startsWith("/unni-naengmyeon") ||
+    pathname.startsWith("/gomyunghee-naengmyeon") ||
     pathname.startsWith("/kakaobot") ||
     isKakaobot ||
     isUnniNaengmyeon;

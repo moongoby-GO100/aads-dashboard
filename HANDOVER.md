@@ -883,3 +883,23 @@
 - 미포함:
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`은 이번 변경 범위에서 제외하고 보존했다.
 - 롤백: 본 HANDOVER 항목, `src/app/unni-naengmyeon/recipes/page.tsx`, `src/app/chat/page.tsx` 중복 제거 변경분을 revert하면 이전 상태로 돌아간다.
+
+## 2026-08-04 08:51 KST - gomyunghee naengmyeon public site
+
+- 요청: 고명희냉면도 언니냉면과 동일한 구성의 공개 사이트를 하나 생성.
+- 조치:
+  - `src/app/gomyunghee-naengmyeon/page.tsx`, `InquiryForm.tsx`, `page.module.css`를 추가해 `/gomyunghee-naengmyeon` 공개 홈페이지를 구성했다.
+  - `public/brands/gomyunghee-naengmyeon/logo.svg`를 추가해 고명희냉면 전용 로고와 favicon/apple icon을 적용했다.
+  - `src/middleware.ts`, `src/components/ClientLayout.tsx`, `src/app/layout.tsx`에 고명희냉면 공개 경로와 `gomyunghee.newtalk.kr` 호스트 예외를 추가했다.
+  - 배민 주문 링크는 현재 확인된 `https://s.baemin.com/2b000l0sq2E18`로 연결했다.
+  - 매장 주소/전화번호는 실측 정보가 없어 언니냉면 정보를 복사하지 않고 배민 주문 화면 기준 안내로 제한했다.
+- 검증:
+  - `npx eslint src/app/gomyunghee-naengmyeon/page.tsx src/app/gomyunghee-naengmyeon/InquiryForm.tsx src/components/ClientLayout.tsx src/app/layout.tsx src/middleware.ts` 통과.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과. Next.js 16.1.6 기준 `/gomyunghee-naengmyeon` route 생성 확인.
+  - 로컬 임시 서버 기준 `curl -I http://127.0.0.1:3022/gomyunghee-naengmyeon` 200 OK, `curl -I http://127.0.0.1:3022/brands/gomyunghee-naengmyeon/logo.svg` 200 OK 확인.
+- 미완료:
+  - 커밋, 푸시, 운영 배포는 CEO의 별도 승인 전까지 수행하지 않았다.
+  - Playwright 스크린샷 검증은 대시보드 의존성에 Playwright가 없어 수행하지 못했다.
+  - 현재 작업트리에 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`이 남아 있어 배포 전 선별 커밋이 필요하다.
+- 롤백: 위 신규 라우트/로고 파일과 `src/middleware.ts`, `src/components/ClientLayout.tsx`, `src/app/layout.tsx`, 본 HANDOVER 항목의 변경분을 revert하면 이전 상태로 돌아간다.

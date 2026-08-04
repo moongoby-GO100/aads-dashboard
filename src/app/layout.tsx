@@ -8,9 +8,10 @@ export async function generateViewport(): Promise<Viewport> {
   const host = headersList.get("host") || "";
   const isKakaobot = host.includes("kakaobot");
   const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
+  const isGomyungheeNaengmyeon = host.split(":")[0] === "gomyunghee.newtalk.kr";
 
   return {
-    themeColor: isKakaobot ? "#FFE812" : isUnniNaengmyeon ? "#f45d48" : "#00d4ff",
+    themeColor: isKakaobot ? "#FFE812" : isUnniNaengmyeon || isGomyungheeNaengmyeon ? "#f45d48" : "#00d4ff",
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
@@ -23,16 +24,18 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = headersList.get("host") || "";
   const isKakaobot = host.includes("kakaobot");
   const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
+  const isGomyungheeNaengmyeon = host.split(":")[0] === "gomyunghee.newtalk.kr";
 
-  if (isUnniNaengmyeon) {
+  if (isUnniNaengmyeon || isGomyungheeNaengmyeon) {
+    const isGomyunghee = isGomyungheeNaengmyeon;
     return {
-      title: "언니냉면 | 성신여대 배달 냉면",
-      description: "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다.",
+      title: isGomyunghee ? "고명희냉면 | 배달 냉면" : "언니냉면 | 성신여대 배달 냉면",
+      description: isGomyunghee ? "배달전문 냉면 브랜드, 고명희냉면입니다." : "성신여대 앞 배달전문 냉면 브랜드, 언니냉면입니다.",
       icons: {
-        icon: [{ url: "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png", type: "image/png" }],
-        apple: [{ url: "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png" }],
+        icon: [{ url: isGomyunghee ? "/brands/gomyunghee-naengmyeon/logo.svg" : "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png", type: isGomyunghee ? "image/svg+xml" : "image/png" }],
+        apple: [{ url: isGomyunghee ? "/brands/gomyunghee-naengmyeon/logo.svg" : "/brands/unni-naengmyeon/bowlcut-logo-concepts-20260722/concept-h-wordmark-noodles.png" }],
       },
-      appleWebApp: { capable: true, statusBarStyle: "default", title: "언니냉면" },
+      appleWebApp: { capable: true, statusBarStyle: "default", title: isGomyunghee ? "고명희냉면" : "언니냉면" },
     };
   }
 
@@ -60,16 +63,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const headersList = await headers();
   const host = headersList.get("host") || "";
   const isUnniNaengmyeon = host.split(":")[0] === "unni.newtalk.kr";
+  const isGomyungheeNaengmyeon = host.split(":")[0] === "gomyunghee.newtalk.kr";
 
   return (
     <html lang="ko">
       <head>
-        {!isUnniNaengmyeon && (
+        {!isUnniNaengmyeon && !isGomyungheeNaengmyeon && (
           <script dangerouslySetInnerHTML={{ __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}` }} />
         )}
       </head>
       <body>
-        <ClientLayout isPublicHost={isUnniNaengmyeon}>{children}</ClientLayout>
+        <ClientLayout isPublicHost={isUnniNaengmyeon || isGomyungheeNaengmyeon}>{children}</ClientLayout>
       </body>
     </html>
   );

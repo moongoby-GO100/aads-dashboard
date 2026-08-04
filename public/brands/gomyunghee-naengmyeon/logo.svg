@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title desc">
+  <title id="title">고명희냉면 로고</title>
+  <desc id="desc">전통 냉면 그릇과 한글 워드마크를 결합한 고명희냉면 로고</desc>
+  <rect width="900" height="900" rx="190" fill="#fff8ea"/>
+  <circle cx="450" cy="450" r="334" fill="#173e35"/>
+  <circle cx="450" cy="450" r="292" fill="#fff8ea"/>
+  <path d="M222 390c54-78 141-122 228-122s174 44 228 122" fill="none" stroke="#f45d48" stroke-width="30" stroke-linecap="round"/>
+  <path d="M270 463c38 99 105 150 180 150s142-51 180-150H270Z" fill="#173e35"/>
+  <path d="M306 461h288" stroke="#fff8ea" stroke-width="22" stroke-linecap="round"/>
+  <path d="M350 342c26 35 23 72 0 110M424 329c30 42 30 82 0 123M500 329c30 42 30 82 0 123M574 342c26 35 23 72 0 110" fill="none" stroke="#173e35" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="353" cy="405" r="16" fill="#f45d48"/>
+  <circle cx="453" cy="390" r="13" fill="#f45d48"/>
+  <circle cx="548" cy="405" r="16" fill="#f45d48"/>
+  <text x="450" y="700" text-anchor="middle" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="84" font-weight="900" letter-spacing="-8" fill="#173e35">고명희냉면</text>
+  <text x="450" y="760" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="6" fill="#f45d48">KOREAN COLD NOODLES</text>
+</svg>

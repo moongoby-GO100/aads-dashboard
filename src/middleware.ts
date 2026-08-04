@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "/braming/shared", "/unni-naengmyeon", "/brands", "/fonts", "/apps", "/static", "/screenshots", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/login", "/signup", "/invite/accept", "/e2e-auth.html", "/braming/shared", "/unni-naengmyeon", "/gomyunghee-naengmyeon", "/brands", "/fonts", "/apps", "/static", "/screenshots", "/_next", "/favicon.ico", "/api", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
 const KAKAOBOT_ALLOWED = ["/kakaobot", "/login", "/signup", "/api", "/_next", "/favicon.ico", "/manifest.json", "/manifest-kakaobot.json", "/icon-", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest"];
 
@@ -21,6 +21,7 @@ export async function middleware(request: NextRequest) {
   const isKakaobot = hostname === "kakaobot.newtalk.kr";
   const isFoodBiz = hostname === "fb.newtalk.kr";
   const isUnniDomain = hostname === "unni.newtalk.kr";
+  const isGomyungheeDomain = hostname === "gomyunghee.newtalk.kr";
 
   // Backward compatibility for E2E URLs generated before the public asset
   // path was corrected. Preserve the token and redirect query parameters.
@@ -41,6 +42,20 @@ export async function middleware(request: NextRequest) {
     }
 
     const allowed = ["/unni-naengmyeon", "/brands", "/api/v1/unni-naengmyeon"]
+      .some((prefix) => pathname.startsWith(prefix));
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    return NextResponse.next();
+  }
+
+  if (isGomyungheeDomain) {
+    if (pathname === "/") {
+      return NextResponse.rewrite(new URL("/gomyunghee-naengmyeon", request.url));
+    }
+
+    const allowed = ["/gomyunghee-naengmyeon", "/brands", "/api/v1/unni-naengmyeon", "/reports"]
       .some((prefix) => pathname.startsWith(prefix));
     if (!allowed) {
       return NextResponse.redirect(new URL("/", request.url));
