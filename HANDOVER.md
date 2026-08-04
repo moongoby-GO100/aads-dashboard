@@ -1,5 +1,29 @@
 # AADS Dashboard Handover
 
+## 2026-08-04 17:55 KST - naengmyeon menu order and gomyunghee old-shop branding
+
+- Request: Move the donkatsu composition block to the bottom of the main menu on both Unni Naengmyeon and Gomyunghee Naengmyeon pages, because naengmyeon should remain the lead product. Also change Gomyunghee Naengmyeon homepage design and logo to an old local-shop style.
+- Changes:
+  - `src/app/unni-naengmyeon/page.tsx`: restored the hero to the water naengmyeon image and naengmyeon-first copy, and moved the `donkatsuFeature` block after main, solo set, double set, side, and extra/drink menu categories.
+  - `src/app/unni-naengmyeon/page.module.css`: adjusted donkatsu feature spacing for its new bottom placement.
+  - `src/app/gomyunghee-naengmyeon/page.tsx`: restored the hero to naengmyeon-first content, moved the donkatsu composition to the bottom, and changed metadata/copy to old signboard style.
+  - `src/app/gomyunghee-naengmyeon/page.module.css`: changed the visual system to a restrained old-shop signboard palette and typography.
+  - `public/brands/gomyunghee-naengmyeon/logo.svg`: replaced the logo with a red-bordered old signboard style mark and heavy Korean wordmark.
+- Verification:
+  - `npm run lint -- src/app/unni-naengmyeon/page.tsx src/app/gomyunghee-naengmyeon/page.tsx` passed.
+  - `npm run build` passed. Next.js 16.1.6 generated both `/unni-naengmyeon` and `/gomyunghee-naengmyeon`.
+  - External HTTPS checks passed: `https://unni.newtalk.kr/` returned 200 with `돈까스 메뉴 구성` after `추가 메뉴`; `https://gomyunghee.newtalk.kr/` returned 200 with the same order plus `노포 감성` and `오래된 간판처럼` text.
+  - `https://gomyunghee.newtalk.kr/brands/gomyunghee-naengmyeon/logo.svg` returned 200 and served the updated old-shop SVG logo.
+- Deployment:
+  - Dashboard blue-green deploy completed before this entry; active dashboard upstream is green on port 3101 and both dashboard containers are healthy.
+  - Local commit `f2bbae3 fix: refine naengmyeon menus and gomyunghee branding` contains the page/logo changes.
+  - This HANDOVER entry is recorded in a separate local follow-up docs commit.
+  - Push was not performed in this step. `main` is ahead of `dashboard-write/main` by the local page/logo and docs commits.
+- Scope exclusions:
+  - Existing unrelated dirty files `public/manager/env_unknown.json` and `public/manager/env_5.json` were preserved and excluded from this change.
+- Rollback:
+  - Revert `f2bbae3` and redeploy the dashboard to restore the previous donkatsu-first/gomyunghee styling state. Revert the follow-up docs commit to remove this handover note.
+
 ## 2026-08-04 08:31 KST - OHVIS app branding and push notification UI
 
 - Request: Rename the current AADS app to OHVIS and support app notifications for response completion.
