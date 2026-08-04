@@ -59,13 +59,14 @@ export default function AgentPage() {
   }, []);
 
   const manualDownloadUrl = `${API}/kakao-bot/agent/download-exe`;
+  const installTicketUrl = "/kakao-bot/agent/install-ticket";
 
   const handleAutoInstallDownload = async () => {
     setInstallLoading(true);
     setInstallError("");
     setInstallMessage("");
     try {
-      const res = await fetch(`${API}/kakao-bot/agent/install-ticket`, {
+      const res = await fetch(installTicketUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       });

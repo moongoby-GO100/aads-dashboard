@@ -1,5 +1,21 @@
 # AADS Dashboard Handover
 
+## 2026-08-04 19:12 KST - PC Agent auto-pair install ticket route hotfix
+
+- Request: Make PC Agent installation automatic so new users do not have to manually find and type an agent token.
+- Finding:
+  - The auto-pair UI and backend install-ticket logic were already committed, but the running backend process still returned 404 for `/api/v1/kakao-bot/agent/install-ticket` until a safe backend restart can load the new route table.
+  - The currently running backend does accept the same authenticated route at `/kakao-bot/agent/install-ticket`, so the dashboard install button can use that path immediately.
+- Change:
+  - `src/app/kakaobot/agent/page.tsx`: changed only the auto install-ticket POST path to `/kakao-bot/agent/install-ticket`; manual download and legacy token fallback remain unchanged.
+- Verification:
+  - `npx eslint src/app/kakaobot/agent/page.tsx src/app/kakaobot/settings/page.tsx` passed.
+  - `npx tsc --noEmit` passed.
+  - Public unauthenticated route probes showed `/api/v1/kakao-bot/agent/install-ticket` returns 404 while `/kakao-bot/agent/install-ticket` reaches auth flow, confirming the fallback path is live.
+- Deployment note:
+  - Backend blue-green deploy was attempted twice but stopped safely because the target slot still had active chat streams.
+  - Dashboard redeploy is required after this commit; backend restart should be retried when target stream count reaches 0.
+
 ## 2026-08-04 17:55 KST - naengmyeon menu order and gomyunghee old-shop branding
 
 - Request: Move the donkatsu composition block to the bottom of the main menu on both Unni Naengmyeon and Gomyunghee Naengmyeon pages, because naengmyeon should remain the lead product. Also change Gomyunghee Naengmyeon homepage design and logo to an old local-shop style.
