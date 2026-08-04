@@ -1,20 +1,21 @@
 # AADS Dashboard Handover
 
-## 2026-08-04 19:12 KST - PC Agent auto-pair install ticket route hotfix
+## 2026-08-04 19:12 KST - PC Agent auto-pair install ticket route verification
 
 - Request: Make PC Agent installation automatic so new users do not have to manually find and type an agent token.
 - Finding:
-  - The auto-pair UI and backend install-ticket logic were already committed, but the running backend process still returned 404 for `/api/v1/kakao-bot/agent/install-ticket` until a safe backend restart can load the new route table.
-  - The currently running backend does accept the same authenticated route at `/kakao-bot/agent/install-ticket`, so the dashboard install button can use that path immediately.
+  - The auto-pair UI and backend install-ticket logic were already committed, but the running backend process still returned 404 for `/api/v1/kakao-bot/agent/install-ticket` until a safe backend restart loaded the new route table.
+  - A temporary no-prefix probe path redirected to the dashboard login page and must not be used by the install button.
 - Change:
-  - `src/app/kakaobot/agent/page.tsx`: changed only the auto install-ticket POST path to `/kakao-bot/agent/install-ticket`; manual download and legacy token fallback remain unchanged.
+  - `src/app/kakaobot/agent/page.tsx`: keeps the auto install-ticket POST on `${API}/kakao-bot/agent/install-ticket`, so it uses the authenticated `/api/v1` API route.
 - Verification:
   - `npx eslint src/app/kakaobot/agent/page.tsx src/app/kakaobot/settings/page.tsx` passed.
   - `npx tsc --noEmit` passed.
-  - Public unauthenticated route probes showed `/api/v1/kakao-bot/agent/install-ticket` returns 404 while `/kakao-bot/agent/install-ticket` reaches auth flow, confirming the fallback path is live.
+  - After backend blue-green deploy, public unauthenticated route probes showed `/api/v1/kakao-bot/agent/install-ticket` returns 401 instead of 404.
+  - Invalid ticket exchange returned 400, confirming the exchange endpoint is registered and executing validation.
 - Deployment note:
-  - Backend blue-green deploy was attempted twice but stopped safely because the target slot still had active chat streams.
-  - Dashboard redeploy is required after this commit; backend restart should be retried when target stream count reaches 0.
+  - Backend blue-green deploy completed after target slot active streams dropped to 0; active backend moved to port 8100.
+  - Dashboard redeploy is required after this verification entry.
 
 ## 2026-08-04 17:55 KST - naengmyeon menu order and gomyunghee old-shop branding
 
