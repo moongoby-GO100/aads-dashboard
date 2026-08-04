@@ -5,19 +5,20 @@ import styles from "./page.module.css";
 
 const BRAND_LOGO = "/brands/gomyunghee-naengmyeon/logo.svg";
 const BAEMIN_ORDER_URL = "https://s.baemin.com/2b000l0sq2E18";
+const PUBLIC_SITE_URL = "https://gomyunghee.newtalk.kr";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://aads.newtalk.kr"),
+  metadataBase: new URL(PUBLIC_SITE_URL),
   title: "고명희냉면 | 배달 냉면",
   applicationName: "고명희냉면",
   description: "배달의민족 고명희냉면입니다. 물냉면, 비빔냉면, 명태회냉면과 든든한 세트 메뉴를 주문해 보세요.",
   keywords: ["고명희냉면", "배달 냉면", "물냉면", "비빔냉면", "명태회냉면", "돈까스 냉면 세트"],
-  alternates: { canonical: "/" },
+  alternates: { canonical: PUBLIC_SITE_URL },
   openGraph: {
     title: "고명희냉면 | 시원하게 제대로 말아주는 냉면",
     description: "배달의민족에서 만나는 냉면 전문 브랜드",
     type: "website",
-    url: "/",
+    url: PUBLIC_SITE_URL,
     locale: "ko_KR",
     images: [{ url: BRAND_LOGO, width: 900, height: 900, alt: "고명희냉면 로고" }],
   },

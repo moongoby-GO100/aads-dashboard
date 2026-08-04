@@ -922,3 +922,19 @@
 - 롤백:
   - 앱 변경은 `03edf4c` revert 후 dashboard deploy.
   - nginx 변경은 `/etc/nginx/conf.d/aads.conf.bak.pre_gomyunghee_20260804_0911` 복원 후 `docker exec aads-nginx nginx -t && docker exec aads-nginx nginx -s reload`.
+
+## 2026-08-04 09:24 KST - gomyunghee domain final verification
+
+- 요청: Cloudflare DNS 반영 후 `gomyunghee.newtalk.kr` 최종 완료 상태 재검증 및 누락된 커밋/푸시/배포/문서 상태 명시.
+- 조치:
+  - Cloudflare 경유 `https://gomyunghee.newtalk.kr/` 외부 접근이 HTTP 200으로 전환된 것을 확인했다.
+  - 운영 HTML에서 `고명희냉면`, `/gomyunghee-naengmyeon` rewrite, logo preload가 내려오는 것을 확인했다.
+  - 고명희냉면 페이지의 `metadataBase`, canonical, OG URL이 `aads.newtalk.kr`로 남아 있어 `https://gomyunghee.newtalk.kr` 기준으로 정정했다.
+- 검증:
+  - `curl -I https://gomyunghee.newtalk.kr/` HTTP/2 200 확인.
+  - `curl -I https://gomyunghee.newtalk.kr/gomyunghee-naengmyeon` HTTP/2 200 확인.
+  - `git rev-parse HEAD`와 `git rev-parse @{u}`가 동일한 `d9dd8d0e2cb0767c8bdf99fe284cc2dd8972b9ab`였음을 확인했다.
+- 남은 이슈:
+  - 메타 도메인 정정분은 본 항목과 함께 별도 커밋/배포가 필요하다.
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`은 이번 변경 범위에서 제외하고 보존한다.
+- 롤백: 메타 도메인 정정 커밋을 revert하고 dashboard deploy를 재실행하면 이전 상태로 돌아간다.
