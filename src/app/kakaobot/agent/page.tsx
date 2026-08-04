@@ -226,7 +226,7 @@ export default function AgentPage() {
                 {
                   step: 4,
                   title: "토큰 입력 후 연결 확인",
-                  desc: "EXE 실행 창에 아래 에이전트 등록 섹션에서 발급받은 토큰을 입력하면 서버와 자동 연결됩니다.",
+                  desc: "EXE 실행 창에 위 에이전트 등록 토큰 섹션에서 발급받은 토큰을 입력하면 서버와 자동 연결됩니다.",
                   icon: "🔑",
                 },
               ].map((item) => (

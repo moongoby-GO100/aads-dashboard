@@ -94,7 +94,12 @@ export default function SettingsPage() {
         method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       });
       const d = await res.json();
-      if (d?.token) setAgentToken(d.token);
+      if (!res.ok || !d?.token) {
+        setSaveMsg(d?.detail || "토큰 발급 실패");
+        setTimeout(() => setSaveMsg(""), 3000);
+      } else {
+        setAgentToken(d.token);
+      }
     } catch {
       setSaveMsg("토큰 발급 실패");
       setTimeout(() => setSaveMsg(""), 3000);
