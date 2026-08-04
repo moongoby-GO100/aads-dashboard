@@ -1,8 +1,23 @@
 // OHVIS Service Worker - PWA install and app push notifications.
 // Chat/API/build assets must stay network-only. Serving an old /chat shell after
 // refresh can run stale message merge logic and hide responses that are in DB.
-const CACHE_NAME = 'ohvis-v3-static-only';
+const CACHE_NAME = 'ohvis-v4-static-only';
 const PRECACHE_URLS = ['/login', '/kakaobot'];
+
+function chatUrlForSession(sessionId) {
+  return sessionId ? `/chat#${encodeURIComponent(String(sessionId))}` : '/chat';
+}
+
+function sameOriginUrl(value) {
+  try {
+    const url = new URL(value || '/chat', self.location.origin);
+    return url.origin === self.location.origin
+      ? url.href
+      : new URL('/chat', self.location.origin).href;
+  } catch {
+    return new URL('/chat', self.location.origin).href;
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -46,15 +61,19 @@ self.addEventListener('push', (event) => {
     payload = { body: event.data ? event.data.text() : '' };
   }
 
+  const payloadData = payload.data || {};
+  const sessionId = payload.session_id || payloadData.session_id;
+  const targetUrl = payload.url || payloadData.url || chatUrlForSession(sessionId);
   const title = payload.title || '오비스';
   const options = {
     body: payload.body || '응답이 완료되었습니다.',
     tag: payload.tag || 'ohvis-notification',
     icon: payload.icon || '/icon-192x192.png',
     badge: payload.badge || '/icon-192x192.png',
+    actions: payload.actions || [{ action: 'open-chat', title: '확인' }],
     data: {
-      url: payload.url || '/chat',
-      ...(payload.data || {}),
+      ...payloadData,
+      url: targetUrl,
     },
   };
 
@@ -63,12 +82,13 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data && event.notification.data.url
-    ? event.notification.data.url
+  const data = event.notification.data || {};
+  const targetUrl = data.url
+    ? data.url
     : '/chat';
 
   event.waitUntil((async () => {
-    const url = new URL(targetUrl, self.location.origin).href;
+    const url = sameOriginUrl(targetUrl);
     const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windowClients) {
       if ('focus' in client) {

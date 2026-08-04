@@ -3514,12 +3514,16 @@ export default function ChatPage() {
   }, []);
 
   // ── 토스트 디바운스 (5초 내 중복 차단) ──
-  const showCompletionToast = useCallback((msg: string) => {
+  const showCompletionToast = useCallback((msg: string, sessionId?: string | null) => {
     const now = Date.now();
     if (now - lastToastTimeRef.current < 5000) return;
     lastToastTimeRef.current = now;
     setCompletionToast(msg);
-    showLocalCompletionNotification(msg);
+    const notificationSessionId = sessionId || activeSessionRef.current;
+    showLocalCompletionNotification(
+      msg,
+      notificationSessionId ? `/chat#${encodeURIComponent(notificationSessionId)}` : undefined,
+    );
     if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
     completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
   }, []);
@@ -4356,7 +4360,7 @@ export default function ChatPage() {
           const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
             if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
-            showCompletionToast("응답이 완료되었습니다");
+            showCompletionToast("응답이 완료되었습니다", sid);
           } else if (_lastAi979?.id) {
             lastToastedAiIdRef.current = _lastAi979.id;  // 자동트리거도 ID 기록 — 이중 토스트 방지
           }
@@ -4535,7 +4539,7 @@ export default function ChatPage() {
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => isFinalAssistantMessage(m));
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
               if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
-              showCompletionToast("응답이 완료되었습니다");
+              showCompletionToast("응답이 완료되었습니다", sid);
             } else if (_lastAi1029?.id) {
               lastToastedAiIdRef.current = _lastAi1029.id;
             }
@@ -5522,7 +5526,7 @@ export default function ChatPage() {
               setStreaming(false);
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
               // P0-FIX: SSE done 경로에도 완료 토스트 표시
-              showCompletionToast("응답이 완료되었습니다");
+              showCompletionToast("응답이 완료되었습니다", requestSessionId);
               isNearBottomRef.current = true;
               scrollToMessagesBottom(true);
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -6138,7 +6142,7 @@ export default function ChatPage() {
                 const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
                   if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
-                  showCompletionToast("응답이 완료되었습니다");
+                  showCompletionToast("응답이 완료되었습니다", _sid);
                 } else if (_lastAi1696?.id) {
                   lastToastedAiIdRef.current = _lastAi1696.id;
                 }

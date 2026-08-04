@@ -99,7 +99,32 @@ export async function registerOhvisPushNotifications(options?: {
   return "granted";
 }
 
-export function showLocalCompletionNotification(body = "응답이 완료되었습니다."): void {
+function currentChatTargetUrl(): string {
+  if (typeof window === "undefined") return "/chat";
+  const path = window.location.pathname || "/chat";
+  const hash = window.location.hash || "";
+  if (path.startsWith("/chat") && hash) return `${path}${hash}`;
+  return `${path}${window.location.search || ""}${hash}`;
+}
+
+function navigateToNotificationTarget(targetUrl: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(targetUrl || "/chat", window.location.origin);
+    if (url.origin !== window.location.origin) return;
+    window.focus();
+    if (window.location.href !== url.href) {
+      window.location.assign(url.href);
+    }
+  } catch {
+    window.focus();
+  }
+}
+
+export function showLocalCompletionNotification(
+  body = "응답이 완료되었습니다.",
+  targetUrl = currentChatTargetUrl(),
+): void {
   if (typeof window === "undefined") return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   if (!document.hidden) return;
@@ -109,11 +134,11 @@ export function showLocalCompletionNotification(body = "응답이 완료되었�
       tag: "ohvis-chat-complete",
       icon: "/icon-192x192.png",
       badge: "/icon-192x192.png",
-      data: { url: window.location.pathname + window.location.search + window.location.hash },
+      data: { url: targetUrl },
     });
     notification.onclick = () => {
-      window.focus();
       notification.close();
+      navigateToNotificationTarget(targetUrl);
     };
   } catch {
     // Browser denied runtime Notification construction; server push still covers installed apps.
