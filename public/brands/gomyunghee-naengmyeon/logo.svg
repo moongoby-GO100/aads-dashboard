@@ -1,16 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title desc">
   <title id="title">고명희냉면 로고</title>
-  <desc id="desc">전통 냉면 그릇과 한글 워드마크를 결합한 고명희냉면 로고</desc>
-  <rect width="900" height="900" rx="190" fill="#fff8ea"/>
-  <circle cx="450" cy="450" r="334" fill="#173e35"/>
-  <circle cx="450" cy="450" r="292" fill="#fff8ea"/>
-  <path d="M222 390c54-78 141-122 228-122s174 44 228 122" fill="none" stroke="#f45d48" stroke-width="30" stroke-linecap="round"/>
-  <path d="M270 463c38 99 105 150 180 150s142-51 180-150H270Z" fill="#173e35"/>
-  <path d="M306 461h288" stroke="#fff8ea" stroke-width="22" stroke-linecap="round"/>
-  <path d="M350 342c26 35 23 72 0 110M424 329c30 42 30 82 0 123M500 329c30 42 30 82 0 123M574 342c26 35 23 72 0 110" fill="none" stroke="#173e35" stroke-width="18" stroke-linecap="round"/>
-  <circle cx="353" cy="405" r="16" fill="#f45d48"/>
-  <circle cx="453" cy="390" r="13" fill="#f45d48"/>
-  <circle cx="548" cy="405" r="16" fill="#f45d48"/>
-  <text x="450" y="700" text-anchor="middle" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="84" font-weight="900" letter-spacing="-8" fill="#173e35">고명희냉면</text>
-  <text x="450" y="760" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="6" fill="#f45d48">KOREAN COLD NOODLES</text>
+  <desc id="desc">오래된 냉면집 간판처럼 붉은 테두리와 묵직한 한글 워드마크를 사용한 고명희냉면 로고</desc>
+  <rect width="900" height="900" rx="48" fill="#f7efd9"/>
+  <rect x="74" y="86" width="752" height="728" rx="22" fill="#fffaf0" stroke="#202724" stroke-width="26"/>
+  <rect x="108" y="120" width="684" height="660" rx="14" fill="none" stroke="#8b2119" stroke-width="18"/>
+  <path d="M230 342c58-54 129-82 220-82s162 28 220 82" fill="none" stroke="#8b2119" stroke-width="22" stroke-linecap="round"/>
+  <path d="M248 425h404c-31 104-103 157-202 157s-171-53-202-157Z" fill="#202724"/>
+  <path d="M296 427h308" stroke="#fff2cf" stroke-width="20" stroke-linecap="round"/>
+  <path d="M352 313c22 36 20 70-1 111M424 300c28 41 28 82 0 124M500 300c28 41 28 82 0 124M572 313c22 36 20 70-1 111" fill="none" stroke="#202724" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="356" cy="382" r="13" fill="#8b2119"/>
+  <circle cx="450" cy="370" r="11" fill="#8b2119"/>
+  <circle cx="544" cy="382" r="13" fill="#8b2119"/>
+  <text x="450" y="180" text-anchor="middle" font-family="Georgia, 'Times New Roman', 'Noto Serif KR', serif" font-size="34" font-weight="800" letter-spacing="6" fill="#202724">SINCE 2026</text>
+  <text x="450" y="686" text-anchor="middle" font-family="Georgia, 'Times New Roman', 'Noto Serif KR', serif" font-size="88" font-weight="900" letter-spacing="0" fill="#8b2119">고명희냉면</text>
+  <text x="450" y="738" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="800" letter-spacing="7" fill="#202724">COLD NOODLES</text>
 </svg>

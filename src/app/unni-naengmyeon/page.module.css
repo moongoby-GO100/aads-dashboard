@@ -76,7 +76,7 @@
 .sectionHeading > span { color: var(--coral); font-size: 12px; font-weight: 900; letter-spacing: .2em; }
 .sectionHeading h2 { margin: 12px 0 8px; font-size: clamp(38px, 4vw, 58px); font-weight: 900; letter-spacing: -.06em; line-height: 1.2; }
 .sectionHeading p { margin: 0; color: var(--muted); font-size: 16px; }
-.donkatsuFeature { width: min(1160px, 100%); margin: 0 auto 64px; display: grid; grid-template-columns: .82fr 1fr; gap: 38px; align-items: stretch; }
+.donkatsuFeature { width: min(1160px, 100%); margin: 72px auto 0; display: grid; grid-template-columns: .82fr 1fr; gap: 38px; align-items: stretch; }
 .donkatsuPhoto { position: relative; min-height: 430px; overflow: hidden; border-radius: 28px; background: #1e2623; box-shadow: 0 20px 55px rgba(23,62,53,.12); }
 .donkatsuPhoto::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 62%, rgba(16,47,41,.42)); pointer-events: none; }
 .donkatsuFeatureImage { object-fit: cover; object-position: 50% 50%; }

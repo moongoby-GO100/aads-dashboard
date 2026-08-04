@@ -213,8 +213,8 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.heroInner} id="main-content">
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}>SUNGSHIN WOMEN&apos;S UNIV. · DELIVERY ONLY</span>
-            <h1>시원한 냉면에<br /><em>바삭한 돈까스까지</em></h1>
-            <p>살얼음 냉면과 등심 돈까스를 한 번에.<br className={styles.desktopBreak} /> 배민에서 바로 주문하세요.</p>
+            <h1>언니가 제대로<br /><em>말아주는 냉면</em></h1>
+            <p>살얼음 육수와 수제 다대기, 푸짐한 고명을 담은 냉면 한 그릇.<br className={styles.desktopBreak} /> 배민에서 바로 주문하세요.</p>
             <div className={styles.heroActions}>
               <a className={styles.primaryButton} href={BAEMIN_ORDER_URL} target="_blank" rel="noopener noreferrer">배민 주문하기 <ArrowIcon /></a>
               <a className={styles.textButton} href="#location"><PinIcon /> 성신여대점 위치</a>
@@ -225,11 +225,11 @@ export default function UnniNaengmyeonPage() {
             </div>
           </div>
           <div className={styles.heroVisual}>
-            <div className={styles.heroBadge}><b>ICE &amp; CRUNCH</b><span>냉면 + 수제돈까스</span></div>
+            <div className={styles.heroBadge}><b>ICE NAENGMYEON</b><span>살얼음 육수 + 수제 다대기</span></div>
             <Image
-              className={styles.donkatsuHeroImage}
-              src={DONKATSU_MENU_IMAGE}
-              alt="언니냉면과 바삭한 수제 등심돈까스 세트"
+              className={styles.nasMenuCrop}
+              src={WATER_MENU_IMAGE}
+              alt="붉은 다대기와 고명이 보이는 언니 물냉면"
               fill
               priority
               sizes="(max-width: 900px) 100vw, 55vw"
@@ -246,25 +246,8 @@ export default function UnniNaengmyeonPage() {
         <div className={styles.sectionHeading}>
           <span>OUR MENU</span>
           <h2>익숙한 메뉴 그대로,<br />이제 언니냉면으로</h2>
-          <p>배달의민족 오픈 메뉴를 기준으로 대표 냉면과 돈까스 구성을 한눈에 확인할 수 있게 정리했습니다.</p>
+          <p>배달의민족 오픈 메뉴를 기준으로 대표 냉면을 먼저 보고, 돈까스 구성은 주메뉴 하단에서 확인할 수 있게 정리했습니다.</p>
         </div>
-        <section className={styles.donkatsuFeature} aria-labelledby="donkatsu-menu-title">
-          <div className={styles.donkatsuPhoto}>
-            <Image
-              className={styles.donkatsuFeatureImage}
-              src={DONKATSU_SET_IMAGE}
-              alt="냉면과 수제 등심돈까스 세트 메뉴"
-              fill
-              sizes="(max-width: 900px) 100vw, 42vw"
-            />
-          </div>
-          <div className={styles.donkatsuCopy}>
-            <span>NEW SIDE SET</span>
-            <h3 id="donkatsu-menu-title">돈까스 메뉴 구성</h3>
-            <p>냉면만으로 아쉬운 주문에는 바삭한 수제 등심돈까스를 더했습니다. 단품, 1인 세트, 2인 세트로 선택하기 쉽게 구성했습니다.</p>
-            <MenuList items={donkatsuMenus} />
-          </div>
-        </section>
         <div className={styles.menuGallery}>
           <div className={`${styles.galleryPhoto} ${styles.galleryLead}`}>
             <Image
@@ -314,6 +297,23 @@ export default function UnniNaengmyeonPage() {
             <MenuList items={[...extras, ...drinks]} />
           </section>
         </div>
+        <section className={styles.donkatsuFeature} aria-labelledby="donkatsu-menu-title">
+          <div className={styles.donkatsuPhoto}>
+            <Image
+              className={styles.donkatsuFeatureImage}
+              src={DONKATSU_SET_IMAGE}
+              alt="냉면과 수제 등심돈까스 세트 메뉴"
+              fill
+              sizes="(max-width: 900px) 100vw, 42vw"
+            />
+          </div>
+          <div className={styles.donkatsuCopy}>
+            <span>LAST MENU · PORK CUTLET SET</span>
+            <h3 id="donkatsu-menu-title">돈까스 메뉴 구성</h3>
+            <p>냉면 메뉴를 모두 본 뒤 선택할 수 있도록 주메뉴 하단에 배치했습니다. 단품, 1인 세트, 2인 세트로 선택하기 쉽게 구성했습니다.</p>
+            <MenuList items={donkatsuMenus} />
+          </div>
+        </section>
         <p className={styles.menuNotice}>가격과 판매 여부는 배달의민족 주문 화면에서 최종 확인해 주세요. 사진은 원본 메뉴와 구성이 일치하는 항목에만 표시합니다.</p>
       </section>
 
