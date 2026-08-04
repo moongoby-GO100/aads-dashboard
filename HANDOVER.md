@@ -1045,3 +1045,22 @@
 - 미포함:
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋 대상에서 제외하고 보존한다.
 - 롤백: 본 변경 커밋을 revert하고 dashboard deploy를 재실행하면 이전 고명희냉면 디자인으로 돌아간다.
+## 2026-08-04 22:20 KST - 알림 확인 클릭 시 채팅 세션 이동 반영
+
+- 요청: 알람/푸시 알림의 `확인` 클릭 시 완료된 채팅 세션으로 바로 이동되도록 조치.
+- 조치:
+  - `public/sw.js`에 `chatUrlForSession()`과 same-origin URL 검증을 추가하고, 푸시 payload의 `session_id`만으로도 `/chat#<session_id>`를 만들도록 했다.
+  - 서비스워커 `notificationclick`에서 기존 열린 창이 있으면 `navigate(url)` 후 `focus()`하고, 열린 창이 없으면 `openWindow(url)`로 해당 세션을 연다.
+  - `src/services/pushNotifications.ts`의 로컬 Notification 클릭도 단순 focus가 아니라 target URL로 이동하도록 바꿨다.
+  - `src/app/chat/page.tsx`에서 SSE 완료, 폴백 완료 감지, 원샷 완료 감지 경로가 완료된 세션 ID를 알림 URL로 넘기도록 했다.
+- 서버 연계:
+  - 백엔드 커밋 `0b51bd47`에서 Web Push payload에 `actions: 확인`, 최상위 `url`, `data.url=/chat#<session_id>`가 포함됐다.
+- 검증:
+  - `npx eslint` 신규 에러 없이 통과, 기존 경고 21건 유지.
+  - `curl -fsS https://aads.newtalk.kr/sw.js`에서 배포된 서비스워커 코드 확인.
+  - 2026-08-04 22:19 KST 기준 `aads-dashboard` Docker 컨테이너 `healthy`, active 슬롯 `aads-dashboard:3100`.
+- 배포:
+  - 커밋 `f36ef5c fix: route notifications to chat sessions` 원격 `main` 포함.
+  - dashboard blue-green 배포 완료. 외부 헬스체크 통과.
+- 남은 주의:
+  - 기존 설치 PWA는 브라우저가 새 service worker를 activate한 뒤부터 새 클릭 이동이 보장된다.
