@@ -942,3 +942,18 @@
   - deploy script의 자동 frontend QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다. 외부 HTTP/API/컨테이너 health 검증으로 대체했다.
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`, `public/reports/gomyunghee-naengmyeon-logo-proposals.html`은 이번 변경 범위에서 제외하고 보존한다.
 - 롤백: 메타 도메인 정정 커밋을 revert하고 dashboard deploy를 재실행하면 이전 상태로 돌아간다.
+
+## 2026-08-04 09:40 KST - gomyunghee logo proposal report tracking
+
+- 요청: 이전 최종 완료보고의 커밋/푸시/배포/문서 상태가 원장과 충돌하지 않도록 남은 확인과 조치를 완료.
+- 조치:
+  - 공개 페이지에서 연결되는 `public/reports/gomyunghee-naengmyeon-logo-proposals.html`이 미추적 상태로 남아 있던 것을 완료 범위 누락으로 판단하고 Git 추적 대상에 포함했다.
+  - 기존 09:24 HANDOVER 항목의 배포 검증과 별도로, 로고 시안 리포트 파일의 공개 URL 상태와 HTML 무결성을 재검증했다.
+- 검증:
+  - `python3 -m html.parser public/reports/gomyunghee-naengmyeon-logo-proposals.html` 통과.
+  - `rg`로 `로고 시안 6종`, `시안 D`, `시안 F` 문구 확인.
+  - `curl -I https://gomyunghee.newtalk.kr/reports/gomyunghee-naengmyeon-logo-proposals.html` HTTP/2 200 확인.
+  - `curl -I https://aads.newtalk.kr/reports/gomyunghee-naengmyeon-logo-proposals.html` HTTP/2 200 확인.
+- 미포함:
+  - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋 대상에서 제외하고 보존한다.
+- 롤백: 본 커밋을 revert하면 로고 시안 리포트 파일 추적과 문서 기록만 이전 상태로 돌아간다.
