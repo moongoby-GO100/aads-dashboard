@@ -130,14 +130,17 @@ export default function SettingsPage() {
       <div className="flex-1 p-3 md:p-6 overflow-auto">
         <div className="max-w-2xl mx-auto space-y-4">
 
-          {/* PC Agent 토큰 */}
-          <div className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "2px solid #FFE812" }}>
-            <div className="flex items-start gap-3 mb-4">
-              <span style={{ fontSize: "24px" }}>🔑</span>
-              <div>
-                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>PC 에이전트 토큰</h2>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>PC Agent 설치 시 이 토큰을 입력하세요</p>
+          {/* PC Agent 토큰 — 수동 백업 (자동 설치 실패 시에만 사용) */}
+          <div className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-start gap-3">
+                <span style={{ fontSize: "24px" }}>🔑</span>
+                <div>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>에이전트 등록 토큰</h2>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>자동 설치가 실패한 경우에만 이 토큰을 사용하세요</p>
+                </div>
               </div>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: "#F3F4F6", color: "#4B5563" }}>수동 백업</span>
             </div>
             {agentToken ? (
               <div className="space-y-3">
@@ -152,7 +155,7 @@ export default function SettingsPage() {
                   </button>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>이 토큰을 PC Agent 실행 시 붙여넣기 하세요</p>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>에이전트 설치 탭에서 자동 설치가 실패한 경우에만 사용하세요</p>
                   <button onClick={handleGenerateToken} disabled={tokenLoading} className="text-xs underline" style={{ color: "var(--text-secondary)" }}>
                     {tokenLoading ? "발급 중..." : "토큰 재발급"}
                   </button>
@@ -161,8 +164,8 @@ export default function SettingsPage() {
             ) : (
               <button onClick={handleGenerateToken} disabled={tokenLoading}
                 className="w-full rounded-xl py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-                style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}>
-                {tokenLoading ? "발급 중..." : "🔑 토큰 발급하기"}
+                style={{ background: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB" }}>
+                {tokenLoading ? "발급 중..." : "토큰 발급하기"}
               </button>
             )}
           </div>
