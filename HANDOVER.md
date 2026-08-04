@@ -981,3 +981,18 @@
 - 미포함:
   - 기존 무관 변경 `public/manager/env_unknown.json`, `public/manager/env_5.json`은 이번 커밋 대상에서 제외하고 보존한다.
 - 롤백: 본 커밋을 revert하면 로고 시안 리포트 파일 추적과 문서 기록만 이전 상태로 돌아간다.
+
+## 2026-08-04 18:42 KST - PC Agent 자동 페어링 설치 버튼 전환
+
+- 요청: PC Agent 설치 시 토큰을 수동 입력하지 않고 자동으로 반영되어 설치되도록 변경.
+- 조치:
+  - `src/app/kakaobot/agent/page.tsx`의 기본 다운로드 CTA를 `PC 에이전트 자동 설치` 버튼으로 변경했다.
+  - 버튼 클릭 시 `POST /api/v1/kakao-bot/agent/install-ticket`를 호출해 10분짜리 1회용 설치 티켓을 발급하고, 반환된 `download_url`로 EXE 다운로드를 시작하도록 했다.
+  - 수동 토큰 발급/복사 UI는 자동 설치 실패 시 사용하는 백업 경로로 낮췄다.
+  - 일반 EXE 다운로드 링크는 수동 다운로드 카드로 분리했다.
+  - FAQ와 설치 가이드를 자동 설치 기준 문구로 수정했다.
+- 검증:
+  - `npx tsc --noEmit` 성공.
+- 배포 주의:
+  - 백엔드 `install-ticket` API 배포와 함께 반영되어야 버튼이 정상 동작한다.
+  - 실제 운영 E2E는 로그인 사용자로 설치 페이지 접속 후 자동 설치 버튼 클릭, 파일명 `--ticket-...` 포함 여부, PC Agent 첫 실행 후 온라인 상태로 검증한다.

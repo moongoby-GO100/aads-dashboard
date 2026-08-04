@@ -22,7 +22,7 @@ interface VersionInfo {
 const FAQ_ITEMS = [
   {
     q: "에이전트가 연결되지 않아요",
-    a: "설치 페이지에서 발급한 토큰을 입력했는지 확인하고, Windows 방화벽 또는 보안 프로그램이 AADS 서버 WebSocket 연결을 차단하지 않는지 확인해 주세요.",
+    a: "자동 설치 파일을 새로 내려받아 실행하고, Windows 방화벽 또는 보안 프로그램이 AADS 서버 WebSocket 연결을 차단하지 않는지 확인해 주세요.",
   },
   {
     q: "카카오톡이 자동으로 메시지를 보내나요?",
@@ -42,6 +42,9 @@ export default function AgentPage() {
   const [tokenLoading, setTokenLoading] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [tokenError, setTokenError] = useState("");
+  const [installLoading, setInstallLoading] = useState(false);
+  const [installError, setInstallError] = useState("");
+  const [installMessage, setInstallMessage] = useState("");
 
   useEffect(() => {
     fetch(`${API}/kakao-bot/agent/version`, { headers: getAuthHeaders() })
@@ -55,7 +58,29 @@ export default function AgentPage() {
       .catch(() => {});
   }, []);
 
-  const downloadUrl = `${API}/kakao-bot/agent/download-exe`;
+  const manualDownloadUrl = `${API}/kakao-bot/agent/download-exe`;
+
+  const handleAutoInstallDownload = async () => {
+    setInstallLoading(true);
+    setInstallError("");
+    setInstallMessage("");
+    try {
+      const res = await fetch(`${API}/kakao-bot/agent/install-ticket`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.download_url) {
+        throw new Error(data?.detail || "자동 설치 파일 준비 실패");
+      }
+      setInstallMessage("자동 페어링 설치 파일을 내려받습니다.");
+      window.location.href = data.download_url;
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : "자동 설치 파일 준비 실패");
+    } finally {
+      setInstallLoading(false);
+    }
+  };
 
   const handleGenerateToken = async () => {
     setTokenLoading(true);
@@ -136,15 +161,22 @@ export default function AgentPage() {
                 <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>EXE</span>
               </div>
             </div>
-            <a
-              href={downloadUrl}
-              download="kakaobot-setup.exe"
-              className="flex items-center justify-center gap-2 w-full rounded-xl py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+            <button
+              type="button"
+              onClick={handleAutoInstallDownload}
+              disabled={installLoading}
+              className="flex items-center justify-center gap-2 w-full rounded-xl py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
               style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}
             >
               <span style={{ fontSize: "16px" }}>⬇️</span>
-              PC 에이전트 다운로드
-            </a>
+              {installLoading ? "자동 설치 파일 준비 중..." : "PC 에이전트 자동 설치"}
+            </button>
+            {installMessage && (
+              <p className="mt-2 text-xs" style={{ color: "#16A34A" }}>{installMessage}</p>
+            )}
+            {installError && (
+              <p className="mt-2 text-xs" style={{ color: "#DC2626" }}>{installError}</p>
+            )}
             {versionInfo?.changelog && (
               <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", color: "#6B7280" }}>
                 <span className="font-medium" style={{ color: "#1A1A1A" }}>변경사항: </span>{versionInfo.changelog}
@@ -158,10 +190,10 @@ export default function AgentPage() {
               <div>
                 <h2 className="text-sm font-semibold mb-1" style={{ color: "#1A1A1A" }}>에이전트 등록 토큰</h2>
                 <p className="text-xs leading-relaxed" style={{ color: "#6B7280" }}>
-                  다운로드한 EXE를 처음 실행하면 이 토큰을 붙여넣어 서버에 연결합니다.
+                  자동 설치가 실패한 경우에만 이 토큰을 사용합니다.
                 </p>
               </div>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: "#FFF9DB", color: "#3C1E1E" }}>필수</span>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: "#F3F4F6", color: "#4B5563" }}>수동 백업</span>
             </div>
             {agentToken ? (
               <div className="space-y-3">
@@ -179,7 +211,7 @@ export default function AgentPage() {
                   </button>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs" style={{ color: "#6B7280" }}>설치창이 뜨면 위 토큰을 입력하세요.</p>
+                  <p className="text-xs" style={{ color: "#6B7280" }}>자동 설치가 실패하면 위 토큰을 입력하세요.</p>
                   <button onClick={handleGenerateToken} disabled={tokenLoading} className="text-xs underline" style={{ color: "#6B7280" }}>
                     {tokenLoading ? "발급 중..." : "토큰 재발급"}
                   </button>
@@ -207,8 +239,8 @@ export default function AgentPage() {
               {[
                 {
                   step: 1,
-                  title: "에이전트 다운로드",
-                  desc: "위 다운로드 버튼을 클릭하여 EXE 설치 파일을 저장합니다.",
+                  title: "자동 설치 파일 다운로드",
+                  desc: "위 버튼을 클릭하면 계정에 연결된 1회용 설치 파일이 생성됩니다.",
                   icon: "⬇️",
                 },
                 {
@@ -225,8 +257,8 @@ export default function AgentPage() {
                 },
                 {
                   step: 4,
-                  title: "토큰 입력 후 연결 확인",
-                  desc: "EXE 실행 창에 위 에이전트 등록 토큰 섹션에서 발급받은 토큰을 입력하면 서버와 자동 연결됩니다.",
+                  title: "연결 확인",
+                  desc: "EXE를 실행하면 토큰 입력 없이 서버와 자동 연결됩니다.",
                   icon: "🔑",
                 },
               ].map((item) => (
@@ -261,6 +293,18 @@ export default function AgentPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid #E5E7EB" }}>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#1A1A1A" }}>수동 다운로드</h2>
+            <a
+              href={manualDownloadUrl}
+              download="kakaobot-setup.exe"
+              className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ background: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB" }}
+            >
+              일반 설치 파일 다운로드
+            </a>
           </div>
 
           {/* FAQ */}
