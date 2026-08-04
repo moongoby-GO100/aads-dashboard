@@ -95,7 +95,10 @@ export default function SettingsPage() {
       });
       const d = await res.json();
       if (d?.token) setAgentToken(d.token);
-    } catch {}
+    } catch {
+      setSaveMsg("토큰 발급 실패");
+      setTimeout(() => setSaveMsg(""), 3000);
+    }
     setTokenLoading(false);
   };
 

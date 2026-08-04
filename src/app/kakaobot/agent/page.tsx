@@ -22,7 +22,7 @@ interface VersionInfo {
 const FAQ_ITEMS = [
   {
     q: "에이전트가 연결되지 않아요",
-    a: "WebSocket 연결을 확인해주세요. 방화벽에서 포트 8080이 열려 있는지 확인하고, 에이전트 토큰이 올바르게 입력되었는지 다시 확인해 주세요.",
+    a: "설치 페이지에서 발급한 토큰을 입력했는지 확인하고, Windows 방화벽 또는 보안 프로그램이 AADS 서버 WebSocket 연결을 차단하지 않는지 확인해 주세요.",
   },
   {
     q: "카카오톡이 자동으로 메시지를 보내나요?",
@@ -38,6 +38,10 @@ export default function AgentPage() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [agentToken, setAgentToken] = useState("");
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [tokenError, setTokenError] = useState("");
 
   useEffect(() => {
     fetch(`${API}/kakao-bot/agent/version`, { headers: getAuthHeaders() })
@@ -45,9 +49,44 @@ export default function AgentPage() {
       .then(d => { if (d) setVersionInfo(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch(`${API}/kakao-bot/agent/token`, { headers: getAuthHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.token) setAgentToken(d.token); })
+      .catch(() => {});
   }, []);
 
   const downloadUrl = `${API}/kakao-bot/agent/download-exe`;
+
+  const handleGenerateToken = async () => {
+    setTokenLoading(true);
+    setTokenError("");
+    try {
+      const res = await fetch(`${API}/kakao-bot/agent/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.token) {
+        throw new Error(data?.detail || "토큰 발급 실패");
+      }
+      setAgentToken(data.token);
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : "토큰 발급 실패");
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  const handleCopyToken = async () => {
+    if (!agentToken) return;
+    try {
+      await navigator.clipboard.writeText(agentToken);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+    } catch {
+      setTokenError("클립보드 복사 실패");
+    }
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FAFAFA" }}>
@@ -110,6 +149,54 @@ export default function AgentPage() {
               <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", color: "#6B7280" }}>
                 <span className="font-medium" style={{ color: "#1A1A1A" }}>변경사항: </span>{versionInfo.changelog}
               </div>
+            )}
+          </div>
+
+          {/* 토큰 발급 카드 */}
+          <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid #E5E7EB" }}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h2 className="text-sm font-semibold mb-1" style={{ color: "#1A1A1A" }}>에이전트 등록 토큰</h2>
+                <p className="text-xs leading-relaxed" style={{ color: "#6B7280" }}>
+                  다운로드한 EXE를 처음 실행하면 이 토큰을 붙여넣어 서버에 연결합니다.
+                </p>
+              </div>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: "#FFF9DB", color: "#3C1E1E" }}>필수</span>
+            </div>
+            {agentToken ? (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <code className="flex-1 rounded-lg px-3 py-2.5 text-xs font-mono select-all break-all"
+                    style={{ background: "#FAFAFA", border: "1px solid #E5E7EB", color: "#1A1A1A" }}>
+                    {agentToken}
+                  </code>
+                  <button
+                    onClick={handleCopyToken}
+                    className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors"
+                    style={{ background: tokenCopied ? "#22c55e" : "#FFE812", color: tokenCopied ? "#fff" : "#3C1E1E", border: tokenCopied ? "1px solid #16a34a" : "1px solid #F5DC00" }}
+                  >
+                    {tokenCopied ? "복사됨" : "복사"}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs" style={{ color: "#6B7280" }}>설치창이 뜨면 위 토큰을 입력하세요.</p>
+                  <button onClick={handleGenerateToken} disabled={tokenLoading} className="text-xs underline" style={{ color: "#6B7280" }}>
+                    {tokenLoading ? "발급 중..." : "토큰 재발급"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateToken}
+                disabled={tokenLoading}
+                className="w-full rounded-xl py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}
+              >
+                {tokenLoading ? "발급 중..." : "토큰 발급하기"}
+              </button>
+            )}
+            {tokenError && (
+              <p className="mt-2 text-xs" style={{ color: "#DC2626" }}>{tokenError}</p>
             )}
           </div>
 
