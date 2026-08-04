@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-08-04 20:38 KST - PC Agent auto-pair install deployed
+
+- Request: Commit/push and deploy the PC Agent automatic pairing install flow to production.
+- Result:
+  - `origin/main` and `dashboard-write/main` both point to `80ef273df6ab`.
+  - Dashboard blue-green deploy completed successfully; active slot is green on port 3101, standby blue on port 3100 is synced.
+  - `/kakaobot/agent` was included in the production Next.js build and external HTTPS returned HTTP 200 after deploy.
+- Verification:
+  - `bash /root/aads/aads-dashboard/deploy.sh` passed through build, green health, Nginx reload, external health, standby sync, and release check.
+  - Production unauthenticated probes confirmed backend route registration: `POST /api/v1/kakao-bot/agent/install-ticket` returned 401, `GET /api/v1/kakao-bot/agent/token` returned 401, and `GET /api/v1/kakao-bot/agent/download-exe` returned 200.
+  - `aads-dashboard`, `aads-dashboard-green`, `aads-server`, and `aads-server-green` all reported Docker healthy.
+- Note:
+  - The deploy script frontend QA step reported `UNKNOWN`; this was not treated as pass. Manual HTTP/API/container fallback verification was completed instead.
+
 ## 2026-08-04 19:12 KST - PC Agent auto-pair install ticket route verification
 
 - Request: Make PC Agent installation automatic so new users do not have to manually find and type an agent token.
