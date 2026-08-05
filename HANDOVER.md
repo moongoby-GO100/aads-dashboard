@@ -1099,3 +1099,19 @@
   - 외부 다운로드 파일 기준 JPEG, 1280x960, RGB, 300dpi, 312,296 bytes로 재검증했다.
 - 롤백:
   - 본 이미지 커밋을 revert하면 추가된 최종본/프리뷰 파일과 문서 기록이 제거된다.
+
+## 2026-08-06 08:53 KST - 치즈돈까스 메뉴 이미지 alias 운영 반영 재검증
+
+- 요청: 이전 완료보고가 커밋/푸시/배포/문서 원장과 충돌했으므로 남은 확인·조치·검증을 계속 수행하고 최종 상태를 명확히 보고.
+- 추가 조치:
+  - `public/brands/unni-naengmyeon/menu/cheese-donkatsu-menu-baemin-coupang-1280x960.jpg` alias 파일을 300dpi 메타데이터가 있는 최종 원본과 동일하게 맞췄다.
+  - `aads-dashboard`, `aads-dashboard-green` 컨테이너의 `/app/public/brands/unni-naengmyeon/menu/`에 alias 파일을 직접 동기화했다.
+  - 정적 파일 인식 갱신을 위해 `aads-dashboard`, `aads-dashboard-green` 컨테이너를 재시작했다.
+- 재검증:
+  - 로컬 alias 파일: JPEG, 1280x960, RGB, 300dpi, 312,296 bytes.
+  - 내부 포트 `http://127.0.0.1:3100/brands/unni-naengmyeon/menu/cheese-donkatsu-menu-baemin-coupang-1280x960.jpg`: HTTP 200, `Content-Length: 312296`.
+  - 외부 URL `https://unni.newtalk.kr/brands/unni-naengmyeon/menu/cheese-donkatsu-menu-baemin-coupang-1280x960.jpg`: HTTP 200, 다운로드 파일 기준 JPEG, 1280x960, RGB, 300dpi, 312,296 bytes.
+  - 외부 URL `https://unni.newtalk.kr/brands/unni-naengmyeon/menu/generated/cheese-donkatsu-baemin-coupangeats-1280x960.jpg`: HTTP 200, 다운로드 파일 기준 JPEG, 1280x960, RGB, 300dpi, 312,296 bytes.
+  - 컨테이너 상태: `aads-dashboard`, `aads-dashboard-green` 모두 healthy.
+- 원장 상태:
+  - alias 파일과 이 문서 기록은 본 항목 작성 시점에 아직 커밋 전이다. 선별 커밋 후 최종 보고에서 실제 commit/push 상태를 재확인한다.
