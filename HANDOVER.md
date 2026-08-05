@@ -1079,3 +1079,20 @@
   - `accountNoMasked: serverAccount?.account_no_masked`, `await persistSettingsToServer()`가 운영 HTML에 포함되어야 수정 저장 회귀 방지가 반영된 것으로 본다.
 - 롤백:
   - 본 dashboard 커밋을 revert하고 dashboard deploy를 재실행하면 공개 복사본 노출 변경이 제거된다.
+
+## 2026-08-06 08:43 KST - 치즈돈까스 배민/쿠팡이츠 메뉴 이미지 최종본
+
+- 요청: 이전 대화와 생성 이미지를 확인해 치즈돈까스 이미지를 배민/쿠팡이츠 메뉴 이미지 조건에 맞고 구매 전환에 유리한 구도로 최종 생성.
+- 조치:
+  - `public/brands/unni-naengmyeon/menu/generated/cheese-donkatsu-baemin-coupangeats-1280x960.jpg`를 최종 업로드 원본으로 확정했다.
+  - `public/reports/menu-images/cheese-donkatsu-baemin-coupangeats-1280x960.jpg`에 동일 원본을 보고/전달용으로 보관했다.
+  - `public/reports/menu-images/cheese-donkatsu-square-crop-preview.jpg`에 앱 정사각 썸네일 노출 검수용 중앙 크롭 프리뷰를 추가했다.
+- 검증:
+  - PIL 기준 최종본 JPEG, 1280x960, RGB, 300dpi, 312,296 bytes로 확인했다.
+  - 배민 공식 기준: 1280x960 이상, 15MB 이하, JPG/PNG 조건 충족.
+  - 쿠팡이츠 공식 기준: 1280x960, 300ppi, JPG/JPEG/PNG, 음식 중앙 배치 조건 충족.
+  - 육안 검수: 텍스트/로고/워터마크 없음, 치즈 단면과 돈까스 본체가 중앙 960x960 크롭 안에 유지됨.
+- 배포:
+  - 이미지 파일 커밋 대상에는 포함하되, 운영 배포/restart는 별도 승인 전까지 수행하지 않는다.
+- 롤백:
+  - 본 이미지 커밋을 revert하면 추가된 최종본/프리뷰 파일과 문서 기록이 제거된다.
