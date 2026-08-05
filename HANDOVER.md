@@ -1093,6 +1093,9 @@
   - 쿠팡이츠 공식 기준: 1280x960, 300ppi, JPG/JPEG/PNG, 음식 중앙 배치 조건 충족.
   - 육안 검수: 텍스트/로고/워터마크 없음, 치즈 단면과 돈까스 본체가 중앙 960x960 크롭 안에 유지됨.
 - 배포:
-  - 이미지 파일 커밋 대상에는 포함하되, 운영 배포/restart는 별도 승인 전까지 수행하지 않는다.
+  - 커밋 `330835b feat(food): add cheese donkatsu menu image`를 `origin/main`에 push했다.
+  - `aads-dashboard`, `aads-dashboard-green` 컨테이너에 정적 파일 반영 후 재시작했다.
+  - 외부 URL `https://unni.newtalk.kr/brands/unni-naengmyeon/menu/generated/cheese-donkatsu-baemin-coupangeats-1280x960.jpg`가 HTTP 200으로 응답함을 확인했다.
+  - 외부 다운로드 파일 기준 JPEG, 1280x960, RGB, 300dpi, 312,296 bytes로 재검증했다.
 - 롤백:
   - 본 이미지 커밋을 revert하면 추가된 최종본/프리뷰 파일과 문서 기록이 제거된다.
