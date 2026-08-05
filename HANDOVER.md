@@ -1064,3 +1064,18 @@
   - dashboard blue-green 배포 완료. 외부 헬스체크 통과.
 - 남은 주의:
   - 기존 설치 PWA는 브라우저가 새 service worker를 activate한 뒤부터 새 클릭 이동이 보장된다.
+
+## 2026-08-05 17:37 KST - 열정국밥 연동설정 수정 저장 운영 노출 동기화
+
+- 요청: 연동설정 화면에서 기존 입력값을 `수정` 후 저장하면 저장되지 않는 문제 확인 및 수정.
+- 원인:
+  - 백엔드 원본 `app/static/apps/yeoljeong-finance/index.html`과 API 패치는 AADS 서버에 반영됐지만, 운영 도메인 `https://aads.newtalk.kr/apps/yeoljeong-finance/index.html`은 dashboard `public/apps/...` 공개 복사본을 바라본다.
+  - dashboard 공개 복사본이 없어 운영 URL이 404/Next fallback으로 응답했다.
+- 조치:
+  - AADS 서버 원본을 `public/static/apps/yeoljeong-finance/`에 동기화했다.
+  - 운영 앱 경로용 `public/apps/yeoljeong-finance/index.html`도 동일 원본으로 생성했다.
+- 검증 기준:
+  - `integrationCategoryFilter`, `integrationStatusFilter`, `integrationSearchInput` 표식이 운영 HTML에 노출되어야 한다.
+  - `accountNoMasked: serverAccount?.account_no_masked`, `await persistSettingsToServer()`가 운영 HTML에 포함되어야 수정 저장 회귀 방지가 반영된 것으로 본다.
+- 롤백:
+  - 본 dashboard 커밋을 revert하고 dashboard deploy를 재실행하면 공개 복사본 노출 변경이 제거된다.
