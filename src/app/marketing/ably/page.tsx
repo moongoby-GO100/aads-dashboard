@@ -11,7 +11,7 @@ export default function AblyMarketingAnalyzerPage() {
               에이블리 광고분석
             </h1>
             <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
-              에이블리 주간보고서 CSV와 사방넷 주문 엑셀을 합쳐 선택 기간 기준 조치사항을 계산합니다.
+              에이블리 주간보고서 CSV와 사방넷 주문 엑셀을 합쳐 상품명(수집) 매칭, 원가2(상품) 부가세 포함 기준으로 계산합니다.
             </p>
           </div>
           <a
