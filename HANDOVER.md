@@ -1170,3 +1170,21 @@
   - 임시 정적 서버 `python3 -m http.server 8899 --directory public` 기준 `/apps/ably-ad-analyzer/index.html` HTTP 200 확인.
 - 배포:
   - 본 항목 작성 시점에는 코드 수정과 로컬 검증만 완료했고, 커밋/푸시/운영 배포는 아직 미실행이다.
+
+## 2026-08-06 14:25 KST - 오비스 에이블리 광고분석 선택 기간 기능 운영 배포
+
+- 요청: 선택 기간 계산 기능을 운영 오비스에 배포.
+- 배포:
+  - 커밋: `cf52eadd89c8` (`feat(marketing): support Ably custom period analysis`)
+  - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
+  - 방식: blue-green 배포, 활성 슬롯 `blue` -> `green`
+  - 결과: 14:22:07 KST green 내부/외부 헬스체크 통과 후 nginx upstream 전환 완료.
+  - standby: 14:24:38 KST 이전 blue 슬롯 `aads-dashboard` 동기화 및 헬스체크 통과.
+- 검증:
+  - `npx eslint src/app/marketing/ably/page.tsx` 통과.
+  - HTML inline script `new Function(script)` 문법 검사 통과.
+  - 운영 `/marketing/ably`는 비로그인 기준 `/login?redirect=%2Fmarketing%2Fably` 307 응답 확인.
+  - 운영 `/apps/ably-ad-analyzer/index.html`에서 `분석 시작일`, `분석 종료일`, `에이블리 주간보고서 CSV`, `사방넷 주문 수집 엑셀` 문구 확인.
+  - `aads-dashboard`, `aads-dashboard-green` 컨테이너 모두 healthy 확인.
+- 주의:
+  - 배포 스크립트의 Visual QA API 결과는 `UNKNOWN`으로 미확정. 배포는 성공했으나 브라우저 E2E 통과로 간주하지 않는다.
