@@ -14,6 +14,7 @@ const navItems = [
   { href: "/managers", label: "Managers", icon: "👥", adminOnly: true },
   { href: "/team", label: "Team", icon: "👥" },
   { href: "/agenda", label: "아젠다", icon: "📌" },
+  { href: "/marketing/ably", label: "에이블리 광고분석", icon: "📈" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯", adminOnly: true },
   { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true },
   { href: "/docs", label: "문서 통합", icon: "📄" },

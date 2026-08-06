@@ -1,5 +1,21 @@
 # AADS Dashboard Handover
 
+## 2026-08-06 10:39 KST - Ably ad analyzer added to OHVIS
+
+- Request: Make the Ably ad analysis HTML available inside OHVIS for a non-representative account that could not open the previous backend static path.
+- Changes:
+  - `public/apps/ably-ad-analyzer/index.html`: copied the standalone Ably ad analyzer into the dashboard public app path.
+  - `src/app/marketing/ably/page.tsx`: added an OHVIS page that embeds the analyzer and provides a new-window link.
+  - `src/components/Sidebar.tsx`: added a non-admin sidebar menu item, `에이블리 광고분석`.
+- Verification:
+  - `npx eslint src/components/Sidebar.tsx src/app/marketing/ably/page.tsx` passed.
+  - Inline script syntax check for `public/apps/ably-ad-analyzer/index.html` passed.
+  - Local Next.js dev server on port 3177 returned 200 for `/apps/ably-ad-analyzer/index.html`.
+  - `/marketing/ably` redirects to login without a token and returns 200 with a cookie, confirming it is login-protected but not admin-only at middleware level.
+- Not completed:
+  - Browser rendering verification was attempted but local Chromium was not installed.
+  - Commit, push, and production deploy were not performed in this step.
+
 ## 2026-08-04 20:38 KST - PC Agent auto-pair install deployed
 
 - Request: Commit/push and deploy the PC Agent automatic pairing install flow to production.

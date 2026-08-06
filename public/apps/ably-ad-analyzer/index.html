@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>에이블리 광고 분석</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #5d6a78;
+      --line: #d9e0e7;
+      --brand: #0b6b63;
+      --brand-dark: #084f49;
+      --blue: #2563eb;
+      --red: #d13b3b;
+      --amber: #b7791f;
+      --green: #16835c;
+      --shadow: 0 8px 24px rgba(24, 39, 58, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    header {
+      background: #132326;
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .topbar {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 760;
+    }
+
+    .subtitle {
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px 22px 36px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .controls {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      position: sticky;
+      top: 14px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 740;
+      text-transform: uppercase;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    input[type="file"],
+    input[type="number"],
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      min-height: 38px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 92px;
+      line-height: 1.45;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      border-radius: 6px;
+      min-height: 38px;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 720;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--brand-dark);
+    }
+
+    button:disabled {
+      opacity: 0.54;
+      cursor: not-allowed;
+    }
+
+    .content {
+      display: grid;
+      gap: 16px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 14px;
+      min-height: 96px;
+    }
+
+    .metric .label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 680;
+    }
+
+    .metric .value {
+      margin-top: 8px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 780;
+      white-space: nowrap;
+    }
+
+    .metric .delta {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 10px 0;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .tab {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 6px 6px 0 0;
+      min-height: 36px;
+      padding: 8px 12px;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--ink);
+      background: #eef5f4;
+      border-bottom: 3px solid var(--brand);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .toolbar input {
+      max-width: 300px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 66vh;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+      min-width: 1180px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 10px;
+      text-align: right;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    th:first-child,
+    td:first-child,
+    th:nth-child(2),
+    td:nth-child(2) {
+      text-align: left;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f9fbfc;
+      color: #44515e;
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-weight: 740;
+      color: #0f3640;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 58px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 780;
+      color: #fff;
+    }
+
+    .pill.scale { background: var(--green); }
+    .pill.keep { background: var(--blue); }
+    .pill.test { background: var(--amber); }
+    .pill.stop { background: var(--red); }
+    .pill.bundle { background: #5b4ab6; }
+
+    .positive { color: var(--green); font-weight: 720; }
+    .negative { color: var(--red); font-weight: 720; }
+    .muted { color: var(--muted); }
+
+    .chart {
+      padding: 14px;
+    }
+
+    .bars {
+      display: grid;
+      gap: 9px;
+      margin-top: 10px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 96px 1fr 92px;
+      gap: 9px;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .bar-track {
+      height: 12px;
+      border-radius: 999px;
+      background: #e8edf2;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      min-width: 2px;
+      background: var(--brand);
+    }
+
+    .notice {
+      padding: 12px 14px;
+      border: 1px solid #efd9a8;
+      background: #fff8e8;
+      color: #6f4d12;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .empty {
+      padding: 34px 18px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .controls { position: static; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 560px) {
+      main, .topbar { padding-left: 14px; padding-right: 14px; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+      .metric .value { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>에이블리 광고 분석</h1>
+        <div class="subtitle">자체상품코드 기준 · 전체매출 기여이익 · 최근/직전 기간 비교</div>
+      </div>
+      <div class="button-row">
+        <button class="secondary" id="exportCsvBtn" disabled>CSV 내보내기</button>
+        <button id="analyzeBtn">분석 실행</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <aside class="panel controls">
+        <div class="section-title">데이터</div>
+        <label>
+          최근 기간 엑셀/CSV
+          <input type="file" id="currentFile" accept=".xlsx,.xls,.csv">
+        </label>
+        <label>
+          직전 기간 엑셀/CSV
+          <input type="file" id="previousFile" accept=".xlsx,.xls,.csv">
+        </label>
+
+        <div class="section-title">계산 기준</div>
+        <div class="row">
+          <label>
+            쿠폰비(%)
+            <input type="number" id="couponRate" value="5" min="0" max="50" step="0.1">
+          </label>
+          <label>
+            증액 기준(%)
+            <input type="number" id="scaleRate" value="7" min="0" max="50" step="0.1">
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            단일 최소(원/일)
+            <input type="number" id="singleMin" value="6000" min="0" step="1000">
+          </label>
+          <label>
+            묶음 최소(원/일)
+            <input type="number" id="bundleMin" value="10000" min="0" step="1000">
+          </label>
+        </div>
+        <label>
+          최소 집행일
+          <input type="number" id="minDays" value="7" min="1" max="30" step="1">
+        </label>
+
+        <div class="section-title">묶음 캠페인</div>
+        <textarea id="groupInput" spellcheck="false">나시 묶음: ns1017k43, t17633k63, ns1282k64
+스커트 묶음: sk7808k64, sk7936k66, sk7794k63</textarea>
+
+        <div class="section-title">필터</div>
+        <label>
+          자체상품코드/상품명
+          <input type="text" id="searchInput" placeholder="예: ops10549k66">
+        </label>
+        <label>
+          조치
+          <select id="actionFilter">
+            <option value="">전체</option>
+            <option value="증액">증액</option>
+            <option value="유지">유지</option>
+            <option value="제한 테스트">제한 테스트</option>
+            <option value="중단">중단</option>
+            <option value="묶음 점검">묶음 점검</option>
+          </select>
+        </label>
+      </aside>
+
+      <section class="content">
+        <div class="summary-grid" id="summaryGrid">
+          <div class="panel metric"><div class="label">상품 수</div><div class="value">-</div><div class="delta">업로드 대기</div></div>
+          <div class="panel metric"><div class="label">전체매출</div><div class="value">-</div><div class="delta">선택 기간</div></div>
+          <div class="panel metric"><div class="label">광고비</div><div class="value">-</div><div class="delta">선택 기간</div></div>
+          <div class="panel metric"><div class="label">최종 기여이익</div><div class="value">-</div><div class="delta">쿠폰 반영</div></div>
+          <div class="panel metric"><div class="label">증액 후보</div><div class="value">-</div><div class="delta">기준 통과</div></div>
+        </div>
+
+        <div class="panel chart">
+          <div class="section-title">조치 분포</div>
+          <div class="bars" id="actionBars">
+            <div class="empty">분석 결과가 없습니다.</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="tabs">
+            <button class="tab active" data-tab="actions">조치사항</button>
+            <button class="tab" data-tab="groups">묶음 합산</button>
+            <button class="tab" data-tab="raw">전체 상품</button>
+          </div>
+          <div class="toolbar">
+            <div id="statusText" class="muted">파일을 선택한 뒤 분석 실행을 누르십시오.</div>
+            <div class="button-row">
+              <button class="secondary" id="copyBtn" disabled>보고문 복사</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="tableWrap">
+            <div class="empty">최근 기간 파일을 업로드하면 자체상품코드 기준으로 계산됩니다.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const state = {
+      current: [],
+      previous: new Map(),
+      groups: [],
+      groupRows: [],
+      rows: [],
+      tab: "actions",
+      sortKey: "finalProfit",
+      sortDir: "desc",
+      reportText: ""
+    };
+
+    const columnAliases = {
+      code: ["자체상품코드", "자체 상품 코드", "상품코드", "코드"],
+      name: ["상품명", "상품명(확정)", "광고 상품명"],
+      adDays: ["광고일수", "집행일수"],
+      impressions: ["노출수"],
+      clicks: ["클릭수"],
+      adCost: ["광고비"],
+      totalSales: ["전체 전환 매출", "전체매출", "매출", "결제금액"],
+      adSales: ["광고전환매출", "직접 광고 전환 매출", "광고매출"],
+      conversions: ["구매 전환수", "광고전환수", "직접 구매 전환수"],
+      marginAfterAd: ["마진(광고비제외)", "광고비 제외 마진"],
+      adProfit: ["광고수익금"],
+      link: ["링크"]
+    };
+
+    const won = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
+    const pct = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 });
+
+    document.getElementById("analyzeBtn").addEventListener("click", analyze);
+    document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+    document.getElementById("copyBtn").addEventListener("click", copyReport);
+    document.getElementById("searchInput").addEventListener("input", renderTable);
+    document.getElementById("actionFilter").addEventListener("change", renderTable);
+    document.querySelectorAll(".tab").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.tab = button.dataset.tab;
+        document.querySelectorAll(".tab").forEach((item) => item.classList.toggle("active", item === button));
+        renderTable();
+      });
+    });
+
+    async function analyze() {
+      const currentFile = document.getElementById("currentFile").files[0];
+      const previousFile = document.getElementById("previousFile").files[0];
+      if (!currentFile) {
+        setStatus("최근 기간 파일이 필요합니다.", true);
+        return;
+      }
+      setStatus("분석 중입니다.", false);
+      try {
+        const currentRows = await readWorkbookRows(currentFile);
+        const previousRows = previousFile ? await readWorkbookRows(previousFile) : [];
+        state.previous = new Map(previousRows.map((row) => [row.code, row]));
+        state.groups = parseGroups(document.getElementById("groupInput").value);
+        state.current = currentRows;
+        state.rows = currentRows.map(buildDecision).sort((a, b) => b.finalProfit - a.finalProfit);
+        state.groupRows = buildGroups(state.rows, state.groups);
+        buildReport();
+        renderSummary();
+        renderBars();
+        renderTable();
+        document.getElementById("exportCsvBtn").disabled = false;
+        document.getElementById("copyBtn").disabled = false;
+        setStatus(`${state.rows.length}개 상품 분석 완료`, false);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "분석에 실패했습니다.", true);
+      }
+    }
+
+    async function readWorkbookRows(file) {
+      const name = file.name.toLowerCase();
+      const buffer = await file.arrayBuffer();
+      let rows;
+      if (name.endsWith(".csv")) {
+        const text = new TextDecoder("utf-8").decode(buffer);
+        const workbook = XLSX.read(text, { type: "string" });
+        rows = sheetToRows(workbook, workbook.SheetNames[0]);
+      } else {
+        const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+        const sheetName = workbook.SheetNames.includes("A_최근7일누적")
+          ? "A_최근7일누적"
+          : workbook.SheetNames[0];
+        rows = sheetToRows(workbook, sheetName);
+      }
+      if (!rows.length) throw new Error("분석 가능한 행이 없습니다.");
+      return rows;
+    }
+
+    function sheetToRows(workbook, sheetName) {
+      const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+      const headerIndex = matrix.findIndex((row) => row.some((cell) => normalize(cell) === "자체상품코드"));
+      if (headerIndex < 0) throw new Error(`${sheetName} 시트에서 자체상품코드 헤더를 찾지 못했습니다.`);
+      const headers = matrix[headerIndex].map((cell) => String(cell || "").trim());
+      const indexes = buildIndexes(headers);
+      return matrix.slice(headerIndex + 1)
+        .map((row) => normalizeRow(row, indexes, headers))
+        .filter((row) => row.code && row.totalSales + row.adCost + row.adSales > 0);
+    }
+
+    function buildIndexes(headers) {
+      const indexes = {};
+      Object.entries(columnAliases).forEach(([key, aliases]) => {
+        indexes[key] = findHeader(headers, aliases);
+      });
+      indexes.marginAfterAd = findHeader(headers, columnAliases.marginAfterAd);
+      if (indexes.marginAfterAd < 0) {
+        const marginIndexes = headers
+          .map((value, index) => normalize(value) === "마진" ? index : -1)
+          .filter((index) => index >= 0);
+        indexes.marginAfterAd = marginIndexes.length ? Math.max(...marginIndexes) : -1;
+      }
+      return indexes;
+    }
+
+    function findHeader(headers, aliases) {
+      const normalized = headers.map(normalize);
+      for (const alias of aliases.map(normalize)) {
+        const index = normalized.indexOf(alias);
+        if (index >= 0) return index;
+      }
+      return -1;
+    }
+
+    function normalizeRow(row, indexes) {
+      const adCost = numberAt(row, indexes.adCost);
+      const totalSales = numberAt(row, indexes.totalSales);
+      const adSales = numberAt(row, indexes.adSales);
+      const marginAfterAd = numberAt(row, indexes.marginAfterAd);
+      const adDays = Math.max(1, numberAt(row, indexes.adDays));
+      return {
+        code: textAt(row, indexes.code).toLowerCase(),
+        name: textAt(row, indexes.name),
+        link: textAt(row, indexes.link),
+        adDays,
+        impressions: numberAt(row, indexes.impressions),
+        clicks: numberAt(row, indexes.clicks),
+        conversions: numberAt(row, indexes.conversions),
+        adCost,
+        totalSales,
+        adSales,
+        marginAfterAd,
+        adRoas: adCost > 0 ? adSales / adCost * 100 : 0,
+        totalRoas: adCost > 0 ? totalSales / adCost * 100 : 0,
+        dailyAdCost: adCost / adDays
+      };
+    }
+
+    function buildDecision(row) {
+      const couponRate = Number(document.getElementById("couponRate").value || 0) / 100;
+      const scaleRate = Number(document.getElementById("scaleRate").value || 0);
+      const singleMin = Number(document.getElementById("singleMin").value || 0);
+      const minDays = Number(document.getElementById("minDays").value || 7);
+      const previous = state.previous.get(row.code);
+      const coupon = row.totalSales * couponRate;
+      const finalProfit = row.marginAfterAd - coupon;
+      const finalRate = row.totalSales > 0 ? finalProfit / row.totalSales * 100 : 0;
+      const breakEvenDaily = Math.max(0, (row.marginAfterAd - coupon + row.adCost) / row.adDays);
+      const headroom = breakEvenDaily - row.dailyAdCost;
+      const deltaProfit = previous ? finalProfit - (previous.marginAfterAd - previous.totalSales * couponRate) : null;
+      const deltaSales = previous ? row.totalSales - previous.totalSales : null;
+      const action = decideAction({ row, finalProfit, finalRate, headroom, scaleRate, singleMin, minDays, deltaProfit });
+      const nextBudget = recommendBudget({ row, action, headroom, singleMin, breakEvenDaily });
+      return { ...row, coupon, finalProfit, finalRate, breakEvenDaily, headroom, deltaProfit, deltaSales, action, nextBudget };
+    }
+
+    function decideAction(input) {
+      const { row, finalProfit, finalRate, headroom, scaleRate, singleMin, minDays, deltaProfit } = input;
+      if (finalProfit < 0 || finalRate < 0) return "중단";
+      if (row.adDays < minDays) return "제한 테스트";
+      if (finalRate >= scaleRate && row.adRoas >= 650 && headroom >= singleMin * 0.4) return "증액";
+      if (finalRate >= 3 && finalProfit > 0) return "유지";
+      if (deltaProfit !== null && deltaProfit > 0 && finalProfit > 0) return "제한 테스트";
+      return "제한 테스트";
+    }
+
+    function recommendBudget({ row, action, headroom, singleMin, breakEvenDaily }) {
+      if (action === "중단") return 0;
+      if (action === "제한 테스트") return Math.max(singleMin, Math.round(Math.min(row.dailyAdCost, singleMin) / 1000) * 1000);
+      if (action === "유지") return Math.max(singleMin, Math.round(row.dailyAdCost / 1000) * 1000);
+      const target = Math.min(row.dailyAdCost + Math.max(singleMin * 0.5, headroom * 0.45), breakEvenDaily * 0.82);
+      return Math.max(singleMin, Math.round(target / 1000) * 1000);
+    }
+
+    function parseGroups(text) {
+      return text.split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line, index) => {
+          const parts = line.split(":");
+          const name = parts.length > 1 ? parts[0].trim() : `묶음 ${index + 1}`;
+          const codes = (parts.length > 1 ? parts.slice(1).join(":") : parts[0])
+            .split(/[, ]+/)
+            .map((code) => code.trim().toLowerCase())
+            .filter(Boolean);
+          return { name, codes };
+        })
+        .filter((group) => group.codes.length);
+    }
+
+    function buildGroups(rows, groups) {
+      const map = new Map(rows.map((row) => [row.code, row]));
+      return groups.map((group) => {
+        const items = group.codes.map((code) => map.get(code)).filter(Boolean);
+        const total = sumRows(items);
+        const missing = group.codes.filter((code) => !map.has(code));
+        const bundleMin = Number(document.getElementById("bundleMin").value || 0);
+        const singleMin = Number(document.getElementById("singleMin").value || 0);
+        const currentDaily = total.adCost / Math.max(1, total.adDays || 7);
+        const separateMin = items.length * singleMin;
+        const saving = Math.max(0, separateMin - bundleMin);
+        let action = "묶음 점검";
+        if (items.length < 2) action = "유지";
+        if (total.finalProfit < 0 || total.finalRate < 2) action = "중단";
+        if (total.finalProfit > 0 && saving > 0 && total.finalRate >= 3) action = "묶음 점검";
+        return { ...total, groupName: group.name, codes: group.codes, items, missing, action, currentDaily, separateMin, bundleMin, saving };
+      });
+    }
+
+    function sumRows(items) {
+      const total = {
+        adDays: items.reduce((max, row) => Math.max(max, row.adDays || 0), 0),
+        impressions: 0,
+        clicks: 0,
+        conversions: 0,
+        adCost: 0,
+        totalSales: 0,
+        adSales: 0,
+        marginAfterAd: 0,
+        coupon: 0,
+        finalProfit: 0
+      };
+      items.forEach((row) => {
+        total.impressions += row.impressions || 0;
+        total.clicks += row.clicks || 0;
+        total.conversions += row.conversions || 0;
+        total.adCost += row.adCost || 0;
+        total.totalSales += row.totalSales || 0;
+        total.adSales += row.adSales || 0;
+        total.marginAfterAd += row.marginAfterAd || 0;
+        total.coupon += row.coupon || 0;
+        total.finalProfit += row.finalProfit || 0;
+      });
+      total.adRoas = total.adCost > 0 ? total.adSales / total.adCost * 100 : 0;
+      total.totalRoas = total.adCost > 0 ? total.totalSales / total.adCost * 100 : 0;
+      total.finalRate = total.totalSales > 0 ? total.finalProfit / total.totalSales * 100 : 0;
+      return total;
+    }
+
+    function renderSummary() {
+      const totals = sumRows(state.rows);
+      const counts = countBy(state.rows, "action");
+      const scaleCount = counts["증액"] || 0;
+      const previousProfit = state.rows.reduce((sum, row) => sum + (row.deltaProfit === null ? 0 : row.finalProfit - row.deltaProfit), 0);
+      const deltaProfit = state.previous.size ? totals.finalProfit - previousProfit : null;
+      const data = [
+        ["상품 수", `${won.format(state.rows.length)}개`, "분석 대상"],
+        ["전체매출", `${won.format(totals.totalSales)}원`, deltaText(sumDelta("deltaSales"))],
+        ["광고비", `${won.format(totals.adCost)}원`, `일평균 ${won.format(totals.adCost / Math.max(1, totals.adDays || 7))}원`],
+        ["최종 기여이익", `${won.format(totals.finalProfit)}원`, deltaProfit === null ? `이익률 ${pct.format(totals.finalRate)}%` : `직전 대비 ${signed(deltaProfit)}원`],
+        ["증액 후보", `${won.format(scaleCount)}개`, "기준 통과"]
+      ];
+      document.getElementById("summaryGrid").innerHTML = data.map(([label, value, delta]) => `
+        <div class="panel metric">
+          <div class="label">${escapeHtml(label)}</div>
+          <div class="value">${escapeHtml(value)}</div>
+          <div class="delta">${escapeHtml(delta)}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderBars() {
+      const counts = countBy(state.rows, "action");
+      const entries = ["증액", "유지", "제한 테스트", "중단", "묶음 점검"].map((key) => [key, counts[key] || 0]);
+      const max = Math.max(1, ...entries.map((entry) => entry[1]));
+      document.getElementById("actionBars").innerHTML = entries.map(([label, count]) => `
+        <div class="bar-row">
+          <div>${escapeHtml(label)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, count / max * 100)}%"></div></div>
+          <div>${won.format(count)}개</div>
+        </div>
+      `).join("");
+    }
+
+    function renderTable() {
+      const tab = state.tab;
+      if (tab === "groups") return renderGroups();
+      const rows = filteredRows(tab === "actions" ? state.rows.filter((row) => row.action !== "유지") : state.rows);
+      const columns = [
+        ["code", "자체상품코드", (row) => `<span class="code">${escapeHtml(row.code)}</span>`],
+        ["action", "조치", (row) => `<span class="pill ${pillClass(row.action)}">${escapeHtml(row.action)}</span>`],
+        ["nextBudget", "권장 일예산", (row) => row.nextBudget ? `${won.format(row.nextBudget)}원` : "OFF"],
+        ["totalSales", "전체매출", moneyCell],
+        ["adCost", "광고비", moneyCell],
+        ["adRoas", "광고 ROAS", percentCell],
+        ["finalProfit", "최종 기여이익", profitCell],
+        ["finalRate", "이익률", percentCell],
+        ["deltaProfit", "직전 이익차", deltaCell],
+        ["breakEvenDaily", "손익분기 일한도", moneyCell],
+        ["conversions", "전환수", (row) => won.format(row.conversions)],
+        ["name", "상품명", (row) => escapeHtml(shorten(row.name, 38))]
+      ];
+      renderRows(rows, columns);
+    }
+
+    function renderGroups() {
+      const columns = [
+        ["groupName", "묶음명", (row) => escapeHtml(row.groupName)],
+        ["codes", "자체상품코드", (row) => `<span class="code">${escapeHtml(row.codes.join(", "))}</span>`],
+        ["action", "조치", (row) => `<span class="pill ${pillClass(row.action)}">${escapeHtml(row.action)}</span>`],
+        ["bundleMin", "묶음 최소", moneyCell],
+        ["separateMin", "단일 합계 최소", moneyCell],
+        ["saving", "일 절감 가능", moneyCell],
+        ["totalSales", "전체매출", moneyCell],
+        ["adCost", "광고비", moneyCell],
+        ["adRoas", "광고 ROAS", percentCell],
+        ["finalProfit", "최종 기여이익", profitCell],
+        ["finalRate", "이익률", percentCell],
+        ["missing", "누락", (row) => escapeHtml(row.missing.join(", ") || "-")]
+      ];
+      renderRows(state.groupRows, columns);
+    }
+
+    function renderRows(rows, columns) {
+      if (!rows.length) {
+        document.getElementById("tableWrap").innerHTML = `<div class="empty">표시할 행이 없습니다.</div>`;
+        return;
+      }
+      const head = columns.map(([key, label]) => `<th data-key="${key}">${escapeHtml(label)}</th>`).join("");
+      const body = rows.map((row) => `<tr>${columns.map(([key, , render]) => `<td>${render(row, key)}</td>`).join("")}</tr>`).join("");
+      document.getElementById("tableWrap").innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      document.querySelectorAll("th[data-key]").forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.key;
+          state.sortDir = state.sortKey === key && state.sortDir === "desc" ? "asc" : "desc";
+          state.sortKey = key;
+          state.rows.sort((a, b) => compareValues(a[key], b[key]) * (state.sortDir === "desc" ? -1 : 1));
+          state.groupRows.sort((a, b) => compareValues(a[key], b[key]) * (state.sortDir === "desc" ? -1 : 1));
+          renderTable();
+        });
+      });
+    }
+
+    function filteredRows(rows) {
+      const query = document.getElementById("searchInput").value.trim().toLowerCase();
+      const action = document.getElementById("actionFilter").value;
+      return rows.filter((row) => {
+        const matchesQuery = !query || row.code.includes(query) || row.name.toLowerCase().includes(query);
+        const matchesAction = !action || row.action === action;
+        return matchesQuery && matchesAction;
+      });
+    }
+
+    function buildReport() {
+      const topScale = state.rows.filter((row) => row.action === "증액").slice(0, 5);
+      const stopRows = state.rows.filter((row) => row.action === "중단").slice(0, 5);
+      const groupRows = state.groupRows.filter((row) => row.action !== "유지");
+      const lines = [];
+      lines.push("에이블리 광고 조치사항");
+      lines.push("");
+      lines.push(`증액 후보: ${topScale.map((row) => `${row.code} ${won.format(row.nextBudget)}원/일`).join(", ") || "없음"}`);
+      lines.push(`중단 후보: ${stopRows.map((row) => row.code).join(", ") || "없음"}`);
+      if (groupRows.length) {
+        lines.push(`묶음 점검: ${groupRows.map((row) => `${row.groupName}(${row.action}, ${won.format(row.finalProfit)}원)`).join(", ")}`);
+      }
+      state.reportText = lines.join("\n");
+    }
+
+    function exportCsv() {
+      const headers = ["자체상품코드", "조치", "권장일예산", "전체매출", "광고비", "광고ROAS", "최종기여이익", "이익률", "직전이익차", "상품명"];
+      const lines = [headers.join(",")].concat(state.rows.map((row) => [
+        row.code,
+        row.action,
+        row.nextBudget,
+        Math.round(row.totalSales),
+        Math.round(row.adCost),
+        round(row.adRoas),
+        Math.round(row.finalProfit),
+        round(row.finalRate),
+        row.deltaProfit === null ? "" : Math.round(row.deltaProfit),
+        csvEscape(row.name)
+      ].join(",")));
+      const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "ably-ad-actions.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyReport() {
+      await navigator.clipboard.writeText(state.reportText);
+      setStatus("보고문을 클립보드에 복사했습니다.", false);
+    }
+
+    function setStatus(message, isError) {
+      const el = document.getElementById("statusText");
+      el.textContent = message;
+      el.className = isError ? "negative" : "muted";
+    }
+
+    function countBy(rows, key) {
+      return rows.reduce((acc, row) => {
+        acc[row[key]] = (acc[row[key]] || 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    function sumDelta(key) {
+      const values = state.rows.map((row) => row[key]).filter((value) => value !== null && value !== undefined);
+      if (!values.length) return null;
+      return values.reduce((sum, value) => sum + value, 0);
+    }
+
+    function deltaText(value) {
+      return value === null ? "직전 기간 미업로드" : `직전 대비 ${signed(value)}원`;
+    }
+
+    function signed(value) {
+      const sign = value >= 0 ? "+" : "-";
+      return `${sign}${won.format(Math.abs(value))}`;
+    }
+
+    function pillClass(action) {
+      if (action === "증액") return "scale";
+      if (action === "유지") return "keep";
+      if (action === "중단") return "stop";
+      if (action === "묶음 점검") return "bundle";
+      return "test";
+    }
+
+    function moneyCell(row, key) {
+      return `${won.format(row[key] || 0)}원`;
+    }
+
+    function percentCell(row, key) {
+      return `${pct.format(row[key] || 0)}%`;
+    }
+
+    function profitCell(row, key) {
+      const value = row[key] || 0;
+      return `<span class="${value >= 0 ? "positive" : "negative"}">${signed(value)}원</span>`;
+    }
+
+    function deltaCell(row, key) {
+      const value = row[key];
+      if (value === null || value === undefined) return "-";
+      return `<span class="${value >= 0 ? "positive" : "negative"}">${signed(value)}원</span>`;
+    }
+
+    function numberAt(row, index) {
+      if (index < 0) return 0;
+      const value = row[index];
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      const parsed = Number(String(value || "").replace(/[^0-9.-]/g, ""));
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function textAt(row, index) {
+      return index < 0 ? "" : String(row[index] || "").trim();
+    }
+
+    function normalize(value) {
+      return String(value || "").replace(/\s+/g, "").trim();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[ch]));
+    }
+
+    function shorten(value, length) {
+      const text = String(value || "");
+      return text.length > length ? `${text.slice(0, length)}...` : text;
+    }
+
+    function compareValues(a, b) {
+      const av = Array.isArray(a) ? a.join(", ") : a;
+      const bv = Array.isArray(b) ? b.join(", ") : b;
+      if (typeof av === "number" && typeof bv === "number") return av - bv;
+      return String(av ?? "").localeCompare(String(bv ?? ""), "ko");
+    }
+
+    function round(value) {
+      return Math.round((value || 0) * 10) / 10;
+    }
+
+    function csvEscape(value) {
+      const text = String(value || "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+  </script>
+</body>
+</html>
