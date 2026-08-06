@@ -11,7 +11,7 @@ export default function AblyMarketingAnalyzerPage() {
               에이블리 광고분석
             </h1>
             <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
-              엑셀 업로드 후 자체상품코드 기준으로 최근 7일, 직전 7일, 묶음 캠페인 손익을 계산합니다.
+              에이블리 주간보고서 CSV와 사방넷 주문 엑셀을 합쳐 선택 기간 기준 조치사항을 계산합니다.
             </p>
           </div>
           <a
