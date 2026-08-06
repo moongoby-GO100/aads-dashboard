@@ -387,7 +387,7 @@
           사방넷 주문 수집 엑셀
           <input type="file" id="orderFile" accept=".xlsx,.xls,.csv">
         </label>
-        <div class="notice">사방넷 파일에 날짜 컬럼이 없으면 업로드한 주문 파일 전체를 선택 기간 주문으로 간주합니다. 원가는 원가2(상품)을 우선 사용하며 부가세 포함 원가로 계산합니다.</div>
+        <div class="notice">사방넷 파일에 날짜 컬럼이 없으면 업로드한 주문 파일 전체를 선택 기간 주문으로 간주합니다. 매출은 결제금액을 우선 사용하고, 원가는 원가2(상품)에 부가세를 포함해 계산합니다. 결제금액 0원 주문은 주문수량과 배송비 건수에서 제외합니다.</div>
 
         <div class="section-title">기간</div>
         <div class="row">
@@ -419,6 +419,16 @@
         </div>
         <div class="row">
           <label>
+            에이블리 수수료(%)
+            <input type="number" id="platformFeeRate" value="10" min="0" max="50" step="0.1">
+          </label>
+          <label>
+            배송비(원/건)
+            <input type="number" id="shippingFee" value="2500" min="0" step="100">
+          </label>
+        </div>
+        <div class="row">
+          <label>
             단일 최소(원/일)
             <input type="number" id="singleMin" value="6000" min="0" step="1000">
           </label>
@@ -439,6 +449,11 @@
         <textarea id="groupInput" spellcheck="false">나시 묶음: ns1017k43, t17633k63, ns1282k64
 스커트 묶음: sk7808k64, sk7936k66, sk7794k63
 스커트+나시 테스트: sk7944k66, ns1308k65</textarea>
+        <div class="button-row">
+          <button class="secondary" id="saveGroupBtn" type="button">묶음 저장</button>
+          <button class="secondary" id="resetGroupBtn" type="button">기본값 복원</button>
+        </div>
+        <div class="muted" id="savedConfigStatus">묶음 캠페인 입력값은 이 브라우저에 저장됩니다.</div>
 
         <div class="section-title">필터</div>
         <label>
@@ -464,7 +479,7 @@
           <div class="panel metric"><div class="label">상품 수</div><div class="value">-</div><div class="delta">업로드 대기</div></div>
           <div class="panel metric"><div class="label">전체매출</div><div class="value">-</div><div class="delta">사방넷 기준</div></div>
           <div class="panel metric"><div class="label">광고비</div><div class="value">-</div><div class="delta">에이블리 기준</div></div>
-          <div class="panel metric"><div class="label">최종 기여이익</div><div class="value">-</div><div class="delta">마진·쿠폰 반영</div></div>
+          <div class="panel metric"><div class="label">최종 기여이익</div><div class="value">-</div><div class="delta">마진·수수료·배송·쿠폰 반영</div></div>
           <div class="panel metric"><div class="label">증액 후보</div><div class="value">-</div><div class="delta">기준 통과</div></div>
         </div>
 
@@ -510,6 +525,12 @@
       previousPeriod: null,
       dataQuality: []
     };
+    const STORAGE_KEY = "ohvis:ably-ad-analyzer:config:v1";
+    const DEFAULT_GROUP_TEXT = `나시 묶음: ns1017k43, t17633k63, ns1282k64
+스커트 묶음: sk7808k64, sk7936k66, sk7794k63
+스커트+나시 테스트: sk7944k66, ns1308k65`;
+    const SAVED_INPUT_IDS = ["groupInput", "mappingInput", "minDays", "marginRate", "couponRate", "platformFeeRate", "shippingFee", "singleMin", "bundleMin", "scaleRate"];
+    let saveTimer = null;
 
     const adAliases = {
       date: ["일자", "날짜", "집행일", "광고일자"],
@@ -529,7 +550,7 @@
       name: ["상품명(수집)", "상품명 수집", "수집상품명", "수집 상품명", "상품명", "상품명(확정)", "상품명(관리용)", "주문상품명", "주문 상품명", "쇼핑몰상품명", "온라인상품명", "품목명", "상품명/옵션명"],
       option: ["옵션명", "옵션", "주문옵션명", "품목옵션", "옵션정보"],
       quantity: ["수량", "주문수량", "주문 수량", "상품수량", "옵션수량", "주문수량합계"],
-      sales: ["매출", "전체매출", "결제금액", "총결제금액", "판매금액", "상품금액", "주문금액", "총 상품금액", "총상품금액", "판매가", "상품가", "상품판매가", "정산예정금액"],
+      sales: ["결제금액", "총결제금액", "실결제금액", "결제 금액", "매출", "전체매출", "판매금액", "상품금액", "주문금액", "총 상품금액", "총상품금액", "판매가", "상품가", "상품판매가", "정산예정금액"],
       margin: ["마진", "상품마진", "공헌이익", "수익금", "정산예상금액", "정산금액"],
       cost: ["원가2(상품)", "원가2 상품", "원가2", "상품원가2", "원가", "매입가", "공급가"]
     };
@@ -541,8 +562,13 @@
     document.getElementById("analyzeBtn").addEventListener("click", analyze);
     document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
     document.getElementById("copyBtn").addEventListener("click", copyReport);
+    document.getElementById("saveGroupBtn").addEventListener("click", () => saveAnalyzerConfig(true));
+    document.getElementById("resetGroupBtn").addEventListener("click", resetAnalyzerConfig);
     document.getElementById("searchInput").addEventListener("input", renderTable);
     document.getElementById("actionFilter").addEventListener("change", renderTable);
+    SAVED_INPUT_IDS.forEach((id) => {
+      document.getElementById(id).addEventListener("input", scheduleConfigSave);
+    });
     document.querySelectorAll(".tab").forEach((button) => {
       button.addEventListener("click", () => {
         state.tab = button.dataset.tab;
@@ -550,6 +576,7 @@
         renderTable();
       });
     });
+    loadAnalyzerConfig();
 
     async function analyze() {
       const adFile = document.getElementById("adFile").files[0];
@@ -561,6 +588,7 @@
 
       setStatus("두 파일을 읽고 있습니다.", false);
       try {
+        saveAnalyzerConfig(false);
         const [adRows, orderRows] = await Promise.all([readAdFile(adFile), readOrderFile(orderFile)]);
         if (!adRows.length) throw new Error("에이블리 파일에서 분석 가능한 광고 행이 없습니다.");
         if (!orderRows.length) throw new Error("사방넷 파일에서 분석 가능한 주문 행이 없습니다.");
@@ -603,6 +631,52 @@
         console.error(error);
         setStatus(error.message || "분석에 실패했습니다.", true);
       }
+    }
+
+    function loadAnalyzerConfig() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (!saved || typeof saved !== "object") return;
+        SAVED_INPUT_IDS.forEach((id) => {
+          if (Object.prototype.hasOwnProperty.call(saved, id)) {
+            document.getElementById(id).value = saved[id];
+          }
+        });
+        setSavedConfigStatus(`저장된 묶음 설정을 불러왔습니다. (${saved.savedAt || "저장 시각 없음"})`);
+      } catch (error) {
+        console.warn("Failed to load analyzer config", error);
+      }
+    }
+
+    function scheduleConfigSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveAnalyzerConfig(false), 500);
+    }
+
+    function saveAnalyzerConfig(showStatus) {
+      const config = Object.fromEntries(SAVED_INPUT_IDS.map((id) => [id, document.getElementById(id).value]));
+      config.savedAt = new Date().toLocaleString("ko-KR", { hour12: false });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      if (showStatus) setSavedConfigStatus(`저장 완료: ${config.savedAt}`);
+    }
+
+    function resetAnalyzerConfig() {
+      localStorage.removeItem(STORAGE_KEY);
+      document.getElementById("groupInput").value = DEFAULT_GROUP_TEXT;
+      document.getElementById("mappingInput").value = "";
+      document.getElementById("minDays").value = "3";
+      document.getElementById("marginRate").value = "30";
+      document.getElementById("couponRate").value = "5";
+      document.getElementById("platformFeeRate").value = "10";
+      document.getElementById("shippingFee").value = "2500";
+      document.getElementById("singleMin").value = "6000";
+      document.getElementById("bundleMin").value = "10000";
+      document.getElementById("scaleRate").value = "7";
+      setSavedConfigStatus("기본 묶음 설정으로 복원했습니다.");
+    }
+
+    function setSavedConfigStatus(message) {
+      document.getElementById("savedConfigStatus").textContent = message;
     }
 
     async function readAdFile(file) {
@@ -652,25 +726,28 @@
     }
 
     function normalizeOrderRow(row, indexes, headers) {
-      const quantity = numberAt(row, indexes.quantity) || 1;
+      const rawQuantity = numberAt(row, indexes.quantity) || 1;
       const rawSales = numberAt(row, indexes.sales);
       const salesHeader = indexes.sales >= 0 ? normalizeHeader(headers[indexes.sales]) : "";
-      const sales = rawSales && quantity > 1 && /판매가|상품가|단가/.test(salesHeader) ? rawSales * quantity : rawSales;
+      const sales = rawSales && rawQuantity > 1 && /판매가|상품가|단가/.test(salesHeader) ? rawSales * rawQuantity : rawSales;
+      const isPaidOrder = sales > 0;
+      const quantity = isPaidOrder ? rawQuantity : 0;
       const margin = numberAt(row, indexes.margin);
       const cost = numberAt(row, indexes.cost);
       const costHeader = indexes.cost >= 0 ? normalizeHeader(headers[indexes.cost]) : "";
       const costVatMultiplier = costHeader && /부가세포함|vat포함|vatincluded/i.test(costHeader) ? 1 : 1.1;
-      const totalCost = sales && cost ? cost * costVatMultiplier * quantity : 0;
+      const totalCost = isPaidOrder && cost ? cost * costVatMultiplier * quantity : 0;
       return {
         date: parseDate(cell(row, indexes.date)),
         code: cleanCode(textAt(row, indexes.code)),
         name: [textAt(row, indexes.name), textAt(row, indexes.option)].filter(Boolean).join(" "),
         quantity,
+        orderCount: isPaidOrder ? 1 : 0,
         sales,
         margin,
         cost,
         totalCost,
-        grossMargin: totalCost ? sales - totalCost : margin || 0
+        grossMargin: isPaidOrder ? (totalCost ? sales - totalCost : margin || 0) : 0
       };
     }
 
@@ -739,7 +816,7 @@
         const target = ensureAgg(orderAgg, key, row.name, row.code ? "matched" : "name-match");
         target.totalSales += row.sales;
         target.quantity += row.quantity;
-        target.orderCount += 1;
+        target.orderCount += row.orderCount;
         target.grossMargin += row.grossMargin;
       });
 
@@ -814,22 +891,26 @@
 
     function buildDecision(row, previous) {
       const couponRate = Number(document.getElementById("couponRate").value || 0) / 100;
+      const platformFeeRate = Number(document.getElementById("platformFeeRate").value || 0) / 100;
+      const shippingFee = Number(document.getElementById("shippingFee").value || 0);
       const scaleRate = Number(document.getElementById("scaleRate").value || 0);
       const singleMin = Number(document.getElementById("singleMin").value || 0);
       const minDays = Number(document.getElementById("minDays").value || 7);
       const coupon = row.totalSales * couponRate;
-      const finalProfit = row.grossMargin - row.adCost - coupon;
+      const platformFee = row.totalSales * platformFeeRate;
+      const shippingCost = row.orderCount * shippingFee;
+      const finalProfit = row.grossMargin - row.adCost - coupon - platformFee - shippingCost;
       const finalRate = row.totalSales > 0 ? finalProfit / row.totalSales * 100 : 0;
       const adRoas = row.adCost > 0 ? row.adSales / row.adCost * 100 : 0;
       const totalRoas = row.adCost > 0 ? row.totalSales / row.adCost * 100 : 0;
-      const breakEvenDaily = Math.max(0, (row.grossMargin - coupon) / row.adDays);
+      const breakEvenDaily = Math.max(0, (row.grossMargin - coupon - platformFee - shippingCost) / row.adDays);
       const headroom = breakEvenDaily - row.dailyAdCost;
-      const previousProfit = previous ? previous.grossMargin - previous.adCost - previous.totalSales * couponRate : null;
+      const previousProfit = previous ? previous.grossMargin - previous.adCost - previous.totalSales * couponRate - previous.totalSales * platformFeeRate - previous.orderCount * shippingFee : null;
       const deltaProfit = previousProfit === null ? null : finalProfit - previousProfit;
       const deltaSales = previous ? row.totalSales - previous.totalSales : null;
       const action = decideAction({ ...row, finalProfit, finalRate, adRoas, headroom, singleMin, minDays, scaleRate });
       const nextBudget = recommendBudget({ row, action, headroom, singleMin, breakEvenDaily });
-      return { ...row, coupon, finalProfit, finalRate, adRoas, totalRoas, breakEvenDaily, headroom, deltaProfit, deltaSales, action, nextBudget };
+      return { ...row, coupon, platformFee, shippingCost, finalProfit, finalRate, adRoas, totalRoas, breakEvenDaily, headroom, deltaProfit, deltaSales, action, nextBudget };
     }
 
     function decideAction(row) {
@@ -881,6 +962,8 @@
         adSales: 0,
         grossMargin: 0,
         coupon: 0,
+        platformFee: 0,
+        shippingCost: 0,
         finalProfit: 0
       };
       items.forEach((row) => {
@@ -894,6 +977,8 @@
         total.adSales += row.adSales || 0;
         total.grossMargin += row.grossMargin || 0;
         total.coupon += row.coupon || 0;
+        total.platformFee += row.platformFee || 0;
+        total.shippingCost += row.shippingCost || 0;
         total.finalProfit += row.finalProfit || 0;
       });
       total.adRoas = total.adCost > 0 ? total.adSales / total.adCost * 100 : 0;
@@ -949,6 +1034,8 @@
         ["totalSales", "전체매출", moneyCell],
         ["grossMargin", "상품마진", moneyCell],
         ["adCost", "광고비", moneyCell],
+        ["platformFee", "수수료", moneyCell],
+        ["shippingCost", "배송비", moneyCell],
         ["adRoas", "광고 ROAS", percentCell],
         ["finalProfit", "최종 기여이익", profitCell],
         ["finalRate", "이익률", percentCell],
@@ -971,6 +1058,8 @@
         ["saving", "일 절감 가능", moneyCell],
         ["totalSales", "전체매출", moneyCell],
         ["adCost", "광고비", moneyCell],
+        ["platformFee", "수수료", moneyCell],
+        ["shippingCost", "배송비", moneyCell],
         ["adRoas", "광고 ROAS", percentCell],
         ["finalProfit", "최종 기여이익", profitCell],
         ["finalRate", "이익률", percentCell],
@@ -1017,7 +1106,7 @@
     }
 
     function exportCsv() {
-      const headers = ["자체상품코드", "조치", "권장일예산", "전체매출", "상품마진", "광고비", "광고ROAS", "최종기여이익", "이익률", "직전이익차", "주문수량", "매칭", "상품명"];
+      const headers = ["자체상품코드", "조치", "권장일예산", "전체매출", "상품마진", "광고비", "에이블리수수료", "배송비", "광고ROAS", "최종기여이익", "이익률", "직전이익차", "주문수량", "매칭", "상품명"];
       const lines = [headers.join(",")].concat(state.rows.map((row) => [
         row.code,
         row.action,
@@ -1025,6 +1114,8 @@
         Math.round(row.totalSales),
         Math.round(row.grossMargin),
         Math.round(row.adCost),
+        Math.round(row.platformFee),
+        Math.round(row.shippingCost),
         round(row.adRoas),
         Math.round(row.finalProfit),
         round(row.finalRate),
