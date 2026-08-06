@@ -1214,4 +1214,10 @@
   - `상품명`과 `상품명(수집)`이 같이 있을 때 `상품명(수집)`을 우선 선택하는 단위 확인을 재실행한다.
   - `원가2(상품)=3,000`, `주문수량=2`, `판매가=10,000`인 경우 부가세 포함 총원가 6,600원, 상품마진 13,400원으로 계산되는지 재실행한다.
 - 배포:
-  - 본 항목 작성 시점에는 코드 수정 중이며, 검증 후 선별 커밋과 오비스 blue-green 배포를 진행한다.
+  - 코드 커밋: `8fd4968` (`fix(marketing): use Sabanet product cost for Ably analysis`)
+  - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
+  - 방식: blue-green 배포, 활성 슬롯 `blue` -> `green`
+  - 결과: 18:27:31 KST green 내부 헬스체크 통과 및 nginx upstream 전환 완료, 18:29:58 KST standby-blue 동기화 완료.
+  - 운영 검증: `https://aads.newtalk.kr/apps/ably-ad-analyzer/index.html` HTTP 200, `원가2(상품)`, `상품명(수집)`, 부가세 포함 계산 로직 문자열 확인.
+  - 컨테이너 상태: `aads-dashboard`, `aads-dashboard-green` 모두 healthy.
+  - 주의: 배포 스크립트의 Step 7 QA API 결과는 `UNKNOWN`으로 미확정이며, 브라우저 E2E 통과로 간주하지 않는다.
