@@ -387,7 +387,7 @@
           사방넷 주문 수집 엑셀
           <input type="file" id="orderFile" accept=".xlsx,.xls,.csv">
         </label>
-        <div class="notice">사방넷 파일에 날짜 컬럼이 없으면 업로드한 주문 파일 전체를 선택 기간 주문으로 간주합니다. 매출은 결제금액을 우선 사용하고, 원가는 원가2(상품)에 부가세를 포함해 계산합니다. 결제금액 0원 주문은 주문수량과 배송비 건수에서 제외합니다.</div>
+        <div class="notice">사방넷 파일에 날짜 컬럼이 없으면 업로드한 주문 파일 전체를 선택 기간 주문으로 간주합니다. 매출은 결제금액을 우선 사용하고, 원가는 원가2(상품)에 부가세를 포함해 계산합니다. 결제금액 0원 주문은 주문수량에는 포함하고 배송비 건수에서만 제외합니다.</div>
 
         <div class="section-title">기간</div>
         <div class="row">
@@ -731,12 +731,12 @@
       const salesHeader = indexes.sales >= 0 ? normalizeHeader(headers[indexes.sales]) : "";
       const sales = rawSales && rawQuantity > 1 && /판매가|상품가|단가/.test(salesHeader) ? rawSales * rawQuantity : rawSales;
       const isPaidOrder = sales > 0;
-      const quantity = isPaidOrder ? rawQuantity : 0;
+      const quantity = rawQuantity;
       const margin = numberAt(row, indexes.margin);
       const cost = numberAt(row, indexes.cost);
       const costHeader = indexes.cost >= 0 ? normalizeHeader(headers[indexes.cost]) : "";
       const costVatMultiplier = costHeader && /부가세포함|vat포함|vatincluded/i.test(costHeader) ? 1 : 1.1;
-      const totalCost = isPaidOrder && cost ? cost * costVatMultiplier * quantity : 0;
+      const totalCost = cost ? cost * costVatMultiplier * quantity : 0;
       return {
         date: parseDate(cell(row, indexes.date)),
         code: cleanCode(textAt(row, indexes.code)),
@@ -747,7 +747,7 @@
         margin,
         cost,
         totalCost,
-        grossMargin: isPaidOrder ? (totalCost ? sales - totalCost : margin || 0) : 0
+        grossMargin: totalCost ? sales - totalCost : (isPaidOrder ? margin || 0 : 0)
       };
     }
 
