@@ -423,7 +423,7 @@ export default function DocsPage() {
   });
 
   useEffect(() => {
-    if (!data?.projects?.length || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
     const project = params.get("project") || "";
@@ -434,9 +434,19 @@ export default function DocsPage() {
     const key = `${project}\n${basePath}\n${filePath}`;
     if (openedDeepLinkRef.current === key) return;
 
-    const projectDocs = data.projects.find((item) => item.project === project);
-    const file = projectDocs?.files.find((item) => item.base_path === basePath && item.path === filePath);
-    if (!file) return;
+    const projectDocs = data?.projects?.find((item) => item.project === project);
+    const scannedFile = projectDocs?.files.find((item) => item.base_path === basePath && item.path === filePath);
+    const name = filePath.includes("/") ? filePath.split("/").pop() || filePath : filePath;
+    const file: DocFile = scannedFile || {
+      name,
+      path: filePath,
+      size: 0,
+      modified: 0,
+      type: "doc",
+      base_path: basePath,
+      label: "직접 열기",
+      format: detectFormat(name),
+    };
 
     openedDeepLinkRef.current = key;
     setSelectedProject(project);

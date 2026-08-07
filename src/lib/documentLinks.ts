@@ -30,6 +30,28 @@ const DOC_PATH_MAPPINGS: DocPathMapping[] = [
   { hostPrefix: "/srv/newtalk-v2/docs", project: "NTV2", basePath: "/srv/newtalk-v2/docs" },
 ];
 
+type RelativeMapping = {
+  prefix: string;
+  project: string;
+  basePath: string;
+  stripPrefix: string;
+};
+
+const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
+  { prefix: "/app/app/static/docs/", project: "AADS", basePath: "/app/app/static/docs", stripPrefix: "/app/app/static/docs/" },
+  { prefix: "/app/app/static/reports/", project: "AADS", basePath: "/app/app/static/reports", stripPrefix: "/app/app/static/reports/" },
+  { prefix: "/app/app/static/preview/", project: "AADS", basePath: "/app/app/static/preview", stripPrefix: "/app/app/static/preview/" },
+  { prefix: "/app/app/static/gallery/", project: "AADS", basePath: "/app/app/static/gallery", stripPrefix: "/app/app/static/gallery/" },
+  { prefix: "/app/docs/", project: "AADS", basePath: "/app/docs", stripPrefix: "/app/docs/" },
+  { prefix: "/app/reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "/app/reports/" },
+  { prefix: "app/static/docs/", project: "AADS", basePath: "/app/app/static/docs", stripPrefix: "app/static/docs/" },
+  { prefix: "app/static/reports/", project: "AADS", basePath: "/app/app/static/reports", stripPrefix: "app/static/reports/" },
+  { prefix: "app/static/preview/", project: "AADS", basePath: "/app/app/static/preview", stripPrefix: "app/static/preview/" },
+  { prefix: "app/static/gallery/", project: "AADS", basePath: "/app/app/static/gallery", stripPrefix: "app/static/gallery/" },
+  { prefix: "docs/", project: "AADS", basePath: "/app/docs", stripPrefix: "docs/" },
+  { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
+];
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -64,11 +86,22 @@ export function normalizeDocumentHref(href: string): string {
   const raw = href.trim();
   if (!raw || isUnsafeLink(raw)) return "";
 
+  // 1. Absolute host path mappings (/root/aads/...)
   const mappings = [...DOC_PATH_MAPPINGS].sort((a, b) => b.hostPrefix.length - a.hostPrefix.length);
   for (const mapping of mappings) {
     const prefix = trimTrailingSlash(mapping.hostPrefix);
     if (raw === prefix || raw.startsWith(`${prefix}/`)) {
       const { filePath, line, hash } = splitPathSuffix(raw.slice(prefix.length).replace(/^\/+/, ""));
+      if (!filePath || filePath.includes("..")) return raw;
+      return buildDocsHref(mapping.project, mapping.basePath, filePath, line, hash);
+    }
+  }
+
+  // 2. Relative and container path mappings (docs/reports/..., /app/docs/...)
+  for (const mapping of RELATIVE_DOC_MAPPINGS) {
+    if (raw.startsWith(mapping.prefix)) {
+      const remainder = raw.slice(mapping.stripPrefix.length);
+      const { filePath, line, hash } = splitPathSuffix(remainder);
       if (!filePath || filePath.includes("..")) return raw;
       return buildDocsHref(mapping.project, mapping.basePath, filePath, line, hash);
     }
