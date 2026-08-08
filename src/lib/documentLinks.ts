@@ -37,6 +37,18 @@ type RelativeMapping = {
   stripPrefix: string;
 };
 
+type PublicPathMapping = {
+  prefix: string;
+  publicPrefix: string;
+};
+
+const PUBLIC_PATH_MAPPINGS: PublicPathMapping[] = [
+  { prefix: "/root/aads/aads-dashboard/public/reports/", publicPrefix: "/reports/" },
+  { prefix: "/root/aads/aads-dashboard/public/exports/", publicPrefix: "/exports/" },
+  { prefix: "public/reports/", publicPrefix: "/reports/" },
+  { prefix: "public/exports/", publicPrefix: "/exports/" },
+];
+
 const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "/app/app/static/docs/", project: "AADS", basePath: "/app/app/static/docs", stripPrefix: "/app/app/static/docs/" },
   { prefix: "/app/app/static/reports/", project: "AADS", basePath: "/app/app/static/reports", stripPrefix: "/app/app/static/reports/" },
@@ -48,8 +60,6 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "app/static/reports/", project: "AADS", basePath: "/app/app/static/reports", stripPrefix: "app/static/reports/" },
   { prefix: "app/static/preview/", project: "AADS", basePath: "/app/app/static/preview", stripPrefix: "app/static/preview/" },
   { prefix: "app/static/gallery/", project: "AADS", basePath: "/app/app/static/gallery", stripPrefix: "app/static/gallery/" },
-  { prefix: "public/reports/", project: "AADS", basePath: "/root/aads/aads-dashboard/public/reports", stripPrefix: "public/reports/" },
-  { prefix: "public/exports/", project: "AADS", basePath: "/root/aads/aads-dashboard/public/exports", stripPrefix: "public/exports/" },
   { prefix: "docs/", project: "AADS", basePath: "/app/docs", stripPrefix: "docs/" },
   { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
   { prefix: "scripts/", project: "AADS", basePath: "/app", stripPrefix: "" },
@@ -67,6 +77,15 @@ function buildDocsHref(project: string, basePath: string, filePath: string, line
   q.set("file_path", filePath.replace(/^\/+/, ""));
   if (line) q.set("line", line);
   return `/docs?${q.toString()}${hash || ""}`;
+}
+
+function buildPublicHref(publicPrefix: string, filePath: string, hash?: string): string {
+  const encodedPath = filePath
+    .replace(/^\/+/, "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `${publicPrefix}${encodedPath}${hash || ""}`;
 }
 
 function splitPathSuffix(path: string): { filePath: string; line?: string; hash?: string } {
@@ -89,6 +108,16 @@ export function isUnsafeLink(href: string): boolean {
 export function normalizeDocumentHref(href: string): string {
   const raw = href.trim();
   if (!raw || isUnsafeLink(raw)) return "";
+
+  // Public dashboard assets are served by Next.js directly, not by the project-docs API.
+  for (const mapping of PUBLIC_PATH_MAPPINGS) {
+    if (raw.startsWith(mapping.prefix)) {
+      const remainder = raw.slice(mapping.prefix.length);
+      const { filePath, hash } = splitPathSuffix(remainder);
+      if (!filePath || filePath.includes("..")) return raw;
+      return buildPublicHref(mapping.publicPrefix, filePath, hash);
+    }
+  }
 
   // 1. Absolute host path mappings (/root/aads/...)
   const mappings = [...DOC_PATH_MAPPINGS].sort((a, b) => b.hostPrefix.length - a.hostPrefix.length);

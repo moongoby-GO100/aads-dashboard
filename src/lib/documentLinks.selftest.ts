@@ -12,8 +12,16 @@ const cases: Case[] = [
       "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=reports%2F20260802_OHVIS_SYSTEM_CONSTRUCTION_PLAN.md",
   },
   {
+    input: "public/reports/monthly.xlsx",
+    expected: "/reports/monthly.xlsx",
+  },
+  {
     input: "reports/monthly.xlsx",
     expected: "/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=monthly.xlsx",
+  },
+  {
+    input: "/root/aads/aads-dashboard/public/reports/menu images/a.xlsx",
+    expected: "/reports/menu%20images/a.xlsx",
   },
   {
     input: "scripts/apply_doc_fixes.py:12",
