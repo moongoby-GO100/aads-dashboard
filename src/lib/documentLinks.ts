@@ -48,8 +48,12 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "app/static/reports/", project: "AADS", basePath: "/app/app/static/reports", stripPrefix: "app/static/reports/" },
   { prefix: "app/static/preview/", project: "AADS", basePath: "/app/app/static/preview", stripPrefix: "app/static/preview/" },
   { prefix: "app/static/gallery/", project: "AADS", basePath: "/app/app/static/gallery", stripPrefix: "app/static/gallery/" },
+  { prefix: "public/reports/", project: "AADS", basePath: "/root/aads/aads-dashboard/public/reports", stripPrefix: "public/reports/" },
+  { prefix: "public/exports/", project: "AADS", basePath: "/root/aads/aads-dashboard/public/exports", stripPrefix: "public/exports/" },
   { prefix: "docs/", project: "AADS", basePath: "/app/docs", stripPrefix: "docs/" },
   { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
+  { prefix: "scripts/", project: "AADS", basePath: "/app", stripPrefix: "" },
+  { prefix: "tests/", project: "AADS", basePath: "/app", stripPrefix: "" },
 ];
 
 function trimTrailingSlash(value: string): string {

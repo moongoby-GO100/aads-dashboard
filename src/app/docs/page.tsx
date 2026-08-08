@@ -21,6 +21,9 @@ interface DocContentResponse {
   encoding?: "text" | "base64";
   mime_type?: string;
   is_binary?: boolean;
+  format?: string;
+  converted_from?: string;
+  source_mime_type?: string;
 }
 
 interface ListedDocFile extends DocFile {
@@ -116,6 +119,9 @@ const FORMAT_LABELS: Record<string, string> = {
   toml: "TOML",
   xml: "XML",
   csv: "CSV",
+  "excel-csv": "Excel CSV",
+  "word-text": "Word 텍스트",
+  binary: "바이너리",
   python: "Python",
   shell: "Shell",
   sql: "SQL",
@@ -142,6 +148,9 @@ const FORMAT_COLORS: Record<string, string> = {
   toml: "bg-teal-800 text-teal-100",
   xml: "bg-indigo-800 text-indigo-100",
   csv: "bg-emerald-800 text-emerald-100",
+  "excel-csv": "bg-emerald-900 text-emerald-100",
+  "word-text": "bg-blue-800 text-blue-100",
+  binary: "bg-gray-800 text-gray-100",
   python: "bg-sky-800 text-sky-100",
   shell: "bg-lime-800 text-lime-100",
   sql: "bg-violet-800 text-violet-100",
@@ -205,6 +214,51 @@ function buildFullPath(file: DocFile): string {
   return `${base}/${rel}`;
 }
 
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i += 1;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells;
+}
+
+function parseCsvPreview(text: string): { title: string; rows: string[][] }[] {
+  const sections: { title: string; rows: string[][] }[] = [];
+  let current = { title: "Sheet", rows: [] as string[][] };
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    if (line.startsWith("## Sheet:") || line.startsWith("# sheet:")) {
+      if (current.rows.length) sections.push(current);
+      current = { title: line.replace(/^#+\s*/g, ""), rows: [] };
+      continue;
+    }
+    if (line.startsWith("# ")) continue;
+    current.rows.push(splitCsvLine(line));
+  }
+  if (current.rows.length) sections.push(current);
+  return sections;
+}
+
 function isElectronicContractFile(file: ListedDocFile): boolean {
   const haystack = `${file.name} ${file.path} ${file.full_path || ""}`.toLowerCase();
   return (
@@ -261,7 +315,14 @@ export default function DocsPage() {
   const [search, setSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<ListedDocFile | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileMeta, setFileMeta] = useState<{ encoding: string; mime_type: string; is_binary: boolean } | null>(null);
+  const [fileMeta, setFileMeta] = useState<{
+    encoding: string;
+    mime_type: string;
+    is_binary: boolean;
+    format?: string;
+    converted_from?: string;
+    source_mime_type?: string;
+  } | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "modified" | "size">("modified");
   const [listPaneWidth, setListPaneWidth] = useState(420);
@@ -360,6 +421,9 @@ export default function DocsPage() {
         encoding: r.encoding || "text",
         mime_type: r.mime_type || "text/plain",
         is_binary: !!r.is_binary,
+        format: r.format,
+        converted_from: r.converted_from,
+        source_mime_type: r.source_mime_type,
       });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "알 수 없는 오류";
@@ -765,7 +829,7 @@ export default function DocsPage() {
                   </div>
                 ) : fileContent !== null ? (
                   (() => {
-                    const fmt = selectedFile.format || detectFormat(selectedFile.name);
+                    const fmt = fileMeta?.format || selectedFile.format || detectFormat(selectedFile.name);
                     const lowerName = selectedFile.name.toLowerCase();
                     const isBinary = fileMeta?.is_binary || fileMeta?.encoding === "base64";
                     const mime = fileMeta?.mime_type || "application/octet-stream";
@@ -800,8 +864,48 @@ export default function DocsPage() {
                       );
                     }
 
-                    // 오피스 문서: 미리보기 불가, 다운로드 안내
-                    if (fmt === "word" || fmt === "excel" || fmt === "powerpoint") {
+                    if (fmt === "excel-csv" || (selectedFile.format === "excel" && !isBinary && fileMeta?.converted_from)) {
+                      const sections = parseCsvPreview(fileContent);
+                      return (
+                        <div className="space-y-6">
+                          {sections.length ? sections.map((section, sectionIndex) => (
+                            <div key={`${section.title}-${sectionIndex}`} className="overflow-auto">
+                              <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>
+                                {section.title}
+                              </div>
+                              <table className="min-w-full text-xs border-collapse">
+                                <tbody>
+                                  {section.rows.map((row, rowIndex) => (
+                                    <tr key={`${section.title}-${rowIndex}`}>
+                                      {row.map((cell, cellIndex) => (
+                                        <td
+                                          key={`${section.title}-${rowIndex}-${cellIndex}`}
+                                          className="border px-2 py-1 align-top"
+                                          style={{
+                                            borderColor: "var(--border)",
+                                            color: rowIndex === 0 ? "var(--text-primary)" : "var(--text-secondary)",
+                                            fontWeight: rowIndex === 0 ? 600 : 400,
+                                          }}
+                                        >
+                                          {cell}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )) : (
+                            <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+                              {fileContent}
+                            </pre>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // 오피스 문서: 서버가 텍스트/CSV로 변환하지 못한 바이너리만 다운로드 안내
+                    if ((fmt === "word" || fmt === "excel" || fmt === "powerpoint") && isBinary) {
                       const downloadHref = `data:${mime};base64,${fileContent}`;
                       const officeLabel = fmt === "word" ? "Word" : fmt === "excel" ? "Excel" : "PowerPoint";
                       return (
@@ -820,6 +924,30 @@ export default function DocsPage() {
                             style={{ background: "var(--accent)", color: "#fff" }}
                           >
                             ⬇️ 다운로드
+                          </a>
+                        </div>
+                      );
+                    }
+
+                    // 미지원 바이너리: 깨진 base64를 본문에 노출하지 않고 다운로드 폴백
+                    if (isBinary) {
+                      const downloadHref = `data:${mime};base64,${fileContent}`;
+                      return (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="text-5xl mb-4">📎</div>
+                          <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                            이 파일은 다운로드로 열 수 있습니다
+                          </p>
+                          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+                            {selectedFile.name} · {formatSize(selectedFile.size)}
+                          </p>
+                          <a
+                            href={downloadHref}
+                            download={selectedFile.name}
+                            className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
+                            style={{ background: "var(--accent)", color: "#fff" }}
+                          >
+                            다운로드
                           </a>
                         </div>
                       );
