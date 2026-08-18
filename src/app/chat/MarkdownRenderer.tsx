@@ -7,7 +7,8 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import InlineChart from "@/components/chat/InlineChart";
-import { isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
+import { isFileDownloadHref, isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
+import { openManagedFile } from "@/lib/fileDownload";
 
 const isSafeUrl = (url: string) => {
   return !isUnsafeLink(url);
@@ -307,14 +308,28 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
     if (!href || !isSafeUrl(href)) return <span>{children}</span>;
     const normalizedHref = normalizeDocumentHref(href);
     if (!normalizedHref) return <span>{children}</span>;
+    // AADS-FILES: 산출물 파일은 토큰 인증 fetch로 받아 저장/열람 (직접 이동 시 401/404 발생)
+    const managedFile = isFileDownloadHref(normalizedHref);
     return (
       <a
         href={normalizedHref}
         target="_blank"
         rel="noopener noreferrer"
-        style={{ color: linkColor || "var(--ct-accent)", textDecoration: "underline", wordBreak: "break-all" }}
+        title={managedFile ? "클릭하면 파일을 내려받습니다" : undefined}
+        onClick={
+          managedFile
+            ? (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openManagedFile(normalizedHref).then((r) => {
+                  if (!r.ok) window.alert(`파일을 열 수 없습니다.\n${r.error || ""}`);
+                });
+              }
+            : undefined
+        }
+        style={{ color: linkColor || "var(--ct-accent)", textDecoration: "underline", wordBreak: "break-all", cursor: "pointer" }}
       >
-        {children}
+        {managedFile ? "📥 " : ""}{children}
       </a>
     );
   },
