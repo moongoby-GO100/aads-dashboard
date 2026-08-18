@@ -13,7 +13,10 @@
   - `npx eslint src/components/chat/ChatBubble.tsx src/components/chat/ArtifactReport.tsx src/app/chat/MarkdownRenderer.tsx src/lib/documentLinks.ts src/lib/fileDownload.ts` passed with 0 errors and 3 existing `<img>` warnings.
   - `npx tsc src/lib/documentLinks.selftest.ts ... && node .../documentLinks.selftest.js` passed.
 - Deployment:
-  - Pending in this entry; deploy after this commit with dashboard blue-green.
+  - Runtime commit `680909bfc385` was pushed to `main` and deployed with dashboard blue-green at 2026-08-19 07:37 KST.
+  - Active dashboard slot switched to green on port 3101; standby blue on port 3100 was synced to the same release.
+  - External `https://aads.newtalk.kr/login` returned HTTP 200 after deploy.
+  - Internal authenticated-file fallback check returned HTTP 200 for `세무신고_필요항목_정리_20260818.xlsx` with 38,054 bytes and Excel MIME.
 - Scope exclusions:
   - Existing unrelated dashboard/server dirty files were preserved and excluded from the selected commit.
 
