@@ -217,6 +217,8 @@ function normalizeQueuedInterruptDisplayContent(content: string): string {
 
 function isRunnerChatMessage(message: ChatMessage): boolean {
   return message.role === "assistant" && (
+    message.intent === "pipeline_runner" ||
+    message.intent === "runner_notification" ||
     message.content?.includes("[Pipeline Runner]") ||
     message.content?.includes("[Runner]") ||
     (message.content?.startsWith("Step ") && message.content?.includes("runner-")) ||
