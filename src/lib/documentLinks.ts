@@ -66,6 +66,50 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "tests/", project: "AADS", basePath: "/app", stripPrefix: "" },
 ];
 
+// AADS-FILES(2026-08-18): 파일시스템 경로 링크가 https://aads.newtalk.kr/root/... 로 새어나가
+// 404가 나던 문제를 막기 위해 다운로드/열람 API로 연결한다.
+const DOWNLOAD_API = "/api/v1/files/download";
+
+const SITE_ORIGINS = [
+  "https://aads.newtalk.kr",
+  "https://www.newtalk.kr",
+  "https://newtalk.kr",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
+// 서버 파일시스템 경로로 간주할 루트
+const FS_ROOT_PREFIXES = ["/root/", "/app/", "/data/", "/srv/", "/tmp/", "/var/", "/opt/", "/mnt/", "/home/"];
+
+// /docs 텍스트 뷰어가 읽을 수 있는 확장자 (그 외는 곧바로 다운로드 API로 보낸다)
+const DOCS_VIEWER_EXTS = new Set([
+  "md", "markdown", "txt", "json", "yaml", "yml", "py", "ts", "tsx", "js", "jsx",
+  "sql", "sh", "css", "scss", "html", "htm", "xml", "toml", "ini", "log", "csv", "conf",
+]);
+
+// 브라우저에서 바로 볼 수 있는 확장자 (inline=1)
+const INLINE_EXTS = new Set([
+  "pdf", "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico",
+  "txt", "md", "csv", "json", "log", "html", "htm",
+]);
+
+function getExt(path: string): string {
+  const name = path.split("/").pop() || "";
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+function isFilesystemPath(path: string): boolean {
+  return FS_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function buildDownloadHref(filePath: string): string {
+  const q = new URLSearchParams();
+  q.set("path", filePath);
+  if (INLINE_EXTS.has(getExt(filePath))) q.set("inline", "1");
+  return `${DOWNLOAD_API}?${q.toString()}`;
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -106,10 +150,31 @@ export function isUnsafeLink(href: string): boolean {
 }
 
 export function normalizeDocumentHref(href: string): string {
-  const raw = href.trim();
+  let raw = href.trim();
   if (!raw || isUnsafeLink(raw)) return "";
 
-  // Public dashboard assets are served by Next.js directly, not by the project-docs API.
+  // 0. 사이트 URL로 잘못 감싸인 파일시스템 경로 복원
+  //    예: https://aads.newtalk.kr/root/aads/aads-server/보고서.xlsx → /root/aads/aads-server/보고서.xlsx
+  for (const origin of SITE_ORIGINS) {
+    if (raw.startsWith(`${origin}/`)) {
+      const rest = raw.slice(origin.length);
+      let decoded = rest;
+      try {
+        decoded = decodeURI(rest);
+      } catch {
+        decoded = rest;
+      }
+      if (isFilesystemPath(decoded)) {
+        raw = decoded;
+      }
+      break;
+    }
+  }
+
+  // 외부 URL은 그대로 둔다
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  // 1. Next.js가 직접 서빙하는 public 자산
   for (const mapping of PUBLIC_PATH_MAPPINGS) {
     if (raw.startsWith(mapping.prefix)) {
       const remainder = raw.slice(mapping.prefix.length);
@@ -119,7 +184,15 @@ export function normalizeDocumentHref(href: string): string {
     }
   }
 
-  // 1. Absolute host path mappings (/root/aads/...)
+  // 2. 텍스트 뷰어가 못 여는 형식(xlsx/pptx/zip/이미지 등)은 바로 다운로드 API로 보낸다
+  if (isFilesystemPath(raw)) {
+    const { filePath } = splitPathSuffix(raw);
+    if (filePath && !filePath.includes("..") && !DOCS_VIEWER_EXTS.has(getExt(filePath))) {
+      return buildDownloadHref(filePath);
+    }
+  }
+
+  // 3. 절대 호스트 경로 매핑 (/root/aads/...) → /docs 뷰어
   const mappings = [...DOC_PATH_MAPPINGS].sort((a, b) => b.hostPrefix.length - a.hostPrefix.length);
   for (const mapping of mappings) {
     const prefix = trimTrailingSlash(mapping.hostPrefix);
@@ -130,7 +203,7 @@ export function normalizeDocumentHref(href: string): string {
     }
   }
 
-  // 2. Relative and container path mappings (docs/reports/..., /app/docs/...)
+  // 4. 상대/컨테이너 경로 매핑 (docs/..., /app/docs/...)
   for (const mapping of RELATIVE_DOC_MAPPINGS) {
     if (raw.startsWith(mapping.prefix)) {
       const remainder = raw.slice(mapping.stripPrefix.length);
@@ -140,5 +213,16 @@ export function normalizeDocumentHref(href: string): string {
     }
   }
 
+  // 5. 매핑되지 않은 파일시스템 경로 → 다운로드 API (404 방지 최종 안전망)
+  if (isFilesystemPath(raw)) {
+    const { filePath } = splitPathSuffix(raw);
+    if (filePath && !filePath.includes("..")) return buildDownloadHref(filePath);
+  }
+
   return raw;
+}
+
+/** 링크가 파일 다운로드 API로 연결되는지 여부 (UI에서 다운로드 아이콘 표기용) */
+export function isFileDownloadHref(href: string): boolean {
+  return href.startsWith(DOWNLOAD_API);
 }
