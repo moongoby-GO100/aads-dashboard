@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-08-19 07:29 KST - Chat file download link hardening
+
+- Request: Fix chat-generated Excel/report links that opened as `https://aads.newtalk.kr/root/aads/aads-server/...` and failed to open or download.
+- Changes:
+  - `src/components/chat/ChatBubble.tsx`: file download API links now use `openManagedFile()` so authenticated fetch downloads the file instead of navigating directly.
+  - `src/components/chat/ArtifactReport.tsx`: artifact/report markdown links use the same managed download flow.
+  - `src/lib/documentLinks.selftest.ts`: added a regression case for the exact `세무신고_필요항목_정리_20260818.xlsx` production-style URL.
+- Verification:
+  - `python3 -m py_compile app/api/files.py app/main.py` passed in the backend repo.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npx eslint src/components/chat/ChatBubble.tsx src/components/chat/ArtifactReport.tsx src/app/chat/MarkdownRenderer.tsx src/lib/documentLinks.ts src/lib/fileDownload.ts` passed with 0 errors and 3 existing `<img>` warnings.
+  - `npx tsc src/lib/documentLinks.selftest.ts ... && node .../documentLinks.selftest.js` passed.
+- Deployment:
+  - Pending in this entry; deploy after this commit with dashboard blue-green.
+- Scope exclusions:
+  - Existing unrelated dashboard/server dirty files were preserved and excluded from the selected commit.
+
 ## 2026-08-06 10:39 KST - Ably ad analyzer added to OHVIS
 
 - Request: Make the Ably ad analysis HTML available inside OHVIS for a non-representative account that could not open the previous backend static path.

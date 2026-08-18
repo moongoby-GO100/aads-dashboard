@@ -6,7 +6,8 @@
 import React, { useState, useMemo } from "react";
 import { driveApi } from "@/services/driveApi";
 import { chatApi } from "@/services/chatApi";
-import { isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
+import { isFileDownloadHref, isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
+import { openManagedFile } from "@/lib/fileDownload";
 
 // ─── 인라인 마크다운 렌더러 ────────────────────────────────────────────────
 
@@ -26,10 +27,28 @@ function renderInline(text: string, keyPrefix = ""): React.ReactNode {
       );
     } else if (m[5]) {
       const linkHref = !isUnsafeLink(m[5]) ? normalizeDocumentHref(m[5]) : "";
+      const managedFile = isFileDownloadHref(linkHref);
       parts.push(
         linkHref
-          ? <a key={`${keyPrefix}a${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
-              style={{ color: "var(--ct-accent)", textDecoration: "underline" }}>{m[4]}</a>
+          ? <a
+              key={`${keyPrefix}a${idx++}`}
+              href={linkHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={managedFile ? "클릭하면 파일을 내려받습니다" : undefined}
+              onClick={
+                managedFile
+                  ? (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openManagedFile(linkHref).then((r) => {
+                        if (!r.ok) window.alert(`파일을 열 수 없습니다.\n${r.error || ""}`);
+                      });
+                    }
+                  : undefined
+              }
+              style={{ color: "var(--ct-accent)", textDecoration: "underline" }}
+            >{managedFile ? "📥 " : ""}{m[4]}</a>
           : <span key={`${keyPrefix}a${idx++}`}>{m[4]}</span>
       );
     } else if (m[6])

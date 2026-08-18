@@ -14,7 +14,8 @@ import type { ChatMessage } from "@/services/chatApi";
 import SourceCard from "./SourceCard";
 import ConfidenceBadge from "./ConfidenceBadge";
 import InlineChart from "./InlineChart";
-import { normalizeDocumentHref } from "@/lib/documentLinks";
+import { isFileDownloadHref, normalizeDocumentHref } from "@/lib/documentLinks";
+import { openManagedFile } from "@/lib/fileDownload";
 
 // ─── Inline Markdown Renderer ────────────────────────────────────────────────
 
@@ -66,9 +67,27 @@ function renderInline(text: string, key?: number): React.ReactNode {
     } else if (m[5]) {
       // 링크: [text](url) — only allow safe URLs
       const linkHref = isSafeUrl(m[5]) ? normalizeDocumentHref(m[5]) : "#";
+      const managedFile = isFileDownloadHref(linkHref);
       parts.push(
-        <a key={`a${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
-          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[4]}</a>
+        <a
+          key={`a${key}-${idx++}`}
+          href={linkHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={managedFile ? "클릭하면 파일을 내려받습니다" : undefined}
+          onClick={
+            managedFile
+              ? (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openManagedFile(linkHref).then((r) => {
+                    if (!r.ok) window.alert(`파일을 열 수 없습니다.\n${r.error || ""}`);
+                  });
+                }
+              : undefined
+          }
+          style={{ color: "#a78bfa", textDecoration: "underline" }}
+        >{managedFile ? "📥 " : ""}{m[4]}</a>
       );
     } else if (m[6]) parts.push(<strong key={`b${key}-${idx++}`} className="font-semibold">{m[6]}</strong>);
     else if (m[7]) parts.push(<em key={`i${key}-${idx++}`} className="italic">{m[7]}</em>);
@@ -80,9 +99,27 @@ function renderInline(text: string, key?: number): React.ReactNode {
     else if (m[9]) {
       // plain URL 자동 링크 변환
       const linkHref = normalizeDocumentHref(m[9]);
+      const managedFile = isFileDownloadHref(linkHref);
       parts.push(
-        <a key={`au${key}-${idx++}`} href={linkHref} target="_blank" rel="noopener noreferrer"
-          style={{ color: "#a78bfa", textDecoration: "underline" }}>{m[9]}</a>
+        <a
+          key={`au${key}-${idx++}`}
+          href={linkHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={managedFile ? "클릭하면 파일을 내려받습니다" : undefined}
+          onClick={
+            managedFile
+              ? (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openManagedFile(linkHref).then((r) => {
+                    if (!r.ok) window.alert(`파일을 열 수 없습니다.\n${r.error || ""}`);
+                  });
+                }
+              : undefined
+          }
+          style={{ color: "#a78bfa", textDecoration: "underline" }}
+        >{managedFile ? "📥 " : ""}{m[9]}</a>
       );
     }
     last = m.index + m[0].length;

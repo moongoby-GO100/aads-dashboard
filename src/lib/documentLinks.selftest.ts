@@ -24,6 +24,11 @@ const cases: Case[] = [
     expected: "/reports/menu%20images/a.xlsx",
   },
   {
+    input: "https://aads.newtalk.kr/root/aads/aads-server/세무신고_필요항목_정리_20260818.xlsx",
+    expected:
+      "/api/v1/files/download?path=%2Froot%2Faads%2Faads-server%2F%EC%84%B8%EB%AC%B4%EC%8B%A0%EA%B3%A0_%ED%95%84%EC%9A%94%ED%95%AD%EB%AA%A9_%EC%A0%95%EB%A6%AC_20260818.xlsx",
+  },
+  {
     input: "scripts/apply_doc_fixes.py:12",
     expected: "/docs?project=AADS&base_path=%2Fapp&file_path=scripts%2Fapply_doc_fixes.py&line=12",
   },
