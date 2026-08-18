@@ -2881,7 +2881,7 @@ export default function ChatPage() {
         }
       } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${sid}&limit=40&include_streaming=true`
+        `/chat/messages?session_id=${sid}&limit=120&include_streaming=true`
       ).then((result) => {
         if (activeSessionRef.current !== sid) return;
         const shouldKeepPlaceholder = streamingRef.current || waitingBgRef.current || Boolean(bgPartialContentRef.current);
@@ -2974,7 +2974,7 @@ export default function ChatPage() {
     const anchorId = anchor?.dataset.messageId || null;
     const anchorOffset = anchor ? anchor.offsetTop - (container?.scrollTop || 0) : 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-      `/chat/messages?session_id=${activeSession.id}&limit=40&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
+      `/chat/messages?session_id=${activeSession.id}&limit=120&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
     ).catch(() => null);
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
@@ -3854,7 +3854,7 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=40&include_streaming=true`
+        `/chat/messages?session_id=${fetchSid}&limit=120&include_streaming=true`
       )
         .then((result) => {
           const msgs = result.messages;
@@ -4079,7 +4079,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -6200,7 +6200,7 @@ export default function ChatPage() {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
         if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=40&sort=desc&include_streaming=true`)
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=120&sort=desc&include_streaming=true`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
             if (activeSessionRef.current !== activeSession.id) return;
@@ -6242,7 +6242,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=40&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -7047,12 +7047,18 @@ export default function ChatPage() {
       i++;
     }
     // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
-    const MAX_RENDER = messages.length > 500 ? 40 : 150;
+    const MAX_RENDER = display.length > 400 ? 200 : 150;  // AADS-MSG-VANISH-P0: 숨김(러너/시스템) 메시지 제외한 표시 대상 기준으로 산정
     const cappedBase = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
     const cappedIds = new Set(cappedBase.map((item) => item.msg.id));
     const protectedLocalQuestions = display
-      .filter((item) => localQuestionEchoIdsRef.current.has(item.msg.id) && !cappedIds.has(item.msg.id))
-      .slice(-5);
+      .filter((item) => (
+        !cappedIds.has(item.msg.id) &&
+        (
+          localQuestionEchoIdsRef.current.has(item.msg.id) ||
+          (item.msg.role === "user" && item.msg.intent !== "system_trigger")
+        )
+      ))
+      .slice(-20);  // AADS-MSG-VANISH-P0: CEO 입력 질문 버블은 렌더 cap에서 절대 탈락시키지 않는다
     const capped = [...protectedLocalQuestions, ...cappedBase].sort((a, b) => a.idx - b.idx);
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
