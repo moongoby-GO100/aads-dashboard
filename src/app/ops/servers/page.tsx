@@ -219,6 +219,12 @@ export default function ServersPage() {
     borderRadius: 10,
     padding: 16,
   };
+  const healthById = (serverId: string) => servers.find((s) => String(s.server_id) === serverId);
+  const topologyNodes = [
+    { id: "contabo14", label: "contabo14", x: 150, y: 30 },
+    { id: "contabo116", label: "contabo116", x: 50, y: 185 },
+    { id: "cafe24_114", label: "cafe24_114", x: 250, y: 185 },
+  ];
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
@@ -410,57 +416,32 @@ export default function ServersPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 32, flexWrap: "wrap", padding: "16px 0" }}>
             {/* 삼각형 토폴로지 SVG */}
             <svg viewBox="0 0 300 220" style={{ width: "min(300px, 100%)", height: "auto" }}>
-              {/* 꼭짓점: 211(상단), 68(좌하), 114(우하) */}
+              {/* 꼭짓점: contabo14(상단), contabo116(좌하), cafe24_114(우하) */}
               {/* 연결선 */}
               <line x1="150" y1="30" x2="50" y2="185" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="6 3" opacity="0.5" />
               <line x1="150" y1="30" x2="250" y2="185" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="6 3" opacity="0.5" />
               <line x1="50" y1="185" x2="250" y2="185" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="6 3" opacity="0.5" />
 
               {/* 화살표 (양방향) */}
-              {/* 211↔68 */}
+              {/* contabo14↔contabo116 */}
               <text x="80" y="100" fontSize="9" fill="var(--success)" textAnchor="middle">↕ 감시</text>
-              {/* 211↔114 */}
+              {/* contabo14↔cafe24_114 */}
               <text x="220" y="100" fontSize="9" fill="var(--success)" textAnchor="middle">↕ 감시</text>
-              {/* 68↔114 */}
+              {/* contabo116↔cafe24_114 */}
               <text x="150" y="200" fontSize="9" fill="var(--success)" textAnchor="middle">↕ 감시</text>
 
               {/* 서버 노드 */}
-              {/* 211 상단 */}
-              {(() => {
-                const h211 = servers.find((s) => String(s.server_id) === "211");
-                const c211 = statusColor(h211?.status || "unknown");
+              {topologyNodes.map((node) => {
+                const health = healthById(node.id);
+                const color = statusColor(health?.status || "unknown");
                 return (
-                  <g>
-                    <circle cx="150" cy="30" r="22" fill="var(--bg-card)" stroke={c211} strokeWidth="2" />
-                    <text x="150" y="27" textAnchor="middle" fontSize="10" fill="var(--text-primary)" fontWeight="bold">211</text>
-                    <text x="150" y="40" textAnchor="middle" fontSize="7" fill={c211}>{(h211?.status || "unknown").toUpperCase()}</text>
+                  <g key={node.id}>
+                    <circle cx={node.x} cy={node.y} r="26" fill="var(--bg-card)" stroke={color} strokeWidth="2" />
+                    <text x={node.x} y={node.y - 3} textAnchor="middle" fontSize="8" fill="var(--text-primary)" fontWeight="bold">{node.label}</text>
+                    <text x={node.x} y={node.y + 10} textAnchor="middle" fontSize="7" fill={color}>{(health?.status || "unknown").toUpperCase()}</text>
                   </g>
                 );
-              })()}
-              {/* 68 좌하 */}
-              {(() => {
-                const h68 = servers.find((s) => String(s.server_id) === "68");
-                const c68 = statusColor(h68?.status || "unknown");
-                return (
-                  <g>
-                    <circle cx="50" cy="185" r="22" fill="var(--bg-card)" stroke={c68} strokeWidth="2" />
-                    <text x="50" y="182" textAnchor="middle" fontSize="10" fill="var(--text-primary)" fontWeight="bold">68</text>
-                    <text x="50" y="195" textAnchor="middle" fontSize="7" fill={c68}>{(h68?.status || "unknown").toUpperCase()}</text>
-                  </g>
-                );
-              })()}
-              {/* 114 우하 */}
-              {(() => {
-                const h114 = servers.find((s) => String(s.server_id) === "114");
-                const c114 = statusColor(h114?.status || "unknown");
-                return (
-                  <g>
-                    <circle cx="250" cy="185" r="22" fill="var(--bg-card)" stroke={c114} strokeWidth="2" />
-                    <text x="250" y="182" textAnchor="middle" fontSize="10" fill="var(--text-primary)" fontWeight="bold">114</text>
-                    <text x="250" y="195" textAnchor="middle" fontSize="7" fill={c114}>{(h114?.status || "unknown").toUpperCase()}</text>
-                  </g>
-                );
-              })()}
+              })}
             </svg>
 
             {/* 범례 */}
