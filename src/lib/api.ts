@@ -532,6 +532,39 @@ export const api = {
   },
   getAdminTask: (jobId: string) => request<any>(`/admin/tasks/${encodeURIComponent(jobId)}`),
   getAdminTaskStats: () => request<any>("/admin/tasks/stats"),
+  getBrowserTasks: (params?: { status?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return request<unknown>(`/browser-tasks${qs ? `?${qs}` : ""}`);
+  },
+  createBrowserTask: (data: { work_key: string; target_url: string; session_id?: string; current_step?: string }) =>
+    request<unknown>("/browser-tasks", { method: "POST", body: JSON.stringify(data) }),
+  updateBrowserTaskStatus: (taskId: string, data: { status: string; current_step?: string; result?: Record<string, unknown>; error?: string }) =>
+    request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/status`, { method: "PATCH", body: JSON.stringify(data) }),
+  requestBrowserTaskPermission: (taskId: string, data: { work_key: string; origin?: string; action_type: string; action_summary?: string; payload?: Record<string, unknown> }) =>
+    request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/permissions`, { method: "POST", body: JSON.stringify(data) }),
+  getBrowserTaskPermissions: (params?: { decision?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.decision) q.set("decision", params.decision);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<unknown>(`/browser-tasks/permissions/pending${q.size ? `?${q.toString()}` : ""}`);
+  },
+  approveBrowserTaskPermission: (requestId: string, reason = "") =>
+    request<unknown>(`/browser-tasks/permissions/${encodeURIComponent(requestId)}/approve`, { method: "POST", body: JSON.stringify({ reason }) }),
+  rejectBrowserTaskPermission: (requestId: string, reason = "") =>
+    request<unknown>(`/browser-tasks/permissions/${encodeURIComponent(requestId)}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  getAgentVaultCredentials: (params?: { work_key?: string; origin?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.work_key) q.set("work_key", params.work_key);
+    if (params?.origin) q.set("origin", params.origin);
+    return request<unknown>(`/agent-vault/credentials${q.size ? `?${q.toString()}` : ""}`);
+  },
+  saveAgentVaultCredential: (data: { work_key: string; origin: string; label?: string; username: string; password: string; metadata?: Record<string, unknown> }) =>
+    request<unknown>("/agent-vault/credentials", { method: "POST", body: JSON.stringify(data) }),
+  issueAgentVaultAutofillToken: (data: { credential_id: string; work_key: string; origin: string; ttl_seconds?: number }) =>
+    request<unknown>("/agent-vault/autofill-token", { method: "POST", body: JSON.stringify(data) }),
 
   // Design Modification Studio
   getDesignScreens: (projectKey = "AADS") =>

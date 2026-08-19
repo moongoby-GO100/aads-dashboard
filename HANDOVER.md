@@ -1,5 +1,20 @@
 # AADS Dashboard Handover
 
+## 2026-08-19 21:36 KST - AADS-186 Managed Browser console MVP
+
+- Request: Complete OHVIS Managed Browser + Agent Vault implementation after runner failures.
+- Changes:
+  - Added `/browser-tasks` dashboard page for managed browser task creation, status scan, approval/rejection, and Agent Vault credential save/list.
+  - Added browser task and Agent Vault API client methods in `src/lib/api.ts`.
+  - Added `Managed Browser` admin menu item in `src/components/Sidebar.tsx`.
+- Verification:
+  - `npx eslint src/app/browser-tasks/page.tsx src/components/Sidebar.tsx` passed.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `git diff --check` passed.
+  - Full `npm run lint` was attempted and still fails on pre-existing repository-wide lint debt, not this new page.
+- Deployment:
+  - Source commit, push, and dashboard blue-green deployment were handled after this implementation verification.
+
 ## 2026-08-19 07:29 KST - Chat file download link hardening
 
 - Request: Fix chat-generated Excel/report links that opened as `https://aads.newtalk.kr/root/aads/aads-server/...` and failed to open or download.
