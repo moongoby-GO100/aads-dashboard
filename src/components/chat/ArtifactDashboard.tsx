@@ -81,9 +81,9 @@ function StatusBadge({ value }: { value: string }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 const SERVERS: ServerStatus[] = [
-  { name: "서버 68 (AADS)",  ip: "68.183.183.11",  status: "unknown" },
-  { name: "서버 211 (Hub)",   ip: "211.188.51.113", status: "unknown" },
-  { name: "서버 114 (SF/NTV)",ip: "116.120.58.155", status: "unknown" },
+  { name: "contabo116 (AADS)", ip: "5.104.86.116", status: "unknown" },
+  { name: "contabo14 (GO100/KIS)", ip: "5.104.86.14", status: "unknown" },
+  { name: "cafe24_114 (SF/NTV2/NAS)", ip: "114.207.244.86", status: "unknown" },
 ];
 
 export default function ArtifactDashboard() {
