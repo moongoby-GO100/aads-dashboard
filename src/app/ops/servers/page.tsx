@@ -95,13 +95,13 @@ async function fetchServerHealth(
   ip: string,
   role: string
 ): Promise<ServerHealth> {
-  const url = serverId === "68"
+  const url = serverId === "contabo116"
     ? "/api/v1/ops/health-check"
     : `/api/v1/ops/server-health/${serverId}`;
 
   try {
     const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
-    const headers: Record<string, string> = serverId === "68"
+    const headers: Record<string, string> = serverId === "contabo116"
       ? { Authorization: `Bearer ${token}` }
       : {};
 
@@ -109,8 +109,8 @@ async function fetchServerHealth(
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
-    // 서버 68: aads ops health-check 응답 파싱
-    if (serverId === "68") {
+    // contabo116: AADS ops health-check 응답 파싱
+    if (serverId === "contabo116") {
       return {
         server_id: serverId,
         ip,
@@ -122,7 +122,7 @@ async function fetchServerHealth(
           : {},
       };
     }
-    // 서버 211/114: health_server.py 응답 파싱
+    // contabo14/cafe24_114: health_server.py 응답 파싱
     return {
       server_id: serverId,
       ip,
@@ -165,25 +165,22 @@ function GaugeBar({ pct, warn = 80 }: { pct?: number; warn?: number }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const SERVERS = [
-  { id: "68",       ip: "68.183.183.11",  role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
+  { id: "contabo116", ip: "5.104.86.116", role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
   { id: "contabo14", ip: "5.104.86.14",   role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
-  { id: "114",      ip: "116.120.58.155", role: "SF / NTV2 (ShortFlow / NewTalk V2)" },
-  { id: "211",      ip: "211.188.51.113", role: "Hub (Bridge / Pipeline Monitor)" },
+  { id: "cafe24_114", ip: "114.207.244.86", role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)" },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [
-  { from: "211", to: "68" },
-  { from: "68",  to: "114" },
-  { from: "114", to: "211" },
-  { from: "68",  to: "211" },
-  { from: "211", to: "114" },
-  { from: "114", to: "68" },
+  { from: "contabo116", to: "contabo14" },
+  { from: "contabo116", to: "cafe24_114" },
+  { from: "contabo14", to: "cafe24_114" },
+  { from: "cafe24_114", to: "contabo116" },
 ];
 
 const WATCH_LAYERS: WatchLayer[] = [
   { name: "L1", label: "L1: claude_exec 내장 타이머", active: true, detail: "30분 타임아웃, bridge 셀프체크 60초" },
   { name: "L2", label: "L2: watchdog + pipeline_monitor", active: true, detail: "watchdog 30초, pipeline_monitor 2분, bridge_monitor 60초" },
-  { name: "L3", label: "L3: meta_watchdog (서버 211)", active: true, detail: "1분 주기 cron, L2 장애 감지+복구" },
+  { name: "L3", label: "L3: meta_watchdog (contabo14)", active: true, detail: "1분 주기 cron, L2 장애 감지+복구" },
   { name: "L4", label: "L4: 외부 모니터", active: false, detail: "UptimeRobot / GitHub Actions (등록 필요)" },
 ];
 
@@ -211,7 +208,7 @@ export default function ServersPage() {
   }, []);
 
   useEffect(() => {
-    fetchAll();
+    queueMicrotask(fetchAll);
     const t = setInterval(fetchAll, 30000);
     return () => clearInterval(t);
   }, [fetchAll]);

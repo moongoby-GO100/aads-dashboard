@@ -11,23 +11,23 @@ type DeployProjectStatus = DeployServerStatus["projects"][number];
 type DeployStatus = DeployProjectStatus["status"];
 
 const EXPECTED_SERVERS: Array<{ id: string; name: string; ip: string }> = [
-  { id: "68", name: "서버68", ip: "68.183.183.11" },
-  { id: "211", name: "서버211", ip: "211.188.51.113" },
-  { id: "114", name: "서버114", ip: "116.120.58.155" },
+  { id: "contabo116", name: "contabo116 (AADS 본체)", ip: "5.104.86.116" },
+  { id: "contabo14", name: "contabo14 (GO100/KIS)", ip: "5.104.86.14" },
+  { id: "cafe24_114", name: "cafe24_114 (SF/NTV2/NAS)", ip: "114.207.244.86" },
 ];
 
 const SERVER_ACCENTS: Record<string, { accent: string; glow: string; muted: string }> = {
-  "68": {
+  "contabo116": {
     accent: "#38bdf8",
     glow: "rgba(56, 189, 248, 0.18)",
     muted: "rgba(56, 189, 248, 0.08)",
   },
-  "211": {
+  "contabo14": {
     accent: "#f59e0b",
     glow: "rgba(245, 158, 11, 0.18)",
     muted: "rgba(245, 158, 11, 0.08)",
   },
-  "114": {
+  "cafe24_114": {
     accent: "#f472b6",
     glow: "rgba(244, 114, 182, 0.18)",
     muted: "rgba(244, 114, 182, 0.08)",
@@ -90,7 +90,11 @@ export default function AdminDeployPage() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const loadStatus = useCallback(async (silent = false) => {
-    silent ? setRefreshing(true) : setLoading(true);
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError("");
     try {
       const response = await api.getAdminDeployStatus();
