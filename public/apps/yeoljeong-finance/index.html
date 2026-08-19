@@ -1382,9 +1382,18 @@
 
     .inline-filters {
       display: grid;
-      grid-template-columns: 160px 160px minmax(220px, 1fr);
+      grid-template-columns: 150px 150px 190px 230px minmax(240px, 1fr);
       gap: 10px;
       align-items: end;
+    }
+
+    .inline-filters.integration-filter-bar {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #d8e2ef;
+      border-radius: 8px;
+      background: #f8fafc;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
     }
 
     .inline-filters label {
@@ -1393,6 +1402,7 @@
       color: var(--muted);
       font-size: 12px;
       font-weight: 800;
+      min-width: 0;
     }
 
     .inline-filters select,
@@ -1405,6 +1415,206 @@
       color: var(--text);
       font: inherit;
       min-width: 0;
+    }
+
+    .inline-filters select:not([multiple]),
+    .inline-filters input,
+    .multi-select-trigger {
+      min-height: 38px;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+
+    .inline-filters select:not([multiple]):focus,
+    .inline-filters input:focus,
+    .multi-select-control.open .multi-select-trigger {
+      outline: 3px solid rgba(15, 118, 110, 0.13);
+      border-color: var(--accent);
+      background: #fff;
+    }
+
+    .inline-filters .span-2 {
+      grid-column: span 1;
+    }
+
+    .inline-filters select[multiple],
+    #integrationServiceFilter,
+    #integrationBusinessBranchFilter {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .inline-filters .filter-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .multi-select-control {
+      position: relative;
+      min-width: 0;
+    }
+
+    .multi-select-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 850;
+      text-align: left;
+    }
+
+    .multi-select-trigger::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid #64748b;
+      border-bottom: 2px solid #64748b;
+      transform: rotate(45deg) translateY(-2px);
+      flex: 0 0 auto;
+    }
+
+    .multi-select-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .multi-select-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      min-width: 34px;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #e8f6f4;
+      color: var(--accent-strong);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .multi-select-menu {
+      position: absolute;
+      z-index: 25;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      max-height: 230px;
+      overflow: auto;
+      display: none;
+      padding: 6px;
+      border: 1px solid #d9e2ef;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14);
+    }
+
+    .multi-select-control.open .multi-select-menu {
+      display: grid;
+      gap: 3px;
+    }
+
+    .multi-select-option {
+      display: flex !important;
+      grid-template-columns: none !important;
+      align-items: center;
+      gap: 8px !important;
+      min-height: 30px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      color: #1f2937 !important;
+      font-size: 12px !important;
+      font-weight: 800 !important;
+      cursor: pointer;
+    }
+
+    .multi-select-option:hover {
+      background: #f1f8f7;
+    }
+
+    .multi-select-option input {
+      width: 14px;
+      min-height: 14px;
+      accent-color: var(--accent);
+    }
+
+    .readiness-panel {
+      margin-top: 18px;
+      border: 1px solid #cfdce8;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+
+    .readiness-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #d8e2ef;
+      background: linear-gradient(180deg, #f8fafc 0%, #f3f7f6 100%);
+    }
+
+    .readiness-head h3 {
+      margin: 0;
+      color: #102a2d;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .readiness-head p {
+      margin: 4px 0 0;
+      color: #526173;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .readiness-head .status {
+      flex: 0 0 auto;
+    }
+
+    .readiness-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      padding: 10px 16px;
+      border-bottom: 1px solid #e5ecf3;
+      background: #fbfcfd;
+    }
+
+    .readiness-summary .badge {
+      font-size: 11px;
+      min-height: 24px;
+      align-items: center;
+    }
+
+    .readiness-panel .table-wrap {
+      margin-top: 0;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .readiness-panel table th {
+      background: #f8fafc;
+      color: #41525f;
     }
 
     .contract-preview {
@@ -3877,7 +4087,7 @@
             </div>
             <div class="panel-body">
               <div class="integration-status-note">은행 자격증명은 원문을 화면에 다시 표시하지 않고 서버 Vault에 암호화 저장합니다. 신한/IBK 값이 모두 등록되면 저장 직후 거래 연동 API를 호출하며, 외부 은행 실조회 커넥터가 아직 없으면 CSV/엑셀 업로드 대체 경로를 표시합니다.</div>
-              <div class="inline-filters" style="margin-top:12px">
+              <div class="inline-filters integration-filter-bar">
                 <label>구분
                   <select id="integrationCategoryFilter">
                     <option value="all">전체</option>
@@ -3896,12 +4106,31 @@
                     <option value="manual">수기/업로드</option>
                   </select>
                 </label>
+                <label>서비스
+                  <select id="integrationServiceFilter" multiple></select>
+                </label>
+                <label>사업자·지점
+                  <select id="integrationBusinessBranchFilter" multiple></select>
+                </label>
                 <label class="span-2">검색
                   <input id="integrationSearchInput" type="search" placeholder="서비스, 지점, 사업자, ID, 계좌/가맹점번호, 메모 검색">
                 </label>
               </div>
               <div class="table-wrap" style="margin-top:12px">
                 <table><thead><tr><th>구분</th><th>서비스</th><th>사업자·지점</th><th>수집 데이터</th><th>필수 인증값</th><th>최근 동기화</th><th>상태</th><th>설정</th></tr></thead><tbody id="integrationOpsRows"></tbody></table>
+              </div>
+              <div class="readiness-panel">
+                <div class="readiness-head">
+                  <div>
+                    <h3>판매채널 자동수집 점검표</h3>
+                    <p>연동 목록에 저장된 판매채널 계정을 사업자·지점별로 다시 계산한 준비 상태입니다. 실제 연동 목록은 위 표이며, 이 표는 수집 가능 여부만 점검합니다.</p>
+                  </div>
+                  <span class="status info">목록 아님 · 점검표</span>
+                </div>
+                <div id="salesChannelReadinessSummary" class="readiness-summary"></div>
+                <div class="table-wrap">
+                  <table><thead><tr><th>판매사이트</th><th>사업자·지점</th><th>저장 계정</th><th>자동 수집 상태</th><th>수집 데이터</th><th>필요 조치</th></tr></thead><tbody id="salesChannelReadinessRows"></tbody></table>
+                </div>
               </div>
             </div>
           </section>
@@ -4418,6 +4647,7 @@
       credential_registered: ["자격증명등록", "good"],
       ready: ["연동준비", "info"],
       manual: ["수동업로드", "warn"],
+      queued: ["수집대기", "info"],
       running: ["실행중", "info"],
       blocked: ["확인필요", "bad"],
       succeeded: ["수집완료", "good"],
@@ -4438,6 +4668,7 @@
       automation_disabled: ["자동화꺼짐", "warn"],
       not_started: ["미실행", "info"]
     };
+    const integrationSyncTimers = new Map();
     const onboardingDocTypeLabels = {
       resident_register: "주민등록등본",
       bankbook_copy: "통장사본",
@@ -4910,6 +5141,9 @@
     let contractSignatureDrawing = false;
     let filePreviewObjectUrl = "";
     let filePreviewAbortController = null;
+    let serverAccountsRefreshPromise = null;
+
+    persistInitialNormalizedSettings();
 
     const els = {};
     document.querySelectorAll("[id]").forEach(el => els[el.id] = el);
@@ -4940,21 +5174,18 @@
     }
 
     function mergeCollectionById(currentItems, defaultItems) {
-      const merged = Array.isArray(currentItems) && currentItems.length
-        ? currentItems.map(item => ({ ...item }))
-        : structuredClone(defaultItems);
+      const merged = structuredClone(defaultItems);
       const byId = new Map(merged.map(item => [item.id, item]));
-      defaultItems.forEach(defaultItem => {
-        const existing = byId.get(defaultItem.id);
+      if (!Array.isArray(currentItems) || !currentItems.length) return merged;
+      currentItems.forEach(item => {
+        const existing = byId.get(item.id);
         if (!existing) {
-          merged.push(structuredClone(defaultItem));
+          const next = { ...item };
+          merged.push(next);
+          byId.set(next.id, next);
           return;
         }
-        Object.entries(defaultItem).forEach(([key, value]) => {
-          if (existing[key] === undefined || existing[key] === null || existing[key] === "") {
-            existing[key] = structuredClone(value);
-          }
-        });
+        Object.assign(existing, item);
       });
       return merged;
     }
@@ -4986,31 +5217,75 @@
       if (miaBranch) miaBranch.businessId = MIA_BUSINESS_ID;
       next.integrations.forEach(item => {
         if (!MIA_DELIVERY_SERVICES.has(item.service)) return;
+        const branch = next.branches.find(candidate => candidate.name === item.branch);
+        if (branch?.businessId && CANONICAL_BUSINESS_IDS.has(branch.businessId)) {
+          item.businessId = branch.businessId;
+          item.business_id = branch.businessId;
+          return;
+        }
+        const scopedBusinessId = item.businessId || item.business_id || "";
+        if (CANONICAL_BUSINESS_IDS.has(scopedBusinessId)) {
+          item.businessId = scopedBusinessId;
+          item.business_id = scopedBusinessId;
+          return;
+        }
         item.businessId = MIA_BUSINESS_ID;
         item.business_id = MIA_BUSINESS_ID;
-        item.branch = MIA_BRANCH_NAME;
+        if (!item.branch) item.branch = MIA_BRANCH_NAME;
       });
       return next;
     }
 
     function mergeSettings(settings) {
       const base = structuredClone(defaultSettings);
-      if (!settings || typeof settings !== "object") return normalizeBusinessScope(base);
+      if (!settings || typeof settings !== "object") return normalizeStaleIntegrationSyncStatuses(normalizeBusinessScope(base));
       const branches = mergeCollectionById(settings.branches, base.branches);
       const branchIds = new Set(branches.map(item => item.id));
       base.branches.forEach(item => {
         if (!branchIds.has(item.id)) branches.push(structuredClone(item));
       });
-      return normalizeBusinessScope(normalizeMiaBusinessLinks({
+      return normalizeStaleIntegrationSyncStatuses(normalizeBusinessScope(normalizeMiaBusinessLinks({
         businesses: mergeCollectionById(settings.businesses, base.businesses),
         branches,
         accounts: mergeCollectionById(settings.accounts, base.accounts),
         staff: mergeCollectionById(settings.staff, base.staff),
         integrations: mergeCollectionById(settings.integrations, base.integrations)
-      }));
+      })));
+    }
+
+    function normalizeStaleIntegrationSyncStatuses(next) {
+      const now = Date.now();
+      const staleMs = 60 * 1000;
+      const uploadModes = new Set(["portal-csv", "csv-upload", "statement-upload", "upload_queue", "manual", "receipt-photo", "tax-invoice-upload"]);
+      let changed = false;
+      (next.integrations || []).forEach(item => {
+        if (String(item.lastSyncStatus || item.portalStatus || "").toLowerCase() !== "running") return;
+        const startedAt = Date.parse(item.lastSyncAt || item.updatedAt || "");
+        if (Number.isFinite(startedAt) && now - startedAt < staleMs) return;
+        const collectionMode = String(item.collectionMode || item.collection_mode || "").trim();
+        const needsUpload = uploadModes.has(collectionMode) || /upload|photo|excel|report/.test(collectionMode);
+        const hasCredential = Boolean(item.passwordMasked && !String(item.passwordMasked).includes("필요"));
+        item.lastSyncStatus = needsUpload ? "upload_required" : (hasCredential ? "blocked" : "credential_required");
+        item.portalStatus = item.lastSyncStatus;
+        item.portalMessage = needsUpload
+          ? "이전 연동 실행이 완료 응답 없이 종료되어 파일 업로드/브라우저 세션 확인이 필요합니다."
+          : "이전 연동 실행이 완료 응답 없이 종료되어 계정값 또는 PC Agent 세션 확인이 필요합니다.";
+        changed = true;
+      });
+      if (changed) next.__normalizedStaleIntegrationSyncStatuses = true;
+      return next;
+    }
+
+    function persistInitialNormalizedSettings() {
+      if (!state.settings?.__normalizedStaleIntegrationSyncStatuses) return;
+      delete state.settings.__normalizedStaleIntegrationSyncStatuses;
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
 
     function saveState() {
+      if (state.settings?.__normalizedStaleIntegrationSyncStatuses) {
+        delete state.settings.__normalizedStaleIntegrationSyncStatuses;
+      }
       state.meta.updatedAt = new Date().toISOString();
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
@@ -5758,6 +6033,7 @@
         els.businessRows.innerHTML = [...businessRows, ...branchRows].map(row => `<tr><td>${escapeHtml(row[0])}</td><td>${escapeHtml(row[1])}</td><td>${escapeHtml(row[2])}</td><td>${escapeHtml(row[3])}</td></tr>`).join("");
       }
 
+      updateIntegrationFilterOptions();
       if (els.integrationSummaryRows) {
         const integrations = settings().integrations || [];
         const categoryCount = label => integrations.filter(item => (integrationCatalog[item.service]?.category || "기타") === label).length;
@@ -5795,9 +6071,9 @@
           const latestSync = item.lastSyncAt || item.portalMessage || item.memo || "미실행";
           const latestSyncMessage = item.portalMessage || item.memo || "";
           const action = deliveryAutomationServices.has(item.service)
-            ? `<button type="button" data-sync-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">수집 실행</button>`
+            ? `<button type="button" data-sync-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${isIntegrationSyncActive(item) ? "처리중..." : "수집 실행"}</button>`
             : financialTransactionServices.has(item.service)
-              ? `<button type="button" data-sync-financial-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">거래 연동</button>`
+              ? `<button type="button" data-sync-financial-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${isIntegrationSyncActive(item) ? "처리중..." : "거래 연동"}</button>`
               : `<button type="button" data-open-import="${escapeHtml(item.service)}">파일/증빙</button>`;
           return `
           <tr>
@@ -5820,6 +6096,7 @@
           return progressRow(integrationLabels[item.service] || item.service, `${status[0]} · ${item.portalMessage || item.memo || "설정값 또는 커넥터 확인"}`, status[1], 55);
         }).join("") : progressRow("정상", "현재 오류·재연결 대기 항목이 없습니다.", "good", 100);
       }
+      renderSalesChannelReadinessRows();
 
       if (els.marginSummaryBadge) {
         els.marginSummaryBadge.textContent = `${profitRate.toFixed(1)}%`;
@@ -7025,6 +7302,10 @@
       return "ready";
     }
 
+    function isIntegrationSyncActive(item) {
+      return ["queued", "running"].includes(String(item?.lastSyncStatus || item?.portalStatus || "").toLowerCase());
+    }
+
     function integrationSearchText(item) {
       const catalog = integrationCatalog[item.service] || {};
       return [
@@ -7050,14 +7331,118 @@
       ].filter(Boolean).join(" ").toLowerCase();
     }
 
+    function selectedMultiValues(select) {
+      return Array.from(select?.selectedOptions || [])
+        .map(option => option.value)
+        .filter(Boolean);
+    }
+
+    function multiSelectSummary(select, placeholder = "전체") {
+      const selected = selectedMultiValues(select);
+      if (!selected.length) return placeholder;
+      const options = Array.from(select.options);
+      const labels = selected.map(value => options.find(option => option.value === value)?.textContent || value);
+      if (labels.length <= 2) return labels.join(", ");
+      return `${labels.slice(0, 2).join(", ")} 외 ${labels.length - 2}`;
+    }
+
+    function enhanceMultiSelect(select, placeholder) {
+      if (!select) return;
+      let control = select.nextElementSibling;
+      if (!control || !control.classList.contains("multi-select-control")) {
+        control = document.createElement("div");
+        control.className = "multi-select-control";
+        control.innerHTML = `<button type="button" class="multi-select-trigger"><span class="multi-select-text"></span><span class="multi-select-count">전체</span></button><div class="multi-select-menu"></div>`;
+        select.insertAdjacentElement("afterend", control);
+        control.querySelector(".multi-select-trigger").addEventListener("click", event => {
+          event.stopPropagation();
+          document.querySelectorAll(".multi-select-control.open").forEach(item => {
+            if (item !== control) item.classList.remove("open");
+          });
+          control.classList.toggle("open");
+        });
+        control.querySelector(".multi-select-menu").addEventListener("click", event => event.stopPropagation());
+        control.querySelector(".multi-select-menu").addEventListener("change", event => {
+          const checkbox = event.target.closest("input[type='checkbox']");
+          if (!checkbox) return;
+          const option = Array.from(select.options).find(item => item.value === checkbox.value);
+          if (option) option.selected = checkbox.checked;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      }
+      const selected = new Set(selectedMultiValues(select));
+      const selectedCount = selected.size;
+      const triggerText = control.querySelector(".multi-select-text");
+      const triggerCount = control.querySelector(".multi-select-count");
+      if (triggerText) triggerText.textContent = multiSelectSummary(select, placeholder);
+      if (triggerCount) triggerCount.textContent = selectedCount ? `${selectedCount}개` : "전체";
+      control.querySelector(".multi-select-menu").innerHTML = Array.from(select.options).map(option => `
+        <label class="multi-select-option">
+          <input type="checkbox" value="${escapeHtml(option.value)}" ${selected.has(option.value) ? "checked" : ""}>
+          <span>${escapeHtml(option.textContent || option.value)}</span>
+        </label>
+      `).join("") || `<span class="filter-note">선택할 항목이 없습니다.</span>`;
+    }
+
+    function refreshIntegrationMultiSelectControls() {
+      enhanceMultiSelect(els.integrationServiceFilter, "전체 서비스");
+      enhanceMultiSelect(els.integrationBusinessBranchFilter, "전체 사업자·지점");
+    }
+
+    function integrationBusinessId(item) {
+      return String(item.businessId || item.business_id || businessIdForBranchName(item.branch || "") || "").trim();
+    }
+
+    function integrationScopeKey(item) {
+      return `${integrationBusinessId(item)}|${String(item.branch || "").trim()}`;
+    }
+
+    function integrationScopeLabel(item) {
+      const businessId = integrationBusinessId(item);
+      return `${businessName(businessId) || "사업자 미지정"} · ${item.branch || "공통/미지정"}`;
+    }
+
+    function updateIntegrationFilterOptions() {
+      const integrations = settings().integrations || [];
+      if (els.integrationServiceFilter) {
+        const selected = new Set(selectedMultiValues(els.integrationServiceFilter));
+        const services = Array.from(new Set(integrations.map(item => item.service).filter(Boolean)))
+          .sort((a, b) => String(integrationLabels[a] || a).localeCompare(String(integrationLabels[b] || b), "ko"));
+        els.integrationServiceFilter.innerHTML = services.map(service => (
+          `<option value="${escapeHtml(service)}" ${selected.has(service) ? "selected" : ""}>${escapeHtml(integrationLabels[service] || service)}</option>`
+        )).join("");
+      }
+      if (els.integrationBusinessBranchFilter) {
+        const selected = new Set(selectedMultiValues(els.integrationBusinessBranchFilter));
+        const optionMap = new Map();
+        settings().branches.forEach(branch => {
+          const key = `${branch.businessId || ""}|${branch.name || ""}`;
+          optionMap.set(key, `${businessName(branch.businessId || "")} · ${branch.name || "공통/미지정"}`);
+        });
+        integrations.forEach(item => {
+          const key = integrationScopeKey(item);
+          if (!optionMap.has(key)) optionMap.set(key, integrationScopeLabel(item));
+        });
+        els.integrationBusinessBranchFilter.innerHTML = Array.from(optionMap.entries())
+          .sort((a, b) => a[1].localeCompare(b[1], "ko"))
+          .map(([key, label]) => `<option value="${escapeHtml(key)}" ${selected.has(key) ? "selected" : ""}>${escapeHtml(label)}</option>`)
+          .join("");
+      }
+      refreshIntegrationMultiSelectControls();
+    }
+
     function filteredIntegrationItems(sourceItems = settings().integrations, { businessScoped = true } = {}) {
       const selectedBusinessId = selectedSettingsBusinessId();
       const categoryFilter = els.integrationCategoryFilter?.value || "all";
       const statusFilter = els.integrationStatusFilter?.value || "all";
+      const serviceFilters = selectedMultiValues(els.integrationServiceFilter);
+      const scopeFilters = selectedMultiValues(els.integrationBusinessBranchFilter);
       const query = String(els.integrationSearchInput?.value || "").trim().toLowerCase();
       return (sourceItems || []).filter(item => {
-        const itemBusinessId = item.businessId || item.business_id || businessIdForBranchName(item.branch || "");
+        const itemBusinessId = integrationBusinessId(item);
         if (businessScoped && selectedBusinessId && itemBusinessId !== selectedBusinessId) return false;
+        if (serviceFilters.length && !serviceFilters.includes(item.service)) return false;
+        if (scopeFilters.length && !scopeFilters.includes(integrationScopeKey(item))) return false;
         const category = integrationCategoryFor(item);
         if (categoryFilter !== "all") {
           if (categoryFilter === "은행" && !(category === "은행" || financialTransactionServices.has(item.service))) return false;
@@ -7067,6 +7452,68 @@
         if (query && !integrationSearchText(item).includes(query)) return false;
         return true;
       });
+    }
+
+    function renderSalesChannelReadinessRows() {
+      if (!els.salesChannelReadinessRows) return;
+      const selectedServices = selectedMultiValues(els.integrationServiceFilter);
+      const selectedScopes = selectedMultiValues(els.integrationBusinessBranchFilter);
+      const services = Array.from(deliveryAutomationServices)
+        .filter(service => !selectedServices.length || selectedServices.includes(service));
+      const scopes = settings().branches
+        .map(branch => ({ businessId: branch.businessId || "", branch: branch.name || "", key: `${branch.businessId || ""}|${branch.name || ""}` }))
+        .filter(scope => !selectedScopes.length || selectedScopes.includes(scope.key));
+      const rows = [];
+      let registeredCount = 0;
+      let readyCount = 0;
+      let blockedCount = 0;
+      let missingCount = 0;
+      scopes.forEach(scope => {
+        services.forEach(service => {
+          const matches = (settings().integrations || []).filter(item => (
+            item.service === service
+            && integrationBusinessId(item) === scope.businessId
+            && String(item.branch || "") === scope.branch
+          ));
+          const latest = matches.slice().sort((a, b) => String(b.lastSyncAt || "").localeCompare(String(a.lastSyncAt || "")))[0] || null;
+          const rawStatus = latest?.lastSyncStatus || latest?.portalStatus || latest?.status || "";
+          const normalizedStatus = String(rawStatus || latest?.status || "").toLowerCase();
+          const isReady = ["completed", "no_records", "ready", "vault-ready", "credential_registered"].includes(normalizedStatus);
+          if (latest) registeredCount += 1;
+          else missingCount += 1;
+          if (latest && isReady) readyCount += 1;
+          if (latest && !isReady) blockedCount += 1;
+          const status = latest
+            ? (integrationStatusLabels[rawStatus] || integrationStatusLabels[latest.status] || [rawStatus || "저장됨", "warn"])
+            : ["미등록", "bad"];
+          const need = latest
+            ? (latest.portalMessage || latest.memo || (isReady ? "수집 실행 가능" : "계정/권한 확인"))
+            : "연동설정에서 ID/PW 또는 PC Agent 세션 등록";
+          const action = latest
+            ? `${escapeHtml(need)}<br><button type="button" data-sync-integration="${escapeHtml(service)}" data-sync-integration-id="${escapeHtml(latest.id)}">${isIntegrationSyncActive(latest) ? "처리중..." : "수집 실행"}</button>`
+            : `${escapeHtml(need)}<br><button type="button" data-integration-detail="sales-channel-connect" data-default-service="${escapeHtml(service)}">연동설정</button>`;
+          rows.push(`
+            <tr>
+              <td><strong>${escapeHtml(integrationLabels[service] || service)}</strong></td>
+              <td>${escapeHtml(`${businessName(scope.businessId)} · ${scope.branch}`)}</td>
+              <td>${matches.length ? `${matches.length}건${latest?.username ? `<br><span class="muted">${escapeHtml(latest.username)}</span>` : ""}` : "0건"}</td>
+              <td>${badgeHtml(status[0], status[1])}</td>
+              <td>${escapeHtml(integrationCatalog[service]?.dataScope || "매출/정산/리뷰")}</td>
+              <td>${action}</td>
+            </tr>
+          `);
+        });
+      });
+      if (els.salesChannelReadinessSummary) {
+        els.salesChannelReadinessSummary.innerHTML = [
+          badgeHtml(`점검 ${rows.length}개`, "info"),
+          badgeHtml(`계정 있음 ${registeredCount}개`, registeredCount ? "good" : "warn"),
+          badgeHtml(`수집 가능 ${readyCount}개`, readyCount ? "good" : "warn"),
+          badgeHtml(`확인 필요 ${blockedCount}개`, blockedCount ? "warn" : "good"),
+          badgeHtml(`미등록 ${missingCount}개`, missingCount ? "bad" : "good")
+        ].join("");
+      }
+      els.salesChannelReadinessRows.innerHTML = rows.length ? rows.join("") : tableEmpty(6, "선택한 서비스·사업자 조건에 맞는 판매채널 준비 항목이 없습니다.");
     }
 
     function renderSettings() {
@@ -7079,7 +7526,7 @@
       const filteredAccounts = cfg.accounts.filter(item => item.businessId === selectedBusinessId);
       const filteredStaff = cfg.staff.filter(item => filteredBranchNames.has(item.branch));
       const businessIntegrations = cfg.integrations.filter(item => {
-        const itemBusinessId = item.businessId || item.business_id || businessIdForBranchName(item.branch || "");
+        const itemBusinessId = integrationBusinessId(item);
         return itemBusinessId === selectedBusinessId;
       });
       const filteredIntegrations = filteredIntegrationItems(businessIntegrations, { businessScoped: false });
@@ -7206,9 +7653,9 @@
         const uploadMode = ["shinhan_business", "ibk_business", "supplier_statement_upload", "tax_invoice_upload", "utility_bills", "card_pg", "accountant_tax_agent"].includes(item.service)
           || ["bank-excel", "statement-upload", "receipt-photo", "tax-invoice-upload", "utility-bill-upload", "card-pg-report", "accounting-export"].includes(item.collectionMode);
         const actionButton = canRunPortalSync
-          ? `<button type="button" data-sync-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${item.lastSyncStatus === "running" ? "실행중..." : "수집 실행"}</button>`
+          ? `<button type="button" data-sync-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${isIntegrationSyncActive(item) ? "처리중..." : "수집 실행"}</button>`
           : canRunFinancialSync
-            ? `<button type="button" data-sync-financial-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${item.lastSyncStatus === "running" ? "실행중..." : "거래 연동 실행"}</button>`
+            ? `<button type="button" data-sync-financial-integration="${escapeHtml(item.service)}" data-sync-integration-id="${escapeHtml(item.id)}">${isIntegrationSyncActive(item) ? "처리중..." : "거래 연동 실행"}</button>`
           : uploadMode
             ? `<button type="button" data-open-import="${escapeHtml(item.service)}">파일/사진 등록</button>`
             : `<button type="button" disabled title="설정 저장 후 전용 수집기가 연결됩니다.">계정/Vault 등록</button>`;
@@ -8041,7 +8488,9 @@
         settings().integrations.push(nextIntegration);
       }
       saveState();
-      markIntegrationRunning(nextIntegration, `${integrationLabels[nextIntegration.service] || nextIntegration.service} 저장 후 연동 실행 중`);
+      if (pendingAutoSync) {
+        markIntegrationRunning(nextIntegration, `${integrationLabels[nextIntegration.service] || nextIntegration.service} 저장 후 연동 실행 중`);
+      }
       if (hasServerAuth() && canManageSettings()) {
         try {
           await persistSettingsToServer();
@@ -8056,7 +8505,9 @@
         const syncResult = deliveryAutomationServices.has(data.service)
           ? applySyncPayload(pendingAutoSync)
           : applyFinancialSyncPayload(pendingAutoSync);
-        if (syncResult.recordsCount || syncResult.salesCount || syncResult.settlementsCount || syncResult.reviewsCount) {
+        if (syncResult.queued) {
+          syncNotice = `저장 후 백그라운드 수집 등록: ${syncResult.queuedCount || 1}건${syncResult.jobId ? " · " + syncResult.jobId : ""}`;
+        } else if (syncResult.recordsCount || syncResult.salesCount || syncResult.settlementsCount || syncResult.reviewsCount) {
           syncNotice = `저장 후 연동 실행 완료: 매출 ${syncResult.salesCount || 0}건 / 정산 ${syncResult.settlementsCount || 0}건 / 리뷰 ${syncResult.reviewsCount || 0}건 / 거래 ${syncResult.recordsCount || 0}건`;
         } else if (syncResult.blocked) {
           syncNotice = `저장 후 연동 실행 완료: 확인필요 ${syncResult.blocked}건${syncResult.messages.length ? " · " + syncResult.messages.join(" / ") : ""}`;
@@ -8073,12 +8524,19 @@
         form.dataset.editIntegrationId = nextIntegration.id;
       }
       if (!pendingAutoSync) {
-        nextIntegration.lastSyncAt = new Date().toISOString();
-        nextIntegration.lastSyncStatus = canManageAutomation() && shouldUseServerVault ? "connector_not_configured" : "credential_required";
-        nextIntegration.portalStatus = nextIntegration.lastSyncStatus;
-        nextIntegration.portalMessage = canManageAutomation() && shouldUseServerVault
+        const fallbackSyncStatus = canManageAutomation() && shouldUseServerVault ? "connector_not_configured" : "credential_required";
+        const fallbackSyncMessage = canManageAutomation() && shouldUseServerVault
           ? "서버 저장은 완료됐지만 자동 수집 응답이 없습니다. 계정/커넥터 상태를 확인하십시오."
           : "총괄 운영관리자 로그인 또는 서버 Vault 계정 등록이 필요합니다.";
+        Object.assign(nextIntegration, {
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: fallbackSyncStatus,
+          portalStatus: fallbackSyncStatus,
+          portalMessage: fallbackSyncMessage
+        });
+        state.settings.integrations = settings().integrations.map(item => (
+          item.id === nextIntegration.id ? { ...item, ...nextIntegration } : item
+        ));
         saveState();
       }
       renderAll();
@@ -8133,6 +8591,7 @@
       if (currentView === "contracts" && hasServerAuth()) loadEmployeeContracts().catch(err => showToast(`계약서 조회 실패: ${err.message}`));
       if ((currentView === "contracts" || currentView === "payroll") && canManageOnboarding()) loadApprovedEmployees().catch(err => showToast(`승인 직원 조회 실패: ${err.message}`));
       if (currentView === "payroll" && hasServerAuth()) loadPayrollStatements().catch(err => showToast(`급여내역서 조회 실패: ${err.message}`));
+      if (currentView === "integrations") ensureServerAccountsForIntegrations();
       applyAccessPolicy();
     }
 
@@ -8334,8 +8793,23 @@
       ].join("\n");
     }
 
+    function cookieValue(name) {
+      const target = `${encodeURIComponent(name)}=`;
+      return document.cookie.split(";")
+        .map(item => item.trim())
+        .find(item => item.startsWith(target))
+        ?.slice(target.length) || "";
+    }
+
+    function serverAuthToken() {
+      return localStorage.getItem(SERVER_AUTH_TOKEN_KEY)
+        || localStorage.getItem(FB_ACCESS_TOKEN_KEY)
+        || cookieValue(SERVER_AUTH_TOKEN_KEY)
+        || cookieValue(FB_ACCESS_TOKEN_KEY);
+    }
+
     function apiHeaders() {
-      const token = localStorage.getItem(SERVER_AUTH_TOKEN_KEY);
+      const token = serverAuthToken();
       return {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -8343,7 +8817,7 @@
     }
 
     function hasServerAuth() {
-      return Boolean(localStorage.getItem(SERVER_AUTH_TOKEN_KEY));
+      return Boolean(serverAuthToken());
     }
 
     function persistServerAuthToken(token) {
@@ -8355,7 +8829,7 @@
     }
 
     function syncServerAuthCookieFromStorage() {
-      const token = localStorage.getItem(SERVER_AUTH_TOKEN_KEY) || localStorage.getItem(FB_ACCESS_TOKEN_KEY);
+      const token = serverAuthToken();
       if (!token) return false;
       persistServerAuthToken(token);
       return true;
@@ -8442,17 +8916,24 @@
     }
 
     async function financeApi(path, options = {}) {
+      const controller = new AbortController();
+      const timeoutMs = Number(options.timeoutMs || 15000);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       const response = await fetch(`/api/v1/yeoljeong-finance${path}`, {
         ...options,
-        headers: { ...apiHeaders(), ...(options.headers || {}) }
-      });
+        headers: { ...apiHeaders(), ...(options.headers || {}) },
+        signal: options.signal || controller.signal
+      }).catch(error => {
+        if (error?.name === "AbortError") throw new Error(`API 응답 지연: ${Math.round(timeoutMs / 1000)}초 안에 응답하지 않았습니다.`);
+        throw error;
+      }).finally(() => clearTimeout(timeoutId));
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.detail || payload.message || `API ${response.status}`);
       return payload;
     }
 
     function apiAuthOnlyHeaders() {
-      const token = localStorage.getItem("aads_token");
+      const token = serverAuthToken();
       return token ? { Authorization: `Bearer ${token}` } : {};
     }
 
@@ -9200,13 +9681,25 @@
         saveAuthSession(payload);
         return payload;
       } catch (err) {
+        if (/401|403|bearer|인증|권한/i.test(String(err?.message || ""))) {
+          clearServerAuthToken();
+          saveAuthSession(null);
+          renderAll();
+          showToast("로그인 세션이 만료되었습니다. 다시 로그인하면 서버 연동 계정을 불러옵니다.");
+          return null;
+        }
         return authSession;
       }
     }
 
     function refreshFinanceSessionInBackground() {
       refreshFinanceSession()
-        .then(() => renderAuthState())
+        .then(session => {
+          renderAuthState();
+          if (session && currentView === "integrations" && canManageAutomation()) {
+            refreshServerAccounts().catch(err => showToast(`서버 계정 자동 반영 실패: ${err.message}`));
+          }
+        })
         .catch(() => renderAuthState());
     }
 
@@ -9314,6 +9807,22 @@
       showToast(`서버 계정 ${payload.accounts?.length || 0}건을 반영했습니다.`);
     }
 
+    function ensureServerAccountsForIntegrations() {
+      if (!hasServerAuth()) return null;
+      if (!serverAccountsRefreshPromise) {
+        serverAccountsRefreshPromise = refreshFinanceSession()
+          .then(session => {
+            if (!session || !canManageAutomation()) return null;
+            return refreshServerAccounts();
+          })
+          .catch(err => showToast(`서버 계정 자동 반영 실패: ${err.message}`))
+          .finally(() => {
+            serverAccountsRefreshPromise = null;
+          });
+      }
+      return serverAccountsRefreshPromise;
+    }
+
     function integrationMatchesSyncSummary(item, summary, payload = {}) {
       if (!item || !summary || item.service !== summary.service) return false;
       if (summary.account_id && item.serverAccountId && String(item.serverAccountId) === String(summary.account_id)) return true;
@@ -9328,16 +9837,29 @@
 
     function markIntegrationRunning(item, message = "연동 실행 중입니다.") {
       if (!item) return;
+      if (integrationSyncTimers.has(item.id)) clearTimeout(integrationSyncTimers.get(item.id));
       item.lastSyncAt = new Date().toISOString();
       item.lastSyncStatus = "running";
       item.portalStatus = "running";
       item.portalMessage = message;
       saveState();
       renderAll();
+      const timer = setTimeout(() => {
+        const current = settings().integrations.find(candidate => candidate.id === item.id);
+        if (isIntegrationSyncActive(current)) {
+          markIntegrationFailed(current, "백그라운드 수집이 장시간 종료되지 않았습니다. 수집 상태 원장을 새로고침해 결과를 확인하십시오.");
+        }
+        integrationSyncTimers.delete(item.id);
+      }, 10 * 60 * 1000);
+      integrationSyncTimers.set(item.id, timer);
     }
 
     function markIntegrationFailed(item, message = "연동 실행에 실패했습니다.") {
       if (!item) return;
+      if (integrationSyncTimers.has(item.id)) {
+        clearTimeout(integrationSyncTimers.get(item.id));
+        integrationSyncTimers.delete(item.id);
+      }
       item.lastSyncAt = new Date().toISOString();
       item.lastSyncStatus = "blocked";
       item.portalStatus = "blocked";
@@ -9388,6 +9910,10 @@
         settings().integrations
           .filter(item => integrationMatchesSyncSummary(item, summary, payload))
           .forEach(item => {
+            if (!["queued", "running"].includes(String(summary.status || "").toLowerCase()) && integrationSyncTimers.has(item.id)) {
+              clearTimeout(integrationSyncTimers.get(item.id));
+              integrationSyncTimers.delete(item.id);
+            }
             item.lastSyncAt = payload.synced_at || new Date().toISOString();
             item.lastSyncStatus = summary.status;
             item.portalStatus = summary.portal_status || summary.status;
@@ -9397,17 +9923,28 @@
       });
       saveState();
       renderAll();
-      const okStatuses = new Set(["completed", "succeeded", "no_records"]);
+      const okStatuses = new Set(["completed", "succeeded", "no_records", "queued", "running"]);
       const blocked = (payload.summary || []).filter(item => !okStatuses.has(String(item.status || "").toLowerCase())).length;
+      const queued = (payload.summary || []).filter(item => ["queued", "running"].includes(String(item.status || "").toLowerCase())).length;
       const messages = (payload.summary || [])
         .filter(item => !okStatuses.has(String(item.status || "").toLowerCase()))
         .map(item => `${integrationLabels[item.service] || item.service}: ${item.portal_message || item.message || item.error_code || item.status}`)
         .slice(0, 2);
+      const summaryCounts = (payload.summary || []).reduce((totals, item) => {
+        const counts = item.counts || {};
+        totals.sales += Number(counts.sales || item.sales_count || 0);
+        totals.settlements += Number(counts.settlements || item.settlements_count || 0);
+        totals.reviews += Number(counts.reviews || item.reviews_count || 0);
+        return totals;
+      }, { sales: 0, settlements: 0, reviews: 0 });
       return {
         recordsCount: records.length,
-        salesCount: (payload.sales || []).length,
-        settlementsCount: (payload.settlements || []).length,
-        reviewsCount: (payload.reviews || []).length,
+        salesCount: (payload.sales || []).length || summaryCounts.sales,
+        settlementsCount: (payload.settlements || []).length || summaryCounts.settlements,
+        reviewsCount: (payload.reviews || []).length || summaryCounts.reviews,
+        queuedCount: queued,
+        queued: Boolean(payload.queued),
+        jobId: payload.job_id || "",
         blocked,
         messages
       };
@@ -9441,12 +9978,17 @@
         body: JSON.stringify({
           services: runnableServices,
           ...scope,
+          background: true,
           date_from: `${month}-01`,
           date_to: new Date().toISOString().slice(0, 10)
         })
       });
       const result = applySyncPayload(payload);
-      showToast(result.recordsCount ? `자동 수집 매출 ${result.salesCount}건 / 정산 ${result.settlementsCount}건 / 리뷰 ${result.reviewsCount}건 반영` : `수집 실행 완료. 확인필요 ${result.blocked}건${result.messages?.length ? " · " + result.messages.join(" / ") : ""}`);
+      if (result.queued) {
+        showToast(`백그라운드 수집 등록: ${result.queuedCount || runnableServices.length}건${result.jobId ? ` · ${result.jobId}` : ""}`);
+      } else {
+        showToast(result.recordsCount ? `자동 수집 매출 ${result.salesCount}건 / 정산 ${result.settlementsCount}건 / 리뷰 ${result.reviewsCount}건 반영` : `수집 실행 완료. 확인필요 ${result.blocked}건${result.messages?.length ? " · " + result.messages.join(" / ") : ""}`);
+      }
       return result;
     }
 
@@ -9670,7 +10212,12 @@
       els.branchFilter.addEventListener("change", renderAll);
       els.integrationCategoryFilter?.addEventListener("change", renderAll);
       els.integrationStatusFilter?.addEventListener("change", renderAll);
+      els.integrationServiceFilter?.addEventListener("change", renderAll);
+      els.integrationBusinessBranchFilter?.addEventListener("change", renderAll);
       els.integrationSearchInput?.addEventListener("input", renderAll);
+      document.addEventListener("click", () => {
+        document.querySelectorAll(".multi-select-control.open").forEach(item => item.classList.remove("open"));
+      });
       document.querySelectorAll(".tab[data-view]").forEach(btn => btn.addEventListener("click", () => setView(btn.dataset.view)));
       document.querySelectorAll('[data-external-tab="recipes"]').forEach(link => {
         link.addEventListener("click", event => {
