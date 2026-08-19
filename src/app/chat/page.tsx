@@ -414,13 +414,14 @@ function isContinuedMessage(message: ChatMessage): boolean {
 
 function isTerminalIncompleteAssistantMessage(message: ChatMessage): boolean {
   if (message.role !== "assistant") return false;
+  // 스트리밍 진행 중인 메시지는 중단 판정 제외 (조기 배지 방지)
+  if (isStreamingPlaceholderMessage(message)) return false;
   return (
     message.intent === "interrupted_partial" ||
     message.intent === "interruption_notice" ||
     message.intent === "_archived_partial" ||
     message.model_used === "interrupted" ||
     message.model_used === "stopped" ||
-    endsWithProgressOnlyStatement(message) ||
     hasIncompleteQualityFlag(message)
   );
 }
@@ -881,8 +882,13 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
     )
   );
   if (_dupExists) return prev;
+  // 최종 메시지 append 시 동일 세션의 잔존 streaming placeholder도 제거 (placeholder 잔존 방지)
+  const _appendSessionId = appendedMessage.session_id;
   return [
-    ...prev.filter((message) => !message.id.startsWith("ai-partial-")),
+    ...prev.filter((message) =>
+      !message.id.startsWith("ai-partial-") &&
+      !(_appendSessionId && isStreamingPlaceholderMessage(message) && message.session_id === _appendSessionId)
+    ),
     appendedMessage,
   ].sort((a, b) => messageTime(a) - messageTime(b));
 }
@@ -997,7 +1003,9 @@ function mergeServerMessagesPreservingLocal(
     return incomingMessages.some((message) =>
       message.role === "assistant" &&
       message.intent !== "rate_limited" &&
-      messageTime(message) >= localTime - 30000
+      messageTime(message) >= localTime - 30000 &&
+      // execution_id가 있으면 동일 실행의 메시지만 허용 (다른 실행의 완료 메시지로 placeholder가 삭제되는 것 방지)
+      (!localMessage.execution_id || !message.execution_id || message.execution_id === localMessage.execution_id)
     );
   };
   const mergedIncoming = incomingMessages.map((serverMessage) => {
@@ -2021,7 +2029,7 @@ const MessageItem = memo(function MessageItem({
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
               ) : msg.model_used === "stopped" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>■ 사용자 중지</span>
-              ) : endsWithProgressOnlyStatement(msg) || hasIncompleteQualityFlag(msg) ? (
+              ) : !isStreamingPlaceholder && hasIncompleteQualityFlag(msg) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 완료 전 중단</span>
               ) : shouldShowCompletedBadge(msg) ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.20)" }}>✅ 완료</span>
@@ -3530,6 +3538,13 @@ export default function ChatPage() {
     completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
   }, []);
 
+  const showCompletionToastOnce = useCallback(function showCompletionToastOnce(aiMsgId?: string | null) {
+    if (!aiMsgId) return;
+    if (lastToastedAiIdRef.current === aiMsgId) return;
+    lastToastedAiIdRef.current = aiMsgId;
+    showCompletionToast("응답이 완료되었습니다");
+  }, [showCompletionToast]);
+
   useEffect(() => {
     const status = getBrowserPushPermission();
     setPushStatus(status);
@@ -3837,6 +3852,7 @@ export default function ChatPage() {
       lastEventIdRef.current = "";
       lastKnownMsgIdRef.current = null;
       lastKnownMessageRevisionRef.current = null;
+      lastToastedAiIdRef.current = "";
     } else {
       setMessagesLoading(true);
     }
@@ -4366,10 +4382,7 @@ export default function ChatPage() {
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
-            if (_lastAi979?.id) lastToastedAiIdRef.current = _lastAi979.id;
-            showCompletionToast("응답이 완료되었습니다", sid);
-          } else if (_lastAi979?.id) {
-            lastToastedAiIdRef.current = _lastAi979.id;  // 자동트리거도 ID 기록 — 이중 토스트 방지
+            showCompletionToastOnce(_lastAi979?.id);
           }
           return;
         }
@@ -4545,10 +4558,7 @@ export default function ChatPage() {
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => isFinalAssistantMessage(m));
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
-              if (_lastAi1029?.id) lastToastedAiIdRef.current = _lastAi1029.id;
-              showCompletionToast("응답이 완료되었습니다", sid);
-            } else if (_lastAi1029?.id) {
-              lastToastedAiIdRef.current = _lastAi1029.id;
+              showCompletionToastOnce(_lastAi1029?.id);
             }
             return;
           }
@@ -5533,7 +5543,8 @@ export default function ChatPage() {
               setStreaming(false);
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
               // P0-FIX: SSE done 경로에도 완료 토스트 표시
-              showCompletionToast("응답이 완료되었습니다", requestSessionId);
+              const _latestFinalAi = { id: (ev.message_id as string | undefined) ?? currentExecutionIdRef.current ?? undefined };
+              showCompletionToastOnce(_latestFinalAi.id);
               isNearBottomRef.current = true;
               scrollToMessagesBottom(true);
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -6148,10 +6159,7 @@ export default function ChatPage() {
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
-                  if (_lastAi1696?.id) lastToastedAiIdRef.current = _lastAi1696.id;
-                  showCompletionToast("응답이 완료되었습니다", _sid);
-                } else if (_lastAi1696?.id) {
-                  lastToastedAiIdRef.current = _lastAi1696.id;
+                  showCompletionToastOnce(_lastAi1696?.id);
                 }
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
@@ -6165,7 +6173,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToast]);
+  }, [createSession, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToastOnce]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
