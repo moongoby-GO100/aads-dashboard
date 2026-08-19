@@ -165,9 +165,10 @@ function GaugeBar({ pct, warn = 80 }: { pct?: number; warn?: number }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const SERVERS = [
-  { id: "211", ip: "211.188.51.113", role: "Hub (Bridge / auto_trigger / pipeline_monitor)" },
-  { id: "68",  ip: "68.183.183.11",  role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
-  { id: "114", ip: "116.120.58.155", role: "실행 서버 (SF / NTV2)" },
+  { id: "68",       ip: "68.183.183.11",  role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
+  { id: "contabo14", ip: "5.104.86.14",   role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
+  { id: "114",      ip: "116.120.58.155", role: "SF / NTV2 (ShortFlow / NewTalk V2)" },
+  { id: "211",      ip: "211.188.51.113", role: "Hub (Bridge / Pipeline Monitor)" },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [

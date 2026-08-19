@@ -42,7 +42,6 @@ const navItems = [
   { href: "/admin/loops", label: "루프 관리", icon: "🔁", adminOnly: true },
   { href: "/admin/sessions", label: "세션 리플레이", icon: "📹", adminOnly: true },
   { href: "/admin/emergency", label: "Emergency", icon: "🚨", adminOnly: true },
-  { href: "/server-status", label: "Server Status", icon: "🖥️", adminOnly: true },
 ];
 
 interface SidebarProps {
