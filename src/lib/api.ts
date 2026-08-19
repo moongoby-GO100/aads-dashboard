@@ -563,8 +563,15 @@ export const api = {
   },
   saveAgentVaultCredential: (data: { work_key: string; origin: string; label?: string; username: string; password: string; metadata?: Record<string, unknown> }) =>
     request<unknown>("/agent-vault/credentials", { method: "POST", body: JSON.stringify(data) }),
+  disableAgentVaultCredential: (credentialId: string) =>
+    request<unknown>(`/agent-vault/credentials/${encodeURIComponent(credentialId)}`, { method: "DELETE" }),
   issueAgentVaultAutofillToken: (data: { credential_id: string; work_key: string; origin: string; ttl_seconds?: number }) =>
     request<unknown>("/agent-vault/autofill-token", { method: "POST", body: JSON.stringify(data) }),
+  getAgentVaultAccessLogs: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<unknown>(`/agent-vault/access-logs${q.size ? `?${q.toString()}` : ""}`);
+  },
 
   // Design Modification Studio
   getDesignScreens: (projectKey = "AADS") =>

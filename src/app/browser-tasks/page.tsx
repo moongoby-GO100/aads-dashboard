@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 type BrowserTask = {
@@ -32,7 +33,6 @@ type VaultCredential = {
   origin: string;
   label: string;
   username: string;
-  password: string;
   updated_at?: string;
 };
 
@@ -64,10 +64,6 @@ export default function BrowserTasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [workKey, setWorkKey] = useState("aads-ceo-browser");
   const [targetUrl, setTargetUrl] = useState("https://aads.newtalk.kr/chat");
-  const [origin, setOrigin] = useState("https://aads.newtalk.kr");
-  const [label, setLabel] = useState("default");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   const activeTasks = useMemo(() => tasks.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)).length, [tasks]);
@@ -106,20 +102,6 @@ export default function BrowserTasksPage() {
     setError(null);
     try {
       await api.createBrowserTask({ work_key: workKey, target_url: targetUrl, current_step: "대기 중" });
-      await refresh();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveCredential = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.saveAgentVaultCredential({ work_key: workKey, origin, label, username, password, metadata: { source: "dashboard" } });
-      setPassword("");
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -181,13 +163,17 @@ export default function BrowserTasksPage() {
 
         <section className="rounded-lg border p-4 space-y-3" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
           <h2 className="font-semibold">Agent Vault</h2>
-          <input className="w-full rounded border px-3 py-2 text-sm" placeholder="origin" value={origin} onChange={(e) => setOrigin(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
-          <input className="w-full rounded border px-3 py-2 text-sm" placeholder="label" value={label} onChange={(e) => setLabel(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
-          <input className="w-full rounded border px-3 py-2 text-sm" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
-          <input className="w-full rounded border px-3 py-2 text-sm" placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
-          <button disabled={busy || !username || !password} onClick={saveCredential} className="w-full rounded px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: "var(--accent)", color: "#fff" }}>
-            자격증명 저장
-          </button>
+          <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+            계정 등록은 전용 보안 콘솔에서 처리합니다. Managed Browser는 작업 실행과 권한 승인에 집중하고,
+            비밀번호 원문은 화면 목록에 표시하지 않습니다.
+          </p>
+          <Link
+            href={`/agent-vault?work_key=${encodeURIComponent(workKey)}`}
+            className="block w-full rounded px-4 py-2 text-center text-sm font-medium"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            Agent Vault 열기
+          </Link>
         </section>
 
         <section className="rounded-lg border p-4" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
@@ -276,7 +262,7 @@ export default function BrowserTasksPage() {
                   <div className="font-medium">{item.label}</div>
                   <div className="text-sm" style={{ color: "var(--text-secondary)" }}>{item.origin} · {item.username}</div>
                 </div>
-                <span className="font-mono text-xs" style={{ color: "var(--text-secondary)" }}>{item.password}</span>
+                <span className="rounded px-2 py-1 text-xs font-medium" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>원문 비밀번호 숨김</span>
               </div>
             ))}
             {!loading && credentials.length === 0 && <div className="p-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>저장된 자격증명이 없습니다.</div>}

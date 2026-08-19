@@ -1,5 +1,38 @@
 # AADS Dashboard Handover
 
+## 2026-08-20 05:35 KST - Agent Vault Google Password Manager CSV import
+
+- Request: Determine whether Google Account Password Manager entries can be brought into OHVIS Agent Vault and deploy the account registration UI.
+- Finding:
+  - Google Password Manager supports user-initiated password export as CSV, but OHVIS must not directly extract Google account passwords or persist raw CSV files server-side.
+- Changes:
+  - `src/app/agent-vault/page.tsx`: added a `Google CSV 가져오기` tab to the dedicated Agent Vault console.
+  - The import flow parses Google/Chrome CSV headers `url`, `username`, and `password` in the browser, previews selectable rows, masks usernames, never displays raw passwords in the table, and stores only selected rows through the existing Agent Vault API.
+  - Imported credentials are tagged with `source=google-password-manager-csv`, `google-password-manager`, and `imported`, while preserving the selected `work_key`, policy, project, and owner metadata.
+- Verification:
+  - `npx eslint src/app/agent-vault/page.tsx src/app/browser-tasks/page.tsx src/components/Sidebar.tsx` passed.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `git diff --check` passed.
+- Deployment:
+  - Pending in this entry; deploy and external verification follow this note.
+
+## 2026-08-20 05:26 KST - OHVIS Agent Vault account registration UI
+
+- Request: Implement the dedicated account registration UI from the benchmarked Agent Vault plan.
+- Changes:
+  - Added `/agent-vault` admin page as a dedicated account registration and audit console.
+  - Added account summary cards, work_key/origin filters, credential table, account detail panel, registration form, metadata policy fields, and access log tab.
+  - Added `Agent Vault` sidebar entry and linked Managed Browser to the dedicated Vault page.
+  - Removed the credential save form from `/browser-tasks` so that browser tasks remain focused on execution and approvals.
+  - Stopped rendering the credential `password` field in the Managed Browser credential list; the UI now states that raw passwords are hidden.
+  - Added dashboard API methods for disabling credentials and reading Vault access logs.
+- Verification:
+  - `npx eslint src/app/agent-vault/page.tsx src/app/browser-tasks/page.tsx src/components/Sidebar.tsx` passed.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npx eslint src/app/agent-vault/page.tsx src/app/browser-tasks/page.tsx src/lib/api.ts src/components/Sidebar.tsx` was attempted, but `src/lib/api.ts` still has pre-existing `@typescript-eslint/no-explicit-any` debt outside this change.
+- Deployment:
+  - Not deployed in this step. Commit and push were not performed.
+
 ## 2026-08-19 21:36 KST - AADS-186 Managed Browser console MVP
 
 - Request: Complete OHVIS Managed Browser + Agent Vault implementation after runner failures.
