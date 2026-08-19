@@ -3821,14 +3821,19 @@ export default function ChatPage() {
       // FIX: 세션 전환 시 즉시 초기화 (이전 세션 메시지/버블 flash 방지)
       setMessages([]);
       setNextCursor(null);
+      // 이전 세션의 pending 상태 제거 — 다른 세션에 '응답중' 버블 잔류 방지
+      if (activeSessionRef.current) {
+        pendingResponseSessions.current.delete(activeSessionRef.current);
+      }
       setMessagesLoading(true);
       if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
       // A-3: 세션 전환 시 모든 타이머 정리
       if (completionToastTimerRef.current) { clearTimeout(completionToastTimerRef.current); completionToastTimerRef.current = null; }
       if (yellowWarningTimerRef.current) { clearTimeout(yellowWarningTimerRef.current); yellowWarningTimerRef.current = null; }
       setCompletionToast(null);
-      setWaitingBgResponse(false); setBgPartialContent("");
+      setWaitingBgResponse(false); setBgPartialContent(""); bgPartialContentRef.current = "";
       setStreamBuf("");
+      setToolStatus(null);
       lastEventIdRef.current = "";
       lastKnownMsgIdRef.current = null;
       lastKnownMessageRevisionRef.current = null;
