@@ -53,6 +53,21 @@ type ImportRow = {
   error?: string;
 };
 
+type EditCredentialForm = {
+  work_key: string;
+  origin: string;
+  label: string;
+  service_name: string;
+  target_url: string;
+  project: string;
+  owner: string;
+  username: string;
+  password: string;
+  auth_type: string;
+  policy: string;
+  tags: string;
+};
+
 const WORK_KEYS = ["aads-ceo-browser", "food-delivery", "finance-admin", "go100-research", "kis-trading", "ntv2-admin"];
 const PROJECTS = ["AADS", "FOOD", "SF", "KIS", "GO100", "NTV2", "NAS"];
 const AUTH_TYPES = [
@@ -113,6 +128,23 @@ function maskUsername(value: string): string {
   }
   if (value.length <= 4) return `${value.slice(0, 1)}***`;
   return `${value.slice(0, 2)}***${value.slice(-2)}`;
+}
+
+function credentialToEditForm(credential?: VaultCredential | null): EditCredentialForm {
+  return {
+    work_key: credential?.work_key || "aads-ceo-browser",
+    origin: credential?.origin || "",
+    label: credential?.label || "default",
+    service_name: credential?.metadata?.service_name || credential?.label || "",
+    target_url: credential?.metadata?.target_url || credential?.origin || "",
+    project: credential?.metadata?.project || "AADS",
+    owner: credential?.metadata?.owner || "CEO",
+    username: credential?.username || "",
+    password: "",
+    auth_type: credential?.metadata?.auth_type || "password",
+    policy: credential?.metadata?.policy || "ask",
+    tags: credential?.metadata?.tags?.join(",") || "",
+  };
 }
 
 function parseCsv(text: string): string[][] {
@@ -209,6 +241,7 @@ export default function AgentVaultPage() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importFileName, setImportFileName] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditCredentialForm>(() => credentialToEditForm(null));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -257,6 +290,10 @@ export default function AgentVaultPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workKey]);
 
+  useEffect(() => {
+    setEditForm(credentialToEditForm(selected));
+  }, [selected]);
+
   const applyOrigin = () => {
     const nextOrigin = normalizeOrigin(targetUrl);
     setOrigin(nextOrigin);
@@ -300,14 +337,65 @@ export default function AgentVaultPage() {
     }
   };
 
-  const disableCredential = async (credentialId: string) => {
-    if (!window.confirm("이 계정을 비활성화하시겠습니까?")) return;
+  const updateEditForm = <K extends keyof EditCredentialForm>(field: K, value: EditCredentialForm[K]) => {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateCredential = async () => {
+    if (!selected) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await api.disableAgentVaultCredential(credentialId);
-      setNotice("계정이 비활성화되었습니다.");
+      const normalizedOrigin = normalizeOrigin(editForm.origin || editForm.target_url);
+      const payload: {
+        work_key: string;
+        origin: string;
+        label: string;
+        username: string;
+        password?: string;
+        metadata: Record<string, unknown>;
+      } = {
+        work_key: editForm.work_key,
+        origin: normalizedOrigin,
+        label: editForm.label,
+        username: editForm.username,
+        metadata: {
+          ...selected.metadata,
+          source: selected.metadata?.source || "agent-vault-ui",
+          service_name: editForm.service_name,
+          target_url: editForm.target_url,
+          project: editForm.project,
+          owner: editForm.owner,
+          auth_type: editForm.auth_type,
+          policy: editForm.policy,
+          tags: editForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+          verification_status: selected.metadata?.verification_status || "unverified",
+          last_verified_at: selected.metadata?.last_verified_at || null,
+        },
+      };
+      if (editForm.password.trim()) payload.password = editForm.password;
+      await api.updateAgentVaultCredential(selected.id, payload);
+      setNotice(editForm.password.trim() ? "계정 정보와 비밀번호가 수정되었습니다." : "계정 정보가 수정되었습니다.");
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disableCredential = async (credentialId: string, hard = false) => {
+    const message = hard
+      ? "이 계정을 영구 삭제하시겠습니까? 저장된 비밀번호와 autofill 토큰도 함께 제거됩니다."
+      : "이 계정을 비활성화하시겠습니까?";
+    if (!window.confirm(message)) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.disableAgentVaultCredential(credentialId, { hard });
+      setNotice(hard ? "계정이 영구 삭제되었습니다." : "계정이 비활성화되었습니다.");
       setSelectedId(null);
       await refresh();
     } catch (e) {
@@ -527,14 +615,24 @@ export default function AgentVaultPage() {
                       <td className="px-4 py-3">{credential.is_active === false ? "disabled" : credential.metadata?.verification_status || "active"}</td>
                       <td className="px-4 py-3">{formatTime(credential.updated_at)}</td>
                       <td className="px-4 py-3">
-                        <button
-                          disabled={busy}
-                          onClick={() => disableCredential(credential.id)}
-                          className="rounded px-3 py-1.5 text-sm disabled:opacity-50"
-                          style={{ background: "#fee2e2", color: "#b91c1c" }}
-                        >
-                          비활성화
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            disabled={busy}
+                            onClick={() => setSelectedId(credential.id)}
+                            className="rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                            style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+                          >
+                            수정
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => disableCredential(credential.id)}
+                            className="rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                            style={{ background: "#fee2e2", color: "#b91c1c" }}
+                          >
+                            비활성화
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -549,24 +647,93 @@ export default function AgentVaultPage() {
               </table>
             </div>
             <aside className="border-t p-4 xl:border-l xl:border-t-0" style={{ borderColor: "var(--border)" }}>
-              <h2 className="font-semibold">계정 상세</h2>
+              <h2 className="font-semibold">계정 수정</h2>
               {selected ? (
                 <div className="mt-4 space-y-3 text-sm">
-                  <div>
-                    <div className="text-xs" style={{ color: "var(--text-secondary)" }}>서비스</div>
-                    <div className="font-medium">{selected.metadata?.service_name || selected.label}</div>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>서비스명</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.service_name} onChange={(e) => updateEditForm("service_name", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>계정 라벨</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.label} onChange={(e) => updateEditForm("label", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Origin</span>
+                    <input className="w-full rounded border px-3 py-2 font-mono text-xs" value={editForm.origin} onChange={(e) => updateEditForm("origin", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>로그인 페이지 URL</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.target_url} onChange={(e) => updateEditForm("target_url", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Work key</span>
+                    <select className="w-full rounded border px-3 py-2" value={editForm.work_key} onChange={(e) => updateEditForm("work_key", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
+                      {WORK_KEYS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>프로젝트</span>
+                    <select className="w-full rounded border px-3 py-2" value={editForm.project} onChange={(e) => updateEditForm("project", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
+                      {PROJECTS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>책임자</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.owner} onChange={(e) => updateEditForm("owner", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>아이디/이메일</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.username} onChange={(e) => updateEditForm("username", e.target.value)} autoComplete="username" style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>새 비밀번호</span>
+                    <input className="w-full rounded border px-3 py-2" type="password" value={editForm.password} onChange={(e) => updateEditForm("password", e.target.value)} autoComplete="new-password" placeholder="비워두면 기존 값 유지" style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>인증 방식</span>
+                    <select className="w-full rounded border px-3 py-2" value={editForm.auth_type} onChange={(e) => updateEditForm("auth_type", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
+                      {AUTH_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>사용 정책</span>
+                    <select className="w-full rounded border px-3 py-2" value={editForm.policy} onChange={(e) => updateEditForm("policy", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
+                      {POLICIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>태그</span>
+                    <input className="w-full rounded border px-3 py-2" value={editForm.tags} onChange={(e) => updateEditForm("tags", e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+                  </label>
+                  <div className="rounded border p-3 text-xs leading-5" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+                    원문 비밀번호는 표시하지 않습니다. 삭제는 복구 가능한 비활성화가 기본이며, 영구 삭제는 저장된 비밀번호와 미사용 autofill 토큰을 함께 제거합니다.
                   </div>
-                  <div>
-                    <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Origin</div>
-                    <div className="break-all font-mono text-xs">{selected.origin}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs" style={{ color: "var(--text-secondary)" }}>보안 원칙</div>
-                    <div>원문 비밀번호 표시/복사/내보내기 금지. 승인된 작업에는 60초 이하 autofill 토큰만 발급합니다.</div>
-                  </div>
-                  <div>
-                    <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Tags</div>
-                    <div>{selected.metadata?.tags?.join(", ") || "-"}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      disabled={busy || !editForm.work_key || !editForm.origin || !editForm.username}
+                      onClick={updateCredential}
+                      className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                    >
+                      수정 저장
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => disableCredential(selected.id)}
+                      className="rounded px-3 py-2 text-sm disabled:opacity-50"
+                      style={{ background: "#fef3c7", color: "#a16207" }}
+                    >
+                      비활성화
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => disableCredential(selected.id, true)}
+                      className="rounded px-3 py-2 text-sm disabled:opacity-50"
+                      style={{ background: "#fee2e2", color: "#b91c1c" }}
+                    >
+                      영구 삭제
+                    </button>
                   </div>
                 </div>
               ) : (

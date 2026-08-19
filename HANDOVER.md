@@ -1,5 +1,20 @@
 # AADS Dashboard Handover
 
+## 2026-08-20 06:41 KST - Agent Vault account edit/delete
+
+- Request: Add account edit/delete controls to the dedicated Agent Vault UI and deploy.
+- Changes:
+  - `/agent-vault` account list now opens a selected-account edit panel.
+  - The edit panel can update service name, label, origin, login URL, work key, project, owner, username, auth type, policy, tags, and optionally replace the password.
+  - Delete behavior is split into soft disable and hard delete confirmation.
+  - `src/lib/api.ts` now supports Agent Vault `PATCH` and `DELETE?hard=true`.
+- Verification:
+  - `npx eslint src/app/agent-vault/page.tsx` succeeded.
+  - `npm run build` succeeded and generated `/agent-vault`.
+  - `npx tsc --noEmit` succeeded after `next build` regenerated `.next/types`.
+- Backend counterpart:
+  - Requires AADS server commit with `PATCH /api/v1/agent-vault/credentials/{credential_id}` and hard-delete support.
+
 ## 2026-08-20 05:35 KST - Agent Vault Google Password Manager CSV import
 
 - Request: Determine whether Google Account Password Manager entries can be brought into OHVIS Agent Vault and deploy the account registration UI.

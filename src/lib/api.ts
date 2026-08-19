@@ -563,8 +563,13 @@ export const api = {
   },
   saveAgentVaultCredential: (data: { work_key: string; origin: string; label?: string; username: string; password: string; metadata?: Record<string, unknown> }) =>
     request<unknown>("/agent-vault/credentials", { method: "POST", body: JSON.stringify(data) }),
-  disableAgentVaultCredential: (credentialId: string) =>
-    request<unknown>(`/agent-vault/credentials/${encodeURIComponent(credentialId)}`, { method: "DELETE" }),
+  updateAgentVaultCredential: (credentialId: string, data: { work_key: string; origin: string; label?: string; username: string; password?: string; metadata?: Record<string, unknown> }) =>
+    request<unknown>(`/agent-vault/credentials/${encodeURIComponent(credentialId)}`, { method: "PATCH", body: JSON.stringify(data) }),
+  disableAgentVaultCredential: (credentialId: string, options?: { hard?: boolean }) => {
+    const q = new URLSearchParams();
+    if (options?.hard) q.set("hard", "true");
+    return request<unknown>(`/agent-vault/credentials/${encodeURIComponent(credentialId)}${q.size ? `?${q.toString()}` : ""}`, { method: "DELETE" });
+  },
   issueAgentVaultAutofillToken: (data: { credential_id: string; work_key: string; origin: string; ttl_seconds?: number }) =>
     request<unknown>("/agent-vault/autofill-token", { method: "POST", body: JSON.stringify(data) }),
   getAgentVaultAccessLogs: (params?: { limit?: number }) => {
