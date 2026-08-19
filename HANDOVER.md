@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-20 07:43 KST - Agent Vault account edit/delete production deploy
+
+- Request: Continue interrupted account edit/delete deploy and verify production state.
+- Deployment:
+  - `bash /root/aads/aads-dashboard/deploy.sh` completed blue-green deploy.
+  - Release SHA: `e87821bc4fc6`.
+  - Active slot: `aads-dashboard-green` on `:3101`.
+  - Standby slot: `aads-dashboard` on `:3100`, synced to the same release.
+- Verification:
+  - External `https://aads.newtalk.kr/login` returned HTTP 200.
+  - External `https://aads.newtalk.kr/agent-vault` returned HTTP 307 to `/login?redirect=%2Fagent-vault`.
+  - Both dashboard containers expose `AADS_RELEASE_SHA=e87821bc4fc6`.
+  - Production bundle includes Agent Vault `수정 저장`, `비활성화`, `영구 삭제`, and API client calls for `PATCH` and `DELETE`.
+  - Backend external unauthenticated `PATCH`/`DELETE` probes returned HTTP 401, so the API routes are present and protected.
+- Note:
+  - Deploy script frontend QA ended as `UNKNOWN`; manual HTTP/API/container/bundle fallback verification was used instead.
+  - Authenticated UI E2E with a real credential remains pending.
+
 ## 2026-08-20 06:41 KST - Agent Vault account edit/delete
 
 - Request: Add account edit/delete controls to the dedicated Agent Vault UI and deploy.
