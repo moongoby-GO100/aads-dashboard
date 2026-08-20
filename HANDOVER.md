@@ -15,7 +15,11 @@
   - `npm run build` passed and generated `/chat`.
   - `npm run lint` was attempted but still fails on pre-existing repository-wide lint debt outside this change.
 - Deployment:
-  - Pending in this entry; commit/push/deploy follow this note.
+  - Commit/push completed: `e7fcae49e231` on `dashboard-write/main`.
+  - `bash /root/aads/aads-dashboard/deploy.sh` completed the active-slot cutover.
+  - Active slot: `aads-dashboard-green` on `:3101`; standby slot: `aads-dashboard` on `:3100`.
+  - External `https://aads.newtalk.kr` returned HTTP 307 to `/login?redirect=%2F`.
+  - Both dashboard containers are `healthy`.
 
 ## 2026-08-20 07:43 KST - Agent Vault account edit/delete production deploy
 
