@@ -55,6 +55,11 @@ function formatTime(value?: string): string {
   }
 }
 
+function getInitialSessionId(): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("session_id") || "";
+}
+
 export default function BrowserTasksPage() {
   const [tasks, setTasks] = useState<BrowserTask[]>([]);
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
@@ -64,6 +69,7 @@ export default function BrowserTasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [workKey, setWorkKey] = useState("aads-ceo-browser");
   const [targetUrl, setTargetUrl] = useState("https://aads.newtalk.kr/chat");
+  const [sessionId, setSessionId] = useState(getInitialSessionId);
   const [busy, setBusy] = useState(false);
 
   const activeTasks = useMemo(() => tasks.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)).length, [tasks]);
@@ -101,7 +107,12 @@ export default function BrowserTasksPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.createBrowserTask({ work_key: workKey, target_url: targetUrl, current_step: "대기 중" });
+      await api.createBrowserTask({
+        work_key: workKey,
+        target_url: targetUrl,
+        session_id: sessionId || undefined,
+        current_step: "대기 중",
+      });
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -156,6 +167,8 @@ export default function BrowserTasksPage() {
           <input className="w-full rounded border px-3 py-2 text-sm" value={workKey} onChange={(e) => setWorkKey(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
           <label className="block text-xs" style={{ color: "var(--text-secondary)" }}>target_url</label>
           <input className="w-full rounded border px-3 py-2 text-sm" value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
+          <label className="block text-xs" style={{ color: "var(--text-secondary)" }}>chat session_id</label>
+          <input className="w-full rounded border px-3 py-2 text-sm" value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="현재 채팅 세션 자동 귀속" style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }} />
           <button disabled={busy} onClick={createTask} className="w-full rounded px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: "var(--accent)", color: "#fff" }}>
             작업 등록
           </button>
