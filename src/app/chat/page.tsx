@@ -32,6 +32,27 @@ import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./Mar
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 
+type StreamingStatusPayload = {
+  is_streaming: boolean;
+  just_completed?: boolean;
+  completion_token?: string | null;
+  content_length?: number;
+  tool_count?: number;
+  last_tool?: string;
+  partial_content?: string;
+  execution_id?: string | null;
+  last_event_id?: string | null;
+  last_message_id?: string | null;
+  message_revision?: string | null;
+  placeholder_revision?: string | null;
+  artifact_revision?: string | null;
+};
+
+function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
+  const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
+  return `/chat/sessions/${sessionId}/streaming-status${ack}`;
+}
+
 type AuthKeyStatus = {
   label?: string;
   key_name?: string;
@@ -2844,8 +2865,19 @@ export default function ChatPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
+  const ackedCompletionTokenBySessionRef = useRef<Map<string, string>>(new Map());
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
+
+  const streamingStatusPathFor = useCallback((sessionId: string) => (
+    streamingStatusPath(sessionId, ackedCompletionTokenBySessionRef.current.get(sessionId))
+  ), []);
+
+  const markCompletionSeen = useCallback((sessionId: string, status?: StreamingStatusPayload | null) => {
+    if (status?.completion_token) {
+      ackedCompletionTokenBySessionRef.current.set(sessionId, status.completion_token);
+    }
+  }, []);
 
   // 탭 복귀 시 DB에서 메시지 재조회 — 백그라운드 저장된 응답을 화면에 반영
   useEffect(() => {
@@ -2858,18 +2890,12 @@ export default function ChatPage() {
       if (now - lastRefetch < 3000) return;
       lastRefetch = now;
       // P1-c: streaming-status check on tab return
+      let status: StreamingStatusPayload | null = null;
       try {
-        const status = await chatApi<{
-          is_streaming: boolean;
-          just_completed: boolean;
-          partial_content?: string;
-          execution_id?: string | null;
-          last_event_id?: string | null;
-          tool_count?: number;
-          last_tool?: string;
-        }>(`/chat/sessions/${sid}/streaming-status`);
+        status = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
         if (activeSessionRef.current !== sid) return;
-        if (status.just_completed || !status.is_streaming) {
+        const currentStatus = status;
+        if (currentStatus.just_completed || !currentStatus.is_streaming) {
           streamingRef.current = false;
           finalizingRef.current = false;
         } else {
@@ -2877,18 +2903,18 @@ export default function ChatPage() {
           setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
-          if (status.execution_id) currentExecutionIdRef.current = status.execution_id;
-          if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
-          if (status.partial_content) {
-            setBgPartialContent(status.partial_content);
-            setStreamBuf(status.partial_content);
+          if (currentStatus.execution_id) currentExecutionIdRef.current = currentStatus.execution_id;
+          if (currentStatus.last_event_id) lastEventIdRef.current = currentStatus.last_event_id;
+          if (currentStatus.partial_content) {
+            setBgPartialContent(currentStatus.partial_content);
+            setStreamBuf(currentStatus.partial_content);
           }
           setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
-            executionId: status.execution_id || currentExecutionIdRef.current,
-            partialContent: status.partial_content || bgPartialContentRef.current,
-            toolCount: status.tool_count,
-            lastTool: status.last_tool,
+            executionId: currentStatus.execution_id || currentExecutionIdRef.current,
+            partialContent: currentStatus.partial_content || bgPartialContentRef.current,
+            toolCount: currentStatus.tool_count,
+            lastTool: currentStatus.last_tool,
           }));
         }
       } catch {}
@@ -2902,6 +2928,9 @@ export default function ChatPage() {
           fallbackContent: bgPartialContentRef.current || "",
         });
         const finalMsgs = processed.length > 0 ? processed : result.messages;
+        if (finalMsgs.some((message) => isFinalAssistantMessage(message))) {
+          markCompletionSeen(sid, status);
+        }
         setMessages((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
           const hasServerDraft = result.messages.some((m) =>
@@ -2917,7 +2946,7 @@ export default function ChatPage() {
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
     return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
-  }, [settleScrollAfterMessageMerge]);
+  }, [markCompletionSeen, settleScrollAfterMessageMerge, streamingStatusPathFor]);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
@@ -3918,8 +3947,8 @@ export default function ChatPage() {
           return [] as ChatMessage[];
         });
 
-    chatApi<{ is_streaming: boolean; just_completed?: boolean; tool_count?: number; last_tool?: string; partial_content?: string; execution_id?: string | null; last_event_id?: string | null }>(
-      `/chat/sessions/${fetchSid}/streaming-status`
+    chatApi<StreamingStatusPayload>(
+      streamingStatusPathFor(fetchSid)
     ).then(async (status) => {
       if (cancelled) return;
       currentExecutionIdRef.current = status.execution_id || activeSession.current_execution_id || null;
@@ -3964,6 +3993,7 @@ export default function ChatPage() {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
               if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
+                markCompletionSeen(fetchSid, status);
                 setWaitingBgResponse(false); setBgPartialContent("");
                 // B1-FIX: 폴링 완료 감지 시 streaming 인디케이터 + sessionRef 즉시 해제 (30s 타이머 오버라이드 방지)
                 if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
@@ -3974,6 +4004,7 @@ export default function ChatPage() {
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = setTimeout(() => { setWaitingBgResponse(false); setBgPartialContent(""); }, 60000);
         } else {
+          markCompletionSeen(fetchSid, status);
           setWaitingBgResponse(false); setBgPartialContent("");
           // B1-FIX: 즉시 완료 경로에서도 streaming 해제
           if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
@@ -4077,7 +4108,7 @@ export default function ChatPage() {
     }
     // BUG-1 FIX: cleanup — 세션 전환 시 이전 fetch 응답 폐기
     return () => { cancelled = true; };
-  }, [activeSession?.id]);
+  }, [activeSession?.id, markCompletionSeen, streamingStatusPathFor]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -4292,11 +4323,9 @@ export default function ChatPage() {
       tickCount++;
       if (!_waitingBg && !_streaming && tickCount % 5 !== 0) return;
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
-      let ss: { is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null; tool_count?: number; last_tool?: string } | null = null;
+      let ss: StreamingStatusPayload | null = null;
       try {
-        ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; partial_content?: string; last_message_id?: string; execution_id?: string | null; last_event_id?: string | null; message_revision?: string | null; placeholder_revision?: string | null; tool_count?: number; last_tool?: string }>(
-          `/chat/sessions/${sid}/streaming-status`
-        );
+        ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
         if (cancelled) return;
         if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
         if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
@@ -4376,6 +4405,7 @@ export default function ChatPage() {
             setToolStatus("🔄 최종 응답 확인 중...");
             return;
           }
+          markCompletionSeen(sid, ss);
           setStreaming(false); setStreamBuf("");
           // scroll: isNearBottomRef preserved — user scroll position respected
           settleScrollAfterMessageMerge();
@@ -4547,6 +4577,7 @@ export default function ChatPage() {
               if (allMsgs && allMsgs.length > 0) {
                 const latestAi2 = latestFinalAssistantForExecution(allMsgs, ss?.execution_id || currentExecutionIdRef.current);
                 if (latestAi2) {
+                  markCompletionSeen(sid, ss);
                   setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
                 } else {
                   setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
@@ -4597,7 +4628,17 @@ export default function ChatPage() {
       } catch { /* 폴링 실패 무시 */ }
     }, 5000); // 5초 간격: 브라우저 부하 감소
     return () => { cancelled = true; clearInterval(iv); };
-  }, [activeSession?.id, settleScrollAfterMessageMerge]); // PERF: 의존성을 세션 ID만으로 축소
+  }, [
+    activeSession?.id,
+    attachExecutionReplay,
+    bgPartialContent,
+    markCompletionSeen,
+    mergeLatestAssistantFromServer,
+    requestResumeOnce,
+    settleScrollAfterMessageMerge,
+    showCompletionToastOnce,
+    streamingStatusPathFor,
+  ]);
 
   // ── Toggle theme ──
   function toggleTheme() {
@@ -5442,6 +5483,7 @@ export default function ChatPage() {
               if (!isStale()) setStreamBuf(full);
             } else if (ev.type === "done") {
               streamGotFinal = true;
+              let locallyRenderedFinalAiId: string | null = null;
               finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
@@ -5496,6 +5538,7 @@ export default function ChatPage() {
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
               if (full.trim()) {
                 // ★ in-place 업데이트: placeholder를 최종 응답으로 교체 (새 버블 방지)
+                locallyRenderedFinalAiId = (ev.message_id as string | undefined) ?? currentExecutionIdRef.current ?? null;
                 setMessages((prev) => {
                   const existingPh = prev.find(m => m.intent === "streaming_placeholder");
                   const hasPlaceholder = Boolean(existingPh);
@@ -5544,9 +5587,10 @@ export default function ChatPage() {
               setThinkingBuf("");
               setStreaming(false);
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
-              // P0-FIX: SSE done 경로에도 완료 토스트 표시
-              const _latestFinalAi = { id: (ev.message_id as string | undefined) ?? currentExecutionIdRef.current ?? undefined };
-              showCompletionToastOnce(_latestFinalAi.id);
+              // 완료 토스트는 실제 버블이 렌더된 뒤에만 표시한다.
+              if (locallyRenderedFinalAiId) {
+                showCompletionToastOnce(locallyRenderedFinalAiId);
+              }
               isNearBottomRef.current = true;
               scrollToMessagesBottom(true);
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -6122,9 +6166,7 @@ export default function ChatPage() {
             await new Promise((r) => setTimeout(r, delay));
             if (activeSessionRef.current !== _sid) return;
             try {
-              const ss = await chatApi<{ is_streaming: boolean; just_completed?: boolean; execution_id?: string | null; last_event_id?: string | null }>(
-                `/chat/sessions/${_sid}/streaming-status`
-              );
+              const ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(_sid));
               if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
               if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {
@@ -6153,6 +6195,7 @@ export default function ChatPage() {
                   setToolStatus("🔄 최종 응답 확인 중...");
                   return;
                 }
+                markCompletionSeen(_sid, ss);
                 if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
                 setStreaming(false);
                 setStreamBuf("");
@@ -6175,7 +6218,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToastOnce]);
+  }, [createSession, markCompletionSeen, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToastOnce, streamingStatusPathFor]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
@@ -8407,8 +8450,8 @@ export default function ChatPage() {
             });
           })()}
 
-          {/* Invisible Recovery: 백그라운드 응답 — streaming=false일 때만 표시 (streaming=true면 스트리밍 버블이 대신 표시) */}
-          {waitingBgResponse && !streaming && (
+          {/* Invisible Recovery: streaming flag만 남고 placeholder가 없을 때도 대기 버블 표시 */}
+          {waitingBgResponse && (!streaming || !messages.some((message) => isStreamingPlaceholderMessage(message))) && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 style={{

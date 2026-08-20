@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-08-20 19:33 KST - Chat completion toast and response bubble timing
+
+- Request: Fix cases where the green `응답이 완료되었습니다` popup appears before the final assistant bubble, and where the response bubble is temporarily absent after a CEO instruction.
+- Changes:
+  - `src/app/chat/page.tsx`: added a shared `StreamingStatusPayload` type and `streamingStatusPath()` helper.
+  - Frontend now sends `acked_completion_token` after a visible final assistant message is confirmed, so repeated `just_completed` responses are suppressed per session.
+  - Streaming-status completion paths now mark completion as seen only after a final assistant message is loaded or merged.
+  - SSE `done` no longer shows the completion toast for tool-only/empty final events before DB finalization produces a visible assistant bubble.
+  - Invisible Recovery now renders the waiting bubble even when a stale `streaming=true` flag remains but no streaming placeholder exists.
+- Verification:
+  - `npx tsc --noEmit` passed.
+  - `git diff --check` passed.
+  - `npm run build` passed and generated `/chat`.
+  - `npm run lint` was attempted but still fails on pre-existing repository-wide lint debt outside this change.
+- Deployment:
+  - Pending in this entry; commit/push/deploy follow this note.
+
 ## 2026-08-20 07:43 KST - Agent Vault account edit/delete production deploy
 
 - Request: Continue interrupted account edit/delete deploy and verify production state.
