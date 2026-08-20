@@ -46,6 +46,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 export interface ChatWorkspace {
   id: string;
   name: string;
+  project_key?: string | null;
   slug: string;
   description: string | null;
   icon: string | null;

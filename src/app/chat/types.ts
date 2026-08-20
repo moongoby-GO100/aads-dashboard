@@ -3,6 +3,7 @@
 export interface Workspace {
   id: string;
   name: string;
+  project_key?: string | null;
   description?: string;
   icon: string;
   color: string;

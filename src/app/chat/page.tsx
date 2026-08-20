@@ -269,6 +269,8 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 function projectKeyFromWorkspace(workspace?: Workspace | null): string {
+  const directProjectKey = String(workspace?.project_key || "").trim().toUpperCase();
+  if (directProjectKey) return directProjectKey;
   const settings = getWorkspaceSettings(workspace);
   const configured = String(settings.project_key || settings.active_project || settings.project || "").trim().toUpperCase();
   if (configured) return configured;
