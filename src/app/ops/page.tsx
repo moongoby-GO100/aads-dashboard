@@ -13,6 +13,7 @@ interface HealthData {
   stalled_count: number;
   error_count: number;
   checks: Record<string, CheckResult>;
+  infra?: Record<string, unknown>;
   checked_at?: string;
 }
 
@@ -111,6 +112,27 @@ function safeNum(v: unknown): number {
   return typeof v === "number" ? v : 0;
 }
 
+function infraStatusText(v: unknown): string {
+  return typeof v === "string" && v.trim() ? v : "unknown";
+}
+
+function containerStatusColor(status: string, role: "blue" | "green"): string {
+  if (role === "blue") {
+    return status === "running" || status === "healthy" ? "var(--success)" : "var(--danger)";
+  }
+  return status === "running" ? "var(--success)" : "var(--warning)";
+}
+
+function deriveActiveSlot(infra: Record<string, unknown> | undefined, blueStatus: string, greenStatus: string): string {
+  const explicit = infraStatusText(
+    infra?.nginx_upstream || infra?.active_upstream || infra?.active_slot || infra?.active_port || infra?.active_backend
+  );
+  if (explicit !== "unknown") return explicit;
+  if (greenStatus === "running" && blueStatus !== "running") return "8102";
+  if (blueStatus === "running") return "8100";
+  return "unknown";
+}
+
 // ─── Status Color Helpers ─────────────────────────────────────────────────────
 
 function statusColor(status: string): string {
@@ -139,7 +161,6 @@ function statusLabel(status: string): string {
 
 function BarChart({ data }: { data: { label: string; value: number }[] }) {
   const maxVal = Math.max(...data.map((d) => d.value), 0.01);
-  const w = 100 / data.length;
   return (
     <div style={{ width: "100%", overflowX: "auto" }}>
       <svg viewBox={`0 0 ${Math.max(data.length * 40, 280)} 120`} style={{ width: "100%", minWidth: 280, height: 120 }}>
@@ -172,15 +193,16 @@ function BarChart({ data }: { data: { label: string; value: number }[] }) {
 function PieChart({ data }: { data: { label: string; value: number }[] }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#a855f7", "#06b6d4", "#f97316"];
-  let cumAngle = -Math.PI / 2;
   const slices = data.map((d, i) => {
     const angle = total > 0 ? (d.value / total) * 2 * Math.PI : 0;
-    const startAngle = cumAngle;
-    cumAngle += angle;
+    const startAngle = -Math.PI / 2 + data.slice(0, i).reduce((sum, prev) => (
+      sum + (total > 0 ? (prev.value / total) * 2 * Math.PI : 0)
+    ), 0);
+    const endAngle = startAngle + angle;
     const x1 = 50 + 40 * Math.cos(startAngle);
     const y1 = 50 + 40 * Math.sin(startAngle);
-    const x2 = 50 + 40 * Math.cos(cumAngle);
-    const y2 = 50 + 40 * Math.sin(cumAngle);
+    const x2 = 50 + 40 * Math.cos(endAngle);
+    const y2 = 50 + 40 * Math.sin(endAngle);
     const largeArc = angle > Math.PI ? 1 : 0;
     return { d: `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`, color: COLORS[i % COLORS.length], label: d.label, value: d.value };
   });
@@ -315,8 +337,9 @@ export default function OpsPage() {
   // Design review detail toggle
   const [designDetailOpen, setDesignDetailOpen] = useState<string | null>(null);
 
-  // Server tab for env
-  const [activeServer, setActiveServer] = useState<number | string>(68);
+  // Server tab for env. Legacy "68" resolves to contabo116, but the UI should
+  // show the current physical server to avoid confusion after the old 68 host shutdown.
+  const [activeServer, setActiveServer] = useState<number | string>("contabo116");
 
   const fetchAll = useCallback(async () => {
     try {
@@ -381,6 +404,11 @@ export default function OpsPage() {
   // Env snapshots
   const snapshots = envHistory?.snapshots || [];
   const latestServices = envHistory?.latest_services || (snapshots.length > 0 ? snapshots[snapshots.length - 1].services : {});
+  const infra = health?.infra;
+  const blueStatus = infraStatusText(infra?.["aads-server"] || infra?.["aads-server-blue"]);
+  const greenStatus = infraStatusText(infra?.["aads-server-green"]);
+  const activeSlot = deriveActiveSlot(infra, blueStatus, greenStatus);
+  const greenRollbackBlocked = greenStatus !== "running";
 
   const cardStyle: React.CSSProperties = {
     background: "var(--bg-card)",
@@ -462,6 +490,65 @@ export default function OpsPage() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>Mobile Agent</div>
               <div style={{ fontSize: 13, color: "var(--accent)" }}>설치 / 페어링</div>
             </Link>
+          </div>
+        </section>
+
+        {/* ─── 섹션 1-1: Blue-Green 컨테이너 상태 ─── */}
+        <section style={{ ...cardStyle, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Blue-Green 컨테이너</h3>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              nginx upstream: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{loading ? "-" : activeSlot}</span>
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            {[
+              { label: "Blue", port: ":8100", status: blueStatus, role: "blue" as const },
+              { label: "Green", port: ":8102", status: greenStatus, role: "green" as const },
+            ].map((slot) => {
+              const color = containerStatusColor(slot.status, slot.role);
+              const isGreenWarning = slot.role === "green" && greenRollbackBlocked && !loading;
+              return (
+                <div
+                  key={slot.label}
+                  style={{
+                    background: "var(--bg-hover)",
+                    border: `1px solid ${isGreenWarning ? "var(--warning)" : "var(--border)"}`,
+                    borderRadius: 8,
+                    padding: 14,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{slot.label}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>{slot.port}</div>
+                    </div>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        maxWidth: "100%",
+                        color,
+                        background: `color-mix(in srgb, ${color} 14%, transparent)`,
+                        border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
+                        borderRadius: 999,
+                        padding: "3px 9px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {loading ? "loading" : slot.status}
+                    </span>
+                  </div>
+                  {isGreenWarning && (
+                    <div style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.45 }}>
+                      ⚠️ 롤백 불가
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -659,21 +746,25 @@ export default function OpsPage() {
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14, color: "var(--text-primary)" }}>🖥️ 서버 환경 트렌드</h3>
           {/* Server Tabs */}
           <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-            {[68, 211, 114].map((sid) => (
+            {[
+              { id: "contabo116", label: "contabo116" },
+              { id: "contabo14", label: "contabo14" },
+              { id: "cafe24_114", label: "cafe24_114" },
+            ].map((server) => (
               <button
-                key={sid}
-                onClick={() => setActiveServer(sid)}
+                key={server.id}
+                onClick={() => setActiveServer(server.id)}
                 style={{
                   padding: "4px 14px",
                   borderRadius: 20,
                   border: "1px solid var(--border)",
-                  background: activeServer === sid ? "var(--accent)" : "var(--bg-hover)",
-                  color: activeServer === sid ? "#fff" : "var(--text-secondary)",
+                  background: activeServer === server.id ? "var(--accent)" : "var(--bg-hover)",
+                  color: activeServer === server.id ? "#fff" : "var(--text-secondary)",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
               >
-                서버 {sid}
+                {server.label}
               </button>
             ))}
           </div>

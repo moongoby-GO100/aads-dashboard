@@ -355,9 +355,9 @@ export default function RecoveryPage() {
               style={{ background: "var(--bg-hover)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", fontSize: 12 }}
             >
               <option value="all">전체 서버</option>
-              <option value="68">서버 68</option>
-              <option value="211">서버 211</option>
-              <option value="114">서버 114</option>
+              <option value="contabo116">contabo116</option>
+              <option value="contabo14">contabo14</option>
+              <option value="cafe24_114">cafe24_114</option>
             </select>
             <input
               type="date"

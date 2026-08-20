@@ -801,9 +801,9 @@ export default function ChannelsPage() {
                     style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                   >
                     <option value="">선택 안함</option>
-                    <option value="68">68 (AADS)</option>
-                    <option value="211">211 (KIS/GO100)</option>
-                    <option value="114">114 (SF/NAS/NTV2)</option>
+                    <option value="contabo116">contabo116 (AADS)</option>
+                    <option value="contabo14">contabo14 (KIS/GO100)</option>
+                    <option value="cafe24_114">cafe24_114 (SF/NAS/NTV2)</option>
                   </select>
                 </div>
               </div>

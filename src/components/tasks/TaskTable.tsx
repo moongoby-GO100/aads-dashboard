@@ -7,14 +7,20 @@ import { CrossDirective } from "@/services/taskApi";
 
 // ─── 서버 뱃지 ────────────────────────────────────────────────────────────────
 const SERVER_COLORS: Record<string, string> = {
+  "contabo116": "bg-blue-900 text-blue-200 border border-blue-700",
+  "contabo14": "bg-purple-900 text-purple-200 border border-purple-700",
+  "cafe24_114": "bg-orange-900 text-orange-200 border border-orange-700",
   "68": "bg-blue-900 text-blue-200 border border-blue-700",
   "211": "bg-purple-900 text-purple-200 border border-purple-700",
   "114": "bg-orange-900 text-orange-200 border border-orange-700",
 };
 const SERVER_LABELS: Record<string, string> = {
-  "68": "68 (AADS)",
-  "211": "211 (KIS/GO)",
-  "114": "114 (SF/NT/NAS)",
+  "contabo116": "contabo116 (AADS)",
+  "contabo14": "contabo14 (KIS/GO)",
+  "cafe24_114": "cafe24_114 (SF/NT/NAS)",
+  "68": "contabo116 (AADS)",
+  "211": "contabo14 (KIS/GO)",
+  "114": "cafe24_114 (SF/NT/NAS)",
 };
 
 function ServerBadge({ server }: { server: string }) {

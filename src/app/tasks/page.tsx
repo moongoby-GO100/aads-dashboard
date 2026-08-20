@@ -565,7 +565,7 @@ function DirectivesTab() {
                           <td className="p-3 text-gray-200 max-w-xs"><span className="block truncate">{safeRender(d.title)}</span></td>
                           <td className="p-3 hidden md:table-cell">
                             <span className="px-1.5 py-0.5 rounded text-xs font-mono font-semibold bg-blue-900 text-blue-200 border border-blue-700">
-                              68 (AADS)
+                              contabo116 (AADS)
                             </span>
                           </td>
                           <td className="p-3"><StatusBadge status={safeRender(d.status)} /></td>
