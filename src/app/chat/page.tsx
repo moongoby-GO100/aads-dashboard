@@ -1362,6 +1362,8 @@ const MessageItem = memo(function MessageItem({
   screenSize,
 }: MessageItemProps) {
   const isMobileMessage = screenSize === "mobile";
+  const mobileReadableText = isMobileMessage ? "17px" : "14px";
+  const mobileReadableLineHeight = isMobileMessage ? "1.75" : "1.6";
   const LIVE_STREAM_RENDER_LIMIT = 3000;
   const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 3000;
   // reply_to_id가 있으면 원본 메시지 찾기
@@ -1492,7 +1494,7 @@ const MessageItem = memo(function MessageItem({
         </div>
       )}
 
-      <div style={{ maxWidth: isMobileMessage ? "min(100%, calc(100vw - 12px))" : "min(98%, calc(100vw - 20px))" }}>
+      <div style={{ maxWidth: isMobileMessage ? "100%" : "min(98%, calc(100vw - 20px))", width: isMobileMessage ? "100%" : undefined }}>
         {/* Reply-to 인용 표시 */}
         {replyTarget && (
           <div style={{
@@ -1570,9 +1572,11 @@ const MessageItem = memo(function MessageItem({
         ) : (
         <div
           style={{
-            padding: isMobileMessage ? "13px 14px" : "12px 16px",
-            borderRadius: "18px",
-            lineHeight: isMobileMessage ? "1.65" : "1.6",
+            padding: isMobileMessage ? "14px 15px" : "12px 16px",
+            borderRadius: isMobileMessage ? "14px" : "18px",
+            lineHeight: mobileReadableLineHeight,
+            overflowWrap: "anywhere" as const,
+            wordBreak: "break-word" as const,
             ...(msg.role === "user"
               ? msg.is_system_group
                 ? {
@@ -1580,7 +1584,7 @@ const MessageItem = memo(function MessageItem({
                     color: "var(--ct-text2)",
                     border: "1px dashed rgba(99,102,241,0.3)",
                     borderBottomRightRadius: "4px",
-                    fontSize: isMobileMessage ? "14px" : "12px",
+                    fontSize: isMobileMessage ? "15px" : "12px",
                     opacity: 0.75,
                   }
                 : msg.intent === "system_trigger"
@@ -1589,7 +1593,7 @@ const MessageItem = memo(function MessageItem({
                     color: "var(--ct-text)",
                     border: "1px solid #3b82f644",
                     borderBottomRightRadius: "4px",
-                    fontSize: isMobileMessage ? "15.5px" : "14px",
+                    fontSize: isMobileMessage ? mobileReadableText : "14px",
                     whiteSpace: "pre-wrap" as const,
                     fontStyle: "italic" as const,
                   }
@@ -1597,7 +1601,7 @@ const MessageItem = memo(function MessageItem({
                     background: "var(--ct-user)",
                     color: "#fff",
                     borderBottomRightRadius: "4px",
-                    fontSize: isMobileMessage ? "15.5px" : "14px",
+                    fontSize: isMobileMessage ? mobileReadableText : "14px",
                     whiteSpace: "pre-wrap",
                   }
               : {
@@ -1617,7 +1621,7 @@ const MessageItem = memo(function MessageItem({
                     ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
                   opacity: assistantBubbleOpacity,
-                  fontSize: isMobileMessage ? "15.5px" : "14px",
+                  fontSize: isMobileMessage ? mobileReadableText : "14px",
                   transition: "opacity 100ms ease, background 100ms ease, border-color 100ms ease",
                   borderBottomLeftRadius: "4px",
                 }),
@@ -7940,14 +7944,15 @@ export default function ChatPage() {
         onDragOver={(e) => e.preventDefault()}
       >
         {/* Chat Header */}
-        <div
-          style={{
-            padding: screenSize === "mobile" ? "8px 10px" : "10px 14px",
+          <div
+            className={screenSize === "mobile" ? "ct-mobile-chat-header" : undefined}
+            style={{
+            padding: screenSize === "mobile" ? "6px 8px" : "10px 14px",
             borderBottom: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             display: "flex",
             alignItems: "center",
-            gap: screenSize === "mobile" ? "8px" : "10px",
+            gap: screenSize === "mobile" ? "6px" : "10px",
             flexWrap: screenSize === "mobile" ? "wrap" : "nowrap",
             flexShrink: 0,
           }}
@@ -7962,8 +7967,8 @@ export default function ChatPage() {
                 cursor: "pointer",
                 color: "var(--ct-text2)",
                 fontSize: "20px",
-                width: "44px",
-                height: "44px",
+                width: "42px",
+                height: "42px",
                 padding: "0",
               }}
             >
@@ -7993,7 +7998,7 @@ export default function ChatPage() {
             <div
               style={{
                 fontWeight: 600,
-                fontSize: screenSize === "mobile" ? "16px" : "14px",
+                fontSize: screenSize === "mobile" ? "17px" : "14px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -8001,7 +8006,7 @@ export default function ChatPage() {
             >
               {activeSession?.title || "새 대화를 시작하세요"}
             </div>
-            <div style={{ fontSize: screenSize === "mobile" ? "12px" : "11px", color: "var(--ct-text2)", marginTop: "1px" }}>
+            <div style={{ fontSize: screenSize === "mobile" ? "13px" : "11px", color: "var(--ct-text2)", marginTop: "1px" }}>
               {activeSession
                 ? `${activeSession.id.slice(0, 8)}... · ${activeSession.message_count ?? 0}개 메시지`
                 : "세션 없음"}
@@ -8015,15 +8020,15 @@ export default function ChatPage() {
               aria-expanded={showMobileControls}
               title="모바일 설정"
               style={{
-                minWidth: "48px",
-                height: "44px",
+                minWidth: "46px",
+                height: "42px",
                 padding: "0 10px",
                 borderRadius: "8px",
                 border: "1px solid var(--ct-border)",
                 background: showMobileControls ? "var(--ct-accent)" : "var(--ct-hover)",
                 color: showMobileControls ? "#fff" : "var(--ct-text)",
                 cursor: "pointer",
-                fontSize: "15px",
+                fontSize: "16px",
                 fontWeight: 700,
                 flexShrink: 0,
               }}
@@ -8303,7 +8308,7 @@ export default function ChatPage() {
             overflowY: "auto",
             overflowAnchor: "none" as never,
             scrollBehavior: "auto",
-            padding: screenSize === "mobile" ? "12px 8px" : "16px",
+            padding: screenSize === "mobile" ? "10px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
             gap: "12px",
@@ -8356,20 +8361,20 @@ export default function ChatPage() {
             <div
               style={{
                 textAlign: "center",
-                paddingTop: "60px",
+                paddingTop: screenSize === "mobile" ? "24px" : "60px",
                 color: "var(--ct-text2)",
               }}
             >
-              <div style={{ fontSize: "42px", marginBottom: "14px" }}>{isInternalAdmin ? "🧭" : "💬"}</div>
-              <div style={{ fontSize: "18px", fontWeight: 700, marginBottom: "8px" }}>
+              <div style={{ fontSize: screenSize === "mobile" ? "34px" : "42px", marginBottom: "12px" }}>{isInternalAdmin ? "🧭" : "💬"}</div>
+              <div style={{ fontSize: screenSize === "mobile" ? "20px" : "18px", fontWeight: 700, marginBottom: "8px" }}>
                 {isInternalAdmin ? "Personal Assistant" : "AI Chat"}
               </div>
-              <div style={{ fontSize: "13px", marginBottom: "20px" }}>
+              <div style={{ fontSize: screenSize === "mobile" ? "16px" : "13px", lineHeight: 1.6, marginBottom: screenSize === "mobile" ? "14px" : "20px" }}>
                 {isInternalAdmin
                   ? "오늘의 운영, 일정, 작업, 승인 대기 항목을 바로 물어보세요."
                   : "내 작업공간에서 할 일을 말하거나 아래 질문으로 시작하세요."}
               </div>
-              <div
+              {screenSize !== "mobile" && <div
                 style={{
                   display: "flex",
                   justifyContent: "center",
@@ -8403,9 +8408,9 @@ export default function ChatPage() {
                   >
                     {prompt}
                   </button>
-                ))}
-              </div>
-              <div
+                  ))}
+              </div>}
+              {screenSize !== "mobile" && <div
                 style={{
                   display: "inline-flex",
                   flexDirection: "column",
@@ -8421,7 +8426,7 @@ export default function ChatPage() {
                 <span>1. 하고 싶은 일이나 현재 막힌 점을 입력합니다.</span>
                 <span>2. 결과물은 아티팩트 패널에서 다시 확인합니다.</span>
                 <span>3. 팀원은 Team 메뉴에서 초대하고 역할을 지정합니다.</span>
-              </div>
+              </div>}
             </div>
           )}
 
@@ -8684,6 +8689,7 @@ export default function ChatPage() {
 
         {/* Input Area */}
         <div
+          className={screenSize === "mobile" ? "ct-mobile-composer" : undefined}
           style={{
             padding: screenSize === "mobile" ? "8px 8px" : "12px 14px",
             paddingBottom: screenSize === "mobile" ? "calc(10px + env(safe-area-inset-bottom, 0px))" : "12px",
@@ -9481,19 +9487,19 @@ export default function ChatPage() {
             <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
           </div>}
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
-          <div style={{ display: "flex", gap: screenSize === "mobile" ? "6px" : "8px", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", gap: screenSize === "mobile" ? "7px" : "8px", alignItems: "flex-end" }}>
             {/* Mobile "+" toggle button */}
             {screenSize === "mobile" && (
               <button
                 onClick={() => setShowMobileActions(!showMobileActions)}
                 style={{
-                  width: "52px", height: "52px", flexShrink: 0,
+                  width: "52px", height: "54px", flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: showMobileActions ? "var(--ct-accent)" : "var(--ct-hover)",
                   color: showMobileActions ? "#fff" : "var(--ct-text)",
                   border: "1px solid var(--ct-border)",
-                  borderRadius: "8px", cursor: "pointer",
-                  fontSize: "24px", fontWeight: 500,
+                  borderRadius: "12px", cursor: "pointer",
+                  fontSize: "26px", fontWeight: 700,
                   transition: "all 0.2s",
                 }}
               >
@@ -9512,11 +9518,11 @@ export default function ChatPage() {
                   }
                 }}
                 style={{
-                  width: "44px", height: "52px", flexShrink: 0,
+                  width: "44px", height: "54px", flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "none", border: "none",
                   color: "var(--ct-text2)", cursor: "pointer",
-                  fontSize: "22px", padding: 0,
+                  fontSize: "24px", padding: 0,
                 }}
                 title="줄바꿈"
               >
@@ -9570,7 +9576,7 @@ export default function ChatPage() {
                     cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
                     opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.4 : 1,
                     transition: "all 0.2s",
-                    fontSize: "18px",
+                    fontSize: "20px",
                   }}
                 >
                   {uploading ? "⏳" : streaming ? (hasInput ? "📋" : "⏹") : "➤"}

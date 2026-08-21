@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-21 13:49 KST - Mobile focus mode readability pass
+
+- Request: Implement the CEO smartphone chat UX direction immediately and clarify whether it also applies to the app.
+- App scope:
+  - AADS dashboard is currently a PWA/mobile web app with `public/manifest.json` `start_url=/chat`.
+  - The same `/chat` dashboard code path is used by mobile browser and installed PWA app.
+  - There is no separate native Android/iOS app package in this dashboard repo for this UI.
+- Changes:
+  - `src/app/chat/page.tsx`: mobile message bubbles now use the full available width, 17px body text, 1.75 line-height, stronger wrapping, and tighter first-screen header spacing.
+  - `src/app/chat/page.tsx`: mobile empty-state prompt cards and instructions are hidden so the first screen stays focused on chat plus input.
+  - `src/app/chat/page.tsx`: mobile composer buttons were enlarged and the composer received a dedicated mobile class for bottom emphasis.
+  - `src/app/chat/ChatInput.tsx`: mobile textarea now has larger padding, 18px input text, 54px minimum height, stronger border, and hides the screen-share button from the default mobile first screen.
+  - `src/app/globals.css`: mobile chat text, paragraph/list line-height, code text, links, header, and composer readability rules were added.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx` passed with pre-existing warnings only.
+  - `npm run build` passed and generated `/chat`.
+- Deployment:
+  - Included in the dashboard deployment candidate from this commit. Production health and release SHA are verified after deploy.
+
 ## 2026-08-21 13:36 KST - Mobile composer context collapse
 
 - Request: Immediately implement the remaining mobile chat focus-mode fix.

@@ -398,12 +398,14 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
       <div style={{ display: "flex", flex: 1, alignItems: "flex-end", gap: "4px" }}>
         {/* 화면 공유 버튼 + 인디케이터 (onScreenShare 있을 때만) */}
         {onScreenShare && (
-          <ScreenShare
-            ref={screenShareRef}
-            onCapture={onScreenShare}
-            onHiddenCapture={onHiddenScreenCapture}
-            hiddenMode={screenHiddenMode ?? true}
-          />
+          <div style={{ display: screenSize === "mobile" ? "none" : "contents" }}>
+            <ScreenShare
+              ref={screenShareRef}
+              onCapture={onScreenShare}
+              onHiddenCapture={onHiddenScreenCapture}
+              hiddenMode={screenHiddenMode ?? true}
+            />
+          </div>
         )}
 
         {/* 텍스트 입력 영역 (슬래시/멘션 메뉴 absolute 기준점) */}
@@ -487,19 +489,19 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
               style={{
                 width: "100%",
                 padding: allowInternalMentions
-                  ? (screenSize === "mobile" ? "12px 108px 12px 14px" : "10px 46px 10px 14px")
-                  : (screenSize === "mobile" ? "12px 64px 12px 14px" : "10px 14px"),
+                  ? (screenSize === "mobile" ? "13px 108px 13px 15px" : "10px 46px 10px 14px")
+                  : (screenSize === "mobile" ? "13px 64px 13px 15px" : "10px 14px"),
                 fontSize: screenSize === "mobile" ? "18px" : "14px",
                 resize: "none",
                 overflow: "hidden",
                 background: "var(--ct-input)",
                 color: "var(--ct-text)",
-                border: "1px solid var(--ct-border)",
-                borderRadius: "12px",
+                border: screenSize === "mobile" ? "1.5px solid var(--ct-border)" : "1px solid var(--ct-border)",
+                borderRadius: screenSize === "mobile" ? "14px" : "12px",
                 outline: "none",
                 fontFamily: "inherit",
-                lineHeight: screenSize === "mobile" ? "1.55" : "1.5",
-                minHeight: screenSize === "mobile" ? "52px" : "44px",
+                lineHeight: screenSize === "mobile" ? "1.6" : "1.5",
+                minHeight: screenSize === "mobile" ? "54px" : "44px",
                 maxHeight: screenSize === "mobile" ? "220px" : "160px",
               }}
               inputMode="text"
