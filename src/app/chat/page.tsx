@@ -1350,6 +1350,7 @@ interface MessageItemProps {
   onViewArtifact?: (artifactId: string) => void;
   onOpenLightbox?: (srcs: string[], idx: number) => void;
   isLastAssistantMsg?: boolean;
+  screenSize: ScreenSize;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -1358,7 +1359,9 @@ const MessageItem = memo(function MessageItem({
   onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
+  screenSize,
 }: MessageItemProps) {
+  const isMobileMessage = screenSize === "mobile";
   const LIVE_STREAM_RENDER_LIMIT = 3000;
   const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 3000;
   // reply_to_id가 있으면 원본 메시지 찾기
@@ -1489,7 +1492,7 @@ const MessageItem = memo(function MessageItem({
         </div>
       )}
 
-      <div style={{ maxWidth: "min(98%, calc(100vw - 20px))" }}>
+      <div style={{ maxWidth: isMobileMessage ? "min(100%, calc(100vw - 12px))" : "min(98%, calc(100vw - 20px))" }}>
         {/* Reply-to 인용 표시 */}
         {replyTarget && (
           <div style={{
@@ -1567,9 +1570,9 @@ const MessageItem = memo(function MessageItem({
         ) : (
         <div
           style={{
-            padding: "12px 16px",
+            padding: isMobileMessage ? "13px 14px" : "12px 16px",
             borderRadius: "18px",
-            lineHeight: "1.6",
+            lineHeight: isMobileMessage ? "1.65" : "1.6",
             ...(msg.role === "user"
               ? msg.is_system_group
                 ? {
@@ -1577,7 +1580,7 @@ const MessageItem = memo(function MessageItem({
                     color: "var(--ct-text2)",
                     border: "1px dashed rgba(99,102,241,0.3)",
                     borderBottomRightRadius: "4px",
-                    fontSize: "12px",
+                    fontSize: isMobileMessage ? "14px" : "12px",
                     opacity: 0.75,
                   }
                 : msg.intent === "system_trigger"
@@ -1586,7 +1589,7 @@ const MessageItem = memo(function MessageItem({
                     color: "var(--ct-text)",
                     border: "1px solid #3b82f644",
                     borderBottomRightRadius: "4px",
-                    fontSize: "14px",
+                    fontSize: isMobileMessage ? "15.5px" : "14px",
                     whiteSpace: "pre-wrap" as const,
                     fontStyle: "italic" as const,
                   }
@@ -1594,7 +1597,7 @@ const MessageItem = memo(function MessageItem({
                     background: "var(--ct-user)",
                     color: "#fff",
                     borderBottomRightRadius: "4px",
-                    fontSize: "14px",
+                    fontSize: isMobileMessage ? "15.5px" : "14px",
                     whiteSpace: "pre-wrap",
                   }
               : {
@@ -1614,7 +1617,7 @@ const MessageItem = memo(function MessageItem({
                     ? `1px solid ${msg.intent === "pipeline_runner" ? "#f59e0b44" : msg.intent === "agent_result" ? "#8b5cf644" : "#ef444444"}`
                     : "1px solid var(--ct-border)",
                   opacity: assistantBubbleOpacity,
-                  fontSize: "14px",
+                  fontSize: isMobileMessage ? "15.5px" : "14px",
                   transition: "opacity 100ms ease, background 100ms ease, border-color 100ms ease",
                   borderBottomLeftRadius: "4px",
                 }),
@@ -2236,6 +2239,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.content === next.msg.content &&
   prev.msg.role === next.msg.role &&
   prev.msg.intent === next.msg.intent &&
+  prev.screenSize === next.screenSize &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.isLastAssistantMsg === next.isLastAssistantMsg &&
@@ -2347,7 +2351,8 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
-  const [showMobileActions, setShowMobileActions] = useState(true);
+  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [showMobileControls, setShowMobileControls] = useState(false);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
   const [imageGenLoading, setImageGenLoading] = useState(false);
   const [showDesignOps, setShowDesignOps] = useState(false);
@@ -3450,6 +3455,12 @@ export default function ChatPage() {
   useEffect(() => { inputRef.current = input; }, [input]);
   useEffect(() => { toolStatusRef.current = toolStatus; }, [toolStatus]);
   useEffect(() => { screenSizeRef.current = screenSize; }, [screenSize]);
+  useEffect(() => {
+    if (screenSize !== "mobile") {
+      setShowMobileActions(false);
+      setShowMobileControls(false);
+    }
+  }, [screenSize]);
   useEffect(() => { uploadingRef.current = uploading; }, [uploading]);
   useEffect(() => { queueCountRef.current = queueCount; }, [queueCount]);
 
@@ -7915,12 +7926,13 @@ export default function ChatPage() {
         {/* Chat Header */}
         <div
           style={{
-            padding: "10px 14px",
+            padding: screenSize === "mobile" ? "8px 10px" : "10px 14px",
             borderBottom: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             display: "flex",
             alignItems: "center",
-            gap: "10px",
+            gap: screenSize === "mobile" ? "8px" : "10px",
+            flexWrap: screenSize === "mobile" ? "wrap" : "nowrap",
             flexShrink: 0,
           }}
         >
@@ -7933,8 +7945,10 @@ export default function ChatPage() {
                 border: "none",
                 cursor: "pointer",
                 color: "var(--ct-text2)",
-                fontSize: "18px",
-                padding: "4px",
+                fontSize: "20px",
+                width: "44px",
+                height: "44px",
+                padding: "0",
               }}
             >
               ☰
@@ -7963,7 +7977,7 @@ export default function ChatPage() {
             <div
               style={{
                 fontWeight: 600,
-                fontSize: "14px",
+                fontSize: screenSize === "mobile" ? "16px" : "14px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -7971,13 +7985,48 @@ export default function ChatPage() {
             >
               {activeSession?.title || "새 대화를 시작하세요"}
             </div>
-            <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "1px" }}>
+            <div style={{ fontSize: screenSize === "mobile" ? "12px" : "11px", color: "var(--ct-text2)", marginTop: "1px" }}>
               {activeSession
                 ? `${activeSession.id.slice(0, 8)}... · ${activeSession.message_count ?? 0}개 메시지`
                 : "세션 없음"}
             </div>
           </div>
 
+          {screenSize === "mobile" && (
+            <button
+              type="button"
+              onClick={() => setShowMobileControls((prev) => !prev)}
+              aria-expanded={showMobileControls}
+              title="모바일 설정"
+              style={{
+                minWidth: "48px",
+                height: "44px",
+                padding: "0 10px",
+                borderRadius: "8px",
+                border: "1px solid var(--ct-border)",
+                background: showMobileControls ? "var(--ct-accent)" : "var(--ct-hover)",
+                color: showMobileControls ? "#fff" : "var(--ct-text)",
+                cursor: "pointer",
+                fontSize: "15px",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              설정
+            </button>
+          )}
+
+          <div
+            style={screenSize === "mobile"
+              ? {
+                  display: showMobileControls ? "grid" : "none",
+                  gridTemplateColumns: "1fr",
+                  gap: "8px",
+                  width: "100%",
+                  paddingTop: "8px",
+                }
+              : { display: "contents" }}
+          >
           {/* Role selector */}
           <select
             value={roleKey}
@@ -8011,6 +8060,7 @@ export default function ChatPage() {
               maxWidth: "160px",
               outline: "none",
               opacity: activeSession ? 1 : 0.6,
+              ...(screenSize === "mobile" ? { width: "100%", maxWidth: "none", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
             {roleOptions.map((role) => (
@@ -8046,6 +8096,7 @@ export default function ChatPage() {
               cursor: "pointer",
               maxWidth: "200px",
               outline: "none",
+              ...(screenSize === "mobile" ? { width: "100%", maxWidth: "none", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
             {selectableModels.map((m) => (
@@ -8073,6 +8124,7 @@ export default function ChatPage() {
               cursor: "pointer",
               maxWidth: "128px",
               outline: "none",
+              ...(screenSize === "mobile" ? { width: "100%", maxWidth: "none", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
             <option value="quality">완성 우선</option>
@@ -8106,6 +8158,7 @@ export default function ChatPage() {
               color: pushStatus === "granted" ? "#fff" : "var(--ct-text2)",
               flexShrink: 0,
               opacity: pushStatus === "unsupported" || pushStatus === "denied" ? 0.45 : 1,
+              ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", borderRadius: "8px", fontSize: "18px" } : {}),
             }}
           >
             🔔
@@ -8136,6 +8189,7 @@ export default function ChatPage() {
               color: voiceAlertsEnabled ? "#fff" : "var(--ct-text2)",
               flexShrink: 0,
               opacity: isVoiceAlertSupported() ? 1 : 0.45,
+              ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", borderRadius: "8px", fontSize: "18px" } : {}),
             }}
           >
             🔊
@@ -8163,6 +8217,7 @@ export default function ChatPage() {
                 color: "var(--ct-text2)",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
+                ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", fontSize: "16px" } : {}),
               }}
             >
               ⬇ 내보내기
@@ -8190,6 +8245,7 @@ export default function ChatPage() {
               color: artifactTab === "agenda" ? "#fff" : "var(--ct-text2)",
               whiteSpace: "nowrap",
               flexShrink: 0,
+              ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
             📋 아이디어 메모
@@ -8213,13 +8269,15 @@ export default function ChatPage() {
               color: "var(--ct-text2)",
               whiteSpace: "nowrap",
               flexShrink: 0,
+              ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
             📄{artifactMode === "hidden" && screenSize === "desktop" ? "▶" : "◀"}
           </button>
+          </div>
         </div>
 
-        <UsageBar />
+        {screenSize !== "mobile" && <UsageBar />}
         {/* Messages */}
         <div
           ref={messagesContainerRef}
@@ -8256,7 +8314,7 @@ export default function ChatPage() {
             </button>
           )}
           {/* P0-4: 세션 요약 카드 — 세션에 메시지가 있을 때 최초 진입 시 표시 */}
-          {activeSession?.id && messages.length > 0 && (activeSession.message_count ?? messages.length) < 200 && (
+          {screenSize !== "mobile" && activeSession?.id && messages.length > 0 && (activeSession.message_count ?? messages.length) < 200 && (
             <SessionSummaryCard sessionId={activeSession.id} />
           )}
 
@@ -8496,6 +8554,7 @@ export default function ChatPage() {
                     onViewArtifact={handleViewArtifactStable}
                     onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
+                    screenSize={screenSize}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -8528,6 +8587,7 @@ export default function ChatPage() {
                       onViewArtifact={handleViewArtifactStable}
                       onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
+                      screenSize={screenSize}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
@@ -8610,16 +8670,16 @@ export default function ChatPage() {
         <div
           style={{
             padding: screenSize === "mobile" ? "8px 8px" : "12px 14px",
-            paddingBottom: screenSize === "mobile" ? "calc(56px + env(safe-area-inset-bottom, 0px))" : "12px",
+            paddingBottom: screenSize === "mobile" ? "calc(10px + env(safe-area-inset-bottom, 0px))" : "12px",
             borderTop: "1px solid var(--ct-border)",
             background: "var(--ct-sb)",
             flexShrink: 0,
           }}
         >
           {/* 메모리 & 맥락 뷰어 */}
-          <MemoryContextBar sessionId={activeSession?.id ?? null} />
+          {screenSize !== "mobile" && <MemoryContextBar sessionId={activeSession?.id ?? null} />}
 
-          {activeSession?.id && (todoItems.length > 0 || todoLoading || todoError) && (
+          {screenSize !== "mobile" && activeSession?.id && (todoItems.length > 0 || todoLoading || todoError) && (
             <div
               style={{
                 marginBottom: "8px",
@@ -9368,9 +9428,9 @@ export default function ChatPage() {
               </button>
             </div>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px" }}>
+          {screenSize !== "mobile" && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px" }}>
             <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
-          </div>
+          </div>}
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
           <div style={{ display: "flex", gap: screenSize === "mobile" ? "6px" : "8px", alignItems: "flex-end" }}>
             {/* Mobile "+" toggle button */}
@@ -9378,13 +9438,13 @@ export default function ChatPage() {
               <button
                 onClick={() => setShowMobileActions(!showMobileActions)}
                 style={{
-                  width: "44px", height: "44px", flexShrink: 0,
+                  width: "52px", height: "52px", flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: showMobileActions ? "var(--ct-accent)" : "var(--ct-hover)",
                   color: showMobileActions ? "#fff" : "var(--ct-text)",
                   border: "1px solid var(--ct-border)",
-                  borderRadius: "50%", cursor: "pointer",
-                  fontSize: "20px", fontWeight: 300,
+                  borderRadius: "8px", cursor: "pointer",
+                  fontSize: "24px", fontWeight: 500,
                   transition: "all 0.2s",
                 }}
               >
@@ -9403,11 +9463,11 @@ export default function ChatPage() {
                   }
                 }}
                 style={{
-                  width: "36px", height: "44px", flexShrink: 0,
+                  width: "44px", height: "52px", flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: "none", border: "none",
                   color: "var(--ct-text2)", cursor: "pointer",
-                  fontSize: "18px", padding: 0,
+                  fontSize: "22px", padding: 0,
                 }}
                 title="줄바꿈"
               >
@@ -9437,7 +9497,7 @@ export default function ChatPage() {
                 }}
                 placeholder={
                   screenSize === "mobile"
-                    ? "메시지 입력... (↵으로 줄바꿈)"
+                    ? "메시지 입력"
                     : isInternalAdmin
                       ? "개인비서에게 지시하세요... (/ 명령어, @ 프로젝트)"
                       : "내 작업공간에서 진행할 일을 입력하세요... (/ 명령어, @ 멘션)"
@@ -9454,14 +9514,14 @@ export default function ChatPage() {
                   disabled={uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0)}
                   style={{
                     position: "absolute", right: "6px", bottom: "6px",
-                    width: "36px", height: "36px",
+                    width: "44px", height: "44px",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     background: uploading ? "#9ca3af" : streaming ? (hasInput || pendingPreviewFiles.length > 0 ? "var(--ct-accent)" : "#ef4444") : "var(--ct-accent)",
                     color: "#fff", border: "none", borderRadius: "50%",
                     cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
                     opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.4 : 1,
                     transition: "all 0.2s",
-                    fontSize: "16px",
+                    fontSize: "18px",
                   }}
                 >
                   {uploading ? "⏳" : streaming ? (hasInput ? "📋" : "⏹") : "➤"}
