@@ -117,7 +117,7 @@ body {
     opacity: 0.88;
   }
   .ct-messages-scroll {
-    font-size: 17px;
+    font-size: var(--ct-mobile-font-size, 19px);
     line-height: 1.75;
   }
   .ct-messages-scroll p,
@@ -126,7 +126,7 @@ body {
   }
   .ct-messages-scroll pre,
   .ct-messages-scroll code {
-    font-size: 14.5px;
+    font-size: var(--ct-mobile-code-font-size, 17px);
     line-height: 1.6;
   }
   .ct-messages-scroll a {

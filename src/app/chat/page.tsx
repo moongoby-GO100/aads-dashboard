@@ -1351,6 +1351,7 @@ interface MessageItemProps {
   onOpenLightbox?: (srcs: string[], idx: number) => void;
   isLastAssistantMsg?: boolean;
   screenSize: ScreenSize;
+  mobileFontPx: number;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -1359,11 +1360,11 @@ const MessageItem = memo(function MessageItem({
   onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
-  screenSize,
+  screenSize, mobileFontPx,
 }: MessageItemProps) {
   const isMobileMessage = screenSize === "mobile";
-  const mobileReadableText = isMobileMessage ? "17px" : "14px";
-  const mobileReadableLineHeight = isMobileMessage ? "1.75" : "1.6";
+  const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
+  const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
   const LIVE_STREAM_RENDER_LIMIT = 3000;
   const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 3000;
   // reply_to_id가 있으면 원본 메시지 찾기
@@ -2244,6 +2245,7 @@ const MessageItem = memo(function MessageItem({
   prev.msg.role === next.msg.role &&
   prev.msg.intent === next.msg.intent &&
   prev.screenSize === next.screenSize &&
+  prev.mobileFontPx === next.mobileFontPx &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
   prev.streaming === next.streaming &&
   prev.isLastAssistantMsg === next.isLastAssistantMsg &&
@@ -2323,6 +2325,7 @@ export default function ChatPage() {
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_RUNTIME_MODEL);
   const [responseMode, setResponseMode] = useState<"quality" | "fast">("quality");
+  const [mobileChatFontPx, setMobileChatFontPx] = useState(19);
   const [roleKey, setRoleKey] = useState("CEO");
   const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
   const roleLabels = useMemo(() => new Map(roleOptions.map((role) => [role.id, role.label])), [roleOptions]);
@@ -2334,6 +2337,19 @@ export default function ChatPage() {
     if (savedMode === "fast" || savedMode === "quality") {
       setResponseMode(savedMode);
     }
+  }, []);
+  useEffect(() => {
+    const savedFont = Number(localStorage.getItem("aads-chat-mobile-font-px"));
+    if (Number.isFinite(savedFont) && savedFont >= 17 && savedFont <= 24) {
+      setMobileChatFontPx(savedFont);
+    }
+  }, []);
+  const changeMobileChatFont = useCallback((delta: number) => {
+    setMobileChatFontPx((current) => {
+      const next = Math.min(24, Math.max(17, current + delta));
+      localStorage.setItem("aads-chat-mobile-font-px", String(next));
+      return next;
+    });
   }, []);
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
@@ -8014,6 +8030,55 @@ export default function ChatPage() {
           </div>
 
           {screenSize === "mobile" && (
+            <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => changeMobileChatFont(-1)}
+                disabled={mobileChatFontPx <= 17}
+                aria-label="채팅 글씨 줄이기"
+                title="채팅 글씨 줄이기"
+                style={{
+                  minWidth: "42px",
+                  height: "42px",
+                  padding: "0 8px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--ct-border)",
+                  background: "var(--ct-hover)",
+                  color: "var(--ct-text)",
+                  cursor: mobileChatFontPx <= 17 ? "not-allowed" : "pointer",
+                  opacity: mobileChatFontPx <= 17 ? 0.45 : 1,
+                  fontSize: "16px",
+                  fontWeight: 800,
+                }}
+              >
+                A-
+              </button>
+              <button
+                type="button"
+                onClick={() => changeMobileChatFont(1)}
+                disabled={mobileChatFontPx >= 24}
+                aria-label="채팅 글씨 키우기"
+                title="채팅 글씨 키우기"
+                style={{
+                  minWidth: "42px",
+                  height: "42px",
+                  padding: "0 8px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--ct-border)",
+                  background: "var(--ct-hover)",
+                  color: "var(--ct-text)",
+                  cursor: mobileChatFontPx >= 24 ? "not-allowed" : "pointer",
+                  opacity: mobileChatFontPx >= 24 ? 0.45 : 1,
+                  fontSize: "18px",
+                  fontWeight: 900,
+                }}
+              >
+                A+
+              </button>
+            </div>
+          )}
+
+          {screenSize === "mobile" && (
             <button
               type="button"
               onClick={() => setShowMobileControls((prev) => !prev)}
@@ -8304,15 +8369,18 @@ export default function ChatPage() {
           ref={messagesContainerRef}
           className="ct-messages-scroll"
           style={{
+            "--ct-mobile-font-size": `${mobileChatFontPx}px`,
+            "--ct-mobile-code-font-size": `${Math.max(15, mobileChatFontPx - 2)}px`,
             flex: 1,
             overflowY: "auto",
             overflowAnchor: "none" as never,
             scrollBehavior: "auto",
+            fontSize: screenSize === "mobile" ? `${mobileChatFontPx}px` : undefined,
             padding: screenSize === "mobile" ? "10px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
             gap: "12px",
-          }}
+          } as React.CSSProperties}
         >
           {hasMoreMessages && (
             <button
@@ -8576,6 +8644,7 @@ export default function ChatPage() {
                     onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
                     screenSize={screenSize}
+                    mobileFontPx={mobileChatFontPx}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -8609,6 +8678,7 @@ export default function ChatPage() {
                       onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
                       screenSize={screenSize}
+                      mobileFontPx={mobileChatFontPx}
                     />
                   ))}
                   {hiddenMsgs && hiddenMsgs.length > 0 && isExpanded && (
@@ -8632,7 +8702,7 @@ export default function ChatPage() {
                   padding: "12px 16px",
                   borderRadius: "18px",
                   borderBottomLeftRadius: "4px",
-                  fontSize: "14px",
+                  fontSize: screenSize === "mobile" ? `${mobileChatFontPx}px` : "14px",
                   lineHeight: "1.6",
                   maxWidth: "80%",
                   background: "var(--ct-ai)",
@@ -9561,6 +9631,7 @@ export default function ChatPage() {
                 onHiddenScreenCapture={handleHiddenScreenCapture}
                 screenHiddenMode={screenHiddenMode}
                 allowInternalMentions={isInternalAdmin}
+                mobileFontPx={mobileChatFontPx + 1}
               />
               {/* Mobile: send button inside textarea area */}
               {screenSize === "mobile" && (

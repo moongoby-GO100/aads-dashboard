@@ -42,10 +42,11 @@ interface ChatInputProps {
   onHiddenScreenCapture?: (file: File) => void;
   screenHiddenMode?: boolean;
   allowInternalMentions?: boolean;
+  mobileFontPx?: number;
 }
 
 const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode, allowInternalMentions = false }, ref) {
+  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode, allowInternalMentions = false, mobileFontPx = 20 }, ref) {
     const [localInput, setLocalInput] = useState("");
     const [voiceState, setVoiceState] = useState<"idle" | "recording" | "transcribing">("idle");
     const taRef = useRef<HTMLTextAreaElement>(null);
@@ -491,7 +492,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 padding: allowInternalMentions
                   ? (screenSize === "mobile" ? "13px 108px 13px 15px" : "10px 46px 10px 14px")
                   : (screenSize === "mobile" ? "13px 64px 13px 15px" : "10px 14px"),
-                fontSize: screenSize === "mobile" ? "18px" : "14px",
+                fontSize: screenSize === "mobile" ? `${mobileFontPx}px` : "14px",
                 resize: "none",
                 overflow: "hidden",
                 background: "var(--ct-input)",

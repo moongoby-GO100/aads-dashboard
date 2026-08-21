@@ -1,5 +1,20 @@
 # AADS Dashboard Handover
 
+## 2026-08-21 16:09 KST - Mobile chat font size control
+
+- Request: Add a way to increase/decrease chat text size on mobile because the fixed mobile fit made long-phone screens hard to read.
+- Changes:
+  - `src/app/chat/page.tsx`: added persisted mobile chat font size state using `localStorage` key `aads-chat-mobile-font-px`.
+  - `src/app/chat/page.tsx`: added mobile-only `A-` and `A+` controls in the compact header, clamped from 17px to 24px.
+  - `src/app/chat/page.tsx`: mobile message text, active stream fallback text, and message scroll container now follow the selected font size.
+  - `src/app/chat/ChatInput.tsx`: mobile textarea font size follows the selected chat font size plus 1px.
+  - `src/app/globals.css`: mobile chat and code font sizes now use CSS variables with readable fallbacks.
+- Verification:
+  - `npm run build` passed and generated `/chat`.
+  - `npm run lint` still fails on pre-existing repository-wide ESLint debt unrelated to this change.
+- Deployment:
+  - Commit, push, and production dashboard deployment are handled in the release step for this entry.
+
 ## 2026-08-21 13:49 KST - Mobile focus mode readability pass
 
 - Request: Implement the CEO smartphone chat UX direction immediately and clarify whether it also applies to the app.
