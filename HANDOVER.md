@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-21 13:27 KST - Mobile chat focus mode and large-text input
+
+- Request: Make the AADS chat usable from a smartphone by showing only the essential chat and input controls on the first screen, hiding secondary menus behind buttons, and improving readability for older eyes.
+- Changes:
+  - `src/app/chat/page.tsx`: mobile first row is reduced to sidebar, session title, and a settings button. Role/model/response mode/notification/voice/export/memo/artifact controls are hidden in the settings panel.
+  - `src/app/chat/page.tsx`: mobile first screen hides usage bar, session summary, memory context, TODO details, and Ops Dock from the default composer area.
+  - `src/app/chat/page.tsx`: mobile message bubbles use larger readable text and wider available width.
+  - `src/app/chat/ChatInput.tsx`: mobile textarea increased to 18px, 52px minimum height, 220px max height, larger line-height, and safer right padding for voice/send controls.
+  - `src/app/globals.css`: mobile action grid changed to two columns with larger button text and touch targets.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx` passed with pre-existing warnings only.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npm run build` passed and generated `/chat`.
+- Commits:
+  - `0709540` `fix: improve mobile chat header controls`
+  - `958203b` `fix: tune mobile chat input layout`
+- Deployment:
+  - Not deployed in this entry. Push/deploy require the explicit release step.
+
 ## 2026-08-21 12:45 KST - Chat completion/interruption app push and voice alerts
 
 - Request: Verify why chat completion/interruption app push alerts are not reliably noticeable, improve the behavior, and add voice guidance.
