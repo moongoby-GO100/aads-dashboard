@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-08-21 13:36 KST - Mobile composer context collapse
+
+- Request: Immediately implement the remaining mobile chat focus-mode fix.
+- Cause:
+  - The previous mobile focus-mode change hid major panels, but composer-level context banners still rendered at full height on mobile.
+  - Yellow warning, tool-turn notice, upload status, branch banner, reply preview, and attachment thumbnails could still push the message list and input away from the first viewport.
+- Changes:
+  - `src/app/chat/page.tsx`: added `showMobileComposerContext` state.
+  - `src/app/chat/page.tsx`: mobile composer context now appears as a single compact summary row by default.
+  - `src/app/chat/page.tsx`: the original full warning/tool/upload/branch/reply/attachment details remain available by tapping the compact row.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with pre-existing warnings only.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npm run build` passed and generated `/chat`.
+- Deployment:
+  - Not deployed in this entry. Push/deploy require an explicit release step.
+
 ## 2026-08-21 13:27 KST - Mobile chat focus mode and large-text input
 
 - Request: Make the AADS chat usable from a smartphone by showing only the essential chat and input controls on the first screen, hiding secondary menus behind buttons, and improving readability for older eyes.

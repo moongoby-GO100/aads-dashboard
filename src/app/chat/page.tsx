@@ -2353,6 +2353,7 @@ export default function ChatPage() {
   const [showImageGen, setShowImageGen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
+  const [showMobileComposerContext, setShowMobileComposerContext] = useState(false);
   const [imageGenPrompt, setImageGenPrompt] = useState("");
   const [imageGenLoading, setImageGenLoading] = useState(false);
   const [showDesignOps, setShowDesignOps] = useState(false);
@@ -7096,6 +7097,21 @@ export default function ChatPage() {
       })
       .slice(0, 8)
   ), [showAllTodos, todoItems]);
+  const mobileComposerContextLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (yellowWarning && streaming) labels.push("경고");
+    if (toolTurnInfo && streaming) labels.push("도구");
+    if (uploading) labels.push("업로드");
+    if (branchPoint) labels.push("분기");
+    if (replyToMessage) labels.push("답글");
+    if (pendingPreviewFiles.length > 0) labels.push(`첨부 ${pendingPreviewFiles.length}`);
+    return labels;
+  }, [branchPoint, pendingPreviewFiles.length, replyToMessage, streaming, toolTurnInfo, uploading, yellowWarning]);
+  const hasMobileComposerContext = screenSize === "mobile" && mobileComposerContextLabels.length > 0;
+
+  useEffect(() => {
+    if (!hasMobileComposerContext) setShowMobileComposerContext(false);
+  }, [hasMobileComposerContext]);
 
   type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[] };
   const displayData = useMemo(() => {
@@ -9030,7 +9046,40 @@ export default function ChatPage() {
           )}
 
           {/* AADS-190: Yellow 경고 바 */}
-          {yellowWarning && streaming && (
+          {hasMobileComposerContext && (
+            <button
+              type="button"
+              onClick={() => setShowMobileComposerContext((prev) => !prev)}
+              style={{
+                width: "100%",
+                minHeight: "38px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+                marginBottom: "6px",
+                padding: "7px 10px",
+                borderRadius: "10px",
+                border: "1px solid var(--ct-border)",
+                background: "var(--ct-hover)",
+                color: "var(--ct-text)",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 700,
+                textAlign: "left",
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {mobileComposerContextLabels.join(" · ")}
+              </span>
+              <span style={{ flexShrink: 0, color: "var(--ct-text2)", fontSize: "12px" }}>
+                {showMobileComposerContext ? "접기" : "보기"}
+              </span>
+            </button>
+          )}
+
+          {/* AADS-190: Yellow 경고 바 */}
+          {yellowWarning && streaming && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "8px 12px", marginBottom: "8px", borderRadius: "8px",
@@ -9060,7 +9109,7 @@ export default function ChatPage() {
           )}
 
           {/* AADS-190: 도구 턴 연장 알림 */}
-          {toolTurnInfo && streaming && (
+          {toolTurnInfo && streaming && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               padding: "6px 12px", marginBottom: "8px", borderRadius: "8px",
               background: "#6366f120", border: "1px solid #6366f160",
@@ -9071,7 +9120,7 @@ export default function ChatPage() {
           )}
 
           {/* 업로드 진행 표시 */}
-          {uploading && (
+          {uploading && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               display: "flex", alignItems: "center", gap: "6px",
               marginBottom: "6px", padding: "4px 10px",
@@ -9083,7 +9132,7 @@ export default function ChatPage() {
           )}
 
           {/* P2-2: 분기 모드 배너 */}
-          {branchPoint && (
+          {branchPoint && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               display: "flex", alignItems: "center", gap: "8px",
               marginBottom: "6px", padding: "6px 12px",
@@ -9105,7 +9154,7 @@ export default function ChatPage() {
           )}
 
           {/* Reply-to 인용 미리보기 바 */}
-          {replyToMessage && (
+          {replyToMessage && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               display: "flex", alignItems: "center", gap: "8px",
               marginBottom: "6px", padding: "6px 12px",
@@ -9128,7 +9177,7 @@ export default function ChatPage() {
 
 
           {/* 첨부된 파일 목록 (이미지 썸네일 + 텍스트 파일 배지) */}
-          {pendingPreviewFiles.length > 0 && (
+          {pendingPreviewFiles.length > 0 && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
               display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "6px",
             }}>
