@@ -76,7 +76,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
           taRef.current.style.height = "auto";
           setTimeout(() => {
             if (taRef.current) {
-              const maxH = window.innerWidth < 768 ? 200 : 160;
+              const maxH = window.innerWidth < 768 ? 220 : 160;
               taRef.current.style.height = Math.min(taRef.current.scrollHeight, maxH) + "px";
             }
           }, 0);
@@ -168,7 +168,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
       if (taRef.current) {
         taRef.current.value = next;
         taRef.current.style.height = "auto";
-        const maxH = window.innerWidth < 768 ? 200 : 160;
+        const maxH = window.innerWidth < 768 ? 220 : 160;
         taRef.current.style.height = Math.min(taRef.current.scrollHeight, maxH) + "px";
         taRef.current.focus();
       }
@@ -235,7 +235,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
       e.target.style.height = "auto";
-      const maxH = window.innerWidth < 768 ? 200 : 160;
+      const maxH = window.innerWidth < 768 ? 220 : 160;
       e.target.style.height = Math.min(e.target.scrollHeight, maxH) + "px";
       setLocalInput(val);
       updateHasInput(val);
@@ -487,9 +487,9 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
               style={{
                 width: "100%",
                 padding: allowInternalMentions
-                  ? (screenSize === "mobile" ? "10px 86px 10px 14px" : "10px 46px 10px 14px")
-                  : (screenSize === "mobile" ? "10px 48px 10px 14px" : "10px 14px"),
-                fontSize: screenSize === "mobile" ? "16px" : "14px",
+                  ? (screenSize === "mobile" ? "12px 108px 12px 14px" : "10px 46px 10px 14px")
+                  : (screenSize === "mobile" ? "12px 64px 12px 14px" : "10px 14px"),
+                fontSize: screenSize === "mobile" ? "18px" : "14px",
                 resize: "none",
                 overflow: "hidden",
                 background: "var(--ct-input)",
@@ -498,9 +498,9 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 borderRadius: "12px",
                 outline: "none",
                 fontFamily: "inherit",
-                lineHeight: "1.5",
-                minHeight: screenSize === "mobile" ? "44px" : "44px",
-                maxHeight: screenSize === "mobile" ? "140px" : "160px",
+                lineHeight: screenSize === "mobile" ? "1.55" : "1.5",
+                minHeight: screenSize === "mobile" ? "52px" : "44px",
+                maxHeight: screenSize === "mobile" ? "220px" : "160px",
               }}
               inputMode="text"
               enterKeyHint="send"
@@ -523,16 +523,16 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 title={voiceState === "recording" ? "녹음 중지 후 텍스트 변환" : voiceState === "transcribing" ? "음성 텍스트 변환 중" : "음성으로 입력"}
                 style={{
                   position: "absolute",
-                  right: screenSize === "mobile" ? "46px" : "8px",
-                  bottom: "6px",
-                  width: "32px",
-                  height: "32px",
+                  right: screenSize === "mobile" ? "56px" : "8px",
+                  bottom: screenSize === "mobile" ? "7px" : "6px",
+                  width: screenSize === "mobile" ? "40px" : "32px",
+                  height: screenSize === "mobile" ? "40px" : "32px",
                   borderRadius: "50%",
                   border: "1px solid var(--ct-border)",
                   background: voiceState === "recording" ? "#ef4444" : "var(--ct-hover)",
                   color: voiceState === "recording" ? "#fff" : "var(--ct-text2)",
                   cursor: voiceState === "transcribing" ? "wait" : "pointer",
-                  fontSize: "14px",
+                  fontSize: screenSize === "mobile" ? "16px" : "14px",
                   opacity: voiceState === "transcribing" ? 0.7 : 1,
                 }}
               >
