@@ -8,6 +8,8 @@ export type PushNotificationStatus =
   | "denied"
   | "error";
 
+export type ChatNotificationKind = "completed" | "interrupted";
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   const token = localStorage.getItem("aads_token");
@@ -125,17 +127,46 @@ export function showLocalCompletionNotification(
   body = "응답이 완료되었습니다.",
   targetUrl = currentChatTargetUrl(),
 ): void {
+  showLocalChatNotification({ kind: "completed", body, targetUrl, requireHidden: true });
+}
+
+export function showLocalChatNotification(options: {
+  kind: ChatNotificationKind;
+  body?: string;
+  targetUrl?: string;
+  requireHidden?: boolean;
+}): void {
   if (typeof window === "undefined") return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  if (!document.hidden) return;
+  if (options.requireHidden && !document.hidden) return;
+  const body = options.body || (
+    options.kind === "interrupted"
+      ? "응답이 중단되었습니다. 이어서 생성할 수 있습니다."
+      : "응답이 완료되었습니다."
+  );
+  const targetUrl = options.targetUrl || currentChatTargetUrl();
+  const tag = options.kind === "interrupted" ? "ohvis-chat-interrupted" : "ohvis-chat-complete";
+  const notificationOptions: NotificationOptions = {
+    body,
+    tag,
+    icon: "/icon-192x192.png",
+    badge: "/icon-192x192.png",
+    data: { url: targetUrl },
+  };
   try {
-    const notification = new Notification("오비스", {
-      body,
-      tag: "ohvis-chat-complete",
-      icon: "/icon-192x192.png",
-      badge: "/icon-192x192.png",
-      data: { url: targetUrl },
-    });
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.ready
+        .then((registration) => registration.showNotification("오비스", notificationOptions))
+        .catch(() => {
+          const fallback = new Notification("오비스", notificationOptions);
+          fallback.onclick = () => {
+            fallback.close();
+            navigateToNotificationTarget(targetUrl);
+          };
+        });
+      return;
+    }
+    const notification = new Notification("오비스", notificationOptions);
     notification.onclick = () => {
       notification.close();
       navigateToNotificationTarget(targetUrl);

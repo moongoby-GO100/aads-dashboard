@@ -1,5 +1,26 @@
 # AADS Dashboard Handover
 
+## 2026-08-21 12:45 KST - Chat completion/interruption app push and voice alerts
+
+- Request: Verify why chat completion/interruption app push alerts are not reliably noticeable, improve the behavior, and add voice guidance.
+- Finding:
+  - Existing local chat notification only called `new Notification()` for completion and returned early while the chat tab was visible via `document.hidden`.
+  - Interruption states such as `interrupted_partial`/`model_used=interrupted`/manual stop were not wired to the app notification path.
+  - Voice output was not implemented; the chat input only had speech-to-text.
+- Changes:
+  - `src/services/pushNotifications.ts`: added `showLocalChatNotification()` for `completed` and `interrupted`, using Service Worker `showNotification()` when available and preserving the old hidden-tab completion wrapper.
+  - `src/services/voiceAlerts.ts`: added Korean Web Speech API voice alert helper with localStorage toggle, duplicate suppression, and cancellation.
+  - `src/app/chat/page.tsx`: unified completion/interruption toast, local app notification, and voice alert dispatch with per-message dedupe.
+  - Added interruption alerts for SSE/stream failure partial preservation and manual stop.
+  - Added a chat toolbar voice toggle button next to the app notification button.
+  - Completion remains green; interruption uses amber so status is visually distinct.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx src/services/pushNotifications.ts src/services/voiceAlerts.ts` passed with pre-existing warnings only.
+  - `npm run build` passed and generated `/chat`.
+  - Repository-wide `npm run lint` still fails on pre-existing lint debt outside this change.
+- Deployment:
+  - Not deployed in this entry. Commit/push/deploy require the explicit release step after CEO approval.
+
 ## 2026-08-20 19:33 KST - Chat completion toast and response bubble timing
 
 - Request: Fix cases where the green `응답이 완료되었습니다` popup appears before the final assistant bubble, and where the response bubble is temporarily absent after a CEO instruction.

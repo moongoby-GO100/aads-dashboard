@@ -22,9 +22,17 @@ import { getMe, type CurrentUser } from "@/lib/auth";
 import {
   getBrowserPushPermission,
   registerOhvisPushNotifications,
-  showLocalCompletionNotification,
+  showLocalChatNotification,
   type PushNotificationStatus,
 } from "@/services/pushNotifications";
+import {
+  cancelVoiceAlerts,
+  getVoiceAlertsEnabled,
+  isVoiceAlertSupported,
+  setVoiceAlertsEnabled,
+  speakChatAlert,
+  type VoiceAlertKind,
+} from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
@@ -2859,12 +2867,16 @@ export default function ChatPage() {
   const bgPartialContentRef = useRef(bgPartialContent);
   useEffect(() => { bgPartialContentRef.current = bgPartialContent; }, [bgPartialContent]);
   const [completionToast, setCompletionToast] = useState<string | null>(null);
+  const [completionToastKind, setCompletionToastKind] = useState<VoiceAlertKind>("completed");
   const [pushStatus, setPushStatus] = useState<PushNotificationStatus>("default");
+  const [voiceAlertsEnabled, setVoiceAlertsEnabledState] = useState(() => getVoiceAlertsEnabled());
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
+  const lastInterruptedAiIdRef = useRef<string>("");   // 중단 알림 발생한 AI 메시지 ID — 동일 메시지 이중 알림 차단
+  const lastChatStatusAlertRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const ackedCompletionTokenBySessionRef = useRef<Map<string, string>>(new Map());
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
@@ -3551,30 +3563,54 @@ export default function ChatPage() {
     return () => {
       if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
       if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+      cancelVoiceAlerts();
     };
   }, []);
 
-  // ── 토스트 디바운스 (5초 내 중복 차단) ──
-  const showCompletionToast = useCallback((msg: string, sessionId?: string | null) => {
+  const showChatStatusAlert = useCallback((
+    kind: VoiceAlertKind,
+    msg: string,
+    options: { sessionId?: string | null; dedupeKey?: string | null } = {},
+  ) => {
     const now = Date.now();
-    if (now - lastToastTimeRef.current < 5000) return;
+    const notificationSessionId = options.sessionId || activeSessionRef.current;
+    const dedupeKey = `${kind}:${options.dedupeKey || notificationSessionId || ""}`;
+    if (lastChatStatusAlertRef.current.key === dedupeKey && now - lastChatStatusAlertRef.current.at < 5000) return;
+    lastChatStatusAlertRef.current = { key: dedupeKey, at: now };
+    if (now - lastToastTimeRef.current < 1200) return;
     lastToastTimeRef.current = now;
     setCompletionToast(msg);
-    const notificationSessionId = sessionId || activeSessionRef.current;
-    showLocalCompletionNotification(
-      msg,
-      notificationSessionId ? `/chat#${encodeURIComponent(notificationSessionId)}` : undefined,
-    );
+    setCompletionToastKind(kind);
+    showLocalChatNotification({
+      kind,
+      body: msg,
+      targetUrl: notificationSessionId ? `/chat#${encodeURIComponent(notificationSessionId)}` : undefined,
+    });
+    speakChatAlert(kind, { text: msg, dedupeKey, enabled: voiceAlertsEnabled });
     if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
     completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
-  }, []);
+  }, [voiceAlertsEnabled]);
+
+  const showCompletionToast = useCallback((msg: string, sessionId?: string | null) => {
+    showChatStatusAlert("completed", msg, { sessionId, dedupeKey: msg });
+  }, [showChatStatusAlert]);
 
   const showCompletionToastOnce = useCallback(function showCompletionToastOnce(aiMsgId?: string | null) {
     if (!aiMsgId) return;
     if (lastToastedAiIdRef.current === aiMsgId) return;
     lastToastedAiIdRef.current = aiMsgId;
-    showCompletionToast("응답이 완료되었습니다");
-  }, [showCompletionToast]);
+    showChatStatusAlert("completed", "응답이 완료되었습니다.", { dedupeKey: aiMsgId });
+  }, [showChatStatusAlert]);
+
+  const showInterruptionAlertOnce = useCallback((aiMsgId?: string | null, sessionId?: string | null) => {
+    if (!aiMsgId) return;
+    if (lastInterruptedAiIdRef.current === aiMsgId) return;
+    lastInterruptedAiIdRef.current = aiMsgId;
+    showChatStatusAlert("interrupted", "응답이 중단되었습니다. 이어서 생성할 수 있습니다.", {
+      sessionId,
+      dedupeKey: aiMsgId,
+    });
+  }, [showChatStatusAlert]);
 
   useEffect(() => {
     const status = getBrowserPushPermission();
@@ -3590,6 +3626,19 @@ export default function ChatPage() {
     registerOhvisPushNotifications({ requestPermission: true, sendTest: true })
       .then(setPushStatus)
       .catch(() => setPushStatus("error"));
+  }, []);
+
+  const toggleVoiceAlerts = useCallback(() => {
+    setVoiceAlertsEnabledState((prev) => {
+      const next = !prev;
+      setVoiceAlertsEnabled(next);
+      if (next) {
+        speakChatAlert("completed", { text: "음성 안내가 켜졌습니다.", dedupeKey: "voice-enabled", enabled: true });
+      } else {
+        cancelVoiceAlerts();
+      }
+      return next;
+    });
   }, []);
 
   // ── Init theme ──
@@ -3884,6 +3933,7 @@ export default function ChatPage() {
       lastKnownMsgIdRef.current = null;
       lastKnownMessageRevisionRef.current = null;
       lastToastedAiIdRef.current = "";
+      lastInterruptedAiIdRef.current = "";
     } else {
       setMessagesLoading(true);
     }
@@ -4922,6 +4972,7 @@ export default function ChatPage() {
     designPrompt,
     designScreenId,
     designScreens,
+    showCompletionToast,
   ]);
 
   // ── Send message (SSE streaming) ──
@@ -6138,6 +6189,11 @@ export default function ChatPage() {
       setToolStatus(null);
       if (!isStale() && !_isInvisibleRecovery) {
         // streaming_placeholder 잔여물 정리 — 내용 있으면 버블 유지 (사라짐 방지)
+        const interruptedAlertId = currentExecutionIdRef.current || (sessionId ? `interrupted-${sessionId}` : null);
+        const shouldAlertInterrupted = Boolean(
+          (streamBufRef.current || bgPartialContentRef.current || "").trim() ||
+          thinkingBufRef.current.trim()
+        );
         setMessages((prev) => {
           const capturedBuf = streamBufRef.current;
           const capturedThinking = thinkingBufRef.current;
@@ -6157,6 +6213,9 @@ export default function ChatPage() {
             return null;
           }).filter(Boolean) as ChatMessage[];
         });
+        if (shouldAlertInterrupted) {
+          showInterruptionAlertOnce(interruptedAlertId, sessionId);
+        }
 
         // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
         // 백그라운드 완료 메시지를 놓치지 않도록 300ms/2s/5s 3회 원샷 체크
@@ -6233,19 +6292,23 @@ export default function ChatPage() {
       // ★ in-place 업데이트: placeholder를 stopped 메시지로 교체
       setMessages((prev) => {
         const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
+        const stoppedId = hasPlaceholder
+          ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `stopped-${Date.now()}`)
+          : `stopped-${Date.now()}`;
         const stoppedMsg: ChatMessage = {
-          id: hasPlaceholder
-            ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `stopped-${Date.now()}`)
-            : `stopped-${Date.now()}`,
+          id: stoppedId,
           session_id: activeSession!.id,
           role: "assistant",
           content: buf + "\n\n_(응답 중지됨)_",
+          model_used: "stopped",
         };
         if (hasPlaceholder) {
           return prev.map(m => m.intent === "streaming_placeholder" ? stoppedMsg : m);
         }
         return [...prev, stoppedMsg];
       });
+      const stoppedAlertId = currentExecutionIdRef.current || `stopped-${activeSession.id}`;
+      showInterruptionAlertOnce(stoppedAlertId, activeSession.id);
     }
     // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
     isNearBottomRef.current = true;
@@ -7195,7 +7258,7 @@ export default function ChatPage() {
       {completionToast && (
         <div style={{
           position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
-          zIndex: 9999, background: "#22c55e", color: "#fff", padding: "10px 24px",
+          zIndex: 9999, background: completionToastKind === "interrupted" ? "#f59e0b" : "#22c55e", color: "#fff", padding: "10px 24px",
           borderRadius: 8, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
           animation: "fadeIn 0.3s ease",
         }}>
@@ -8046,6 +8109,36 @@ export default function ChatPage() {
             }}
           >
             🔔
+          </button>
+
+          <button
+            onClick={toggleVoiceAlerts}
+            disabled={!isVoiceAlertSupported()}
+            title={
+              !isVoiceAlertSupported()
+                ? "이 브라우저는 음성 안내를 지원하지 않음"
+                : voiceAlertsEnabled
+                  ? "음성 안내 켜짐"
+                  : "음성 안내 꺼짐"
+            }
+            aria-label="음성 안내"
+            style={{
+              width: "30px",
+              height: "30px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "14px",
+              background: voiceAlertsEnabled ? "var(--ct-accent)" : "var(--ct-hover)",
+              border: "none",
+              borderRadius: "6px",
+              cursor: isVoiceAlertSupported() ? "pointer" : "not-allowed",
+              color: voiceAlertsEnabled ? "#fff" : "var(--ct-text2)",
+              flexShrink: 0,
+              opacity: isVoiceAlertSupported() ? 1 : 0.45,
+            }}
+          >
+            🔊
           </button>
 
           {/* Export session */}
