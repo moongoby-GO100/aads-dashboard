@@ -4,6 +4,7 @@ export interface Workspace {
   id: string;
   name: string;
   project_key?: string | null;
+  display_name?: string;
   description?: string;
   icon: string;
   color: string;

@@ -263,7 +263,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                     }}
                   >
                     <span>{ws.icon || "📁"}</span>
-                    <span style={{ flex: 1 }}>{ws.name}</span>
+                    <span style={{ flex: 1 }}>{ws.display_name || ws.name}</span>
                     <span style={{ fontSize: "10px" }}>
                       {expandedWorkspaceIds.includes(ws.id) ? "▾" : "▸"}
                     </span>

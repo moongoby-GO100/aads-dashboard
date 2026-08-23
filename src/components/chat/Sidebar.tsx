@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 interface Workspace {
   id: string;
   name: string;
+  display_name?: string;
+  project_key?: string;
   icon: string;
   description?: string;
   session_count?: number;
@@ -291,8 +293,8 @@ export default function ChatSidebar({
           <SidebarHubCard
             key={ws.id}
             id={ws.id}
-            name={ws.name}
-            icon={ws.icon || WORKSPACE_ICONS[ws.name] || "📁"}
+            name={ws.display_name || ws.name}
+            icon={ws.icon || WORKSPACE_ICONS[ws.project_key || ws.name] || "📁"}
             sessionCount={ws.session_count || 0}
             isSelected={selectedWorkspace === ws.id}
             isCollapsed={isCollapsed}

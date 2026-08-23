@@ -2318,7 +2318,7 @@ export default function ChatPage() {
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
   );
-  const activeWsName = activeWsObj?.name || "워크스페이스";
+  const activeWsName = activeWsObj?.display_name || activeWsObj?.name || "워크스페이스";
 
   // ── Chat state ──
   const [input, setInput] = useState("");
