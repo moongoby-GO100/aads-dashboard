@@ -20,6 +20,16 @@ const cases: Case[] = [
     expected: "/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=monthly.xlsx",
   },
   {
+    input: "reports/GO100-303-strategy-card.md",
+    expected:
+      "/docs?project=GO100&base_path=%2Froot%2Fkis-autotrade-v4%2Freports&file_path=GO100-303-strategy-card.md",
+  },
+  {
+    input: "docs/reports/GO100-303-strategy-card.md",
+    expected:
+      "/docs?project=GO100&base_path=%2Froot%2Fkis-autotrade-v4%2Freports&file_path=GO100-303-strategy-card.md",
+  },
+  {
     input: "/root/aads/aads-dashboard/public/reports/menu images/a.xlsx",
     expected: "/reports/menu%20images/a.xlsx",
   },

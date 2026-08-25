@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-08-25 17:55 KST - Project document deep-link routing fallback
+
+- Request: Directly apply and verify the immediate improvement for document click 404s.
+- Cause:
+  - Relative links such as `docs/reports/GO100-...md` and `reports/GO100-...md` were normalized as AADS local `/app/docs` or `/app/reports` links.
+  - GO100/KIS/SF/NTV2 project reports can live under each project server path, so AADS-local routing can open `/docs` with the wrong `project/base_path/file_path` and show a file-load 404.
+- Changes:
+  - `src/lib/documentLinks.ts`: added project-hint mappings before generic AADS relative path handling. Project-prefixed document/report links now route to their project document base, with GO100 reports using `/root/kis-autotrade-v4/reports`.
+  - `src/lib/documentLinks.selftest.ts`: added regression cases for `reports/GO100-303-strategy-card.md` and `docs/reports/GO100-303-strategy-card.md`.
+- Verification:
+  - `npm exec tsc -- --noEmit` passed.
+  - `npm exec tsc -- src/lib/documentLinks.selftest.ts --module commonjs --target es2020 --outDir /tmp/aads-documentlinks-test --esModuleInterop --skipLibCheck` passed.
+  - `node /tmp/aads-documentlinks-test/documentLinks.selftest.js` passed.
+  - `npm run build` passed and generated `/docs`.
+- Deployment:
+  - Not deployed, committed, or pushed in this step. Production will keep the previous behavior until the dashboard release step runs.
+
 ## 2026-08-21 16:09 KST - Mobile chat font size control
 
 - Request: Add a way to increase/decrease chat text size on mobile because the fixed mobile fit made long-phone screens hard to read.

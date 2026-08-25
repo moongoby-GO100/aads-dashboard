@@ -37,6 +37,13 @@ type RelativeMapping = {
   stripPrefix: string;
 };
 
+type ProjectHintMapping = {
+  project: string;
+  basePath: string;
+  prefixes: string[];
+  filePattern: RegExp;
+};
+
 type PublicPathMapping = {
   prefix: string;
   publicPrefix: string;
@@ -64,6 +71,33 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
   { prefix: "scripts/", project: "AADS", basePath: "/app", stripPrefix: "" },
   { prefix: "tests/", project: "AADS", basePath: "/app", stripPrefix: "" },
+];
+
+const PROJECT_HINT_MAPPINGS: ProjectHintMapping[] = [
+  {
+    project: "GO100",
+    basePath: "/root/kis-autotrade-v4/reports",
+    prefixes: ["docs/reports/", "reports/"],
+    filePattern: /^(GO100[-_]|GO100\b|#?\d+.*GO100|.*상한가|.*백억)/i,
+  },
+  {
+    project: "KIS",
+    basePath: "/root/kis-autotrade-v4/docs",
+    prefixes: ["docs/", "reports/"],
+    filePattern: /^(KIS[-_]|KIS\b|.*자동매매)/i,
+  },
+  {
+    project: "SF",
+    basePath: "/data/shortflow/docs",
+    prefixes: ["docs/", "reports/"],
+    filePattern: /^(SF[-_]|ShortFlow\b|.*shortflow|.*숏폼)/i,
+  },
+  {
+    project: "NTV2",
+    basePath: "/srv/newtalk-v2/docs",
+    prefixes: ["docs/", "reports/"],
+    filePattern: /^(NTV2[-_]|NT[-_]|NewTalk\b|.*newtalk)/i,
+  },
 ];
 
 // AADS-FILES(2026-08-18): 파일시스템 경로 링크가 https://aads.newtalk.kr/root/... 로 새어나가
@@ -130,6 +164,17 @@ function buildPublicHref(publicPrefix: string, filePath: string, hash?: string):
     .map((part) => encodeURIComponent(part))
     .join("/");
   return `${publicPrefix}${encodedPath}${hash || ""}`;
+}
+
+function basename(path: string): string {
+  return path.split("/").pop() || path;
+}
+
+function normalizeProjectHintPath(filePath: string): string {
+  return filePath
+    .replace(/^docs\/reports\//, "")
+    .replace(/^reports\//, "")
+    .replace(/^docs\//, "");
 }
 
 function splitPathSuffix(path: string): { filePath: string; line?: string; hash?: string } {
@@ -204,6 +249,17 @@ export function normalizeDocumentHref(href: string): string {
   }
 
   // 4. 상대/컨테이너 경로 매핑 (docs/..., /app/docs/...)
+  for (const mapping of PROJECT_HINT_MAPPINGS) {
+    const matchedPrefix = mapping.prefixes.find((prefix) => raw.startsWith(prefix));
+    if (!matchedPrefix) continue;
+    const remainder = raw.slice(matchedPrefix.length);
+    const { filePath, line, hash } = splitPathSuffix(remainder);
+    if (!filePath || filePath.includes("..")) return raw;
+    if (mapping.filePattern.test(basename(filePath))) {
+      return buildDocsHref(mapping.project, mapping.basePath, normalizeProjectHintPath(filePath), line, hash);
+    }
+  }
+
   for (const mapping of RELATIVE_DOC_MAPPINGS) {
     if (raw.startsWith(mapping.prefix)) {
       const remainder = raw.slice(mapping.stripPrefix.length);
