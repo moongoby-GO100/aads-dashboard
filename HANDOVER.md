@@ -10,9 +10,16 @@
   - `src/lib/documentLinks.ts`: split GO100 project-hint mapping so `docs/reports/GO100-...` uses `/root/kis-autotrade-v4/docs` plus `reports/...`, while `reports/GO100-...` keeps `/root/kis-autotrade-v4/reports`.
   - `src/lib/documentLinks.selftest.ts`: added a regression case for an observed existing GO100 docs report filename.
 - Verification:
-  - Pending in the release step for this entry.
+  - `npm exec tsc -- --noEmit` passed.
+  - `npm exec eslint -- src/lib/documentLinks.ts src/lib/documentLinks.selftest.ts` passed.
+  - `npm exec tsc -- --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir /tmp/aads-doclink-selftest src/lib/documentLinks.ts src/lib/documentLinks.selftest.ts && node /tmp/aads-doclink-selftest/documentLinks.selftest.js` passed.
+  - `npm run build` passed.
+  - Full `npm run lint` still fails on pre-existing repository-wide lint debt outside this change (`any`, React hook rules, refs during render).
 - Deployment:
-  - Pending in the release step for this entry.
+  - Commit `c629bbabd29760deb62ef89059ca0ffd4542017a` pushed to `main`.
+  - `bash deploy.sh` completed blue-green deployment at 2026-08-25 18:41 KST; active slot: green, standby: blue, `AADS_RELEASE_SHA=c629bbabd297`.
+  - Authenticated project-docs API verified the observed GO100 report path returns HTTP 200 from `/root/kis-autotrade-v4/docs/reports/GO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md`.
+  - Browser Bridge E2E tools timed out; HTTP/API/container validation used as fallback.
 
 ## 2026-08-25 17:55 KST - Project document deep-link routing fallback
 
