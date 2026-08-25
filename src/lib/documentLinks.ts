@@ -50,6 +50,12 @@ type PublicPathMapping = {
   publicPrefix: string;
 };
 
+export type DocumentRouteParams = {
+  project: string;
+  basePath: string;
+  filePath: string;
+};
+
 const PUBLIC_PATH_MAPPINGS: PublicPathMapping[] = [
   { prefix: "/root/aads/aads-dashboard/public/reports/", publicPrefix: "/reports/" },
   { prefix: "/root/aads/aads-dashboard/public/exports/", publicPrefix: "/exports/" },
@@ -178,6 +184,17 @@ function basename(path: string): string {
   return path.split("/").pop() || path;
 }
 
+function parseDocsHref(href: string): DocumentRouteParams | null {
+  if (!href.startsWith("/docs?")) return null;
+  const query = href.slice(href.indexOf("?") + 1).split("#", 1)[0];
+  const q = new URLSearchParams(query);
+  const project = q.get("project") || "";
+  const basePath = q.get("base_path") || "";
+  const filePath = q.get("file_path") || "";
+  if (!project || !basePath || !filePath) return null;
+  return { project, basePath, filePath };
+}
+
 function normalizeProjectHintPath(filePath: string): string {
   return filePath
     .replace(/^docs\/reports\//, "")
@@ -290,6 +307,29 @@ export function normalizeDocumentHref(href: string): string {
   }
 
   return raw;
+}
+
+export function normalizeDocumentRouteParams(params: DocumentRouteParams): DocumentRouteParams {
+  const project = params.project.trim();
+  const basePath = params.basePath.trim().replace(/\/+$/, "");
+  const filePath = params.filePath.trim().replace(/^\/+/, "");
+  const original = { project, basePath, filePath };
+
+  if (!project || !basePath || !filePath || filePath.includes("..")) return original;
+
+  // Legacy chat links often encoded every relative document as AADS /app/docs or /app/reports.
+  // Re-run those routes through the same project-hint mapper used for markdown links.
+  const legacyPrefix =
+    project === "AADS" && basePath === "/app/docs"
+      ? "docs/"
+      : project === "AADS" && basePath === "/app/reports"
+        ? "reports/"
+        : "";
+  if (!legacyPrefix) return original;
+
+  const repaired = parseDocsHref(normalizeDocumentHref(`${legacyPrefix}${filePath}`));
+  if (!repaired) return original;
+  return repaired;
 }
 
 /** 링크가 파일 다운로드 API로 연결되는지 여부 (UI에서 다운로드 아이콘 표기용) */

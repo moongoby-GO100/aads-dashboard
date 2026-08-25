@@ -1,4 +1,4 @@
-import { normalizeDocumentHref } from "./documentLinks";
+import { normalizeDocumentHref, normalizeDocumentRouteParams } from "./documentLinks";
 
 type Case = {
   input: string;
@@ -65,5 +65,57 @@ for (const item of cases) {
   const actual = normalizeDocumentHref(item.input);
   if (actual !== item.expected) {
     throw new Error(`normalizeDocumentHref(${item.input}) => ${actual}, expected ${item.expected}`);
+  }
+}
+
+const routeCases = [
+  {
+    input: {
+      project: "AADS",
+      basePath: "/app/docs",
+      filePath: "reports/GO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md",
+    },
+    expected: {
+      project: "GO100",
+      basePath: "/root/kis-autotrade-v4/docs",
+      filePath: "reports/GO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md",
+    },
+  },
+  {
+    input: {
+      project: "AADS",
+      basePath: "/app/reports",
+      filePath: "GO100-303-strategy-card.md",
+    },
+    expected: {
+      project: "GO100",
+      basePath: "/root/kis-autotrade-v4/reports",
+      filePath: "GO100-303-strategy-card.md",
+    },
+  },
+  {
+    input: {
+      project: "AADS",
+      basePath: "/app/docs",
+      filePath: "reports/20260802_OHVIS_SYSTEM_CONSTRUCTION_PLAN.md",
+    },
+    expected: {
+      project: "AADS",
+      basePath: "/app/docs",
+      filePath: "reports/20260802_OHVIS_SYSTEM_CONSTRUCTION_PLAN.md",
+    },
+  },
+];
+
+for (const item of routeCases) {
+  const actual = normalizeDocumentRouteParams(item.input);
+  if (
+    actual.project !== item.expected.project ||
+    actual.basePath !== item.expected.basePath ||
+    actual.filePath !== item.expected.filePath
+  ) {
+    throw new Error(
+      `normalizeDocumentRouteParams(${JSON.stringify(item.input)}) => ${JSON.stringify(actual)}, expected ${JSON.stringify(item.expected)}`,
+    );
   }
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
+import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
 
 interface DocFile {
   name: string;
@@ -490,10 +491,26 @@ export default function DocsPage() {
     if (typeof window === "undefined") return;
 
     const params = new URLSearchParams(window.location.search);
-    const project = params.get("project") || "";
-    const basePath = params.get("base_path") || "";
-    const filePath = params.get("file_path") || "";
+    const normalizedRoute = normalizeDocumentRouteParams({
+      project: params.get("project") || "",
+      basePath: params.get("base_path") || "",
+      filePath: params.get("file_path") || "",
+    });
+    const project = normalizedRoute.project;
+    const basePath = normalizedRoute.basePath;
+    const filePath = normalizedRoute.filePath;
     if (!project || !basePath || !filePath) return;
+    if (
+      project !== (params.get("project") || "") ||
+      basePath !== (params.get("base_path") || "") ||
+      filePath !== (params.get("file_path") || "")
+    ) {
+      const q = new URLSearchParams();
+      q.set("project", project);
+      q.set("base_path", basePath);
+      q.set("file_path", filePath);
+      window.history.replaceState(null, "", `/docs?${q.toString()}`);
+    }
 
     const key = `${project}\n${basePath}\n${filePath}`;
     if (openedDeepLinkRef.current === key) return;
