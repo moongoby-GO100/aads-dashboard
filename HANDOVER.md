@@ -1555,8 +1555,9 @@
   - 운영 green 컨테이너 정적 번들에서 GO100 `/root/kis-autotrade-v4/docs` 매핑 및 딥링크 보정 로직 포함 확인.
 - 배포:
   - 코드 커밋: `5b323a4` (`fix(docs): repair project document deep links`)
+  - 문서기록 커밋: `2d1d689` (`docs: record project docs deeplink deployment`)
   - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
-  - 방식: blue-green 배포, 활성 슬롯 `blue` -> `green`
-  - 결과: 07:46:17 KST green 내부 헬스체크 통과, 07:46:18 KST nginx reload 완료, 07:46:19 KST 외부 헬스체크 통과, 07:48:49 KST standby-blue 동기화 완료.
-  - 운영 상태: `aads-dashboard-green` 활성, release `5b323a4badef`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
+  - 1차 결과: 07:46:17 KST green 내부 헬스체크 통과, 07:46:18 KST nginx reload 완료, 07:46:19 KST 외부 헬스체크 통과, 07:48:49 KST standby-blue 동기화 완료.
+  - 최신 HEAD 재배포: 07:59:35 KST blue 내부 헬스체크 통과, 07:59:35 KST nginx reload 완료, 07:59:36 KST 외부 헬스체크 통과, 08:02:29 KST standby-green 동기화 완료.
+  - 운영 상태: `aads-dashboard` 활성, release `2d1d6896a059`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
   - 주의: 배포 스크립트 Step 7 QA는 `UNKNOWN`, Browser Bridge 로그인/E2E는 타임아웃/로그인 실패로 미완료. HTTP 307 인증 보호, API `/health`, 컨테이너 상태, 번들 반영 검증으로 대체했다.
