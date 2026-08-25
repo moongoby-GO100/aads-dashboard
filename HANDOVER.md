@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-08-25 18:29 KST - GO100 docs/reports deep-link base correction
+
+- Request: Re-review before dashboard deployment, then commit, push, deploy, and E2E verify.
+- Cause:
+  - Post-deploy verification found that `docs/reports/GO100-...` links were routed to `/root/kis-autotrade-v4/reports`.
+  - GO100 documents under the `docs/reports/` relative prefix actually live under the allowed backend base `/root/kis-autotrade-v4/docs` with `file_path=reports/...` on contabo14.
+- Changes:
+  - `src/lib/documentLinks.ts`: split GO100 project-hint mapping so `docs/reports/GO100-...` uses `/root/kis-autotrade-v4/docs` plus `reports/...`, while `reports/GO100-...` keeps `/root/kis-autotrade-v4/reports`.
+  - `src/lib/documentLinks.selftest.ts`: added a regression case for an observed existing GO100 docs report filename.
+- Verification:
+  - Pending in the release step for this entry.
+- Deployment:
+  - Pending in the release step for this entry.
+
 ## 2026-08-25 17:55 KST - Project document deep-link routing fallback
 
 - Request: Directly apply and verify the immediate improvement for document click 404s.

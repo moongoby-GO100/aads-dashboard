@@ -27,7 +27,12 @@ const cases: Case[] = [
   {
     input: "docs/reports/GO100-303-strategy-card.md",
     expected:
-      "/docs?project=GO100&base_path=%2Froot%2Fkis-autotrade-v4%2Freports&file_path=GO100-303-strategy-card.md",
+      "/docs?project=GO100&base_path=%2Froot%2Fkis-autotrade-v4%2Fdocs&file_path=reports%2FGO100-303-strategy-card.md",
+  },
+  {
+    input: "docs/reports/GO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md",
+    expected:
+      "/docs?project=GO100&base_path=%2Froot%2Fkis-autotrade-v4%2Fdocs&file_path=reports%2FGO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md",
   },
   {
     input: "/root/aads/aads-dashboard/public/reports/menu images/a.xlsx",

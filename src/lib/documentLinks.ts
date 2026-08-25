@@ -41,6 +41,7 @@ type ProjectHintMapping = {
   project: string;
   basePath: string;
   prefixes: string[];
+  filePathPrefix?: string;
   filePattern: RegExp;
 };
 
@@ -76,8 +77,15 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
 const PROJECT_HINT_MAPPINGS: ProjectHintMapping[] = [
   {
     project: "GO100",
+    basePath: "/root/kis-autotrade-v4/docs",
+    prefixes: ["docs/reports/"],
+    filePathPrefix: "reports/",
+    filePattern: /^(GO100[-_]|GO100\b|#?\d+.*GO100|.*상한가|.*백억)/i,
+  },
+  {
+    project: "GO100",
     basePath: "/root/kis-autotrade-v4/reports",
-    prefixes: ["docs/reports/", "reports/"],
+    prefixes: ["reports/"],
     filePattern: /^(GO100[-_]|GO100\b|#?\d+.*GO100|.*상한가|.*백억)/i,
   },
   {
@@ -256,7 +264,13 @@ export function normalizeDocumentHref(href: string): string {
     const { filePath, line, hash } = splitPathSuffix(remainder);
     if (!filePath || filePath.includes("..")) return raw;
     if (mapping.filePattern.test(basename(filePath))) {
-      return buildDocsHref(mapping.project, mapping.basePath, normalizeProjectHintPath(filePath), line, hash);
+      return buildDocsHref(
+        mapping.project,
+        mapping.basePath,
+        `${mapping.filePathPrefix || ""}${normalizeProjectHintPath(filePath)}`,
+        line,
+        hash,
+      );
     }
   }
 
