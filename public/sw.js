@@ -19,6 +19,17 @@ function sameOriginUrl(value) {
   }
 }
 
+function cleanNotificationPart(value, fallback) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text || fallback;
+}
+
+function projectFromWorkspaceName(value) {
+  const text = String(value || '').trim();
+  const bracket = text.match(/\[([A-Za-z0-9_-]+)\]/);
+  return (bracket && bracket[1] ? bracket[1] : text).trim();
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
@@ -64,7 +75,15 @@ self.addEventListener('push', (event) => {
   const payloadData = payload.data || {};
   const sessionId = payload.session_id || payloadData.session_id;
   const targetUrl = payload.url || payloadData.url || chatUrlForSession(sessionId);
-  const title = payload.title || '오비스';
+  const project = cleanNotificationPart(
+    payload.project || payload.project_key || payloadData.project || payloadData.project_key || projectFromWorkspaceName(payload.workspace_name || payloadData.workspace_name),
+    ''
+  );
+  const sessionTitle = cleanNotificationPart(payload.session_title || payloadData.session_title || payload.conversation_title || payloadData.conversation_title, '');
+  const scopedTitle = project && sessionTitle
+    ? `${project} · ${sessionTitle}`
+    : project || sessionTitle || '';
+  const title = payload.title || scopedTitle || '오비스';
   const options = {
     body: payload.body || '응답이 완료되었습니다.',
     tag: payload.tag || 'ohvis-notification',
@@ -73,6 +92,8 @@ self.addEventListener('push', (event) => {
     actions: payload.actions || [{ action: 'open-chat', title: '확인' }],
     data: {
       ...payloadData,
+      project,
+      session_title: sessionTitle,
       url: targetUrl,
     },
   };

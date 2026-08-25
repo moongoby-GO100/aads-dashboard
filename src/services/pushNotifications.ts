@@ -132,9 +132,11 @@ export function showLocalCompletionNotification(
 
 export function showLocalChatNotification(options: {
   kind: ChatNotificationKind;
+  title?: string;
   body?: string;
   targetUrl?: string;
   requireHidden?: boolean;
+  data?: Record<string, unknown>;
 }): void {
   if (typeof window === "undefined") return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -145,20 +147,23 @@ export function showLocalChatNotification(options: {
       : "응답이 완료되었습니다."
   );
   const targetUrl = options.targetUrl || currentChatTargetUrl();
-  const tag = options.kind === "interrupted" ? "ohvis-chat-interrupted" : "ohvis-chat-complete";
+  const baseTag = options.kind === "interrupted" ? "ohvis-chat-interrupted" : "ohvis-chat-complete";
+  const sessionTag = String(options.data?.session_id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  const tag = sessionTag ? `${baseTag}-${sessionTag}` : baseTag;
+  const title = (options.title || "오비스").trim() || "오비스";
   const notificationOptions: NotificationOptions = {
     body,
     tag,
     icon: "/icon-192x192.png",
     badge: "/icon-192x192.png",
-    data: { url: targetUrl },
+    data: { ...(options.data || {}), url: targetUrl },
   };
   try {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.ready
-        .then((registration) => registration.showNotification("오비스", notificationOptions))
+        .then((registration) => registration.showNotification(title, notificationOptions))
         .catch(() => {
-          const fallback = new Notification("오비스", notificationOptions);
+          const fallback = new Notification(title, notificationOptions);
           fallback.onclick = () => {
             fallback.close();
             navigateToNotificationTarget(targetUrl);
@@ -166,7 +171,7 @@ export function showLocalChatNotification(options: {
         });
       return;
     }
-    const notification = new Notification("오비스", notificationOptions);
+    const notification = new Notification(title, notificationOptions);
     notification.onclick = () => {
       notification.close();
       navigateToNotificationTarget(targetUrl);

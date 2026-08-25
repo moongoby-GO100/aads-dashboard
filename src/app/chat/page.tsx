@@ -307,6 +307,17 @@ function projectKeyFromWorkspace(workspace?: Workspace | null): string {
   return (nameMatch?.[1] || "AADS").toUpperCase();
 }
 
+function compactAlertPart(value: unknown, fallback: string, maxLength = 48): string {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const safe = text || fallback;
+  return safe.length > maxLength ? `${safe.slice(0, maxLength - 1)}…` : safe;
+}
+
+function chatAlertProjectLabel(workspace?: Workspace | null): string {
+  const projectKey = projectKeyFromWorkspace(workspace);
+  return compactAlertPart(projectKey, "AADS", 24);
+}
+
 function messageTime(message: ChatMessage): number {
   const time = new Date(message.created_at || 0).getTime();
   return Number.isFinite(time) ? time : 0;
@@ -3606,22 +3617,50 @@ export default function ChatPage() {
   ) => {
     const now = Date.now();
     const notificationSessionId = options.sessionId || activeSessionRef.current;
+    const knownSessions = [
+      ...(activeSessionObjRef.current ? [activeSessionObjRef.current] : []),
+      ...sessions,
+      ...Object.values(sidebarSessionsByWorkspace).flat(),
+    ];
+    const notificationSession = notificationSessionId
+      ? knownSessions.find((session) => session.id === notificationSessionId)
+      : activeSessionObjRef.current;
+    const notificationWorkspace = (
+      notificationSession
+        ? workspaces.find((workspace) => workspace.id === notificationSession.workspace_id)
+        : undefined
+    ) || activeWsObj;
+    const projectLabel = chatAlertProjectLabel(notificationWorkspace);
+    const sessionTitle = compactAlertPart(
+      notificationSession?.title || notificationSessionId?.slice(0, 8),
+      "새 대화",
+      56,
+    );
+    const notificationTitle = `${projectLabel} · ${sessionTitle}`;
+    const displayMsg = `${notificationTitle}: ${msg}`;
+    const voiceText = `${projectLabel} 프로젝트, ${sessionTitle} 대화, ${msg}`;
     const dedupeKey = `${kind}:${options.dedupeKey || notificationSessionId || ""}`;
     if (lastChatStatusAlertRef.current.key === dedupeKey && now - lastChatStatusAlertRef.current.at < 5000) return;
     lastChatStatusAlertRef.current = { key: dedupeKey, at: now };
     if (now - lastToastTimeRef.current < 1200) return;
     lastToastTimeRef.current = now;
-    setCompletionToast(msg);
+    setCompletionToast(displayMsg);
     setCompletionToastKind(kind);
     showLocalChatNotification({
       kind,
+      title: notificationTitle,
       body: msg,
       targetUrl: notificationSessionId ? `/chat#${encodeURIComponent(notificationSessionId)}` : undefined,
+      data: {
+        project: projectLabel,
+        session_id: notificationSessionId,
+        session_title: sessionTitle,
+      },
     });
-    speakChatAlert(kind, { text: msg, dedupeKey, enabled: voiceAlertsEnabled });
+    speakChatAlert(kind, { text: voiceText, dedupeKey, enabled: voiceAlertsEnabled });
     if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
     completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
-  }, [voiceAlertsEnabled]);
+  }, [activeWsObj, sessions, sidebarSessionsByWorkspace, voiceAlertsEnabled, workspaces]);
 
   const showCompletionToast = useCallback((msg: string, sessionId?: string | null) => {
     showChatStatusAlert("completed", msg, { sessionId, dedupeKey: msg });
