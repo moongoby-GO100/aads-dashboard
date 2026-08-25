@@ -1535,3 +1535,28 @@
   - 샘플 검증 통과: 광고중 상품이 오가닉 상품보다 먼저 정렬되고, 광고 미집행 유료 주문 5건은 `광고 제안`, 4건은 `오가닉 매출`로 판정됨.
 - 배포:
   - 본 항목 작성 시점에는 코드 수정과 로컬 검증만 완료했고, 커밋/푸시/운영 배포는 아직 미실행이다.
+
+## 2026-08-26 07:56 KST - 문서현황 GO100 딥링크 오분류 복구
+
+- 요청: 각 프로젝트 세션에서 저장된 문서를 채팅창에서 클릭하면 문서현황으로 이동하지만 문서가 열리지 않는 문제를 즉시 조치하고 배포.
+- 원인:
+  - 구형 채팅 링크가 `project=AADS`, `base_path=/app/docs`, `file_path=reports/GO100-...md` 형태로 저장되어 GO100 문서를 AADS 로컬 문서로 열려고 했다.
+  - 신규 `normalizeDocumentHref()`에는 GO100 힌트 매핑이 있었지만, 이미 생성된 `/docs?...` 딥링크를 문서 화면 진입 시 다시 교정하는 방어 로직이 없었다.
+- 조치:
+  - `src/lib/documentLinks.ts`에 `normalizeDocumentRouteParams()`를 추가해 AADS `/app/docs`·`/app/reports` 오분류 딥링크를 프로젝트 힌트 기준으로 재정규화한다.
+  - `src/app/docs/page.tsx`에서 URL 파라미터를 열기 전에 위 함수를 적용하고, 교정된 URL로 `history.replaceState()`를 수행한다.
+  - `src/lib/documentLinks.selftest.ts`에 GO100 #303 문서 URL 오분류 회귀 케이스를 추가했다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+  - `npx eslint src/lib/documentLinks.ts src/lib/documentLinks.selftest.ts src/app/docs/page.tsx` 통과.
+  - `npm run build` 통과.
+  - `/tmp/aads-doclinks-selftest`로 TypeScript 셀프테스트 컴파일 후 `node documentLinks.selftest.js` 통과.
+  - GO100 원격 문서 `/root/kis-autotrade-v4/docs/reports/GO100-303-STRATEGY-CARD-FULL-SYNC-20260825.md` 존재 및 내용 확인.
+  - 운영 green 컨테이너 정적 번들에서 GO100 `/root/kis-autotrade-v4/docs` 매핑 및 딥링크 보정 로직 포함 확인.
+- 배포:
+  - 코드 커밋: `5b323a4` (`fix(docs): repair project document deep links`)
+  - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
+  - 방식: blue-green 배포, 활성 슬롯 `blue` -> `green`
+  - 결과: 07:46:17 KST green 내부 헬스체크 통과, 07:46:18 KST nginx reload 완료, 07:46:19 KST 외부 헬스체크 통과, 07:48:49 KST standby-blue 동기화 완료.
+  - 운영 상태: `aads-dashboard-green` 활성, release `5b323a4badef`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
+  - 주의: 배포 스크립트 Step 7 QA는 `UNKNOWN`, Browser Bridge 로그인/E2E는 타임아웃/로그인 실패로 미완료. HTTP 307 인증 보호, API `/health`, 컨테이너 상태, 번들 반영 검증으로 대체했다.
