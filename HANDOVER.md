@@ -1600,5 +1600,12 @@
 - 검증:
   - `npx eslint src/services/voiceAlerts.ts src/app/chat/page.tsx` 통과. 기존 경고 20건, 신규 오류 0건.
   - `npm run build` 통과.
+  - 운영 컨테이너 번들에서 `음성 안내가 꺼졌습니다.`, `voice-enabled`, `voiceschanged` 반영 확인.
+  - `https://aads.newtalk.kr/chat` HTTP 307 로그인 리다이렉트 확인, `https://aads.newtalk.kr/login` HTTP 200 확인.
+  - `aads-dashboard`, `aads-dashboard-green` 컨테이너 healthy 확인.
 - 배포:
-  - 본 항목 작성 시점에는 코드 수정과 로컬 검증을 완료했고, 커밋/푸시/운영 배포를 이어서 수행한다.
+  - 코드 커밋: `07124ad` (`fix(chat): stabilize voice alert toggle`)
+  - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
+  - 결과: 07:56:41 KST blue 내부 헬스체크 통과, 07:56:42 KST nginx reload 완료, 07:56:43 KST 외부 헬스체크 통과, 07:59:08 KST standby-green 동기화 완료.
+  - 운영 상태: 활성 슬롯 `blue`, release `07124ad9992b`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
+  - 주의: 배포 스크립트 Step 7 QA는 `UNKNOWN`, 브라우저 음성 재생은 기기/브라우저 권한과 사용자 제스처가 필요하므로 수동 클릭 검증이 필요하다.
