@@ -39,6 +39,7 @@ import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./Mar
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
+const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -513,12 +514,27 @@ function streamingPlaceholderStatus(
     };
   }
   return {
-    label: hasContent ? "이어쓰기 가능" : "중단됨",
+    label: "응답 확인 중",
     color: "#f59e0b",
     bg: "rgba(245,158,11,0.12)",
     border: "rgba(245,158,11,0.25)",
     recoverable: hasContent,
   };
+}
+
+function shouldKeepDraftAsRecovering(message: ChatMessage, now = Date.now()): boolean {
+  if (!isStreamingPlaceholderMessage(message)) return false;
+  const createdAt = messageTime(message);
+  if (!createdAt) return false;
+  return now - createdAt < AUTO_RECOVERY_DRAFT_GRACE_MS;
+}
+
+function interruptedBadgeLabel(message: ChatMessage): string {
+  if (message.model_used === "interrupted" && message.intent !== "interruption_notice") {
+    return "응답 확인 중";
+  }
+  if (message.intent === "interrupted_partial") return "응답 확인 중";
+  return "응답 중단";
 }
 
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
@@ -2074,7 +2090,7 @@ const MessageItem = memo(function MessageItem({
               {placeholderStatus ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: placeholderStatus.bg, color: placeholderStatus.color, border: `1px solid ${placeholderStatus.border}` }}>⚠️ {placeholderStatus.label}</span>
               ) : !isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ 응답 중단</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)" }}>⚠️ {interruptedBadgeLabel(msg)}</span>
               ) : msg.model_used === "recovered" ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.25)" }}>🔄 복구됨</span>
               ) : msg.model_used === "stopped" ? (
@@ -3673,11 +3689,11 @@ export default function ChatPage() {
     showChatStatusAlert("completed", "응답이 완료되었습니다.", { dedupeKey: aiMsgId });
   }, [showChatStatusAlert]);
 
-  const showInterruptionAlertOnce = useCallback((aiMsgId?: string | null, sessionId?: string | null) => {
+  const showInterruptionAlertOnce = useCallback((aiMsgId?: string | null, sessionId?: string | null, message?: string) => {
     if (!aiMsgId) return;
     if (lastInterruptedAiIdRef.current === aiMsgId) return;
     lastInterruptedAiIdRef.current = aiMsgId;
-    showChatStatusAlert("interrupted", "응답이 중단되었습니다. 이어서 생성할 수 있습니다.", {
+    showChatStatusAlert("interrupted", message || "응답 연결을 확인 중입니다. 완료되면 같은 버블에 이어 표시됩니다.", {
       sessionId,
       dedupeKey: aiMsgId,
     });
@@ -6164,12 +6180,15 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
-            // ★ FIX: 타임아웃 시 버블 유지 — placeholder를 partial 메시지로 교체
+            // 자동 복구 대기 타임아웃은 사용자 중단이 아니다. 같은 버블을 진행 상태로 유지한다.
             setMessages((prev) => prev.map((m) =>
               m.intent === "streaming_placeholder"
-                ? convertDraftMessage(m, {
-                  note: "⏳ _응답 복구 대기 중..._",
-                }) || m
+                ? {
+                  ...m,
+                  content: m.content || "⏳ AI가 응답을 생성 중입니다...",
+                  intent: "streaming_placeholder",
+                  model_used: "streaming",
+                }
                 : m
             ));
             setStreaming(false);
@@ -6246,9 +6265,12 @@ export default function ChatPage() {
               streamingSessionRef.current = null;
               setMessages((prev) => prev.map((m) =>
                 m.intent === "streaming_placeholder"
-                  ? convertDraftMessage(m, {
-                    note: "⏳ _응답 복구 대기 중..._",
-                  }) || m
+                  ? {
+                    ...m,
+                    content: m.content || "⏳ AI가 응답을 생성 중입니다...",
+                    intent: "streaming_placeholder",
+                    model_used: "streaming",
+                  }
                   : m
               ));
               setStreaming(false);
@@ -6260,19 +6282,24 @@ export default function ChatPage() {
       setToolStatus(null);
       if (!isStale() && !_isInvisibleRecovery) {
         // streaming_placeholder 잔여물 정리 — 내용 있으면 버블 유지 (사라짐 방지)
-        const interruptedAlertId = currentExecutionIdRef.current || (sessionId ? `interrupted-${sessionId}` : null);
-        const shouldAlertInterrupted = Boolean(
-          (streamBufRef.current || bgPartialContentRef.current || "").trim() ||
-          thinkingBufRef.current.trim()
-        );
         setMessages((prev) => {
           const capturedBuf = streamBufRef.current;
           const capturedThinking = thinkingBufRef.current;
+          const cleanupAt = Date.now();
           return prev.map((m) => {
             if (m.intent !== "streaming_placeholder") return m;
             const preserved = capturedBuf || m.content || "";
             const preservedThinking = capturedThinking || m.thinking_summary || "";
             if (preserved.trim() || preservedThinking.trim()) {
+              if (shouldKeepDraftAsRecovering(m, cleanupAt)) {
+                return {
+                  ...m,
+                  content: preserved,
+                  thinking_summary: preservedThinking || m.thinking_summary,
+                  intent: "streaming_placeholder",
+                  model_used: "streaming",
+                };
+              }
               return {
                 ...m,
                 content: preserved,
@@ -6281,12 +6308,17 @@ export default function ChatPage() {
                 model_used: "interrupted",
               };
             }
+            if (shouldKeepDraftAsRecovering(m, cleanupAt)) {
+              return {
+                ...m,
+                content: m.content || "⏳ AI가 응답을 생성 중입니다...",
+                intent: "streaming_placeholder",
+                model_used: "streaming",
+              };
+            }
             return null;
           }).filter(Boolean) as ChatMessage[];
         });
-        if (shouldAlertInterrupted) {
-          showInterruptionAlertOnce(interruptedAlertId, sessionId);
-        }
 
         // P1-FIX: SSE 종료 직후 즉시 just_completed 체크 (interval 대기 없이)
         // 백그라운드 완료 메시지를 놓치지 않도록 300ms/2s/5s 3회 원샷 체크
@@ -6379,7 +6411,7 @@ export default function ChatPage() {
         return [...prev, stoppedMsg];
       });
       const stoppedAlertId = currentExecutionIdRef.current || `stopped-${activeSession.id}`;
-      showInterruptionAlertOnce(stoppedAlertId, activeSession.id);
+      showInterruptionAlertOnce(stoppedAlertId, activeSession.id, "사용자 요청으로 응답을 중지했습니다.");
     }
     // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
     isNearBottomRef.current = true;

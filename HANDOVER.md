@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-27 07:24 KST - Chat auto-recovery status wording
+
+- Request: Verify whether immediate response bubbles still appear, then apply the improvement if safe because the chat shows an "response interrupted" message right after a question.
+- Cause:
+  - The immediate `streaming_placeholder` bubble is required and should remain.
+  - Auto-retry, SSE reconnect, and background completion recovery could convert a recent in-progress placeholder into `interrupted_partial` or show an interruption alert before the final answer had a chance to settle.
+- Changes:
+  - `src/app/chat/page.tsx`: kept the immediate assistant progress bubble behavior.
+  - `src/app/chat/page.tsx`: changed inactive auto-recovery placeholders from "stopped/interrupted" wording to "response checking" wording.
+  - `src/app/chat/page.tsx`: added a 120s grace window so recent streaming placeholders remain recoverable instead of being finalized as interrupted.
+  - `src/app/chat/page.tsx`: separated automatic recovery alerts from manual user stop alerts.
+- Verification:
+  - `git diff --check` passed.
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
+  - `npm run build` passed and generated `/chat`.
+  - Full `npm run lint` still fails on pre-existing repository-wide lint debt outside this change.
+- Deployment:
+  - Pending commit, push, and dashboard deployment in the release step for this entry.
+
 ## 2026-08-25 18:29 KST - GO100 docs/reports deep-link base correction
 
 - Request: Re-review before dashboard deployment, then commit, push, deploy, and E2E verify.
