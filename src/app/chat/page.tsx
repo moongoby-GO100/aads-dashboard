@@ -31,6 +31,7 @@ import {
   isVoiceAlertSupported,
   setVoiceAlertsEnabled,
   speakChatAlert,
+  warmUpVoiceAlerts,
   type VoiceAlertKind,
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
@@ -2923,6 +2924,7 @@ export default function ChatPage() {
   const [completionToastKind, setCompletionToastKind] = useState<VoiceAlertKind>("completed");
   const [pushStatus, setPushStatus] = useState<PushNotificationStatus>("default");
   const [voiceAlertsEnabled, setVoiceAlertsEnabledState] = useState(() => getVoiceAlertsEnabled());
+  const [voiceAlertsSupported, setVoiceAlertsSupported] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -3709,6 +3711,28 @@ export default function ChatPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const syncVoiceAlertState = () => {
+      setVoiceAlertsSupported(isVoiceAlertSupported());
+      setVoiceAlertsEnabledState(getVoiceAlertsEnabled());
+    };
+    syncVoiceAlertState();
+
+    if (typeof window === "undefined") return;
+    window.addEventListener("storage", syncVoiceAlertState);
+    const speech = window.speechSynthesis;
+    if (speech) {
+      speech.addEventListener?.("voiceschanged", syncVoiceAlertState);
+      const voiceReadyTimer = window.setTimeout(syncVoiceAlertState, 500);
+      return () => {
+        window.removeEventListener("storage", syncVoiceAlertState);
+        speech.removeEventListener?.("voiceschanged", syncVoiceAlertState);
+        window.clearTimeout(voiceReadyTimer);
+      };
+    }
+    return () => window.removeEventListener("storage", syncVoiceAlertState);
+  }, []);
+
   const enablePushNotifications = useCallback(() => {
     registerOhvisPushNotifications({ requestPermission: true, sendTest: true })
       .then(setPushStatus)
@@ -3716,17 +3740,29 @@ export default function ChatPage() {
   }, []);
 
   const toggleVoiceAlerts = useCallback(() => {
+    if (!voiceAlertsSupported) {
+      setCompletionToast("이 브라우저는 음성 안내를 지원하지 않습니다.");
+      setCompletionToastKind("interrupted");
+      if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
+      completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
+      return;
+    }
     setVoiceAlertsEnabledState((prev) => {
       const next = !prev;
       setVoiceAlertsEnabled(next);
       if (next) {
+        warmUpVoiceAlerts();
         speakChatAlert("completed", { text: "음성 안내가 켜졌습니다.", dedupeKey: "voice-enabled", enabled: true });
       } else {
         cancelVoiceAlerts();
       }
+      setCompletionToast(next ? "음성 안내가 켜졌습니다." : "음성 안내가 꺼졌습니다.");
+      setCompletionToastKind("completed");
+      if (completionToastTimerRef.current) clearTimeout(completionToastTimerRef.current);
+      completionToastTimerRef.current = setTimeout(() => setCompletionToast(null), 3000);
       return next;
     });
-  }, []);
+  }, [voiceAlertsSupported]);
 
   // ── Init theme ──
   useEffect(() => {
@@ -8323,15 +8359,16 @@ export default function ChatPage() {
 
           <button
             onClick={toggleVoiceAlerts}
-            disabled={!isVoiceAlertSupported()}
+            disabled={!voiceAlertsSupported}
             title={
-              !isVoiceAlertSupported()
+              !voiceAlertsSupported
                 ? "이 브라우저는 음성 안내를 지원하지 않음"
                 : voiceAlertsEnabled
                   ? "음성 안내 켜짐"
                   : "음성 안내 꺼짐"
             }
             aria-label="음성 안내"
+            aria-pressed={voiceAlertsEnabled}
             style={{
               width: "30px",
               height: "30px",
@@ -8342,14 +8379,14 @@ export default function ChatPage() {
               background: voiceAlertsEnabled ? "var(--ct-accent)" : "var(--ct-hover)",
               border: "none",
               borderRadius: "6px",
-              cursor: isVoiceAlertSupported() ? "pointer" : "not-allowed",
+              cursor: voiceAlertsSupported ? "pointer" : "not-allowed",
               color: voiceAlertsEnabled ? "#fff" : "var(--ct-text2)",
               flexShrink: 0,
-              opacity: isVoiceAlertSupported() ? 1 : 0.45,
+              opacity: voiceAlertsSupported ? 1 : 0.45,
               ...(screenSize === "mobile" ? { width: "100%", minHeight: "44px", borderRadius: "8px", fontSize: "18px" } : {}),
             }}
           >
-            🔊
+            {voiceAlertsEnabled ? "🔊" : "🔇"}
           </button>
 
           {/* Export session */}

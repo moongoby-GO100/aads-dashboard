@@ -5,16 +5,34 @@ const lastSpokenAtByKey = new Map<string, number>();
 
 export function getVoiceAlertsEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return localStorage.getItem(STORAGE_KEY) !== "off";
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== "off";
+  } catch {
+    return true;
+  }
 }
 
 export function setVoiceAlertsEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, enabled ? "on" : "off");
+  try {
+    localStorage.setItem(STORAGE_KEY, enabled ? "on" : "off");
+  } catch {
+    // Storage may be unavailable in private/webview contexts. Keep in-memory UI state.
+  }
 }
 
 export function isVoiceAlertSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+}
+
+export function warmUpVoiceAlerts(): void {
+  if (!isVoiceAlertSupported()) return;
+  try {
+    window.speechSynthesis.resume();
+    window.speechSynthesis.getVoices();
+  } catch {
+    // Best-effort user gesture warm-up for mobile browsers.
+  }
 }
 
 function defaultVoiceText(kind: VoiceAlertKind): string {

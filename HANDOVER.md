@@ -1584,3 +1584,21 @@
   - 최신 HEAD 재배포: 07:59:35 KST blue 내부 헬스체크 통과, 07:59:35 KST nginx reload 완료, 07:59:36 KST 외부 헬스체크 통과, 08:02:29 KST standby-green 동기화 완료.
   - 운영 상태: `aads-dashboard` 활성, release `2d1d6896a059`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
   - 주의: 배포 스크립트 Step 7 QA는 `UNKNOWN`, Browser Bridge 로그인/E2E는 타임아웃/로그인 실패로 미완료. HTTP 307 인증 보호, API `/health`, 컨테이너 상태, 번들 반영 검증으로 대체했다.
+
+## 2026-08-27 07:53 KST - 채팅창 음성알림 온오프 토글 안정화
+
+- 요청: 채팅창 음성알림 온오프가 동작하지 않는 문제 확인 및 조치.
+- 원인:
+  - 음성 지원 여부를 렌더 시점의 `speechSynthesis` 존재 여부로만 판정해, 모바일 브라우저처럼 음성 엔진/voice 목록이 늦게 준비되는 환경에서 버튼 상태가 비활성 또는 불일치할 수 있었다.
+  - `localStorage` 접근 실패 시 예외 방어가 없어 private/webview 계열 환경에서 설정 저장이 깨질 수 있었다.
+  - 꺼짐 상태에서는 토스트/아이콘 피드백이 없어 토글 적용 여부를 사용자가 확인하기 어려웠다.
+- 조치:
+  - `src/services/voiceAlerts.ts`에서 음성알림 설정 읽기/쓰기를 예외 안전하게 변경하고, 사용자 제스처 시 `speechSynthesis.resume()`/`getVoices()`를 호출하는 워밍업 함수를 추가했다.
+  - `src/app/chat/page.tsx`에서 `voiceschanged`와 `storage` 이벤트를 구독해 음성 지원/설정 상태를 재동기화하도록 했다.
+  - 음성 토글 버튼에 `aria-pressed`를 추가하고, 켜짐/꺼짐 아이콘을 `🔊`/`🔇`으로 분리했다.
+  - 토글 시 `음성 안내가 켜졌습니다.` 또는 `음성 안내가 꺼졌습니다.` 토스트를 즉시 표시한다.
+- 검증:
+  - `npx eslint src/services/voiceAlerts.ts src/app/chat/page.tsx` 통과. 기존 경고 20건, 신규 오류 0건.
+  - `npm run build` 통과.
+- 배포:
+  - 본 항목 작성 시점에는 코드 수정과 로컬 검증을 완료했고, 커밋/푸시/운영 배포를 이어서 수행한다.
