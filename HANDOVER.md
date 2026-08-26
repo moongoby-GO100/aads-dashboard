@@ -17,7 +17,11 @@
   - `npm run build` passed and generated `/chat`.
   - Full `npm run lint` still fails on pre-existing repository-wide lint debt outside this change.
 - Deployment:
-  - Pending commit, push, and dashboard deployment in the release step for this entry.
+  - Commit `aeb4d86cae2178af29505f6c2b1c46de980ddc11` pushed to `main`.
+  - `bash deploy.sh` completed blue-green deployment at 2026-08-27 07:31 KST; active slot: green, standby: blue, `AADS_RELEASE_SHA=aeb4d86cae21`.
+  - External `/chat` verified HTTP 307 to `/login?redirect=%2Fchat`; external `/login` verified HTTP 200.
+  - API health verified HTTP 200 via `/api/v1/health`; both `aads-dashboard-green` and `aads-dashboard` containers reported healthy.
+  - Deploy script Step 7 QA returned UNKNOWN, so HTTP/API/container validation was used as fallback.
 
 ## 2026-08-25 18:29 KST - GO100 docs/reports deep-link base correction
 
