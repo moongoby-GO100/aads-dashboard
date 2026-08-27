@@ -42,6 +42,8 @@ const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
+const COMPLETION_ACK_STORAGE_PREFIX = "aads.chat.completionAck.";
+const COMPLETION_ACK_STORAGE_TTL_MS = 30 * 60 * 1000;
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -62,6 +64,34 @@ type StreamingStatusPayload = {
 function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
   const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
   return `/chat/sessions/${sessionId}/streaming-status${ack}`;
+}
+
+function loadPersistedCompletionAck(sessionId: string): string | null {
+  if (typeof window === "undefined" || !sessionId) return null;
+  try {
+    const raw = window.localStorage.getItem(`${COMPLETION_ACK_STORAGE_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { token?: string; at?: number };
+    if (!parsed.token || !parsed.at || Date.now() - parsed.at > COMPLETION_ACK_STORAGE_TTL_MS) {
+      window.localStorage.removeItem(`${COMPLETION_ACK_STORAGE_PREFIX}${sessionId}`);
+      return null;
+    }
+    return parsed.token;
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedCompletionAck(sessionId: string, completionToken: string): void {
+  if (typeof window === "undefined" || !sessionId || !completionToken) return;
+  try {
+    window.localStorage.setItem(
+      `${COMPLETION_ACK_STORAGE_PREFIX}${sessionId}`,
+      JSON.stringify({ token: completionToken, at: Date.now() })
+    );
+  } catch {
+    // localStorage can be blocked in private/webview contexts; in-memory dedupe still applies.
+  }
 }
 
 type AuthKeyStatus = {
@@ -2991,13 +3021,20 @@ export default function ChatPage() {
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
 
-  const streamingStatusPathFor = useCallback((sessionId: string) => (
-    streamingStatusPath(sessionId, ackedCompletionTokenBySessionRef.current.get(sessionId))
-  ), []);
+  const streamingStatusPathFor = useCallback((sessionId: string) => {
+    const ackedToken =
+      ackedCompletionTokenBySessionRef.current.get(sessionId) ||
+      loadPersistedCompletionAck(sessionId);
+    if (ackedToken && !ackedCompletionTokenBySessionRef.current.has(sessionId)) {
+      ackedCompletionTokenBySessionRef.current.set(sessionId, ackedToken);
+    }
+    return streamingStatusPath(sessionId, ackedToken);
+  }, []);
 
   const markCompletionSeen = useCallback((sessionId: string, status?: StreamingStatusPayload | null) => {
     if (status?.completion_token) {
       ackedCompletionTokenBySessionRef.current.set(sessionId, status.completion_token);
+      savePersistedCompletionAck(sessionId, status.completion_token);
     }
   }, []);
 
@@ -3764,6 +3801,10 @@ export default function ChatPage() {
         const [oldest] = completionAlertKeysRef.current;
         if (oldest) completionAlertKeysRef.current.delete(oldest);
       }
+    }
+    if (sessionId && completionToken) {
+      ackedCompletionTokenBySessionRef.current.set(sessionId, completionToken);
+      savePersistedCompletionAck(sessionId, completionToken);
     }
     lastToastedAiIdRef.current = aiMsgId;
     showChatStatusAlert("completed", "응답이 완료되었습니다.", {
