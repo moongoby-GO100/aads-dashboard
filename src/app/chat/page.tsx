@@ -41,6 +41,7 @@ import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./Mar
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
+const COMPLETION_ALERT_DEDUPE_MAX = 200;
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -481,11 +482,22 @@ function shouldShowCompletedBadge(message: ChatMessage): boolean {
 function streamingPlaceholderStatus(
   message: ChatMessage,
   isActive: boolean,
+  activeStatusHint?: string | null,
 ): { label: string; color: string; bg: string; border: string; recoverable: boolean } | null {
   if (message.intent !== "streaming_placeholder" && !message.intent?.startsWith("streaming")) return null;
   if (isActive) {
+    const hint = String(activeStatusHint || "");
+    const label = /최종|저장|확인/.test(hint)
+      ? "최종 저장 확인 중"
+      : /재연결|복구/.test(hint)
+      ? "서버 재연결 중"
+      : /재시도|용량|한도|rate|limit/i.test(hint)
+      ? "모델 재시도 중"
+      : /도구|실행/.test(hint)
+      ? "도구 실행 중"
+      : "생성 중";
     return {
-      label: "생성 중",
+      label,
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.12)",
       border: "rgba(59,130,246,0.25)",
@@ -514,8 +526,36 @@ function streamingPlaceholderStatus(
       recoverable: hasContent,
     };
   }
+  // P0-FIX: 중단/재시도/재연결/저장 대기 세분화
+  if (/중단|interrupt|stop/i.test(content) || /중단|interrupt/i.test(reason)) {
+    return {
+      label: "응답 중단 — 재시도 가능",
+      color: "#ef4444",
+      bg: "rgba(239,68,68,0.10)",
+      border: "rgba(239,68,68,0.25)",
+      recoverable: hasContent,
+    };
+  }
+  if (/재연결|reconnect|복구/i.test(content)) {
+    return {
+      label: "서버 재연결 중",
+      color: "#f59e0b",
+      bg: "rgba(245,158,11,0.12)",
+      border: "rgba(245,158,11,0.25)",
+      recoverable: hasContent,
+    };
+  }
+  if (/최종|저장|확인/.test(content)) {
+    return {
+      label: "최종 저장 대기 중",
+      color: "#3b82f6",
+      bg: "rgba(59,130,246,0.08)",
+      border: "rgba(59,130,246,0.20)",
+      recoverable: hasContent,
+    };
+  }
   return {
-    label: "응답 확인 중",
+    label: hasContent ? "최종 저장 대기 중" : "응답 대기 중",
     color: "#f59e0b",
     bg: "rgba(245,158,11,0.12)",
     border: "rgba(245,158,11,0.25)",
@@ -532,9 +572,9 @@ function shouldKeepDraftAsRecovering(message: ChatMessage, now = Date.now()): bo
 
 function interruptedBadgeLabel(message: ChatMessage): string {
   if (message.model_used === "interrupted" && message.intent !== "interruption_notice") {
-    return "응답 확인 중";
+    return "중단 응답 보존됨";
   }
-  if (message.intent === "interrupted_partial") return "응답 확인 중";
+  if (message.intent === "interrupted_partial") return "중단 응답 보존됨";
   return "응답 중단";
 }
 
@@ -1394,14 +1434,13 @@ const MessageItem = memo(function MessageItem({
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
   const LIVE_STREAM_RENDER_LIMIT = 3000;
-  const LAST_ASSISTANT_AUTO_OPEN_LIMIT = 3000;
   // reply_to_id가 있으면 원본 메시지 찾기
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
   const hasLiveStreamingContent = Boolean(streamingContent && isStreamingPlaceholder);
   const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent);
-  const placeholderStatus = streamingPlaceholderStatus(msg, isActiveStreamingPlaceholder);
+  const placeholderStatus = streamingPlaceholderStatus(msg, isActiveStreamingPlaceholder, streamToolStatus);
   const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
   const isVisiblyStreaming = isActiveStreamingPlaceholder;
@@ -1429,10 +1468,18 @@ const MessageItem = memo(function MessageItem({
   const forceToolsOpen = Boolean(isLastAssistantMsg && !isVisiblyStreaming);
   const effectiveToolsOpen = forceToolsOpen || toolsOpen;
   // P1: 긴 보고서 접이식 상태
+  const [contentCollapseTouched, setContentCollapseTouched] = useState(false);
   const [contentCollapsed, setContentCollapsed] = useState(
-    () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && (!isLastAssistantMsg || msg.content.length > LAST_ASSISTANT_AUTO_OPEN_LIMIT)
+    () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
   );
-  const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant" && msg.content.length <= LAST_ASSISTANT_AUTO_OPEN_LIMIT);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setContentCollapseTouched(false);
+      setContentCollapsed(msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [isLastAssistantMsg, isStreamingPlaceholder, msg.content.length, msg.id, msg.role]);
+  const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant" && !contentCollapseTouched);
   const effectiveContentCollapsed = isStreamingPlaceholder || forceContentOpen ? false : contentCollapsed;
   const displayedStreamingContent = streamingContent && streamingContent.length > LIVE_STREAM_RENDER_LIMIT
     ? `... 앞 ${streamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${streamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
@@ -1970,7 +2017,10 @@ const MessageItem = memo(function MessageItem({
                     </div>
                     <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                       <button
-                        onClick={() => setContentCollapsed(false)}
+                        onClick={() => {
+                          setContentCollapseTouched(true);
+                          setContentCollapsed(false);
+                        }}
                         style={{
                           fontSize: "11px", padding: "3px 10px", borderRadius: "6px",
                           background: "rgba(108,99,255,0.1)", color: "var(--ct-accent)",
@@ -2015,7 +2065,10 @@ const MessageItem = memo(function MessageItem({
                   {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
                       <button
-                        onClick={() => setContentCollapsed(true)}
+                        onClick={() => {
+                          setContentCollapseTouched(true);
+                          setContentCollapsed(true);
+                        }}
                         style={{
                           fontSize: "11px", padding: "2px 8px", borderRadius: "6px",
                           background: "rgba(108,99,255,0.08)", color: "var(--ct-text2)",
@@ -2646,7 +2699,8 @@ export default function ChatPage() {
   }, []);
   const settleScrollAfterMessageMerge = useCallback(() => {
     if (Date.now() < userScrollPauseUntilRef.current) return;
-    if (Date.now() < bottomStickUntilRef.current) {
+    // P1-FIX: bottomStick이 active여도 사용자가 상단에 있으면 강제 스크롤 금지
+    if (Date.now() < bottomStickUntilRef.current && isNearBottomRef.current) {
       scrollToMessagesBottom(true);
       return;
     }
@@ -2930,6 +2984,7 @@ export default function ChatPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const lastToastTimeRef = useRef<number>(0);
   const lastToastedAiIdRef = useRef<string>("");   // 토스트 발생한 AI 메시지 ID — 동일 메시지 이중 토스트 차단
+  const completionAlertKeysRef = useRef<Set<string>>(new Set());
   const lastInterruptedAiIdRef = useRef<string>("");   // 중단 알림 발생한 AI 메시지 ID — 동일 메시지 이중 알림 차단
   const lastChatStatusAlertRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const ackedCompletionTokenBySessionRef = useRef<Map<string, string>>(new Map());
@@ -2944,6 +2999,16 @@ export default function ChatPage() {
     if (status?.completion_token) {
       ackedCompletionTokenBySessionRef.current.set(sessionId, status.completion_token);
     }
+  }, []);
+
+  const completionAlertKey = useCallback((
+    aiMsgId?: string | null,
+    sessionId?: string | null,
+    executionId?: string | null,
+    completionToken?: string | null,
+  ) => {
+    const stable = completionToken || executionId || aiMsgId;
+    return stable ? `${sessionId || activeSessionRef.current || "session"}:${stable}` : "";
   }, []);
 
   // 탭 복귀 시 DB에서 메시지 재조회 — 백그라운드 저장된 응답을 화면에 반영
@@ -3452,8 +3517,7 @@ export default function ChatPage() {
               setThinkingBuf("");
               setToolStatus(null);
               setToolLogs([]);
-              isNearBottomRef.current = true;
-              scrollToMessagesBottom(true);
+              settleScrollAfterMessageMerge();
               return;
             }
           } catch {
@@ -3468,7 +3532,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [mergeLatestAssistantFromServer, preservePartialAndContinueStreaming, scrollToMessagesBottom]);
+  }, [preservePartialAndContinueStreaming, settleScrollAfterMessageMerge]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -3658,9 +3722,9 @@ export default function ChatPage() {
     const displayMsg = `${notificationTitle}: ${msg}`;
     const voiceText = `${projectLabel} 프로젝트, ${sessionTitle} 대화, ${msg}`;
     const dedupeKey = `${kind}:${options.dedupeKey || notificationSessionId || ""}`;
-    if (lastChatStatusAlertRef.current.key === dedupeKey && now - lastChatStatusAlertRef.current.at < 5000) return;
+    if (lastChatStatusAlertRef.current.key === dedupeKey && now - lastChatStatusAlertRef.current.at < 8000) return;
     lastChatStatusAlertRef.current = { key: dedupeKey, at: now };
-    if (now - lastToastTimeRef.current < 1200) return;
+    if (now - lastToastTimeRef.current < 3000) return;
     lastToastTimeRef.current = now;
     setCompletionToast(displayMsg);
     setCompletionToastKind(kind);
@@ -3684,12 +3748,29 @@ export default function ChatPage() {
     showChatStatusAlert("completed", msg, { sessionId, dedupeKey: msg });
   }, [showChatStatusAlert]);
 
-  const showCompletionToastOnce = useCallback(function showCompletionToastOnce(aiMsgId?: string | null) {
+  const showCompletionToastOnce = useCallback(function showCompletionToastOnce(
+    aiMsgId?: string | null,
+    sessionId?: string | null,
+    executionId?: string | null,
+    completionToken?: string | null,
+  ) {
     if (!aiMsgId) return;
+    const key = completionAlertKey(aiMsgId, sessionId, executionId, completionToken);
+    if (key && completionAlertKeysRef.current.has(key)) return;
     if (lastToastedAiIdRef.current === aiMsgId) return;
+    if (key) {
+      completionAlertKeysRef.current.add(key);
+      if (completionAlertKeysRef.current.size > COMPLETION_ALERT_DEDUPE_MAX) {
+        const [oldest] = completionAlertKeysRef.current;
+        if (oldest) completionAlertKeysRef.current.delete(oldest);
+      }
+    }
     lastToastedAiIdRef.current = aiMsgId;
-    showChatStatusAlert("completed", "응답이 완료되었습니다.", { dedupeKey: aiMsgId });
-  }, [showChatStatusAlert]);
+    showChatStatusAlert("completed", "응답이 완료되었습니다.", {
+      sessionId,
+      dedupeKey: key || aiMsgId,
+    });
+  }, [completionAlertKey, showChatStatusAlert]);
 
   const showInterruptionAlertOnce = useCallback((aiMsgId?: string | null, sessionId?: string | null, message?: string) => {
     if (!aiMsgId) return;
@@ -4531,7 +4612,7 @@ export default function ChatPage() {
             void mergeLatestAssistantFromServer(sid);
             return;
           }
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
+          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
           pendingResponseSessions.current.delete(sid);
           setWaitingBgResponse(false); setBgPartialContent("");
           streamingSessionRef.current = null;
@@ -4587,7 +4668,7 @@ export default function ChatPage() {
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
-            showCompletionToastOnce(_lastAi979?.id);
+            showCompletionToastOnce(_lastAi979?.id, sid, ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
           }
           return;
         }
@@ -4597,7 +4678,7 @@ export default function ChatPage() {
             void mergeLatestAssistantFromServer(sid);
             return;
           }
-          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
+          finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
@@ -4683,24 +4764,32 @@ export default function ChatPage() {
           } else {
             streamingStuckCount++;
           }
-          if (streamingStuckCount >= 150) {
-            // 서버가 아직 is_streaming=true라고 보고하면 중단으로 바꾸지 않는다.
-            // 긴 도구 실행/LLM 지연 중 placeholder를 interruption_notice로 전환하면
-            // 하단에 "응답 중단" 배지가 생기고, 이후 재연결이 다시 붙으면서
-            // 중단/재실행이 반복되는 것처럼 보인다.
+          // P0-FIX: 90초(30 ticks×3s) 무변화 시 서버 finalization 트리거
+          if (streamingStuckCount >= 30) {
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
               .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
+              const latestFinal = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+              if (latestFinal) {
+                // 이미 완료된 응답 발견 → 즉시 반영
+                setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestFinal));
+                markCompletionSeen(sid, ss);
+                setStreaming(false); setStreamBuf("");
+                setWaitingBgResponse(false); setBgPartialContent("");
+                pendingResponseSessions.current.delete(sid);
+                settleScrollAfterMessageMerge();
+                showCompletionToastOnce(latestFinal.id, sid, ss.execution_id);
+                streamingStuckCount = 0;
+                stuckCooldownUntil = Date.now() + 30000;
+                return;
+              }
               if (Date.now() >= mergeCooldownUntilRef.current) { setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
             }
-            setWaitingBgResponse(true);
-            pendingResponseSessions.current.add(sid);
-            setToolStatus("⏳ 응답 지연 감지 — 서버 생성 상태를 유지하며 계속 대기 중...");
-            if (ss.execution_id) {
-              attachExecutionReplay(sid, ss.execution_id, false);
-            }
+            // 서버에 finalization 요청
+            requestServerFinalization(sid, [0, 1500, 3500]);
+            setToolStatus("⏳ 90초 무응답 — 서버에 상태 확인 요청 중...");
             streamingStuckCount = 0;
-            stuckCooldownUntil = Date.now() + 90000;
+            stuckCooldownUntil = Date.now() + 60000;
           }
         } else {
           streamingStuckCount = 0;
@@ -4764,7 +4853,7 @@ export default function ChatPage() {
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => isFinalAssistantMessage(m));
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
-              showCompletionToastOnce(_lastAi1029?.id);
+              showCompletionToastOnce(_lastAi1029?.id, sid, ss?.execution_id || currentExecutionIdRef.current, ss?.completion_token);
             }
             return;
           }
@@ -5658,7 +5747,7 @@ export default function ChatPage() {
             } else if (ev.type === "done") {
               streamGotFinal = true;
               let locallyRenderedFinalAiId: string | null = null;
-              finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 2000);  // P0-FIX: 5s→2s (polling 복구 빠르게 활성화)
+              finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
               setToolLogs([]);
@@ -5763,10 +5852,9 @@ export default function ChatPage() {
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
               // 완료 토스트는 실제 버블이 렌더된 뒤에만 표시한다.
               if (locallyRenderedFinalAiId) {
-                showCompletionToastOnce(locallyRenderedFinalAiId);
+                showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current);
               }
-              isNearBottomRef.current = true;
-              scrollToMessagesBottom(true);
+              settleScrollAfterMessageMerge();
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
@@ -6402,7 +6490,7 @@ export default function ChatPage() {
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
-                  showCompletionToastOnce(_lastAi1696?.id);
+                  showCompletionToastOnce(_lastAi1696?.id, _sid, ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
                 }
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
@@ -6416,7 +6504,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, markCompletionSeen, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, showCompletionToastOnce, streamingStatusPathFor]);
+  }, [createSession, markCompletionSeen, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, settleScrollAfterMessageMerge, showCompletionToastOnce, streamingStatusPathFor]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
@@ -7340,7 +7428,10 @@ export default function ChatPage() {
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
       const isSystemMsg = isHiddenSystemChatMessage(m);
-      return !isSystemMsg && m.role === "assistant" && m.intent !== "streaming_placeholder";
+      if (isSystemMsg || m.role !== "assistant") return false;
+      // P0-FIX: content 있는 streaming_placeholder도 last assistant로 인정 (접힘 방지)
+      if (m.intent === "streaming_placeholder" && !hasMeaningfulDisplayContent(m)) return false;
+      return true;
     })?.msg.id;
     return { display: capped, lastAssistantId, totalCount: sortedAll.length };
   }, [messages]);
