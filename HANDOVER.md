@@ -1628,3 +1628,22 @@
   - 결과: 07:56:41 KST blue 내부 헬스체크 통과, 07:56:42 KST nginx reload 완료, 07:56:43 KST 외부 헬스체크 통과, 07:59:08 KST standby-green 동기화 완료.
   - 운영 상태: 활성 슬롯 `blue`, release `07124ad9992b`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
   - 주의: 배포 스크립트 Step 7 QA는 `UNKNOWN`, 브라우저 음성 재생은 기기/브라우저 권한과 사용자 제스처가 필요하므로 수동 클릭 검증이 필요하다.
+
+## 2026-08-28 17:18 KST - 채팅 응답 완료 시 스크롤 위치 보존
+
+- 요청: 응답 완료 시 채팅창 스크롤이 다시 상단으로 이동하는 현상을 확인하고 즉시 조치.
+- 원인:
+  - 응답 완료 직후 SSE `done`, `streaming-status.just_completed`, safety-net polling, 추가지시 완료 확인 경로가 서버 메시지를 다시 병합하면서 `setMessages()`를 여러 번 실행했다.
+  - 기존 완료 경로는 메시지 병합 전 화면 앵커를 저장하지 않고 `settleScrollAfterMessageMerge()`만 호출해, 대형 세션에서 React 렌더와 DOM 높이 재계산이 겹치면 브라우저가 viewport를 상단 쪽으로 재고정할 수 있었다.
+- 조치:
+  - `src/app/chat/page.tsx`에 `MessageViewportAnchor`와 `captureMessageViewportAnchor()` / `restoreMessageViewportAnchor()`를 추가했다.
+  - 완료·복구·폴링 병합 경로를 `setMessagesPreservingViewport()`로 감싸, 메시지 교체 전 현재 보이는 메시지의 `data-message-id`와 offset을 저장하고 렌더 후 같은 위치로 복원한다.
+  - 사용자가 하단에 있을 때는 계속 하단을 유지하고, 중간을 보고 있을 때는 기존 읽던 위치를 유지하도록 분기했다.
+- 검증:
+  - `npx eslint src/app/chat/page.tsx` 통과. 기존 경고 19건, 신규 오류 0건.
+  - `npx tsc --noEmit --pretty false` 통과.
+  - `npm run build` 통과.
+  - `git diff --check` 통과.
+  - `aads-dashboard`, `aads-dashboard-green`, `aads-server`, `aads-postgres` 컨테이너 healthy 확인.
+- 배포:
+  - 본 항목 작성 시점에는 코드 수정과 로컬 검증만 완료했고, 커밋/푸시/운영 배포는 아직 미실행이다.

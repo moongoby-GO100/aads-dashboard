@@ -62,6 +62,13 @@ type StreamingStatusPayload = {
   artifact_revision?: string | null;
 };
 
+type MessageViewportAnchor = {
+  messageId: string | null;
+  offsetTop: number;
+  distanceFromBottom: number;
+  wasNearBottom: boolean;
+};
+
 function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
   const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
   return `/chat/sessions/${sessionId}/streaming-status${ack}`;
@@ -2762,6 +2769,48 @@ export default function ChatPage() {
     }
     scrollToMessagesBottom();
   }, [scrollToMessagesBottom]);
+  const captureMessageViewportAnchor = useCallback((): MessageViewportAnchor | null => {
+    const container = messagesContainerRef.current;
+    if (!container) return null;
+    const messageNodes = Array.from(container.querySelectorAll<HTMLElement>("[data-message-id]"));
+    const anchor = messageNodes.find((el) => el.offsetTop + el.offsetHeight >= container.scrollTop) || null;
+    return {
+      messageId: anchor?.dataset.messageId || null,
+      offsetTop: anchor ? anchor.offsetTop - container.scrollTop : 0,
+      distanceFromBottom: Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight),
+      wasNearBottom: container.scrollTop + container.clientHeight >= container.scrollHeight - 300,
+    };
+  }, []);
+  const restoreMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null) => {
+    if (!anchor) return;
+    const restore = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      if (anchor.wasNearBottom) {
+        container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        isNearBottomRef.current = true;
+        return;
+      }
+      const anchorEl = anchor.messageId
+        ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchor.messageId)}"]`)
+        : null;
+      if (anchorEl) {
+        container.scrollTop = Math.max(0, anchorEl.offsetTop - anchor.offsetTop);
+      } else {
+        container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - anchor.distanceFromBottom);
+      }
+      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+    };
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+    });
+  }, []);
+  const setMessagesPreservingViewport = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
+    const anchor = captureMessageViewportAnchor();
+    setMessages(updater);
+    restoreMessageViewportAnchor(anchor);
+  }, [captureMessageViewportAnchor, restoreMessageViewportAnchor]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -4639,7 +4688,7 @@ export default function ChatPage() {
         const processed = surfaceDbSavedStreamingPlaceholders(msgs, {}).reverse();
         const latestAi = latestFinalAssistantForExecution(processed, currentExecutionIdRef.current);
         if (latestAi) {
-          setMessages(prev => {
+          setMessagesPreservingViewport(prev => {
             const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
             if (hasPlaceholder) return replaceStreamingPlaceholderWithFinal(prev, latestAi);
             const alreadyHas = prev.some(m => m.id === latestAi.id || (latestAi.execution_id && m.execution_id === latestAi.execution_id));
@@ -4648,11 +4697,16 @@ export default function ChatPage() {
           });
         }
       } catch { /* polling fallback */ }
-      settleScrollAfterMessageMerge();
+      restoreMessageViewportAnchor(captureMessageViewportAnchor());
 
     }, 800);
     return () => clearTimeout(timer);
-  }, [streaming, settleScrollAfterMessageMerge]);
+  }, [
+    captureMessageViewportAnchor,
+    restoreMessageViewportAnchor,
+    setMessagesPreservingViewport,
+    streaming,
+  ]);
 
   // FIX-4: 브리핑 렌더 후 재스크롤 (브리핑이 DOM에 추가되면 scrollHeight 변경됨)
   useEffect(() => {
@@ -4742,7 +4796,7 @@ export default function ChatPage() {
             const latestAi = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
               completedAi = latestAi;
-              setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
+              setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
               const recoverablePartial = freshMsgs
                 .slice()
@@ -4756,7 +4810,7 @@ export default function ChatPage() {
                   )
                 );
               if (recoverablePartial) {
-                setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs, { preserveStreamingPlaceholders: true }));
+                setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs, { preserveStreamingPlaceholders: true }));
                 pendingResponseSessions.current.add(sid);
                 setWaitingBgResponse(true);
                 setBgPartialContent(recoverablePartial.content || bgPartialContent);
@@ -4766,7 +4820,7 @@ export default function ChatPage() {
                 void requestResumeOnce(sid);
                 return;
               }
-              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
+              setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
           }
           if (!completedAi) {
@@ -4779,7 +4833,7 @@ export default function ChatPage() {
           markCompletionSeen(sid, ss);
           setStreaming(false); setStreamBuf("");
           // scroll: isNearBottomRef preserved — user scroll position respected
-          settleScrollAfterMessageMerge();
+          restoreMessageViewportAnchor(captureMessageViewportAnchor());
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -4805,14 +4859,14 @@ export default function ChatPage() {
           if (freshMsgs && freshMsgs.length > 0) {
             const latestAi = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
-              setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
+              setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
-              setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
+              setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
           }
           setStreaming(false); setStreamBuf("");
           // scroll: preserve user position
-          settleScrollAfterMessageMerge();
+          restoreMessageViewportAnchor(captureMessageViewportAnchor());
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -4888,18 +4942,18 @@ export default function ChatPage() {
               const latestFinal = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
               if (latestFinal) {
                 // 이미 완료된 응답 발견 → 즉시 반영
-                setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestFinal));
+                setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestFinal));
                 markCompletionSeen(sid, ss);
                 setStreaming(false); setStreamBuf("");
                 setWaitingBgResponse(false); setBgPartialContent("");
                 pendingResponseSessions.current.delete(sid);
-                settleScrollAfterMessageMerge();
+                restoreMessageViewportAnchor(captureMessageViewportAnchor());
                 showCompletionToastOnce(latestFinal.id, sid, statusExecutionId || ss.execution_id);
                 streamingStuckCount = 0;
                 stuckCooldownUntil = Date.now() + 30000;
                 return;
               }
-              if (Date.now() >= mergeCooldownUntilRef.current) { setMessages(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
+              if (Date.now() >= mergeCooldownUntilRef.current) { setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs)); mergeCooldownUntilRef.current = Date.now() + 5000; }
             }
             // 서버에 finalization 요청
             requestServerFinalization(sid, [0, 1500, 3500]);
@@ -4958,12 +5012,12 @@ export default function ChatPage() {
                 if (latestAi2) {
                   markCompletionSeen(sid, ss);
                   markExecutionSettled(sid, latestAi2.execution_id || fallbackExecutionId);
-                  setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
+                  setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
                 } else {
-                  setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
+                  setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
                 // scroll: preserve user position
-                settleScrollAfterMessageMerge();
+                restoreMessageViewportAnchor(captureMessageViewportAnchor());
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -4993,7 +5047,7 @@ export default function ChatPage() {
             }
           }
         }
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
           const hasStoppedMsg = prev.some((m) => m.id.startsWith("stopped-"));
           const latestFinalAssistant = latest.find((m) => isFinalAssistantMessage(m));
@@ -5004,7 +5058,7 @@ export default function ChatPage() {
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
-        settleScrollAfterMessageMerge();
+        restoreMessageViewportAnchor(captureMessageViewportAnchor());
       } catch { /* 폴링 실패 무시 */ }
     }, 5000); // 5초 간격: 브라우저 부하 감소
     return () => { cancelled = true; clearInterval(iv); };
@@ -5012,13 +5066,16 @@ export default function ChatPage() {
     activeSession?.id,
     attachExecutionReplay,
     bgPartialContent,
+    captureMessageViewportAnchor,
     isExecutionSettled,
     markCompletionSeen,
     markExecutionSettled,
     mergeLatestAssistantFromServer,
     requestResumeOnce,
     requestServerFinalization,
+    restoreMessageViewportAnchor,
     settleScrollAfterMessageMerge,
+    setMessagesPreservingViewport,
     showCompletionToastOnce,
     streamingStatusPathFor,
   ]);
@@ -5786,7 +5843,7 @@ export default function ChatPage() {
               if (ev.reason === "interrupt_applied" && visibleDraft.trim() && !isPlaceholderOnlyContent(visibleDraft)) {
                 const preservedExecutionId = currentExecutionIdRef.current || undefined;
                 const nextPlaceholderAt = new Date().toISOString();
-                setMessages((prev) => {
+                setMessagesPreservingViewport((prev) => {
                   const hasPlaceholder = prev.some((m) => isStreamingPlaceholderMessage(m));
                   const next = prev.map((m) => {
                     if (!isStreamingPlaceholderMessage(m)) return m;
@@ -5915,7 +5972,7 @@ export default function ChatPage() {
               if (full.trim()) {
                 // ★ in-place 업데이트: placeholder를 최종 응답으로 교체 (새 버블 방지)
                 locallyRenderedFinalAiId = (ev.message_id as string | undefined) ?? currentExecutionIdRef.current ?? null;
-                setMessages((prev) => {
+                setMessagesPreservingViewport((prev) => {
                   const existingPh = prev.find(m => m.intent === "streaming_placeholder");
                   const hasPlaceholder = Boolean(existingPh);
                   const finalMsg = {
@@ -5967,7 +6024,7 @@ export default function ChatPage() {
               if (locallyRenderedFinalAiId) {
                 showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current);
               }
-              settleScrollAfterMessageMerge();
+              restoreMessageViewportAnchor(captureMessageViewportAnchor());
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
@@ -6583,9 +6640,9 @@ export default function ChatPage() {
                     const latestAi = latestFinalAssistantForExecution(filtered, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
                     if (latestAi) {
                       completedAi = latestAi;
-                      setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
+                      setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
                     } else {
-                      setMessages(prev => mergeServerMessagesPreservingLocal(prev, filtered));
+                      setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, filtered));
                     }
                     requestServerFinalization(_sid, [0, 1500]);
                   }
@@ -6621,7 +6678,21 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, isExecutionSettled, markCompletionSeen, markExecutionSettled, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, settleScrollAfterMessageMerge, showCompletionToastOnce, streamingStatusPathFor]);
+  }, [
+    captureMessageViewportAnchor,
+    createSession,
+    isExecutionSettled,
+    markCompletionSeen,
+    markExecutionSettled,
+    mergeLatestAssistantFromServer,
+    requestResumeOnce,
+    requestServerFinalization,
+    restoreMessageViewportAnchor,
+    settleScrollAfterMessageMerge,
+    setMessagesPreservingViewport,
+    showCompletionToastOnce,
+    streamingStatusPathFor,
+  ]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
