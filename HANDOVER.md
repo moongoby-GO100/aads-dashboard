@@ -17,7 +17,10 @@
   - `npx tsc --noEmit` passed.
   - `git diff --check` passed.
 - Deployment:
-  - Pending commit, push, and deploy at the time of this entry.
+  - Commit `5a281c6` (`feat(admin): show model routing failures`) was pushed.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment and switched active dashboard traffic to green.
+  - Runtime containers `aads-dashboard` and `aads-dashboard-green` were healthy after deployment.
+  - Built-in deploy QA ended as `UNKNOWN`, so HTTP/auth-redirect and container health checks were used as fallback validation.
 
 ## 2026-08-29 04:33 KST - Chat completion alert waits for stable final message
 
