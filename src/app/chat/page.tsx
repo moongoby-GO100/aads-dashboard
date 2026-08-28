@@ -514,7 +514,16 @@ function shouldShowCompletedBadge(message: ChatMessage): boolean {
   if (message.intent === "rate_limited" || message.intent === "streaming_placeholder") return false;
   if (isContinuedMessage(message) || message.intent === "regenerated" || message.intent === "_archived_partial") return false;
   if (isTerminalIncompleteAssistantMessage(message)) return false;
+  if (endsWithProgressOnlyStatement(message)) return false;
   return message.status === undefined || message.status === "completed";
+}
+
+function shouldEmitCompletionAlertForMessage(message?: ChatMessage | null): boolean {
+  if (!message) return true;
+  if (!isFinalAssistantMessage(message)) return false;
+  if (endsWithProgressOnlyStatement(message)) return false;
+  if (hasIncompleteQualityFlag(message)) return false;
+  return true;
 }
 
 function streamingPlaceholderStatus(
@@ -3903,8 +3912,10 @@ export default function ChatPage() {
     sessionId?: string | null,
     executionId?: string | null,
     completionToken?: string | null,
+    finalMessage?: ChatMessage | null,
   ) {
     if (!aiMsgId) return;
+    if (!shouldEmitCompletionAlertForMessage(finalMessage)) return;
     const key = completionAlertKey(aiMsgId, sessionId, executionId, completionToken);
     if (key && completionAlertKeysRef.current.has(key)) return;
     if (lastToastedAiIdRef.current === aiMsgId) return;
@@ -4780,7 +4791,21 @@ export default function ChatPage() {
         }
         if (ss.just_completed) {
           if (finalizingRef.current) {
-            void mergeLatestAssistantFromServer(sid);
+            const completionStatus = ss;
+            const completionToken = ss.completion_token;
+            const completionExecutionId = statusExecutionId || ss.execution_id || currentExecutionIdRef.current;
+            void mergeLatestAssistantFromServer(sid)
+              .then((message) => {
+                if (!message || cancelled) return;
+                markCompletionSeen(sid, completionStatus);
+                showCompletionToastOnce(
+                  message.id,
+                  sid,
+                  message.execution_id || completionExecutionId,
+                  completionToken,
+                  message,
+                );
+              });
             return;
           }
           finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
@@ -4839,7 +4864,7 @@ export default function ChatPage() {
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
-            showCompletionToastOnce(_lastAi979?.id, sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
+            showCompletionToastOnce(_lastAi979?.id, sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token, _lastAi979);
           }
           return;
         }
@@ -4948,7 +4973,7 @@ export default function ChatPage() {
                 setWaitingBgResponse(false); setBgPartialContent("");
                 pendingResponseSessions.current.delete(sid);
                 restoreMessageViewportAnchor(captureMessageViewportAnchor());
-                showCompletionToastOnce(latestFinal.id, sid, statusExecutionId || ss.execution_id);
+                showCompletionToastOnce(latestFinal.id, sid, statusExecutionId || ss.execution_id, undefined, latestFinal);
                 streamingStuckCount = 0;
                 stuckCooldownUntil = Date.now() + 30000;
                 return;
@@ -5025,7 +5050,7 @@ export default function ChatPage() {
             const _lastUser1029 = rawLatest?.find((m: ChatMessage) => m.role === "user");
             const _lastAi1029 = rawLatest?.find((m: ChatMessage) => isFinalAssistantMessage(m));
             if (!isAutoTriggerResponse(_lastUser1029, _lastAi1029)) {
-              showCompletionToastOnce(_lastAi1029?.id, sid, ss?.execution_id || currentExecutionIdRef.current, ss?.completion_token);
+              showCompletionToastOnce(_lastAi1029?.id, sid, ss?.execution_id || currentExecutionIdRef.current, ss?.completion_token, _lastAi1029);
             }
             return;
           }
@@ -5917,6 +5942,7 @@ export default function ChatPage() {
             } else if (ev.type === "done") {
               streamGotFinal = true;
               let locallyRenderedFinalAiId: string | null = null;
+              let localFinalMessageForAlert: ChatMessage | null = null;
               finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
               _stopDrain();  // Phase4: 버퍼 즉시 플러시
               setToolStatus(null);
@@ -5971,7 +5997,19 @@ export default function ChatPage() {
               // full이 비어있으면 빈 버블 방지 — 도구만 실행된 경우
               if (full.trim()) {
                 // ★ in-place 업데이트: placeholder를 최종 응답으로 교체 (새 버블 방지)
-                locallyRenderedFinalAiId = (ev.message_id as string | undefined) ?? currentExecutionIdRef.current ?? null;
+                locallyRenderedFinalAiId = typeof ev.message_id === "string" ? ev.message_id : null;
+                localFinalMessageForAlert = locallyRenderedFinalAiId
+                  ? {
+                    id: locallyRenderedFinalAiId,
+                    session_id: requestSessionId!,
+                    execution_id: currentExecutionIdRef.current || undefined,
+                    role: "assistant" as const,
+                    content: full,
+                    model_used: ev.model || undefined,
+                    intent: ev.intent || undefined,
+                    created_at: new Date().toISOString(),
+                  }
+                  : null;
                 setMessagesPreservingViewport((prev) => {
                   const existingPh = prev.find(m => m.intent === "streaming_placeholder");
                   const hasPlaceholder = Boolean(existingPh);
@@ -6020,9 +6058,10 @@ export default function ChatPage() {
               setThinkingBuf("");
               setStreaming(false);
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
-              // 완료 토스트는 실제 버블이 렌더된 뒤에만 표시한다.
+              // 완료 토스트는 서버 저장 메시지 ID가 확인된 최종 버블에만 표시한다.
+              // DB 저장 ID가 없는 로컬 합성 버블은 직후 finalization/폴링에서 내용이 바뀔 수 있다.
               if (locallyRenderedFinalAiId) {
-                showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current);
+                showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current, undefined, localFinalMessageForAlert);
               }
               restoreMessageViewportAnchor(captureMessageViewportAnchor());
             } else if (ev.type === "tool_use" && ev.tool_name) {
@@ -6664,7 +6703,7 @@ export default function ChatPage() {
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
-                  showCompletionToastOnce(_lastAi1696?.id, _sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
+                  showCompletionToastOnce(_lastAi1696?.id, _sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token, _lastAi1696);
                 }
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }

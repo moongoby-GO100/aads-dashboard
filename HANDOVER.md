@@ -1,5 +1,26 @@
 # AADS Dashboard Handover
 
+## 2026-08-29 04:33 KST - Chat completion alert waits for stable final message
+
+- Request: Stop the first assistant bubble from showing a completion alert while the answer is still continuing and later changing in place.
+- Cause:
+  - `src/app/chat/page.tsx` emitted the completion toast from the SSE `done` path even when the server had not provided a saved `message_id`.
+  - That local synthetic finalization could fire the voice/toast completion alert before DB finalization, polling recovery, or later message merge stabilized the final assistant bubble.
+  - Completion badges and alerts also did not reject progress-only assistant text such as "확인하겠습니다/진행하겠습니다" tails.
+- Changes:
+  - `src/app/chat/page.tsx`: completion badges now reject progress-only terminal text.
+  - `src/app/chat/page.tsx`: added `shouldEmitCompletionAlertForMessage` so completion alerts require a final assistant message that is not incomplete/progress-only.
+  - `src/app/chat/page.tsx`: SSE `done` no longer uses `execution_id` as an alert message ID fallback. If the server has not returned a saved `message_id`, the alert waits for DB finalization/polling to fetch the stable final message.
+  - `src/app/chat/page.tsx`: polling/finalization completion paths pass the final message object into the alert gate.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
+  - `npx tsc --noEmit` passed.
+  - `git diff --check` passed.
+  - `npm run build` passed and generated `/chat`.
+  - Full `npm run lint` still fails on pre-existing repository-wide lint debt outside this change.
+- Deployment:
+  - Not committed, pushed, or deployed in this step. Production will keep the previous behavior until the dashboard release/deploy step runs.
+
 ## 2026-08-28 17:15 KST - Chat streaming completion state stabilization
 
 - Request: Apply the recommended fix for repeated response bubbles in session `45249276-83a1-42ca-b58d-d5f1737a388b`.
