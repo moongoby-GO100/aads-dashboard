@@ -1646,4 +1646,8 @@
   - `git diff --check` 통과.
   - `aads-dashboard`, `aads-dashboard-green`, `aads-server`, `aads-postgres` 컨테이너 healthy 확인.
 - 배포:
-  - 본 항목 작성 시점에는 코드 수정과 로컬 검증만 완료했고, 커밋/푸시/운영 배포는 아직 미실행이다.
+  - 코드 커밋: `6c322f6` (`fix chat completion scroll anchoring`)
+  - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
+  - 결과: 운영 `aads-dashboard` 컨테이너가 새 빌드로 교체되어 healthy 상태를 반환했다.
+  - 운영 상태: `https://aads.newtalk.kr/chat`은 로그인 리다이렉트 후 `/login` HTTP 200 응답을 반환한다.
+  - 주의: `capture_screenshot`은 타임아웃으로 실패해 브라우저 시각 검증은 미완료이며, API/컨테이너 검증으로 대체했다.
