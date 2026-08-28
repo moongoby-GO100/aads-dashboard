@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-08-29 07:45 KST - Chat interruption diagnostics visible in bubbles
+
+- Request: Apply chat cut-off improvements and make response interruption causes visible/analyzable from the chat window.
+- Cause:
+  - Interruption badges only showed generic labels such as "임시 저장됨".
+  - The render message payload did not carry interruption `quality_details`, so the UI could not explain cause, idle time, last event, or auto-resume status.
+- Changes:
+  - `src/app/chat/page.tsx` now summarizes interruption diagnostics on assistant metadata lines.
+  - Added category labels for relay congestion, watchdog timeout, superseded-by-newer-instruction, user stop, auto recovery, process interruption, and final-save-missing cases.
+  - The diagnostic chip exposes the raw reason/category/idle/age/last event/tool in the title tooltip for quick inspection.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` succeeded with existing warnings only.
+  - `npx tsc --noEmit` succeeded.
+  - Production build and deploy validation are required before final completion.
+- Deployment:
+  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+
 ## 2026-08-29 05:16 KST - Admin model routing error panel and fallback order
 
 - Request: Reflect chat model routing settings in `/admin/model-routing` and make models with errors visible.

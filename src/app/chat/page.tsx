@@ -664,6 +664,64 @@ function interruptedBadgeLabel(message: ChatMessage): string {
   return "이어가기 가능";
 }
 
+function textDetail(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function interruptionCategoryLabel(category: string): string {
+  const normalized = category.toLowerCase();
+  if (normalized === "relay_503") return "모델 릴레이 혼잡";
+  if (normalized === "watchdog_timeout") return "장시간 무응답";
+  if (normalized === "superseded") return "새 지시 우선";
+  if (normalized === "user_action") return "사용자 중지";
+  if (normalized === "auto_recovery") return "자동 복구";
+  if (normalized === "process_interrupt") return "프로세스 중단";
+  if (normalized === "final_save_missing") return "최종 저장 누락";
+  if (normalized === "unknown") return "원인 미분류";
+  return category || "원인 미분류";
+}
+
+function interruptionDiagnosticSummary(message: ChatMessage): { summary: string; title: string } | null {
+  if (!isInterruptedLikeMessage(message) && !hasIncompleteQualityFlag(message)) return null;
+  const details = qualityDetailsObject(message);
+  const category = textDetail(
+    details.category ||
+    details.interruption_reason_group ||
+    details.interrupt_category
+  );
+  const subreason = textDetail(details.interruption_subreason);
+  const reason = textDetail(details.reason || details.interruption_reason || details.interrupt_reason);
+  const idleSeconds = numericDetail(details.interrupted_idle_seconds ?? details.idle_seconds);
+  const ageSeconds = numericDetail(details.interrupted_age_seconds ?? details.age_seconds);
+  const contentLen = numericDetail(details.interrupted_content_len ?? details.partial_len);
+  const lastEvent = textDetail(details.interrupted_last_event ?? details.last_event);
+  const lastTool = textDetail(details.interrupted_last_tool ?? details.last_tool);
+  const autoResume = details.auto_resume_scheduled === true;
+  const sawDone = details.interrupted_saw_done === true || details.saw_done === true;
+  const parts: string[] = [];
+  if (category) parts.push(`원인 ${interruptionCategoryLabel(category)}`);
+  if (subreason && subreason !== "-") parts.push(`상세 ${subreason}`);
+  if (idleSeconds !== null && idleSeconds > 0) parts.push(`무응답 ${formatResponseDuration(idleSeconds * 1000)}`);
+  if (ageSeconds !== null && ageSeconds > 0 && parts.length < 3) parts.push(`진행 ${formatResponseDuration(ageSeconds * 1000)}`);
+  if (lastEvent && lastEvent !== "-" && parts.length < 3) parts.push(`마지막 ${lastEvent}`);
+  if (lastTool && lastTool !== "-" && parts.length < 3) parts.push(`도구 ${lastTool}`);
+  if (autoResume) parts.push("자동 이어쓰기 예약");
+  if (sawDone && parts.length < 4) parts.push("done 수신");
+  if (contentLen !== null && contentLen > 0 && parts.length < 4) parts.push(`${contentLen.toLocaleString()}자 보존`);
+  const summary = parts.slice(0, 4).join(" · ");
+  if (!summary) return null;
+  const title = [
+    reason ? `reason=${reason}` : "",
+    category ? `category=${category}` : "",
+    idleSeconds !== null ? `idle=${idleSeconds}s` : "",
+    ageSeconds !== null ? `age=${ageSeconds}s` : "",
+    lastEvent ? `last_event=${lastEvent}` : "",
+    lastTool ? `last_tool=${lastTool}` : "",
+    autoResume ? "auto_resume=true" : "",
+  ].filter(Boolean).join("\n");
+  return { summary, title };
+}
+
 function isInterruptedLikeMessage(message: ChatMessage): boolean {
   if (isContinuedMessage(message)) return false;
   return (
@@ -1564,6 +1622,9 @@ const MessageItem = memo(function MessageItem({
     : null;
   const durationMs = isVisiblyStreaming ? liveDurationMs : persistedDurationMs;
   const durationLabel = isVisiblyStreaming ? "진행" : "소요";
+  const interruptionDiagnostics = msg.role === "assistant"
+    ? interruptionDiagnosticSummary(msg)
+    : null;
   const finalThinkingSummary = msg.role === "assistant" && !isVisiblyStreaming
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
@@ -2310,6 +2371,25 @@ const MessageItem = memo(function MessageItem({
                   }}
                 >
                   {durationLabel} {formatResponseDuration(durationMs)}
+                </span>
+              )}
+              {interruptionDiagnostics && (
+                <span
+                  title={interruptionDiagnostics.title}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                    padding: "1px 6px",
+                    borderRadius: "8px",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    background: "rgba(14,165,233,0.10)",
+                    color: "#0284c7",
+                    border: "1px solid rgba(14,165,233,0.22)",
+                  }}
+                >
+                  {interruptionDiagnostics.summary}
                 </span>
               )}
               {msg.created_at && (
