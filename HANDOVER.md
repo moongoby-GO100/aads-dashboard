@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-28 17:15 KST - Chat streaming completion state stabilization
+
+- Request: Apply the recommended fix for repeated response bubbles in session `45249276-83a1-42ca-b58d-d5f1737a388b`.
+- Cause:
+  - The chat UI could keep polling `streaming-status` for an execution that had already completed locally.
+  - A stale `execution_id` could re-enable `streaming_placeholder` on tab focus, session entry, interval polling, or post-SSE completion checks.
+  - Historical assistant messages such as `regenerated`, `interrupted_partial`, and `_archived_partial` were still rendered as normal visible bubbles when consecutive assistant history existed.
+- Changes:
+  - `src/app/chat/page.tsx`: added per-session completed execution tracking to prevent settled executions from being reactivated as active streaming.
+  - `src/app/chat/page.tsx`: wired the settled execution guard into tab focus refresh, session entry, interval polling, server finalization merge, completion toast, and post-SSE one-shot checks.
+  - `src/app/chat/page.tsx`: collapsed historical assistant trail messages behind the kept response bubble instead of surfacing them as repeated current answers.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
+  - `git diff --check -- src/app/chat/page.tsx` passed.
+  - `npm run build` passed and generated `/chat`.
+  - Production deploy script completed blue-green deployment; active slot: blue, standby: green, `AADS_RELEASE_SHA=41ef497b9d5d`.
+  - External `/chat` verified HTTP 307 to `/login?redirect=%2Fchat`; local dashboard `/login` verified HTTP 200; `aads-dashboard` and `aads-dashboard-green` containers reported healthy.
+  - Deploy script Step 7 QA returned UNKNOWN, so HTTP/container validation was used as fallback.
+
 ## 2026-08-27 07:24 KST - Chat auto-recovery status wording
 
 - Request: Verify whether immediate response bubbles still appear, then apply the improvement if safe because the chat shows an "response interrupted" message right after a question.
