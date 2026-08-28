@@ -1694,3 +1694,19 @@
   - 결과: 운영 `aads-dashboard` 컨테이너가 새 빌드로 교체되어 healthy 상태를 반환했다.
   - 운영 상태: `https://aads.newtalk.kr/chat`은 로그인 리다이렉트 후 `/login` HTTP 200 응답을 반환한다.
   - 주의: `capture_screenshot`은 타임아웃으로 실패해 브라우저 시각 검증은 미완료이며, API/컨테이너 검증으로 대체했다.
+
+## 2026-08-29 05:52 KST - 채팅 응답 중 스크롤 상단 튐 방지 보강
+
+- 요청: 응답 생성 중/완료 직후 채팅창 스크롤이 상단으로 이동하는 문제를 개선안 기준으로 즉시 조치하고 운영 반영.
+- 원인:
+  - 기존 1차 패치 이후에도 visibility refetch, execution replay, streaming-status polling, SSE done/message_done, resume/last-response fallback, tool hydration 경로 일부가 직접 `setMessages()`를 호출했다.
+  - 해당 경로들은 서버 메시지 병합 또는 placeholder 교체 전 현재 viewport anchor를 저장하지 않아, 긴 세션에서 React 렌더와 flex column 높이 재계산이 겹칠 때 브라우저가 상단 쪽으로 재고정될 수 있었다.
+- 조치:
+  - `src/app/chat/page.tsx`에서 비의도 서버 병합/복구/완료/도구 hydration 경로를 `setMessagesPreservingViewport()`로 통합했다.
+  - 사용자가 새 질문을 보내는 경우처럼 의도적으로 하단 이동해야 하는 경로는 기존 하단 고정을 유지했다.
+  - 세션 삭제/전환/수동 메시지 삭제처럼 명시적 UI 상태 초기화 경로는 변경하지 않았다.
+- 검증 예정:
+  - `npx eslint src/app/chat/page.tsx`
+  - `npx tsc --noEmit --pretty false`
+  - `npm run build`
+  - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.

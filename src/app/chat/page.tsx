@@ -3187,7 +3187,7 @@ export default function ChatPage() {
             setBgPartialContent(currentStatus.partial_content);
             setStreamBuf(currentStatus.partial_content);
           }
-          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
             executionId: alreadySettled ? null : (currentStatus.execution_id || currentExecutionIdRef.current),
             partialContent: currentStatus.partial_content || bgPartialContentRef.current,
@@ -3209,7 +3209,7 @@ export default function ChatPage() {
         if (finalMsgs.some((message) => isFinalAssistantMessage(message))) {
           markCompletionSeen(sid, status);
         }
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           if (Date.now() < mergeCooldownUntilRef.current) return prev;
           const hasServerDraft = result.messages.some((m) =>
             m.intent === "streaming_placeholder" && hasMeaningfulDisplayContent(m)
@@ -3224,7 +3224,7 @@ export default function ChatPage() {
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
     return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
-  }, [isExecutionSettled, markCompletionSeen, markExecutionSettled, settleScrollAfterMessageMerge, streamingStatusPathFor]);
+  }, [isExecutionSettled, markCompletionSeen, markExecutionSettled, setMessagesPreservingViewport, settleScrollAfterMessageMerge, streamingStatusPathFor]);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
@@ -3255,12 +3255,12 @@ export default function ChatPage() {
   const hydrateMessageTools = useCallback(async (msg: ChatMessage) => {
     if (!msg.id || toolHydrationRequestedRef.current.has(msg.id)) return;
     toolHydrationRequestedRef.current.add(msg.id);
-    setMessages((prev) => prev.map((m) =>
+    setMessagesPreservingViewport((prev) => prev.map((m) =>
       m.id === msg.id ? { ...m, tool_hydration_status: "loading" } as ChatMessage : m
     ));
     try {
       const fullMsg = await chatApi<ChatMessage>(`/chat/messages/${msg.id}`);
-      setMessages((prev) => prev.map((m) => {
+      setMessagesPreservingViewport((prev) => prev.map((m) => {
         if (m.id !== msg.id) return m;
         return {
           ...mergeServerMessageWithExisting(m, fullMsg),
@@ -3268,11 +3268,11 @@ export default function ChatPage() {
         } as ChatMessage;
       }));
     } catch {
-      setMessages((prev) => prev.map((m) =>
+      setMessagesPreservingViewport((prev) => prev.map((m) =>
         m.id === msg.id ? { ...m, tool_hydration_status: "error" } as ChatMessage : m
       ));
     }
-  }, []);
+  }, [setMessagesPreservingViewport]);
 
   useEffect(() => {
     if (!activeSession?.id) return;
@@ -3371,7 +3371,7 @@ export default function ChatPage() {
       }
       if (activeSessionRef.current !== sessionId || !finalMessage) return null;
       markExecutionSettled(sessionId, finalMessage.execution_id || currentExecutionIdRef.current);
-      setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, finalMessage));
+      setMessagesPreservingViewport((prev) => replaceStreamingPlaceholderWithFinal(prev, finalMessage));
       lastKnownMsgIdRef.current = finalMessage.id;
       pendingResponseSessions.current.delete(sessionId);
       setWaitingBgResponse(false);
@@ -3382,7 +3382,7 @@ export default function ChatPage() {
     } catch {
       return null;
     }
-  }, [markExecutionSettled]);
+  }, [markExecutionSettled, setMessagesPreservingViewport]);
 
   const requestServerFinalization = useCallback((sessionId: string, delays: number[] = [0, 500, 1500, 3500, 5000]) => {
     finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
@@ -3439,7 +3439,7 @@ export default function ChatPage() {
     const savedPartial = convertDraftMessage(message, {
       modelUsed: "streaming",
     });
-    setMessages((prev) => {
+    setMessagesPreservingViewport((prev) => {
       let hasPlaceholder = false;
       const resetPrev = prev
         .filter((m) => {
@@ -3480,7 +3480,7 @@ export default function ChatPage() {
         },
       ].sort((a, b) => messageTime(a) - messageTime(b));
     });
-  }, [activeSession?.id]);
+  }, [activeSession?.id, setMessagesPreservingViewport]);
 
   const attachExecutionReplay = useCallback(async (attachSessionId: string, executionId: string, replayFromStart = false) => {
     if (!attachSessionId || !executionId) return;
@@ -3498,7 +3498,7 @@ export default function ChatPage() {
     streamingSessionRef.current = attachSessionId;
     setStreaming(true);
     setWaitingBgResponse(true);
-    setMessages((prev) => {
+    setMessagesPreservingViewport((prev) => {
       const hasPlaceholder = prev.some((m) => m.intent === "streaming_placeholder");
       if (hasPlaceholder) {
         return prev.map((m) =>
@@ -3659,7 +3659,7 @@ export default function ChatPage() {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc&include_streaming=true`)
                 .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full }).reverse());
               if (activeSessionRef.current !== attachSessionId) return;
-              setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+              setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               setStreaming(false);
               setWaitingBgResponse(false);
@@ -3682,7 +3682,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [preservePartialAndContinueStreaming, settleScrollAfterMessageMerge]);
+  }, [preservePartialAndContinueStreaming, setMessagesPreservingViewport, settleScrollAfterMessageMerge]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -3698,12 +3698,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (!waitingBgResponse || !activeSession?.id) return;
     const sid = activeSession.id;
-    setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+    setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
       sessionId: sid,
       executionId: currentExecutionIdRef.current,
       partialContent: bgPartialContentRef.current || streamBufRef.current || "분석 중...",
     }));
-  }, [activeSession?.id, waitingBgResponse]);
+  }, [activeSession?.id, setMessagesPreservingViewport, waitingBgResponse]);
 
   // ── H-3: sendMessage useCallback 안정화용 ref ──
   const activeSessionObjRef = useRef(activeSession);
@@ -4341,7 +4341,7 @@ export default function ChatPage() {
           });
           {
             const finalMsgs = processed.length > 0 ? processed : msgs;
-            setMessages((prev) => (
+            setMessagesPreservingViewport((prev) => (
               prev.length > 0
                 ? mergeServerMessagesPreservingLocal(prev, finalMsgs)
                 : mergeServerMessagesPreservingLocal([], finalMsgs)
@@ -4394,7 +4394,7 @@ export default function ChatPage() {
         // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
         // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
         const _exec_id_for_attach = initialStatusSettled ? null : (status.execution_id || activeSession?.current_execution_id || null);
-        setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+        setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
           sessionId: fetchSid,
           executionId: _exec_id_for_attach,
           partialContent: status.partial_content || bgPartialContentRef.current,
@@ -4533,7 +4533,7 @@ export default function ChatPage() {
     }
     // BUG-1 FIX: cleanup — 세션 전환 시 이전 fetch 응답 폐기
     return () => { cancelled = true; };
-  }, [activeSession?.id, isExecutionSettled, markCompletionSeen, markExecutionSettled, streamingStatusPathFor]);
+  }, [activeSession?.id, isExecutionSettled, markCompletionSeen, markExecutionSettled, setMessagesPreservingViewport, streamingStatusPathFor]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -4566,13 +4566,13 @@ export default function ChatPage() {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
             const processed = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
-            setMessages((prev) => mergeServerMessagesPreservingLocal(prev, processed));
+            setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, processed));
           }
         })
         .catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [activeSession?.id, messages.length, streaming]);
+  }, [activeSession?.id, messages.length, setMessagesPreservingViewport, streaming]);
 
   // 스크롤 이벤트로 near-bottom 감지. 과거 메시지는 버튼으로만 로드해 대형 세션의 scroll anchoring 루프를 막는다.
   const loadingOlderRef = useRef(false);
@@ -4658,7 +4658,7 @@ export default function ChatPage() {
       const thinking = thinkingBufRef.current;
       if (!buf && !thinking) return;
       startTransition(() => {
-      setMessages(prev => {
+      setMessagesPreservingViewport(prev => {
         const ph = prev.find(m => m.intent === "streaming_placeholder");
         if (!ph || (ph.content === buf && (ph.thinking_summary || "") === thinking)) return prev;
         return prev.map(m =>
@@ -4673,12 +4673,12 @@ export default function ChatPage() {
       const buf = streamBufRef.current;
       const thinking = thinkingBufRef.current;
       if (buf || thinking) {
-        setMessages(prev => prev.map(m =>
+        setMessagesPreservingViewport(prev => prev.map(m =>
           m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
         ));
       }
     };
-  }, [streaming, mergeLatestAssistantFromServer]);
+  }, [streaming, mergeLatestAssistantFromServer, setMessagesPreservingViewport]);
 
   // ── SAFETY-NET: streaming→false 전환 후 placeholder 잔류 방지 + 스크롤 복구 ──
   const prevStreamingForSafetyRef = useRef(false);
@@ -4781,7 +4781,7 @@ export default function ChatPage() {
           if (streamingStatus.tool_count && streamingStatus.last_tool) {
             setToolStatus(`🔧 ${streamingStatus.last_tool} 실행 중... (도구 ${streamingStatus.tool_count}회)`);
           }
-          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
             executionId: streamingStatus.execution_id || currentExecutionIdRef.current,
             partialContent: streamingStatus.partial_content || bgPartialContentRef.current || streamBufRef.current,
@@ -4910,7 +4910,7 @@ export default function ChatPage() {
           if (ss.partial_content) {
             const statusPartialContent = ss.partial_content;
             setStreamBuf(statusPartialContent);
-            setMessages(prev => {
+            setMessagesPreservingViewport(prev => {
               const placeholderIndex = prev.findIndex((m) => m.intent === "streaming_placeholder");
               const placeholder: ChatMessage = {
                 id: placeholderIndex >= 0 ? prev[placeholderIndex].id : `ai-streaming-${Date.now()}`,
@@ -5057,7 +5057,7 @@ export default function ChatPage() {
           if (hasPlaceholder && !_streaming) {
             const phMsg = rawLatest.find((m) => m.intent === "streaming_placeholder");
             if (phMsg) {
-              setMessages(prev => {
+              setMessagesPreservingViewport(prev => {
                 const idx = prev.findIndex((m) => m.intent === "streaming_placeholder");
                 if (idx >= 0) {
                   const existing = prev[idx];
@@ -5511,7 +5511,7 @@ export default function ChatPage() {
           )
             .then((result) => {
               const fresh = surfaceDbSavedStreamingPlaceholders(result.messages || [], { keepEmpty: true });
-              setMessages((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+              setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
             })
             .catch(() => {});
           // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
@@ -5834,7 +5834,7 @@ export default function ChatPage() {
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
               if (ev.execution_id) {
                 currentExecutionIdRef.current = ev.execution_id;
-                setMessages((prev) => prev.map((m) =>
+                setMessagesPreservingViewport((prev) => prev.map((m) =>
                   m.intent === "streaming_placeholder" ? { ...m, execution_id: ev.execution_id } : m,
                 ));
               }
@@ -6146,7 +6146,7 @@ export default function ChatPage() {
               setStreaming(false);
               setToolStatus(null);
               // ★ in-place 업데이트
-              setMessages((prev) => {
+              setMessagesPreservingViewport((prev) => {
                 const eventMessage = ev.message as ChatMessage;
                 const mergedMessage = {
                   ...eventMessage,
@@ -6234,7 +6234,7 @@ export default function ChatPage() {
       if (isStale()) { /* 세션 전환됨 — UI 업데이트 안 함 */ }
       else if (!streamGotFinal && full) {
         setStreamBuf("");
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           const hasPlaceholder = prev.some((message) => message.intent === "streaming_placeholder");
           if (hasPlaceholder) {
             return prev.map((message) => (
@@ -6294,7 +6294,7 @@ export default function ChatPage() {
             ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
             const aiMsg = msgs.find((m) => isFinalAssistantMessage(m));
             if (aiMsg) {
-              setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
+              setMessagesPreservingViewport((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
               mergeCooldownUntilRef.current = Date.now() + 5000;
               break;
             }
@@ -6319,7 +6319,7 @@ export default function ChatPage() {
         const frozenContent = full;  // 끊기 직전까지의 텍스트 캡처
         // PERSIST-FIX: SSE 끊김 즉시 message content에 캡처 (버블 사라짐 방지)
         if (frozenContent) {
-          setMessages(prev => prev.map(m =>
+          setMessagesPreservingViewport(prev => prev.map(m =>
             m.intent === "streaming_placeholder" ? { ...m, content: frozenContent } : m
           ));
         }
@@ -6349,10 +6349,10 @@ export default function ChatPage() {
           // 5분 초과 시 안내 메시지 후 종료
           if (Date.now() - resumeStartTime > MAX_RESUME_DURATION) {
             if (!isStale()) {
-              setMessages(prev => prev.map((m) =>
-                m.intent === "streaming_placeholder"
-                  ? convertDraftMessage(m, {
-                    fallbackContent: frozenContent,
+                  setMessagesPreservingViewport(prev => prev.map((m) =>
+                    m.intent === "streaming_placeholder"
+                      ? convertDraftMessage(m, {
+                        fallbackContent: frozenContent,
                     note: "🔧 서버 점검 중입니다. 잠시 후 새로고침해주세요.",
                   }) || m
                   : m
@@ -6427,7 +6427,7 @@ export default function ChatPage() {
                     setToolStatus(null);
                     if (full.trim()) {
                       // ★ in-place 업데이트: placeholder를 최종 응답으로 교체
-                      setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, {
+                      setMessagesPreservingViewport((prev) => replaceStreamingPlaceholderWithFinal(prev, {
                         id: `ai-${Date.now()}`,
                         session_id: sessionId!,
                         role: "assistant" as const,
@@ -6514,7 +6514,7 @@ export default function ChatPage() {
             pendingResponseSessions.current.delete(sessionId!);
             setWaitingBgResponse(false); setBgPartialContent("");
             // 자동 복구 대기 타임아웃은 사용자 중단이 아니다. 같은 버블을 진행 상태로 유지한다.
-            setMessages((prev) => prev.map((m) =>
+            setMessagesPreservingViewport((prev) => prev.map((m) =>
               m.intent === "streaming_placeholder"
                 ? {
                   ...m,
@@ -6547,7 +6547,7 @@ export default function ChatPage() {
                 if (!frozenContent || resp.message.content.length > frozenContent.length) {
                   // ★ in-place 업데이트
                   if (!isStale()) setStreamBuf(resp.message.content);
-                  setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, resp.message!));
+                  setMessagesPreservingViewport((prev) => replaceStreamingPlaceholderWithFinal(prev, resp.message!));
                   mergeCooldownUntilRef.current = Date.now() + 5000;
                   requestServerFinalization(sessionId, [0, 1500]);
                   setStreaming(false);
@@ -6566,10 +6566,10 @@ export default function ChatPage() {
           }
         }
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
+          setMessagesPreservingViewport((prev) => [
+            ...prev,
+            {
+              id: `err-${Date.now()}`,
             session_id: sessionId!,
             role: "assistant",
             content: `⚠️ 오류: ${err.message}`,
@@ -6596,7 +6596,7 @@ export default function ChatPage() {
               setWaitingBgResponse(false);
               setBgPartialContent("");
               streamingSessionRef.current = null;
-              setMessages((prev) => prev.map((m) =>
+              setMessagesPreservingViewport((prev) => prev.map((m) =>
                 m.intent === "streaming_placeholder"
                   ? {
                     ...m,
@@ -6615,7 +6615,7 @@ export default function ChatPage() {
       setToolStatus(null);
       if (!isStale() && !_isInvisibleRecovery) {
         // streaming_placeholder 잔여물 정리 — 내용 있으면 버블 유지 (사라짐 방지)
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           const capturedBuf = streamBufRef.current;
           const capturedThinking = thinkingBufRef.current;
           const cleanupAt = Date.now();
@@ -6784,7 +6784,7 @@ export default function ChatPage() {
             const filtered = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
             // FIX: placeholder 삭제 금지 — stopped/interrupt 메시지가 있으면 유지하면서 DB 메시지와 병합
             isNearBottomRef.current = false;
-            setMessages((prev) => {
+            setMessagesPreservingViewport((prev) => {
               const localMsgs = prev.filter((m) => m.id.startsWith("stopped-") || m.id.startsWith("interrupt-"));
               const dbIds = new Set(filtered.map((m) => m.id));
               // DB에 없는 로컬 메시지만 끝에 추가
@@ -6825,7 +6825,7 @@ export default function ChatPage() {
           if (activeSessionRef.current !== sid) return;
           const filtered = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
           // FIX: placeholder 삭제 금지
-          setMessages((prev) => {
+          setMessagesPreservingViewport((prev) => {
             const localMsgs = prev.filter((m) => m.id.startsWith("stopped-") || m.id.startsWith("interrupt-"));
             const dbIds = new Set(filtered.map((m) => m.id));
             const merged = [...filtered, ...localMsgs.filter((m) => !dbIds.has(m.id))];
@@ -6983,7 +6983,7 @@ export default function ChatPage() {
             if (ev.type === "stream_start") {
               if (ev.execution_id) {
                 currentExecutionIdRef.current = ev.execution_id;
-                setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+                setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
                   sessionId,
                   executionId: ev.execution_id,
                   partialContent: full || streamBufRef.current || bgPartialContentRef.current,
@@ -7043,7 +7043,7 @@ export default function ChatPage() {
                   duration_ms: ev.duration_ms,
                 },
               };
-              setMessages((prev) => {
+              setMessagesPreservingViewport((prev) => {
                 // 기존 메시지의 intent를 regenerated로 변경
                 const updated = prev.map((m) =>
                   m.id === msgId ? { ...m, intent: mode === "continue" ? "continued" : "regenerated" } : m
@@ -7070,7 +7070,7 @@ export default function ChatPage() {
           pendingResponseSessions.current.add(sessionId);
           setWaitingBgResponse(true);
           setBgPartialContent(full || bgPartialContentRef.current || "");
-          setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
+          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId,
             executionId: currentExecutionIdRef.current,
             partialContent: full || bgPartialContentRef.current || "분석 중...",
@@ -7091,7 +7091,7 @@ export default function ChatPage() {
       }
       setRegeneratingId(null);
     }
-  }, [attachExecutionReplay, mergeLatestAssistantFromServer, requestResumeOnce, streaming]);
+  }, [attachExecutionReplay, mergeLatestAssistantFromServer, requestResumeOnce, setMessagesPreservingViewport, streaming]);
 
   // ── 방식B: 입력창에 복사 (재지시) ──
   const handleCopyToInput = useCallback((content: string) => {
