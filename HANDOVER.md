@@ -1710,3 +1710,20 @@
   - `npx tsc --noEmit --pretty false`
   - `npm run build`
   - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.
+
+## 2026-08-29 07:05 KST - 채팅창 잔여 스크롤/추가지시 상태 표시 개선
+
+- 요청: 채팅창 추가 오류/문제점 전수 검수 권장조치와 추가 문제점을 즉시 조치하고 배포 운영 반영.
+- 원인:
+  - 기존 보강 이후에도 이미지 생성, 추가지시 버블 생성, 신규 세션 placeholder, 전송 실패 복원, 사용자 중지, 편집/삭제/재생성, 로컬 코드패널 알림 일부가 직접 `setMessages()`를 호출해 긴 세션에서 viewport 보존 경로를 우회할 수 있었다.
+  - 응답 중 추가지시는 토스트와 상단 큐 카운트로만 표시되어, 실제 질문 버블이 `대기`, `반영 중`, `응답 포함 완료` 중 어느 상태인지 세션 원장 화면에서 구분하기 어려웠다.
+- 조치:
+  - `src/app/chat/page.tsx`의 비초기화 메시지 변경 경로를 `setMessagesPreservingViewport()`로 통합했다.
+  - user interrupt 버블 판별 함수와 상태 배지를 추가해 추가지시 질문 하단에 `추가 지시 대기`, `응답 반영 중`, `응답 포함 완료` 상태가 남도록 했다.
+  - SSE `interrupt_applied`, `done`, `message_done`, completion polling, last-response fallback 완료 경로에서 추가지시 버블 상태를 자동 승격하도록 했다.
+- 검증 예정:
+  - `git diff --check`
+  - `npx eslint src/app/chat/page.tsx`
+  - `npx tsc --noEmit --pretty false`
+  - `npm run build`
+  - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.

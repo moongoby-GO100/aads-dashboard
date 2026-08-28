@@ -282,7 +282,43 @@ function normalizeQueuedInterruptDisplayContent(content: string): string {
   return String(content || "")
     .replace(/^💬\s*\*\*\[추가 지시\]\*\*\s*/, "")
     .replace(/^\[추가 지시\]\s*/, "")
+    .replace(/\s*📎\s*\d+개 파일\s*$/, "")
     .trim();
+}
+
+function isUserInterruptMessage(message: ChatMessage): boolean {
+  return message.role === "user" && (
+    message.intent === "queued_interrupt" ||
+    message.intent === "interrupt_queued" ||
+    message.intent === "interrupt_applied" ||
+    message.intent === "interrupt_completed"
+  );
+}
+
+function interruptStatusBadge(message: ChatMessage): { label: string; color: string; bg: string; border: string } | null {
+  if (!isUserInterruptMessage(message)) return null;
+  if (message.intent === "interrupt_completed") {
+    return {
+      label: "응답 포함 완료",
+      color: "#16a34a",
+      bg: "rgba(22,163,74,0.10)",
+      border: "rgba(22,163,74,0.22)",
+    };
+  }
+  if (message.intent === "interrupt_applied") {
+    return {
+      label: "응답 반영 중",
+      color: "#2563eb",
+      bg: "rgba(37,99,235,0.10)",
+      border: "rgba(37,99,235,0.22)",
+    };
+  }
+  return {
+    label: "추가 지시 대기",
+    color: "#d97706",
+    bg: "rgba(217,119,6,0.12)",
+    border: "rgba(217,119,6,0.26)",
+  };
 }
 
 function isRunnerChatMessage(message: ChatMessage): boolean {
@@ -2166,7 +2202,34 @@ const MessageItem = memo(function MessageItem({
         {/* P1: 기존 pipeline_runner 카드 — 접이식으로 통합됨 */}
         {/* 사용자 메시지 타임스탬프 + (수정됨) 표시 */}
         {msg.role === "user" && msg.created_at && (
-          <div style={{ fontSize: "11px", color: "var(--ct-text2)", marginTop: "4px", textAlign: "right", marginRight: "4px" }}>
+          <div style={{
+            fontSize: "11px",
+            color: "var(--ct-text2)",
+            marginTop: "4px",
+            marginRight: "4px",
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+            gap: "6px",
+            flexWrap: "wrap",
+          }}>
+            {(() => {
+              const badge = interruptStatusBadge(msg);
+              return badge ? (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "3px",
+                  padding: "1px 6px",
+                  borderRadius: "8px",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  background: badge.bg,
+                  color: badge.color,
+                  border: `1px solid ${badge.border}`,
+                }}>{badge.label}</span>
+              ) : null;
+            })()}
             {msg.edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
@@ -2820,6 +2883,49 @@ export default function ChatPage() {
     setMessages(updater);
     restoreMessageViewportAnchor(anchor);
   }, [captureMessageViewportAnchor, restoreMessageViewportAnchor]);
+  const updateInterruptBubbleStatus = useCallback((
+    interruptContent: string,
+    nextIntent: "interrupt_applied" | "interrupt_completed",
+  ) => {
+    const normalizedTarget = normalizeQueuedInterruptDisplayContent(interruptContent);
+    if (!normalizedTarget) return;
+    setMessagesPreservingViewport((prev) => prev.map((message) => {
+      if (!isUserInterruptMessage(message)) return message;
+      const normalizedMessage = normalizeQueuedInterruptDisplayContent(message.content);
+      const sameInterrupt =
+        normalizedMessage === normalizedTarget ||
+        normalizedMessage.startsWith(normalizedTarget) ||
+        normalizedTarget.startsWith(normalizedMessage.slice(0, 160));
+      if (!sameInterrupt) return message;
+      if (message.intent === "interrupt_completed") return message;
+      return {
+        ...message,
+        intent: nextIntent,
+        quality_details: {
+          ...qualityDetailsObject(message),
+          interrupt_status: nextIntent,
+          interrupt_status_updated_at: new Date().toISOString(),
+        },
+      };
+    }));
+  }, [setMessagesPreservingViewport]);
+  const markAppliedInterruptsCompleted = useCallback(() => {
+    setMessagesPreservingViewport((prev) => prev.map((message) => {
+      if (!isUserInterruptMessage(message)) return message;
+      if (message.intent !== "interrupt_applied" && message.intent !== "queued_interrupt" && message.intent !== "interrupt_queued") {
+        return message;
+      }
+      return {
+        ...message,
+        intent: "interrupt_completed",
+        quality_details: {
+          ...qualityDetailsObject(message),
+          interrupt_status: "interrupt_completed",
+          interrupt_status_updated_at: new Date().toISOString(),
+        },
+      };
+    }));
+  }, [setMessagesPreservingViewport]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -5245,7 +5351,7 @@ export default function ChatPage() {
       });
       const data = await res.json();
       if (data.url) {
-        setMessages((prev) => [
+        setMessagesPreservingViewport((prev) => [
           ...prev,
           {
             id: `user-img-${Date.now()}`,
@@ -5416,7 +5522,7 @@ export default function ChatPage() {
         content: content,
         created_at: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, userImgMsg]);
+      setMessagesPreservingViewport((prev) => [...prev, userImgMsg]);
       scrollToMessagesBottom(true);
       try {
         const imgData = await chatApi<{ url?: string; data?: string; error?: string }>("/image/generate", {
@@ -5435,7 +5541,7 @@ export default function ChatPage() {
             : "이미지 생성에 실패했습니다.",
           created_at: new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, aiImgMsg]);
+        setMessagesPreservingViewport((prev) => [...prev, aiImgMsg]);
         scrollToMessagesBottom(true);
       } catch {
         // 이미지 생성 오류
@@ -5462,7 +5568,7 @@ export default function ChatPage() {
       // 대화창에 추가 지시를 user 메시지로 즉시 표시 (첨부파일 포함)
       const attachLabel = interruptAttachments.length > 0
         ? ` 📎 ${interruptAttachments.length}개 파일` : "";
-      setMessages(prev => {
+      setMessagesPreservingViewport(prev => {
         const displayContent = `${interruptContent}${attachLabel}`.trim();
         const duplicatePending = prev.some((m) =>
           m.id.startsWith("interrupt-") &&
@@ -5542,19 +5648,19 @@ export default function ChatPage() {
       _optimisticPending = `pending-${Date.now()}`;
       const _optPhId = `ai-streaming-${_optimisticPending}`;
       if (!_existingMsgId) {
-        setMessages(prev => [...prev,
+        setMessagesPreservingViewport(prev => [...prev,
           { id: `tmp-${Date.now()}`, session_id: _optimisticPending!, role: "user" as const, content, created_at: new Date().toISOString() },
           { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
         ]);
       } else {
-        setMessages(prev => [...prev,
+        setMessagesPreservingViewport(prev => [...prev,
           { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
         ]);
       }
       const s = await createSession();
-      if (!s) { setStreaming(false); setMessages(prev => prev.filter(m => m.session_id !== _optimisticPending)); return; }
+      if (!s) { setStreaming(false); setMessagesPreservingViewport(prev => prev.filter(m => m.session_id !== _optimisticPending)); return; }
       sessionId = s.id;
-      setMessages(prev => prev.map(m => m.session_id === _optimisticPending
+      setMessagesPreservingViewport(prev => prev.map(m => m.session_id === _optimisticPending
         ? { ...m, session_id: sessionId!, ...(m.role === "assistant" ? { id: `ai-streaming-${sessionId}` } : {}) }
         : m
       ));
@@ -5611,7 +5717,7 @@ export default function ChatPage() {
     }
     // ★ FIX: user 메시지 → AI placeholder 순서로 단일 setMessages (새 버블 방지 + 순서 보장)
     if (_optimisticPending) {
-      setMessages(prev => {
+      setMessagesPreservingViewport(prev => {
         const currentPlaceholder = prev.find((m) => m.id === streamingPlaceholderId);
         const frozen = freezeStreamingPlaceholders(
           prev.filter((m) => m.id !== streamingPlaceholderId),
@@ -5629,13 +5735,13 @@ export default function ChatPage() {
         ].sort((a, b) => messageTime(a) - messageTime(b));
       });
     } else if (!_existingMsgId) {
-      setMessages(prev => [
+      setMessagesPreservingViewport(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         userMsg,
         { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     } else {
-      setMessages(prev => {
+      setMessagesPreservingViewport(prev => {
         const hasActivePlaceholder = prev.some((message) =>
           message.session_id === sessionId && isStreamingPlaceholderMessage(message)
         );
@@ -5753,7 +5859,7 @@ export default function ChatPage() {
         setInput(content); chatInputRef.current?.setValue(content);
         if (!_existingMsgId) {
           // 프론트엔드에 추가한 사용자 메시지 제거 (DB 미저장이므로)
-          setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+          setMessagesPreservingViewport((prev) => prev.filter((m) => m.id !== userMsg.id));
         }
         throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
       }
@@ -6058,6 +6164,7 @@ export default function ChatPage() {
               setThinkingBuf("");
               setStreaming(false);
               streamingSessionRef.current = null;  // B2-FIX: done 이벤트 시 sessionRef 즉시 정리
+              markAppliedInterruptsCompleted();
               // 완료 토스트는 서버 저장 메시지 ID가 확인된 최종 버블에만 표시한다.
               // DB 저장 ID가 없는 로컬 합성 버블은 직후 finalization/폴링에서 내용이 바뀔 수 있다.
               if (locallyRenderedFinalAiId) {
@@ -6159,6 +6266,7 @@ export default function ChatPage() {
                 } as ChatMessage;
                 return replaceStreamingPlaceholderWithFinal(prev, mergedMessage);
               });
+              markAppliedInterruptsCompleted();
               if (requestSessionId) {
                 mergeCooldownUntilRef.current = Date.now() + 5000;
                 requestServerFinalization(requestSessionId, [0, 500, 1500, 3500]);
@@ -6172,8 +6280,8 @@ export default function ChatPage() {
               setToolTurnInfo(ev.content || `도구 턴 ${ev.current_turn}회 → ${ev.extended_to}회 연장`);
             } else if (ev.type === "interrupt_applied") {
               // CEO 인터럽트가 LLM에 반영됨 → 큐에서 해당 지시 제거 (완료 후 중복 전송 방지)
+              const applied = String(ev.content || "");
               if (msgQueueRef.current.length > 0) {
-                const applied = String(ev.content || "");
                 const idx = msgQueueRef.current.findIndex((item) =>
                   item === applied || item.startsWith(applied) || applied.startsWith(item.slice(0, 100))
                 );
@@ -6182,6 +6290,7 @@ export default function ChatPage() {
               }
               // 무조건 큐 카운트 동기화 (배지 확실 해제)
               setQueueCount(msgQueueRef.current.length);
+              updateInterruptBubbleStatus(applied, "interrupt_applied");
               // 토스트로만 알림 (assistant 메시지 추가 안 함 → 중복 방지)
               setYellowWarning(`✅ 추가 지시 반영됨 (대기 ${msgQueueRef.current.length}건)`);
               if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
@@ -6553,6 +6662,7 @@ export default function ChatPage() {
                   setStreaming(false);
                   setStreamBuf("");
                   setWaitingBgResponse(false); setBgPartialContent("");
+                  markAppliedInterruptsCompleted();
                   streamGotFinal = true;
                 }
                 break;
@@ -6698,6 +6808,7 @@ export default function ChatPage() {
                 if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
                 setStreaming(false);
                 setStreamBuf("");
+                markAppliedInterruptsCompleted();
                 void refreshTodos(_sid);
                 // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -6744,7 +6855,7 @@ export default function ChatPage() {
     isNearBottomRef.current = true;
     if (buf && activeSession) {
       // ★ in-place 업데이트: placeholder를 stopped 메시지로 교체
-      setMessages((prev) => {
+      setMessagesPreservingViewport((prev) => {
         const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
         const stoppedId = hasPlaceholder
           ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `stopped-${Date.now()}`)
@@ -6852,7 +6963,7 @@ export default function ChatPage() {
         const data = await res.json();
         const deletedCount = data.deleted_count || 0;
         // 프론트에서도 해당 메시지 + 바로 다음 AI 메시지 제거
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           const idx = prev.findIndex((m) => m.id === msgId);
           if (idx < 0) return prev;
           // 해당 메시지 + 바로 다음 assistant 메시지 제거
@@ -6868,7 +6979,7 @@ export default function ChatPage() {
     }
     setEditingMsgId(null);
     setEditText("");
-  }, [sendMessage]);
+  }, [sendMessage, setMessagesPreservingViewport]);
 
   // ── 메시지 삭제 (user: 메시지+AI응답 삭제, assistant: 해당 응답만 삭제) ──
   const handleDeleteMessage = useCallback(async (msgId: string, role: string) => {
@@ -6880,7 +6991,7 @@ export default function ChatPage() {
         headers: { ...authHdrs() },
       });
       if (res.ok) {
-        setMessages((prev) => {
+        setMessagesPreservingViewport((prev) => {
           if (role === "user") {
             const idx = prev.findIndex((m) => m.id === msgId);
             if (idx < 0) return prev;
@@ -6895,7 +7006,7 @@ export default function ChatPage() {
       }
     } catch (e) {
     }
-  }, []);
+  }, [setMessagesPreservingViewport]);
 
   // ── AI 응답 재생성 (Regenerate) ──
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
@@ -6910,7 +7021,7 @@ export default function ChatPage() {
     setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
-    setMessages((prev) => {
+    setMessagesPreservingViewport((prev) => {
       if (prev.some((m) => m.id === regenPlaceholderId)) return prev;
       const placeholder: ChatMessage = {
         id: regenPlaceholderId,
@@ -10047,7 +10158,7 @@ export default function ChatPage() {
                     content: text,
                     created_at: new Date().toISOString(),
                   };
-                  setMessages((prev) => [...prev, localMsg]);
+                  setMessagesPreservingViewport((prev) => [...prev, localMsg]);
                 }}
                 placeholder={
                   screenSize === "mobile"
@@ -10296,7 +10407,7 @@ export default function ChatPage() {
           countdown={diffApproval.countdown}
           onClose={diffApproval.close}
           onResult={(action, msg) => {
-            if (msg) setMessages((prev) => [...prev, {
+            if (msg) setMessagesPreservingViewport((prev) => [...prev, {
               id: `sys-${Date.now()}`,
               session_id: activeSession?.id ?? "",
               role: "assistant",
