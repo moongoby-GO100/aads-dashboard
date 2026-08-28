@@ -624,6 +624,17 @@ function isInterruptedLikeMessage(message: ChatMessage): boolean {
   );
 }
 
+function isCollapsedAssistantHistoryMessage(message: ChatMessage): boolean {
+  if (message.role !== "assistant") return false;
+  if (!hasMeaningfulDisplayContent(message)) return false;
+  return (
+    message.intent === "regenerated" ||
+    message.intent === "_archived_partial" ||
+    message.intent === "interrupted_partial" ||
+    message.model_used === "interrupted"
+  );
+}
+
 function isShortInterruptionPlaceholder(message: ChatMessage): boolean {
   if (!isInterruptedLikeMessage(message)) return false;
   if (message.intent === "interrupted_partial" && hasMeaningfulDisplayContent(message)) {
@@ -3035,6 +3046,7 @@ export default function ChatPage() {
   const ackedCompletionTokenBySessionRef = useRef<Map<string, string>>(new Map());
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
+  const completedExecutionKeysRef = useRef<Set<string>>(new Set());
 
   const streamingStatusPathFor = useCallback((sessionId: string) => {
     const ackedToken =
@@ -3052,6 +3064,27 @@ export default function ChatPage() {
       savePersistedCompletionAck(sessionId, status.completion_token);
     }
   }, []);
+
+  const settledExecutionKey = useCallback((sessionId?: string | null, executionId?: string | null) => {
+    if (!sessionId || !executionId) return "";
+    return `${sessionId}:${executionId}`;
+  }, []);
+
+  const isExecutionSettled = useCallback((sessionId?: string | null, executionId?: string | null) => {
+    const key = settledExecutionKey(sessionId, executionId);
+    return Boolean(key && completedExecutionKeysRef.current.has(key));
+  }, [settledExecutionKey]);
+
+  const markExecutionSettled = useCallback((sessionId?: string | null, executionId?: string | null) => {
+    const key = settledExecutionKey(sessionId, executionId);
+    if (!key) return;
+    completedExecutionKeysRef.current.add(key);
+    if (completedExecutionKeysRef.current.size > COMPLETION_ALERT_DEDUPE_MAX) {
+      const [oldest] = completedExecutionKeysRef.current;
+      if (oldest) completedExecutionKeysRef.current.delete(oldest);
+    }
+    if (currentExecutionIdRef.current === executionId) currentExecutionIdRef.current = null;
+  }, [settledExecutionKey]);
 
   const completionAlertKey = useCallback((
     aiMsgId?: string | null,
@@ -3079,7 +3112,10 @@ export default function ChatPage() {
         status = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
         if (activeSessionRef.current !== sid) return;
         const currentStatus = status;
-        if (currentStatus.just_completed || !currentStatus.is_streaming) {
+        const statusExecutionId = currentStatus.execution_id || currentExecutionIdRef.current;
+        const alreadySettled = isExecutionSettled(sid, statusExecutionId);
+        if (currentStatus.just_completed) markExecutionSettled(sid, statusExecutionId);
+        if (currentStatus.just_completed || !currentStatus.is_streaming || alreadySettled) {
           streamingRef.current = false;
           finalizingRef.current = false;
         } else {
@@ -3087,7 +3123,7 @@ export default function ChatPage() {
           setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
-          if (currentStatus.execution_id) currentExecutionIdRef.current = currentStatus.execution_id;
+          if (currentStatus.execution_id && !alreadySettled) currentExecutionIdRef.current = currentStatus.execution_id;
           if (currentStatus.last_event_id) lastEventIdRef.current = currentStatus.last_event_id;
           if (currentStatus.partial_content) {
             setBgPartialContent(currentStatus.partial_content);
@@ -3095,7 +3131,7 @@ export default function ChatPage() {
           }
           setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
-            executionId: currentStatus.execution_id || currentExecutionIdRef.current,
+            executionId: alreadySettled ? null : (currentStatus.execution_id || currentExecutionIdRef.current),
             partialContent: currentStatus.partial_content || bgPartialContentRef.current,
             toolCount: currentStatus.tool_count,
             lastTool: currentStatus.last_tool,
@@ -3130,7 +3166,7 @@ export default function ChatPage() {
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
     return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
-  }, [markCompletionSeen, settleScrollAfterMessageMerge, streamingStatusPathFor]);
+  }, [isExecutionSettled, markCompletionSeen, markExecutionSettled, settleScrollAfterMessageMerge, streamingStatusPathFor]);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
@@ -3276,6 +3312,7 @@ export default function ChatPage() {
         }
       }
       if (activeSessionRef.current !== sessionId || !finalMessage) return null;
+      markExecutionSettled(sessionId, finalMessage.execution_id || currentExecutionIdRef.current);
       setMessages((prev) => replaceStreamingPlaceholderWithFinal(prev, finalMessage));
       lastKnownMsgIdRef.current = finalMessage.id;
       pendingResponseSessions.current.delete(sessionId);
@@ -3287,7 +3324,7 @@ export default function ChatPage() {
     } catch {
       return null;
     }
-  }, []);
+  }, [markExecutionSettled]);
 
   const requestServerFinalization = useCallback((sessionId: string, delays: number[] = [0, 500, 1500, 3500, 5000]) => {
     finalizationTimeoutIdsRef.current.forEach(id => clearTimeout(id));
@@ -3833,12 +3870,13 @@ export default function ChatPage() {
       ackedCompletionTokenBySessionRef.current.set(sessionId, completionToken);
       savePersistedCompletionAck(sessionId, completionToken);
     }
+    if (sessionId && executionId) markExecutionSettled(sessionId, executionId);
     lastToastedAiIdRef.current = aiMsgId;
     showChatStatusAlert("completed", "응답이 완료되었습니다.", {
       sessionId,
       dedupeKey: key || aiMsgId,
     });
-  }, [completionAlertKey, showChatStatusAlert]);
+  }, [completionAlertKey, markExecutionSettled, showChatStatusAlert]);
 
   const showInterruptionAlertOnce = useCallback((aiMsgId?: string | null, sessionId?: string | null, message?: string) => {
     if (!aiMsgId) return;
@@ -4273,9 +4311,12 @@ export default function ChatPage() {
       streamingStatusPathFor(fetchSid)
     ).then(async (status) => {
       if (cancelled) return;
-      currentExecutionIdRef.current = status.execution_id || activeSession.current_execution_id || null;
+      const initialStatusExecutionId = status.execution_id || activeSession.current_execution_id || null;
+      const initialStatusSettled = isExecutionSettled(fetchSid, initialStatusExecutionId);
+      if (status.just_completed) markExecutionSettled(fetchSid, initialStatusExecutionId);
+      currentExecutionIdRef.current = initialStatusSettled ? null : initialStatusExecutionId;
       if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
-      if (status.is_streaming) {
+      if (status.is_streaming && !initialStatusSettled) {
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(fetchSid);
         // [PATCH-A] partial_content/tool_count/last_tool 즉시 화면 표시 (재진입 빈 버블 방지)
@@ -4292,7 +4333,7 @@ export default function ChatPage() {
         await loadMessages(false);
         // [PATCH-C] BUG #4: streaming-status가 execution_id=null 반환 시 activeSession.current_execution_id 폴백
         // 백엔드 in-memory _streaming_state에 execution_id가 누락된 경우 (state↔_active_bg_tasks 비일관성)
-        const _exec_id_for_attach = status.execution_id || activeSession?.current_execution_id || null;
+        const _exec_id_for_attach = initialStatusSettled ? null : (status.execution_id || activeSession?.current_execution_id || null);
         setMessages((prev) => reconcileMessagesForActiveStreaming(prev, {
           sessionId: fetchSid,
           executionId: _exec_id_for_attach,
@@ -4316,6 +4357,7 @@ export default function ChatPage() {
             loadMessages(true).then((retryMsgs) => {
               if (retryMsgs && retryMsgs.length > 0 && retryMsgs[retryMsgs.length - 1].role === "assistant") {
                 markCompletionSeen(fetchSid, status);
+                markExecutionSettled(fetchSid, initialStatusExecutionId);
                 setWaitingBgResponse(false); setBgPartialContent("");
                 // B1-FIX: 폴링 완료 감지 시 streaming 인디케이터 + sessionRef 즉시 해제 (30s 타이머 오버라이드 방지)
                 if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
@@ -4327,6 +4369,7 @@ export default function ChatPage() {
           waitingBgTimeoutRef.current = setTimeout(() => { setWaitingBgResponse(false); setBgPartialContent(""); }, 60000);
         } else {
           markCompletionSeen(fetchSid, status);
+          markExecutionSettled(fetchSid, initialStatusExecutionId);
           setWaitingBgResponse(false); setBgPartialContent("");
           // B1-FIX: 즉시 완료 경로에서도 streaming 해제
           if (streamingSessionRef.current === fetchSid) { streamingSessionRef.current = null; setStreaming(false); setStreamBuf(""); }
@@ -4430,7 +4473,7 @@ export default function ChatPage() {
     }
     // BUG-1 FIX: cleanup — 세션 전환 시 이전 fetch 응답 폐기
     return () => { cancelled = true; };
-  }, [activeSession?.id, markCompletionSeen, streamingStatusPathFor]);
+  }, [activeSession?.id, isExecutionSettled, markCompletionSeen, markExecutionSettled, streamingStatusPathFor]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -4649,8 +4692,14 @@ export default function ChatPage() {
       try {
         ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
         if (cancelled) return;
-        if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
-        if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
+        const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
+        const statusAlreadySettled = isExecutionSettled(sid, statusExecutionId);
+        if (ss.just_completed) markExecutionSettled(sid, statusExecutionId);
+        if (statusAlreadySettled && !ss.just_completed) {
+          ss = { ...ss, is_streaming: false, partial_content: undefined };
+        }
+        if (ss.execution_id && !statusAlreadySettled) currentExecutionIdRef.current = ss.execution_id;
+        if (ss.last_event_id && !statusAlreadySettled) lastEventIdRef.current = ss.last_event_id;
         if (ss.partial_content) {
           setBgPartialContent(ss.partial_content);
           // Invisible Recovery: streaming=true + waitingBg=true → partial_content를 streamBuf에 주입 (타이핑 효과)
@@ -4658,7 +4707,7 @@ export default function ChatPage() {
             setStreamBuf(ss.partial_content);
           }
         }
-        if (ss.is_streaming) {
+        if (ss.is_streaming && !statusAlreadySettled) {
           const streamingStatus = ss;
           streamingSessionRef.current = sid;
           setStreaming(true);
@@ -4690,7 +4739,7 @@ export default function ChatPage() {
           mergeCooldownUntilRef.current = Date.now() + 5000;
           let completedAi: ChatMessage | undefined;
           if (freshMsgs && freshMsgs.length > 0) {
-            const latestAi = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+            const latestAi = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
               completedAi = latestAi;
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
@@ -4736,7 +4785,7 @@ export default function ChatPage() {
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
           const _lastAi979 = completedAi;
           if (!isAutoTriggerResponse(_lastUser979, _lastAi979)) {
-            showCompletionToastOnce(_lastAi979?.id, sid, ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
+            showCompletionToastOnce(_lastAi979?.id, sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
           }
           return;
         }
@@ -4754,7 +4803,7 @@ export default function ChatPage() {
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
-            const latestAi = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+            const latestAi = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
               setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
             } else {
@@ -4774,14 +4823,13 @@ export default function ChatPage() {
           if (waitingBgTimeoutRef.current) { clearTimeout(waitingBgTimeoutRef.current); waitingBgTimeoutRef.current = null; }
         }
         // 스트리밍 중인데 waitingBgResponse가 꺼져 있으면 활성화 (세션 복귀 시)
-        if (ss.is_streaming && !_waitingBg && !_streaming && Date.now() >= stuckCooldownUntil) {
+        if (ss.is_streaming && !statusAlreadySettled && !_waitingBg && !_streaming && Date.now() >= stuckCooldownUntil) {
           streamingSessionRef.current = sid;
           setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
           if (ss.partial_content) {
             const statusPartialContent = ss.partial_content;
-            const statusExecutionId = ss.execution_id;
             setStreamBuf(statusPartialContent);
             setMessages(prev => {
               const placeholderIndex = prev.findIndex((m) => m.intent === "streaming_placeholder");
@@ -4811,14 +4859,14 @@ export default function ChatPage() {
           }
           if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
           waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
-          const _exec_id_for_attach = ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null);
+          const _exec_id_for_attach = statusAlreadySettled ? null : (ss.execution_id || (activeSessionRef.current === sid ? currentExecutionIdRef.current : null));
           if (_exec_id_for_attach && (ss.last_event_id || ss.partial_content)) {
             attachExecutionReplay(sid, _exec_id_for_attach, false);
           }
         }
         // STREAMING-STUCK 안전장치: 서버/프론트가 streaming이어도 토큰/이벤트/placeholder
         // 진행 변화가 있으면 정상 장시간 응답으로 보고 카운터를 리셋한다.
-        if (ss.is_streaming && _streaming) {
+        if (ss.is_streaming && !statusAlreadySettled && _streaming) {
           const streamingProgressKey = [
             ss.execution_id || "",
             ss.last_event_id || "",
@@ -4837,7 +4885,7 @@ export default function ChatPage() {
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
               .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
-              const latestFinal = latestFinalAssistantForExecution(freshMsgs, ss.execution_id || currentExecutionIdRef.current);
+              const latestFinal = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
               if (latestFinal) {
                 // 이미 완료된 응답 발견 → 즉시 반영
                 setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestFinal));
@@ -4846,7 +4894,7 @@ export default function ChatPage() {
                 setWaitingBgResponse(false); setBgPartialContent("");
                 pendingResponseSessions.current.delete(sid);
                 settleScrollAfterMessageMerge();
-                showCompletionToastOnce(latestFinal.id, sid, ss.execution_id);
+                showCompletionToastOnce(latestFinal.id, sid, statusExecutionId || ss.execution_id);
                 streamingStuckCount = 0;
                 stuckCooldownUntil = Date.now() + 30000;
                 return;
@@ -4905,9 +4953,11 @@ export default function ChatPage() {
               if (cancelled) return;
               mergeCooldownUntilRef.current = Date.now() + 5000;
               if (allMsgs && allMsgs.length > 0) {
-                const latestAi2 = latestFinalAssistantForExecution(allMsgs, ss?.execution_id || currentExecutionIdRef.current);
+                const fallbackExecutionId = ss?.execution_id || currentExecutionIdRef.current;
+                const latestAi2 = latestFinalAssistantForExecution(allMsgs, fallbackExecutionId);
                 if (latestAi2) {
                   markCompletionSeen(sid, ss);
+                  markExecutionSettled(sid, latestAi2.execution_id || fallbackExecutionId);
                   setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi2));
                 } else {
                   setMessages(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
@@ -4962,9 +5012,12 @@ export default function ChatPage() {
     activeSession?.id,
     attachExecutionReplay,
     bgPartialContent,
+    isExecutionSettled,
     markCompletionSeen,
+    markExecutionSettled,
     mergeLatestAssistantFromServer,
     requestResumeOnce,
+    requestServerFinalization,
     settleScrollAfterMessageMerge,
     showCompletionToastOnce,
     streamingStatusPathFor,
@@ -6513,8 +6566,11 @@ export default function ChatPage() {
             if (activeSessionRef.current !== _sid) return;
             try {
               const ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(_sid));
-              if (ss.execution_id) currentExecutionIdRef.current = ss.execution_id;
-              if (ss.last_event_id) lastEventIdRef.current = ss.last_event_id;
+              const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
+              const alreadySettled = isExecutionSettled(_sid, statusExecutionId);
+              if (ss.just_completed) markExecutionSettled(_sid, statusExecutionId);
+              if (ss.execution_id && !alreadySettled) currentExecutionIdRef.current = ss.execution_id;
+              if (ss.last_event_id && !alreadySettled) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
@@ -6524,7 +6580,7 @@ export default function ChatPage() {
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
-                    const latestAi = latestFinalAssistantForExecution(filtered, ss.execution_id || currentExecutionIdRef.current);
+                    const latestAi = latestFinalAssistantForExecution(filtered, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
                     if (latestAi) {
                       completedAi = latestAi;
                       setMessages(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
@@ -6542,6 +6598,7 @@ export default function ChatPage() {
                   return;
                 }
                 markCompletionSeen(_sid, ss);
+                markExecutionSettled(_sid, completedAi.execution_id || statusExecutionId);
                 if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
                 setStreaming(false);
                 setStreamBuf("");
@@ -6550,7 +6607,7 @@ export default function ChatPage() {
                 const _lastUser1696 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
                 const _lastAi1696 = completedAi;
                 if (!isAutoTriggerResponse(_lastUser1696, _lastAi1696)) {
-                  showCompletionToastOnce(_lastAi1696?.id, _sid, ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
+                  showCompletionToastOnce(_lastAi1696?.id, _sid, statusExecutionId || ss.execution_id || currentExecutionIdRef.current, ss.completion_token);
                 }
               }
             } catch { /* 원샷 체크 실패 — 기존 interval 폴링이 대신 감지 */ }
@@ -6564,7 +6621,7 @@ export default function ChatPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createSession, markCompletionSeen, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, settleScrollAfterMessageMerge, showCompletionToastOnce, streamingStatusPathFor]);
+  }, [createSession, isExecutionSettled, markCompletionSeen, markExecutionSettled, mergeLatestAssistantFromServer, requestResumeOnce, requestServerFinalization, settleScrollAfterMessageMerge, showCompletionToastOnce, streamingStatusPathFor]);
 
   function stopStreaming() {
     abortCtrl.current?.abort();
@@ -7444,7 +7501,10 @@ export default function ChatPage() {
           const eitherInterrupted =
             isShortInterruptionPlaceholder(msg) ||
             isShortInterruptionPlaceholder(next);
-          if (!sameExecutionDraft && !eitherInterrupted && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
+          const historicalTrail =
+            isCollapsedAssistantHistoryMessage(msg) ||
+            isCollapsedAssistantHistoryMessage(next);
+          if (!sameExecutionDraft && !eitherInterrupted && !historicalTrail && (!overlaps || (!isDraftLike(msg) && !isDraftLike(next)))) break;
           j++;
         }
         if (j > i + 1) {
