@@ -55,6 +55,7 @@ type LiveFrame = {
   current_step?: string;
   captured_at?: string;
   updated_at?: string;
+  metadata?: Record<string, unknown>;
 };
 
 const STATUS_OPTIONS = ["", "queued", "running", "approval_required", "auth_required", "completed", "failed"];
@@ -94,6 +95,13 @@ function eventSummary(event: BrowserTaskEvent): string {
   const payload = event.payload || {};
   const step = payload.current_step || payload.action_type || payload.reason || payload.page_title || payload.current_url;
   return typeof step === "string" && step.trim() ? step : "-";
+}
+
+function liveFrameSource(frame: LiveFrame | null): string {
+  const source = frame?.metadata?.source;
+  if (source === "self_hosted_playwright") return "서버 Playwright";
+  if (source === "pc_agent_browser_screenshot") return "PC Agent";
+  return "대기";
 }
 
 export default function BrowserTasksPage() {
@@ -222,7 +230,7 @@ export default function BrowserTasksPage() {
           <span className="text-2xl">🌐</span>
           <div>
             <h1 className="text-xl font-bold">Managed Browser</h1>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>PC Agent 브라우저 작업, 권한 승인, Agent Vault</p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>서버/PC 브라우저 작업, 권한 승인, Agent Vault</p>
           </div>
         </div>
         <button
@@ -381,6 +389,7 @@ export default function BrowserTasksPage() {
               <div className="truncate">URL: {liveFrame?.current_url || selectedTask?.target_url || "-"}</div>
               <div className="truncate">제목: {liveFrame?.page_title || "-"}</div>
               <div className="truncate">단계: {liveFrame?.current_step || selectedTask?.current_step || "-"}</div>
+              <div className="truncate">캡처: {liveFrameSource(liveFrame)}</div>
             </div>
 
             <div className="rounded border" style={{ borderColor: "var(--border)" }}>
