@@ -15,6 +15,13 @@ type BrowserTask = {
   updated_at?: string;
 };
 
+type BrowserTaskEvent = {
+  id: string;
+  event_type: string;
+  payload?: Record<string, unknown>;
+  created_at?: string;
+};
+
 type PermissionRequest = {
   id: string;
   task_id?: string | null;
@@ -33,6 +40,20 @@ type VaultCredential = {
   origin: string;
   label: string;
   username: string;
+  updated_at?: string;
+};
+
+type LiveFrame = {
+  task_id: string;
+  frame_base64?: string;
+  frame_url?: string;
+  media_type?: string;
+  width?: number | null;
+  height?: number | null;
+  current_url?: string;
+  page_title?: string;
+  current_step?: string;
+  captured_at?: string;
   updated_at?: string;
 };
 
@@ -60,6 +81,21 @@ function getInitialSessionId(): string {
   return new URLSearchParams(window.location.search).get("session_id") || "";
 }
 
+function getFrameSrc(frame: LiveFrame | null): string {
+  if (!frame) return "";
+  if (frame.frame_url) return frame.frame_url;
+  if (!frame.frame_base64) return "";
+  const mediaType = frame.media_type || "image/jpeg";
+  if (frame.frame_base64.startsWith("data:")) return frame.frame_base64;
+  return `data:${mediaType};base64,${frame.frame_base64}`;
+}
+
+function eventSummary(event: BrowserTaskEvent): string {
+  const payload = event.payload || {};
+  const step = payload.current_step || payload.action_type || payload.reason || payload.page_title || payload.current_url;
+  return typeof step === "string" && step.trim() ? step : "-";
+}
+
 export default function BrowserTasksPage() {
   const [tasks, setTasks] = useState<BrowserTask[]>([]);
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
@@ -71,6 +107,10 @@ export default function BrowserTasksPage() {
   const [targetUrl, setTargetUrl] = useState("https://aads.newtalk.kr/chat");
   const [sessionId, setSessionId] = useState(getInitialSessionId);
   const [busy, setBusy] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [liveFrame, setLiveFrame] = useState<LiveFrame | null>(null);
+  const [liveEvents, setLiveEvents] = useState<BrowserTaskEvent[]>([]);
+  const [liveError, setLiveError] = useState<string | null>(null);
 
   const activeTasks = useMemo(() => tasks.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)).length, [tasks]);
 
@@ -103,6 +143,43 @@ export default function BrowserTasksPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  useEffect(() => {
+    if (!selectedTaskId && tasks.length > 0) {
+      setSelectedTaskId(tasks[0].id);
+    }
+  }, [selectedTaskId, tasks]);
+
+  useEffect(() => {
+    if (!selectedTaskId) {
+      setLiveFrame(null);
+      setLiveEvents([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadLive = async () => {
+      try {
+        const res = await api.getBrowserTaskLiveFrame(selectedTaskId, { event_limit: 30, capture: true }) as {
+          frame?: LiveFrame | null;
+          events?: BrowserTaskEvent[];
+        };
+        if (cancelled) return;
+        setLiveFrame(res.frame || null);
+        setLiveEvents(Array.isArray(res.events) ? res.events : []);
+        setLiveError(null);
+      } catch (e) {
+        if (!cancelled) setLiveError(String(e));
+      }
+    };
+
+    loadLive();
+    const id = setInterval(loadLive, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [selectedTaskId]);
+
   const createTask = async () => {
     setBusy(true);
     setError(null);
@@ -134,6 +211,9 @@ export default function BrowserTasksPage() {
       setBusy(false);
     }
   };
+
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
+  const frameSrc = getFrameSrc(liveFrame);
 
   return (
     <div className="p-6 space-y-6" style={{ color: "var(--text-primary)" }}>
@@ -208,41 +288,120 @@ export default function BrowserTasksPage() {
         </section>
       </div>
 
-      <section className="rounded-lg border" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
-        <div className="flex items-center justify-between gap-3 border-b p-4" style={{ borderColor: "var(--border)" }}>
-          <h2 className="font-semibold">브라우저 작업</h2>
-          <select className="rounded border px-3 py-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
-            {STATUS_OPTIONS.map((item) => <option key={item} value={item}>{item || "all"}</option>)}
-          </select>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
-            <thead style={{ color: "var(--text-secondary)" }}>
-              <tr className="text-left">
-                <th className="px-4 py-3">상태</th>
-                <th className="px-4 py-3">work_key</th>
-                <th className="px-4 py-3">target</th>
-                <th className="px-4 py-3">단계</th>
-                <th className="px-4 py-3">갱신</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-4 py-3"><span className="rounded px-2 py-1 text-xs font-medium" style={statusStyle(task.status)}>{task.status}</span></td>
-                  <td className="px-4 py-3 font-mono text-xs">{task.work_key}</td>
-                  <td className="px-4 py-3 truncate max-w-[260px]">{task.target_url}</td>
-                  <td className="px-4 py-3">{task.current_step || "-"}</td>
-                  <td className="px-4 py-3">{formatTime(task.updated_at)}</td>
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_520px]">
+        <section className="rounded-lg border" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+          <div className="flex items-center justify-between gap-3 border-b p-4" style={{ borderColor: "var(--border)" }}>
+            <h2 className="font-semibold">브라우저 작업</h2>
+            <select className="rounded border px-3 py-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value)} style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}>
+              {STATUS_OPTIONS.map((item) => <option key={item} value={item}>{item || "all"}</option>)}
+            </select>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead style={{ color: "var(--text-secondary)" }}>
+                <tr className="text-left">
+                  <th className="px-4 py-3">상태</th>
+                  <th className="px-4 py-3">work_key</th>
+                  <th className="px-4 py-3">target</th>
+                  <th className="px-4 py-3">단계</th>
+                  <th className="px-4 py-3">갱신</th>
                 </tr>
-              ))}
-              {!loading && tasks.length === 0 && (
-                <tr><td className="px-4 py-8 text-center" colSpan={5} style={{ color: "var(--text-secondary)" }}>작업이 없습니다.</td></tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => {
+                  const selected = selectedTaskId === task.id;
+                  return (
+                    <tr
+                      key={task.id}
+                      className="border-t cursor-pointer"
+                      style={{
+                        borderColor: "var(--border)",
+                        background: selected ? "var(--bg-hover)" : "transparent",
+                      }}
+                      onClick={() => setSelectedTaskId(task.id)}
+                    >
+                      <td className="px-4 py-3"><span className="rounded px-2 py-1 text-xs font-medium" style={statusStyle(task.status)}>{task.status}</span></td>
+                      <td className="px-4 py-3 font-mono text-xs">{task.work_key}</td>
+                      <td className="px-4 py-3 truncate max-w-[260px]">{task.target_url}</td>
+                      <td className="px-4 py-3">{task.current_step || "-"}</td>
+                      <td className="px-4 py-3">{formatTime(task.updated_at)}</td>
+                    </tr>
+                  );
+                })}
+                {!loading && tasks.length === 0 && (
+                  <tr><td className="px-4 py-8 text-center" colSpan={5} style={{ color: "var(--text-secondary)" }}>작업이 없습니다.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-lg border overflow-hidden" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
+          <div className="flex items-center justify-between gap-3 border-b p-4" style={{ borderColor: "var(--border)" }}>
+            <div>
+              <h2 className="font-semibold">Live View</h2>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                {selectedTask ? selectedTask.work_key : "작업을 선택하세요"}
+              </p>
+            </div>
+            <span className="rounded px-2 py-1 text-xs font-medium" style={statusStyle(selectedTask?.status || "")}>
+              {selectedTask?.status || "idle"}
+            </span>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {liveError && (
+              <div className="rounded border px-3 py-2 text-xs" style={{ borderColor: "#fca5a5", color: "#b91c1c", background: "#fee2e2" }}>
+                {liveError}
+              </div>
+            )}
+
+            <div
+              className="relative grid aspect-video place-items-center overflow-hidden rounded border"
+              style={{ background: "#0f172a", borderColor: "var(--border)" }}
+            >
+              {frameSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={frameSrc}
+                  alt="브라우저 작업 현재 화면"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="px-4 text-center text-sm" style={{ color: "#cbd5e1" }}>
+                  아직 수신된 화면 프레임이 없습니다.
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              <div className="absolute left-2 top-2 rounded px-2 py-1 text-[11px]" style={{ background: "rgba(15,23,42,.78)", color: "#e2e8f0" }}>
+                {liveFrame?.captured_at ? `캡처 ${formatTime(liveFrame.captured_at)}` : "대기"}
+              </div>
+            </div>
+
+            <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <div className="truncate">URL: {liveFrame?.current_url || selectedTask?.target_url || "-"}</div>
+              <div className="truncate">제목: {liveFrame?.page_title || "-"}</div>
+              <div className="truncate">단계: {liveFrame?.current_step || selectedTask?.current_step || "-"}</div>
+            </div>
+
+            <div className="rounded border" style={{ borderColor: "var(--border)" }}>
+              <div className="border-b px-3 py-2 text-sm font-medium" style={{ borderColor: "var(--border)" }}>최근 실행 이벤트</div>
+              <div className="max-h-64 overflow-y-auto">
+                {liveEvents.map((event) => (
+                  <div key={event.id} className="grid grid-cols-[90px_minmax(0,1fr)] gap-2 border-b px-3 py-2 text-xs last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                    <span style={{ color: "var(--text-secondary)" }}>{formatTime(event.created_at)}</span>
+                    <div className="min-w-0">
+                      <div className="font-medium">{event.event_type}</div>
+                      <div className="truncate" style={{ color: "var(--text-secondary)" }}>{eventSummary(event)}</div>
+                    </div>
+                  </div>
+                ))}
+                {!selectedTask && <div className="p-4 text-center text-xs" style={{ color: "var(--text-secondary)" }}>작업을 선택하면 이벤트가 표시됩니다.</div>}
+                {selectedTask && liveEvents.length === 0 && <div className="p-4 text-center text-xs" style={{ color: "var(--text-secondary)" }}>이벤트가 없습니다.</div>}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-lg border" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>

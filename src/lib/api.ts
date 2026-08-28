@@ -543,6 +543,30 @@ export const api = {
     request<unknown>("/browser-tasks", { method: "POST", body: JSON.stringify(data) }),
   updateBrowserTaskStatus: (taskId: string, data: { status: string; current_step?: string; result?: Record<string, unknown>; error?: string }) =>
     request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/status`, { method: "PATCH", body: JSON.stringify(data) }),
+  getBrowserTaskEvents: (taskId: string, params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/events${q.size ? `?${q.toString()}` : ""}`);
+  },
+  getBrowserTaskLiveFrame: (taskId: string, params?: { event_limit?: number; capture?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.event_limit !== undefined) q.set("event_limit", String(params.event_limit));
+    if (params?.capture !== undefined) q.set("capture", params.capture ? "true" : "false");
+    return request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/live-frame${q.size ? `?${q.toString()}` : ""}`);
+  },
+  updateBrowserTaskLiveFrame: (taskId: string, data: {
+    frame_base64?: string;
+    frame_url?: string;
+    media_type?: string;
+    width?: number;
+    height?: number;
+    current_url?: string;
+    page_title?: string;
+    current_step?: string;
+    cursor?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  }) =>
+    request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/live-frame`, { method: "POST", body: JSON.stringify(data) }),
   requestBrowserTaskPermission: (taskId: string, data: { work_key: string; origin?: string; action_type: string; action_summary?: string; payload?: Record<string, unknown> }) =>
     request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/permissions`, { method: "POST", body: JSON.stringify(data) }),
   getBrowserTaskPermissions: (params?: { decision?: string; limit?: number }) => {
