@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-29 05:16 KST - Admin model routing error panel and fallback order
+
+- Request: Reflect chat model routing settings in `/admin/model-routing` and make models with errors visible.
+- Cause:
+  - The page existed but showed only `image`, `edit_image`, `video`, and `llm`, even though the backend supports `music`, `audio`, and `runner_llm`.
+  - LLM fallback order was not directly editable because the table did not expose `display_order`.
+  - Broken registry models were only visible when they also had a routing preference row.
+- Changes:
+  - `src/app/admin/model-routing/page.tsx` now shows all supported route keys.
+  - Added an LLM fallback chain panel that reflects enabled chat LLM candidates in backend order.
+  - Added an error model panel showing inactive, non-executable, auth-required, billing-depleted, rate-limited, and review-required models from the registry.
+  - Added editable order input so admin changes can control fallback order.
+- Verification:
+  - `npx eslint src/app/admin/model-routing/page.tsx` passed.
+  - `npx tsc --noEmit` passed.
+  - `git diff --check` passed.
+- Deployment:
+  - Pending commit, push, and deploy at the time of this entry.
+
 ## 2026-08-29 04:33 KST - Chat completion alert waits for stable final message
 
 - Request: Stop the first assistant bubble from showing a completion alert while the answer is still continuing and later changing in place.

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
-type RouteKey = "image" | "edit_image" | "video" | "llm";
+type RouteKey = "image" | "edit_image" | "video" | "llm" | "music" | "audio" | "runner_llm";
 
 interface RoutingPreference {
   route_key: RouteKey;
@@ -30,13 +30,34 @@ interface RoutingPreference {
 
 interface RoutingPreferencesResponse {
   preferences?: RoutingPreference[];
+  blocked_counts?: Partial<Record<RouteKey, number>>;
+  fallback_chain?: RoutingPreference[];
+  error_models?: ErrorModel[];
+}
+
+interface ErrorModel {
+  provider: string;
+  model_id: string;
+  display_name?: string;
+  family?: string | null;
+  category?: string | null;
+  is_active: boolean;
+  is_selectable?: boolean;
+  is_executable: boolean;
+  verification_status?: string | null;
+  note?: string;
+  updated_at?: string | null;
+  last_verified_at?: string | null;
 }
 
 const ROUTES: Array<{ key: RouteKey; label: string; desc: string }> = [
   { key: "image", label: "이미지", desc: "generate_image 기본 라우팅" },
   { key: "edit_image", label: "이미지 편집", desc: "edit_image 기본 라우팅" },
   { key: "video", label: "동영상", desc: "generate_video job 라우팅" },
-  { key: "llm", label: "LLM", desc: "어드민 기본 LLM 표시/선호" },
+  { key: "llm", label: "채팅 LLM", desc: "채팅 기본 모델과 장애 시 폴백 순서" },
+  { key: "music", label: "음악", desc: "generate_music 기본 라우팅" },
+  { key: "audio", label: "음성", desc: "TTS/audio 기본 라우팅" },
+  { key: "runner_llm", label: "Runner LLM", desc: "Pipeline Runner 모델 후보" },
 ];
 
 function availabilityStyle(value: string): { background: string; color: string; border: string } {
@@ -59,8 +80,22 @@ function formatDateTime(value?: string | null): string {
   return parsed.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 }
 
+function hasRoutingIssue(item: RoutingPreference): boolean {
+  if (!item.is_enabled) return false;
+  return item.availability !== "available";
+}
+
+function hasModelIssue(item: ErrorModel): boolean {
+  if (!item.is_active || !item.is_executable) return true;
+  const status = String(item.verification_status || "").trim().toLowerCase();
+  return Boolean(status && !["verified", "ok"].includes(status));
+}
+
 export default function ModelRoutingPage() {
   const [items, setItems] = useState<RoutingPreference[]>([]);
+  const [blockedCounts, setBlockedCounts] = useState<Partial<Record<RouteKey, number>>>({});
+  const [fallbackChain, setFallbackChain] = useState<RoutingPreference[]>([]);
+  const [errorModels, setErrorModels] = useState<ErrorModel[]>([]);
   const [activeRoute, setActiveRoute] = useState<RouteKey>("image");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,7 +105,12 @@ export default function ModelRoutingPage() {
     setLoading(true);
     setMessage("");
     api.getModelRoutingPreferences()
-      .then((res: RoutingPreferencesResponse) => setItems(Array.isArray(res.preferences) ? res.preferences : []))
+      .then((res: RoutingPreferencesResponse) => {
+        setItems(Array.isArray(res.preferences) ? res.preferences : []);
+        setBlockedCounts(res.blocked_counts || {});
+        setFallbackChain(Array.isArray(res.fallback_chain) ? res.fallback_chain : []);
+        setErrorModels(Array.isArray(res.error_models) ? res.error_models.filter(hasModelIssue) : []);
+      })
       .catch((err) => setMessage(err instanceof Error ? err.message : "모델 라우팅 설정을 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, []);
@@ -89,12 +129,20 @@ export default function ModelRoutingPage() {
   const routeStats = useMemo(() => {
     const disabled = visibleItems.filter((item) => !item.is_enabled || item.availability === "disabled").length;
     const available = visibleItems.filter((item) => item.availability === "available").length;
+    const blocked = visibleItems.filter(hasRoutingIssue).length;
     return {
       available,
       disabled,
-      blocked: Math.max(visibleItems.length - available - disabled, 0),
+      blocked,
     };
   }, [visibleItems]);
+  const visibleIssueCount = blockedCounts[activeRoute] || routeStats.blocked;
+  const criticalErrorCount = useMemo(() => {
+    return errorModels.filter((item) => {
+      const status = String(item.verification_status || "").toLowerCase();
+      return status.includes("billing") || status.includes("auth") || status.includes("rate");
+    }).length;
+  }, [errorModels]);
 
   const patchItem = (target: RoutingPreference, patch: Partial<RoutingPreference>) => {
     setItems((prev) => prev.map((item) => (
@@ -152,7 +200,7 @@ export default function ModelRoutingPage() {
             <div>
               <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>DB 모델 라우팅 설정</h2>
               <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                explicit 요청값 다음으로 적용되는 이미지/동영상/LLM 기본 모델입니다.
+                explicit 요청값 다음으로 적용되는 기본 모델과 채팅 LLM 폴백 순서를 설정합니다.
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -200,7 +248,10 @@ export default function ModelRoutingPage() {
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{route.label}</span>
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{routeItems.length}개</span>
+                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    {routeItems.length}개
+                    {(blockedCounts[route.key] || 0) > 0 ? ` · 오류 ${blockedCounts[route.key]}` : ""}
+                  </span>
                 </div>
                 <p className="text-[11px] mb-2" style={{ color: "var(--text-secondary)" }}>{route.desc}</p>
                 <p className="text-xs font-mono truncate" style={{ color: "var(--accent)" }}>
@@ -209,6 +260,107 @@ export default function ModelRoutingPage() {
               </button>
             );
           })}
+        </section>
+
+        {activeRoute === "llm" && (
+          <section className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+              <div>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>채팅 LLM 폴백 순서</h3>
+                <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                  기본 모델 실패 또는 런타임 미가용 시 enabled 모델을 순서값 기준으로 시도합니다.
+                </p>
+              </div>
+              <span className="text-xs px-2 py-1 rounded" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                후보 {fallbackChain.length}개
+              </span>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {fallbackChain.length === 0 ? (
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>설정된 LLM 후보가 없습니다.</span>
+              ) : fallbackChain.map((item, idx) => {
+                const issue = hasRoutingIssue(item);
+                return (
+                  <span
+                    key={`${item.provider}:${item.model_id}`}
+                    className="text-xs px-2 py-1 rounded font-mono"
+                    style={{
+                      background: issue ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
+                      color: issue ? "var(--danger)" : "var(--success)",
+                      border: issue ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(34,197,94,0.22)",
+                    }}
+                  >
+                    {idx + 1}. {item.provider}:{item.model_id}
+                    {issue ? ` · ${item.availability}` : ""}
+                  </span>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+          <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>오류 모델</h3>
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                비활성, 실행 불가, 인증/과금/검수 필요 상태인 모델입니다.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <span>전체 {errorModels.length}</span>
+              <span>즉시 조치 {criticalErrorCount}</span>
+            </div>
+          </div>
+          {loading ? (
+            <p className="text-sm p-4" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>
+          ) : errorModels.length === 0 ? (
+            <p className="text-sm p-4" style={{ color: "var(--text-secondary)" }}>오류 모델이 없습니다.</p>
+          ) : (
+            <div className="max-h-[280px] overflow-auto">
+              <table className="w-full text-sm">
+                <thead style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                  <tr>
+                    {["Provider", "Model", "Status", "Runtime", "Note", "Verified"].map((header) => (
+                      <th key={header} className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {errorModels.slice(0, 80).map((item) => {
+                    const tone = availabilityStyle(item.verification_status || "not_configured");
+                    return (
+                      <tr key={`${item.provider}:${item.model_id}`} style={{ borderTop: "1px solid var(--border)" }}>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: "var(--bg-hover)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+                            {item.provider}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 min-w-[260px]">
+                          <p className="font-mono text-xs break-all" style={{ color: "var(--text-primary)" }}>{item.model_id}</p>
+                          <p className="text-[11px] mt-1" style={{ color: "var(--text-secondary)" }}>{item.display_name || item.model_id}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[11px] px-2 py-1 rounded whitespace-nowrap" style={tone}>
+                            {item.verification_status || "unknown"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+                          {item.is_active ? "active" : "inactive"} · {item.is_executable ? "executable" : "not executable"}
+                        </td>
+                        <td className="px-4 py-3 min-w-[260px] text-xs" style={{ color: "var(--text-secondary)" }}>
+                          {item.note || "-"}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: "var(--text-secondary)" }}>
+                          {formatDateTime(item.last_verified_at || item.updated_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
@@ -223,7 +375,7 @@ export default function ModelRoutingPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap text-xs" style={{ color: "var(--text-secondary)" }}>
               <span>available {routeStats.available}</span>
-              <span>blocked {routeStats.blocked}</span>
+              <span>blocked {visibleIssueCount}</span>
               <span>disabled {routeStats.disabled}</span>
             </div>
           </div>
@@ -237,7 +389,7 @@ export default function ModelRoutingPage() {
               <table className="w-full text-sm">
                 <thead style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                   <tr>
-                    {["기본", "상태", "Provider", "Model", "Availability", "Registry", "비고", "Updated"].map((header) => (
+                    {["기본", "상태", "순서", "Provider", "Model", "Availability", "Registry", "비고", "Updated"].map((header) => (
                       <th key={header} className="text-left px-4 py-3 text-xs font-semibold whitespace-nowrap">{header}</th>
                     ))}
                   </tr>
@@ -264,6 +416,17 @@ export default function ModelRoutingPage() {
                             />
                             enabled
                           </label>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min={0}
+                            value={item.display_order}
+                            onChange={(event) => patchItem(item, { display_order: Number(event.target.value || 0) })}
+                            className="w-20 rounded px-2 py-1 text-xs"
+                            style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                            aria-label={`${item.model_id} 라우팅 순서`}
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: "var(--bg-hover)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
