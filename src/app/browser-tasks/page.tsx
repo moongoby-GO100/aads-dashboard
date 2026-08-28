@@ -58,6 +58,31 @@ type LiveFrame = {
   metadata?: Record<string, unknown>;
 };
 
+type BrowserAccessDiagnosis = {
+  category?: string;
+  severity?: string;
+  reason_code?: string;
+  http_status?: number | null;
+  self_hosted_usable?: boolean;
+  approval_required?: boolean;
+};
+
+type BrowserAccessRemediation = {
+  next_action?: string;
+  primary_runtime?: string;
+  fallback_runtimes?: string[];
+  requires_approval?: boolean;
+  message?: string;
+};
+
+type BrowserAccessCheck = {
+  status?: string;
+  diagnosis?: BrowserAccessDiagnosis;
+  access_diagnosis?: BrowserAccessDiagnosis;
+  remediation?: BrowserAccessRemediation;
+  runtime?: string;
+};
+
 const STATUS_OPTIONS = ["", "queued", "running", "approval_required", "auth_required", "completed", "failed"];
 
 function statusStyle(status: string): React.CSSProperties {
@@ -104,6 +129,26 @@ function liveFrameSource(frame: LiveFrame | null): string {
   return "대기";
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function diagnosisLabel(category?: string): string {
+  const labels: Record<string, string> = {
+    reachable: "접근 가능",
+    auth_required: "로그인 필요",
+    challenge_required: "승인 챌린지",
+    bot_or_waf_blocked: "보안 차단",
+    unsupported_url: "지원 안 됨",
+    runtime_unavailable: "런타임 없음",
+    timeout_or_slow_page: "응답 지연",
+    network_or_tls_error: "네트워크/TLS",
+    remote_server_error: "원격 오류",
+    unknown_failure: "확인 필요",
+  };
+  return labels[category || ""] || category || "대기";
+}
+
 export default function BrowserTasksPage() {
   const [tasks, setTasks] = useState<BrowserTask[]>([]);
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
@@ -118,6 +163,8 @@ export default function BrowserTasksPage() {
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [liveFrame, setLiveFrame] = useState<LiveFrame | null>(null);
   const [liveEvents, setLiveEvents] = useState<BrowserTaskEvent[]>([]);
+  const [liveCapture, setLiveCapture] = useState<BrowserAccessCheck | null>(null);
+  const [accessCheck, setAccessCheck] = useState<BrowserAccessCheck | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
 
   const activeTasks = useMemo(() => tasks.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)).length, [tasks]);
@@ -161,6 +208,7 @@ export default function BrowserTasksPage() {
     if (!selectedTaskId) {
       setLiveFrame(null);
       setLiveEvents([]);
+      setLiveCapture(null);
       return;
     }
 
@@ -170,10 +218,12 @@ export default function BrowserTasksPage() {
         const res = await api.getBrowserTaskLiveFrame(selectedTaskId, { event_limit: 30, capture: true }) as {
           frame?: LiveFrame | null;
           events?: BrowserTaskEvent[];
+          capture?: BrowserAccessCheck;
         };
         if (cancelled) return;
         setLiveFrame(res.frame || null);
         setLiveEvents(Array.isArray(res.events) ? res.events : []);
+        setLiveCapture(res.capture || null);
         setLiveError(null);
       } catch (e) {
         if (!cancelled) setLiveError(String(e));
@@ -206,6 +256,23 @@ export default function BrowserTasksPage() {
     }
   };
 
+  const runAccessCheck = async () => {
+    setBusy(true);
+    setError(null);
+    setAccessCheck(null);
+    try {
+      const res = await api.checkBrowserTargetAccess({
+        work_key: workKey || "access-check",
+        target_url: targetUrl,
+      }) as BrowserAccessCheck;
+      setAccessCheck(res);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const decide = async (requestId: string, approved: boolean) => {
     setBusy(true);
     setError(null);
@@ -222,6 +289,11 @@ export default function BrowserTasksPage() {
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
   const frameSrc = getFrameSrc(liveFrame);
+  const liveMetadata = asRecord(liveFrame?.metadata);
+  const frameDiagnosis = asRecord(liveMetadata.access_diagnosis) as BrowserAccessDiagnosis;
+  const frameRemediation = asRecord(liveMetadata.remediation) as BrowserAccessRemediation;
+  const activeDiagnosis = liveCapture?.diagnosis || liveCapture?.access_diagnosis || frameDiagnosis;
+  const activeRemediation = liveCapture?.remediation || frameRemediation;
 
   return (
     <div className="p-6 space-y-6" style={{ color: "var(--text-primary)" }}>
@@ -260,6 +332,15 @@ export default function BrowserTasksPage() {
           <button disabled={busy} onClick={createTask} className="w-full rounded px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: "var(--accent)", color: "#fff" }}>
             작업 등록
           </button>
+          <button disabled={busy || !targetUrl} onClick={runAccessCheck} className="w-full rounded px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ background: "var(--bg-hover)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+            접근 진단
+          </button>
+          {accessCheck && (
+            <div className="rounded border px-3 py-2 text-xs leading-5" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
+              <div className="font-medium">{diagnosisLabel(accessCheck.diagnosis?.category)} · {accessCheck.remediation?.primary_runtime || "-"}</div>
+              <div style={{ color: "var(--text-secondary)" }}>{accessCheck.remediation?.message || accessCheck.diagnosis?.reason_code || "-"}</div>
+            </div>
+          )}
         </section>
 
         <section className="rounded-lg border p-4 space-y-3" style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}>
@@ -390,6 +471,22 @@ export default function BrowserTasksPage() {
               <div className="truncate">제목: {liveFrame?.page_title || "-"}</div>
               <div className="truncate">단계: {liveFrame?.current_step || selectedTask?.current_step || "-"}</div>
               <div className="truncate">캡처: {liveFrameSource(liveFrame)}</div>
+            </div>
+
+            <div className="grid gap-2 rounded border p-3 text-xs" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">접근 진단</span>
+                <span className="rounded px-2 py-1" style={statusStyle(activeDiagnosis?.severity === "error" ? "failed" : activeDiagnosis?.approval_required ? "approval_required" : "running")}>
+                  {diagnosisLabel(activeDiagnosis?.category)}
+                </span>
+              </div>
+              <div style={{ color: "var(--text-secondary)" }}>
+                HTTP {activeDiagnosis?.http_status ?? "-"} · self-hosted {activeDiagnosis?.self_hosted_usable ? "가능" : "확인필요"} · 승인 {activeDiagnosis?.approval_required ? "필요" : "불필요"}
+              </div>
+              <div style={{ color: "var(--text-secondary)" }}>{activeRemediation?.message || "캡처 또는 접근 진단을 실행하면 권장 조치가 표시됩니다."}</div>
+              <div className="truncate" style={{ color: "var(--text-secondary)" }}>
+                권장 런타임: {activeRemediation?.primary_runtime || "-"} / 폴백: {(activeRemediation?.fallback_runtimes || []).join(", ") || "-"}
+              </div>
             </div>
 
             <div className="rounded border" style={{ borderColor: "var(--border)" }}>

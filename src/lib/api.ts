@@ -541,6 +541,8 @@ export const api = {
   },
   createBrowserTask: (data: { work_key: string; target_url: string; session_id?: string; current_step?: string }) =>
     request<unknown>("/browser-tasks", { method: "POST", body: JSON.stringify(data) }),
+  checkBrowserTargetAccess: (data: { work_key?: string; target_url: string }) =>
+    request<unknown>("/browser-tasks/access-check", { method: "POST", body: JSON.stringify(data) }),
   updateBrowserTaskStatus: (taskId: string, data: { status: string; current_step?: string; result?: Record<string, unknown>; error?: string }) =>
     request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/status`, { method: "PATCH", body: JSON.stringify(data) }),
   getBrowserTaskEvents: (taskId: string, params?: { limit?: number }) => {
