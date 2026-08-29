@@ -1799,9 +1799,15 @@
   - recoverable SSE error 수신 시 즉시 스트리밍 잠금을 해제하고 같은 버블을 `이어쓰기 가능` 상태로 전환한다.
   - completion polling에서 최종 버블 연결 실패 시 진행 중으로 되돌리지 않고 재시도 가능한 미완료 버블로 전환한다.
   - 재생성/이어쓰기 실패 후에도 전역 `streaming` 잠금을 해제해 다음 재시도 버튼이 보이도록 했다.
-- 검증 예정:
-  - `git diff --check`
-  - `npx eslint src/app/chat/page.tsx`
-  - `npx tsc --noEmit`
-  - `npm run build`
-  - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.
+- 검증:
+  - `git diff --check` 통과.
+  - `npx eslint src/app/chat/page.tsx` 통과. 기존 경고 20건, 신규 오류 0건.
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과.
+  - `/root/aads/aads-dashboard/deploy.sh` 실행 완료. release `290129da3057`, 활성 슬롯 `green`.
+  - `https://aads.newtalk.kr/chat`은 인증 리다이렉트 후 `/login` HTTP 200 응답을 반환한다.
+  - API health: `pipeline_healthy=true`, `stalled_count=0`, `active_streams_executing=5`, `active_streams_visible=5`, `recovery_pending_streams=0`.
+  - `aads-dashboard`와 `aads-dashboard-green` 컨테이너 모두 healthy.
+- 주의:
+  - 배포 스크립트 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
+  - `capture_screenshot`은 timeout으로 실패해 브라우저 시각 검증은 미완료이며, HTTP/API/컨테이너 검증으로 대체했다.
