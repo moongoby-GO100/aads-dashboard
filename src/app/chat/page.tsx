@@ -821,6 +821,71 @@ function convertDraftMessage(
   };
 }
 
+const RETRYABLE_INCOMPLETE_RESPONSE_NOTE = "응답이 완료 전 종료되었습니다. 이어서 작성하거나 다시 생성할 수 있습니다.";
+
+function markStreamingAsRetryableIncomplete(
+  messages: ChatMessage[],
+  options: {
+    sessionId: string;
+    executionId?: string | null;
+    fallbackContent?: string | null;
+    reason?: string | null;
+    messageId?: string;
+  },
+): ChatMessage[] {
+  const fallbackContent = String(options.fallbackContent || "").trim();
+  const safeContent = fallbackContent && !isPlaceholderOnlyContent(fallbackContent)
+    ? fallbackContent
+    : RETRYABLE_INCOMPLETE_RESPONSE_NOTE;
+  const reason = String(options.reason || "recoverable_stream_error").trim();
+  let touched = false;
+  const next = messages.map((message) => {
+    const sameExecution = Boolean(options.executionId && message.execution_id === options.executionId);
+    const isCandidate =
+      message.session_id === options.sessionId &&
+      message.role === "assistant" &&
+      (isStreamingPlaceholderMessage(message) || sameExecution || message.id === options.messageId);
+    if (!isCandidate) return message;
+    touched = true;
+    const existingDetails = qualityDetailsObject(message);
+    const content = normalizedMessageContent(message);
+    return {
+      ...message,
+      content: content && !isPlaceholderOnlyContent(content) ? message.content : safeContent,
+      intent: "interrupted_partial",
+      model_used: "interrupted",
+      render_id: message.render_id || message.id,
+      execution_id: message.execution_id || options.executionId || undefined,
+      quality_details: {
+        ...existingDetails,
+        interruption_reason: reason,
+        recoverable_retry: true,
+        frontend_marked_retryable: true,
+      },
+    };
+  });
+  if (touched) return next;
+  return [
+    ...next,
+    {
+      id: options.messageId || `ai-retryable-${options.executionId || Date.now()}`,
+      render_id: options.messageId || `ai-retryable-${options.executionId || Date.now()}`,
+      session_id: options.sessionId,
+      execution_id: options.executionId || undefined,
+      role: "assistant",
+      content: safeContent,
+      intent: "interrupted_partial",
+      model_used: "interrupted",
+      quality_details: {
+        interruption_reason: reason,
+        recoverable_retry: true,
+        frontend_marked_retryable: true,
+      },
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
 function surfaceDbSavedStreamingPlaceholders(
   messages: ChatMessage[],
   options: { keepEmpty?: boolean; fallbackContent?: string } = {},
@@ -1566,6 +1631,26 @@ function compareSelectableModels(
   return a.name.localeCompare(b.name);
 }
 
+function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: number; color?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-streaming-caret="true"
+      style={{
+        display: "inline-block",
+        width: "2px",
+        height: `${height}px`,
+        background: color,
+        marginLeft: "3px",
+        animation: "ct-blink 1s step-end infinite",
+        verticalAlign: "text-bottom",
+        borderRadius: "2px",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 // ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
 interface MessageItemProps {
   msg: ChatMessage;
@@ -1997,24 +2082,14 @@ const MessageItem = memo(function MessageItem({
                     lineHeight: 1.5,
                   }}>
                     {streamingThinking}
-                    <span style={{
-                      display: "inline-block", width: "2px", height: "12px",
-                      background: "#f4b557", marginLeft: "2px",
-                      animation: "ct-blink 1s step-end infinite",
-                      verticalAlign: "text-bottom",
-                    }} />
+                    <StreamingCaret height={12} color="#f4b557" />
                   </div>
                 </details>
               ) : null}
               {displayedStreamingContent ? (
                 <>
                   <MarkdownBlock text={displayedStreamingContent} />
-                  <span style={{
-                    display: "inline-block", width: "2px", height: "14px",
-                    background: "var(--ct-accent)", marginLeft: "2px",
-                    animation: "ct-blink 1s step-end infinite",
-                    verticalAlign: "text-bottom",
-                  }} />
+                  <StreamingCaret />
                 </>
               ) : !streamToolStatus && (!streamToolLogs || streamToolLogs.length === 0) ? (
                 <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
@@ -2026,6 +2101,12 @@ const MessageItem = memo(function MessageItem({
                       animationDelay: `${i * 0.2}s`,
                     }} />
                   ))}
+                  <StreamingCaret />
+                </div>
+              ) : null}
+              {isActiveStreamingPlaceholder && !displayedStreamingContent && !streamingThinking && (streamToolStatus || (streamToolLogs && streamToolLogs.length > 0)) ? (
+                <div style={{ display: "flex", alignItems: "center", minHeight: "18px", marginTop: "6px" }}>
+                  <StreamingCaret />
                 </div>
               ) : null}
             </>
@@ -4996,10 +5077,24 @@ export default function ChatPage() {
               .then((message) => {
                 if (cancelled) return;
                 if (!message) {
-                  pendingResponseSessions.current.add(sid);
-                  setWaitingBgResponse(true);
-                  setStreaming(true);
-                  setToolStatus("응답 작성 중...");
+                  pendingResponseSessions.current.delete(sid);
+                  setWaitingBgResponse(false);
+                  setBgPartialContent("");
+                  setStreaming(false);
+                  setStreamBuf("");
+                  setToolStatus(null);
+                  if (streamingSessionRef.current === sid) streamingSessionRef.current = null;
+                  setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
+                    sessionId: sid,
+                    executionId: completionExecutionId,
+                    fallbackContent: streamBufRef.current || bgPartialContentRef.current,
+                    reason: "completion_without_visible_final_message",
+                  }));
+                  showInterruptionAlertOnce(
+                    completionExecutionId || `retryable-${sid}`,
+                    sid,
+                    "완료 신호와 최종 버블 연결이 맞지 않아 이어서 작성할 수 있습니다.",
+                  );
                   return;
                 }
                 markCompletionSeen(sid, completionStatus);
@@ -5045,23 +5140,42 @@ export default function ChatPage() {
                 );
               if (recoverablePartial) {
                 setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs, { preserveStreamingPlaceholders: true }));
-                pendingResponseSessions.current.add(sid);
-                setWaitingBgResponse(true);
+                pendingResponseSessions.current.delete(sid);
+                setWaitingBgResponse(false);
                 setBgPartialContent(recoverablePartial.content || bgPartialContent);
-                setStreaming(true);
-                setStreamBuf(recoverablePartial.content || bgPartialContent || "");
-                setToolStatus("응답 작성 중...");
-                void requestResumeOnce(sid);
+                setStreaming(false);
+                setStreamBuf("");
+                setToolStatus(null);
+                if (streamingSessionRef.current === sid) streamingSessionRef.current = null;
+                showInterruptionAlertOnce(
+                  statusExecutionId || ss.execution_id || currentExecutionIdRef.current || `retryable-${sid}`,
+                  sid,
+                  "응답이 완료 전 종료되어 이어서 작성할 수 있습니다.",
+                );
                 return;
               }
               setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, freshMsgs));
             }
           }
           if (!completedAi) {
-            setWaitingBgResponse(true);
-            pendingResponseSessions.current.add(sid);
-            setStreaming(true);
-            setToolStatus("응답 작성 중...");
+            setWaitingBgResponse(false);
+            setBgPartialContent("");
+            pendingResponseSessions.current.delete(sid);
+            setStreaming(false);
+            setStreamBuf("");
+            setToolStatus(null);
+            if (streamingSessionRef.current === sid) streamingSessionRef.current = null;
+            setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
+              sessionId: sid,
+              executionId: statusExecutionId || ss?.execution_id || currentExecutionIdRef.current,
+              fallbackContent: bgPartialContentRef.current || streamBufRef.current,
+              reason: "completion_without_visible_final_message",
+            }));
+            showInterruptionAlertOnce(
+              statusExecutionId || ss?.execution_id || currentExecutionIdRef.current || `retryable-${sid}`,
+              sid,
+              "완료 신호와 최종 버블 연결이 맞지 않아 이어서 작성할 수 있습니다.",
+            );
             return;
           }
           markCompletionSeen(sid, ss);
@@ -5980,6 +6094,7 @@ export default function ChatPage() {
       const seenStreamEventIds = new Set<string>();
       let currentStreamEventId = "";
       let skipStreamEvent = false;
+      let retryableStreamErrorHandled = false;
 
       // Phase4: 토큰 버퍼링 — SSE 끊김 시에도 표시 지속 (2초 분량 선행 버퍼)
       const _tokenQueue: string[] = [];
@@ -6403,6 +6518,36 @@ export default function ChatPage() {
               if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
               yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 3000);
             } else if (ev.type === "error") {
+              const recoverable = ev.recoverable !== false;
+              const errorReason = String(ev.reason || ev.error_code || "recoverable_stream_error");
+              const preserved = full || streamBufRef.current || bgPartialContentRef.current || String(ev.content || "");
+              if (recoverable) {
+                retryableStreamErrorHandled = true;
+                _stopDrain();
+                if (!isStale()) {
+                  pendingResponseSessions.current.delete(requestSessionId!);
+                  setWaitingBgResponse(false);
+                  setBgPartialContent("");
+                  setStreamBuf("");
+                  setThinkingBuf("");
+                  setStreaming(false);
+                  streamingSessionRef.current = null;
+                  setToolStatus(null);
+                  setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
+                    sessionId: requestSessionId!,
+                    executionId: currentExecutionIdRef.current,
+                    fallbackContent: preserved,
+                    reason: errorReason,
+                  }));
+                  showInterruptionAlertOnce(
+                    currentExecutionIdRef.current || `retryable-${requestSessionId}`,
+                    requestSessionId,
+                    "응답이 완료 전 종료되어 이어서 작성할 수 있습니다.",
+                  );
+                  requestServerFinalization(requestSessionId!, [0, 1500, 3500]);
+                }
+                break;
+              }
               // 서버 재시작/LLM 장애 → Invisible Recovery로 처리 (버블 생성 없이 자동 복구)
               if (!isStale()) setToolStatus("응답 작성 중...");
               sseError = new Error("SSE_SERVER_RESTART");
@@ -6413,8 +6558,11 @@ export default function ChatPage() {
           // SSE error 이벤트는 outer catch로 전파
           if (sseError) throw sseError;
         }
+        if (retryableStreamErrorHandled) break;
         if (streamGotFinal) break; // done 이벤트 수신 → while 루프 탈출
       }
+
+      if (retryableStreamErrorHandled) return;
 
       // AI 트리거 캡처: AI가 [SCREEN_CAPTURE_REQUEST]를 응답에 포함한 경우 자동 캡처 + 재전송
       if (streamGotFinal && aiCaptureRequestedRef.current && !isStale()) {
@@ -6908,10 +7056,24 @@ export default function ChatPage() {
                   }
                 }
                 if (!completedAi) {
-                  pendingResponseSessions.current.add(_sid);
-                  setWaitingBgResponse(true);
-                  setStreaming(true);
-                  setToolStatus("응답 작성 중...");
+                  pendingResponseSessions.current.delete(_sid);
+                  setWaitingBgResponse(false);
+                  setBgPartialContent("");
+                  setStreaming(false);
+                  setStreamBuf("");
+                  setToolStatus(null);
+                  if (streamingSessionRef.current === _sid) streamingSessionRef.current = null;
+                  setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
+                    sessionId: _sid,
+                    executionId: statusExecutionId || ss.execution_id || currentExecutionIdRef.current,
+                    fallbackContent: streamBufRef.current || bgPartialContentRef.current,
+                    reason: "completion_without_visible_final_message",
+                  }));
+                  showInterruptionAlertOnce(
+                    statusExecutionId || ss.execution_id || currentExecutionIdRef.current || `retryable-${_sid}`,
+                    _sid,
+                    "완료 신호와 최종 버블 연결이 맞지 않아 이어서 작성할 수 있습니다.",
+                  );
                   return;
                 }
                 markCompletionSeen(_sid, ss);
@@ -7289,27 +7451,33 @@ export default function ChatPage() {
       if (!regenGotFinal) {
         const recovered = await mergeLatestAssistantFromServer(sessionId);
         if (!recovered) {
-          pendingResponseSessions.current.add(sessionId);
-          setWaitingBgResponse(true);
-          setBgPartialContent(full || bgPartialContentRef.current || "");
-          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
+          pendingResponseSessions.current.delete(sessionId);
+          setWaitingBgResponse(false);
+          setBgPartialContent("");
+          setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
             sessionId,
             executionId: currentExecutionIdRef.current,
-            partialContent: full || bgPartialContentRef.current || "분석 중...",
+            fallbackContent: full || bgPartialContentRef.current,
+            reason: mode === "continue" ? "continue_retry_stream_incomplete" : "regenerate_stream_incomplete",
+            messageId: regenPlaceholderId,
           }));
-          if (currentExecutionIdRef.current) {
-            attachExecutionReplay(sessionId, currentExecutionIdRef.current, false);
-          } else {
-            void requestResumeOnce(sessionId, { cooldownMs: 0 });
-          }
+          showInterruptionAlertOnce(
+            currentExecutionIdRef.current || regenPlaceholderId,
+            sessionId,
+            mode === "continue"
+              ? "이어쓰기 응답이 완료 전 종료되어 다시 이어서 작성할 수 있습니다."
+              : "재생성 응답이 완료 전 종료되어 다시 생성할 수 있습니다.",
+          );
         }
       }
       if (regenGotFinal) {
         setStreaming(false);
         setStreamBuf("");
       } else {
-        setStreaming(true);
-        if (full) setStreamBuf(full);
+        setStreaming(false);
+        setStreamBuf("");
+        streamingSessionRef.current = null;
+        setToolStatus(null);
       }
       setRegeneratingId(null);
     }
@@ -9364,12 +9532,7 @@ export default function ChatPage() {
                 {bgPartialContent ? (
                   <>
                     <MarkdownBlock text={bgPartialContent} />
-                    <span style={{
-                      display: "inline-block", width: "2px", height: "14px",
-                      background: "var(--ct-accent)", marginLeft: "2px",
-                      animation: "ct-blink 1s step-end infinite",
-                      verticalAlign: "text-bottom",
-                    }} />
+                    <StreamingCaret />
                   </>
                 ) : (
                   <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "20px" }}>
@@ -9384,6 +9547,7 @@ export default function ChatPage() {
                         }}
                       />
                     ))}
+                    <StreamingCaret />
                   </div>
                 )}
               </div>

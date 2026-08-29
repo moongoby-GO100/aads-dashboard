@@ -1786,3 +1786,22 @@
   - `npx tsc --noEmit --pretty false`
   - `npm run build`
   - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.
+
+## 2026-08-29 10:49 KST - 응답 미완료 종료 후 재시도 잠금 해제
+
+- 요청: 응답 미완료 종료 후 재시도가 안 되는 경우를 확인해 조치하고 배포 운영 반영.
+- 원인:
+  - 서버가 `recoverable: true` SSE error를 내려도 프론트가 이를 일반 SSE 장애로 처리해 invisible recovery 루프에 들어갔다.
+  - 완료 후보 상태에서 최종 assistant 버블을 찾지 못하면 `streaming=true`와 `waitingBgResponse=true`로 되돌려 `이어서`/`다시 생성` 버튼이 계속 숨겨질 수 있었다.
+  - 재생성/이어쓰기 스트림이 최종 응답 없이 끝난 경우에도 `handleRegenerate()` finally에서 다시 `streaming=true`를 세팅해 버튼 잠금이 유지됐다.
+- 조치:
+  - `markStreamingAsRetryableIncomplete()`를 추가해 미완료 종료를 `interrupted_partial` + `model_used=interrupted` + `quality_details.recoverable_retry=true` 상태로 고정한다.
+  - recoverable SSE error 수신 시 즉시 스트리밍 잠금을 해제하고 같은 버블을 `이어쓰기 가능` 상태로 전환한다.
+  - completion polling에서 최종 버블 연결 실패 시 진행 중으로 되돌리지 않고 재시도 가능한 미완료 버블로 전환한다.
+  - 재생성/이어쓰기 실패 후에도 전역 `streaming` 잠금을 해제해 다음 재시도 버튼이 보이도록 했다.
+- 검증 예정:
+  - `git diff --check`
+  - `npx eslint src/app/chat/page.tsx`
+  - `npx tsc --noEmit`
+  - `npm run build`
+  - 운영 배포 후 `/chat` HTTP 응답 및 컨테이너 health 확인.
