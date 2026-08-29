@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-29 15:04 KST - Mobile docs open in a readable viewer tab
+
+- Request: Make mobile document clicks open the selected document immediately so it can be read, then deploy to production.
+- Cause:
+  - The document detail panel was hidden behind `lg:flex`, so mobile taps selected a file but did not show a readable viewer.
+  - Direct `/docs?project=...&base_path=...&file_path=...` links also loaded inside the same list-first layout on mobile.
+- Changes:
+  - `src/app/docs/page.tsx` now builds canonical document viewer URLs for selected files.
+  - Mobile document taps open the selected document URL in a new tab, with same-tab fallback if the popup is blocked.
+  - Mobile direct-link tabs render a dedicated full-screen document viewer with a list return action.
+  - The document preview renderer was extracted for reuse across the mobile viewer and desktop panel behavior.
+- Verification:
+  - `npx eslint src/app/docs/page.tsx` passed.
+  - `npx tsc --noEmit` passed.
+  - `npm run build` passed and generated `/docs`.
+- Deployment:
+  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+
 ## 2026-08-29 09:37 KST - Chat completion alert waits for persisted final message
 
 - Request: Apply the next-step fix for the session where a response appeared completed while the answer was still being generated or changing in place.

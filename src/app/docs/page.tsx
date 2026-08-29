@@ -215,6 +215,14 @@ function buildFullPath(file: DocFile): string {
   return `${base}/${rel}`;
 }
 
+function buildDocViewerUrl(project: string, file: DocFile): string {
+  const q = new URLSearchParams();
+  q.set("project", project);
+  q.set("base_path", file.base_path);
+  q.set("file_path", file.path);
+  return `/docs?${q.toString()}`;
+}
+
 function splitCsvLine(line: string): string[] {
   const cells: string[] = [];
   let current = "";
@@ -303,6 +311,195 @@ function renderMarkdown(text: string): string {
   html = html.replace(/\n/g, "<br/>");
 
   return html;
+}
+
+function DocContentViewer({
+  selectedFile,
+  fileContent,
+  fileMeta,
+  contentLoading,
+  compact = false,
+}: {
+  selectedFile: ListedDocFile;
+  fileContent: string | null;
+  fileMeta: {
+    encoding: string;
+    mime_type: string;
+    is_binary: boolean;
+    format?: string;
+    converted_from?: string;
+    source_mime_type?: string;
+  } | null;
+  contentLoading: boolean;
+  compact?: boolean;
+}) {
+  if (contentLoading) {
+    return (
+      <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
+        로딩 중...
+      </div>
+    );
+  }
+
+  if (fileContent === null) return null;
+
+  const fmt = fileMeta?.format || selectedFile.format || detectFormat(selectedFile.name);
+  const lowerName = selectedFile.name.toLowerCase();
+  const isBinary = fileMeta?.is_binary || fileMeta?.encoding === "base64";
+  const mime = fileMeta?.mime_type || "application/octet-stream";
+  const frameHeight = compact ? "calc(100vh - 178px)" : "calc(100vh - 200px)";
+
+  if (fmt === "image") {
+    const src = isBinary
+      ? `data:${mime};base64,${fileContent}`
+      : `data:${mime || "image/svg+xml"};utf8,${encodeURIComponent(fileContent)}`;
+    return (
+      <div className="flex items-center justify-center bg-gray-900/40 rounded-lg p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={selectedFile.name}
+          className="max-w-full object-contain rounded"
+          style={{ maxHeight: compact ? "calc(100vh - 190px)" : "calc(100vh - 220px)" }}
+        />
+      </div>
+    );
+  }
+
+  if (fmt === "pdf") {
+    const src = `data:application/pdf;base64,${fileContent}`;
+    return (
+      <iframe
+        src={src}
+        className="w-full border-0 rounded-lg bg-white"
+        style={{ height: frameHeight }}
+        title={selectedFile.name}
+      />
+    );
+  }
+
+  if (fmt === "excel-csv" || (selectedFile.format === "excel" && !isBinary && fileMeta?.converted_from)) {
+    const sections = parseCsvPreview(fileContent);
+    return (
+      <div className="space-y-6">
+        {sections.length ? sections.map((section, sectionIndex) => (
+          <div key={`${section.title}-${sectionIndex}`} className="overflow-auto">
+            <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>
+              {section.title}
+            </div>
+            <table className="min-w-full text-xs border-collapse">
+              <tbody>
+                {section.rows.map((row, rowIndex) => (
+                  <tr key={`${section.title}-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <td
+                        key={`${section.title}-${rowIndex}-${cellIndex}`}
+                        className="border px-2 py-1 align-top"
+                        style={{
+                          borderColor: "var(--border)",
+                          color: rowIndex === 0 ? "var(--text-primary)" : "var(--text-secondary)",
+                          fontWeight: rowIndex === 0 ? 600 : 400,
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )) : (
+          <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+            {fileContent}
+          </pre>
+        )}
+      </div>
+    );
+  }
+
+  if ((fmt === "word" || fmt === "excel" || fmt === "powerpoint") && isBinary) {
+    const downloadHref = `data:${mime};base64,${fileContent}`;
+    const officeLabel = fmt === "word" ? "Word" : fmt === "excel" ? "Excel" : "PowerPoint";
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="text-5xl mb-4">📎</div>
+        <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          {officeLabel} 문서는 브라우저에서 미리보기를 지원하지 않습니다
+        </p>
+        <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+          {selectedFile.name} · {formatSize(selectedFile.size)}
+        </p>
+        <a
+          href={downloadHref}
+          download={selectedFile.name}
+          className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
+          style={{ background: "var(--accent)", color: "#fff" }}
+        >
+          ⬇️ 다운로드
+        </a>
+      </div>
+    );
+  }
+
+  if (isBinary) {
+    const downloadHref = `data:${mime};base64,${fileContent}`;
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="text-5xl mb-4">📎</div>
+        <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          이 파일은 다운로드로 열 수 있습니다
+        </p>
+        <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+          {selectedFile.name} · {formatSize(selectedFile.size)}
+        </p>
+        <a
+          href={downloadHref}
+          download={selectedFile.name}
+          className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
+          style={{ background: "var(--accent)", color: "#fff" }}
+        >
+          다운로드
+        </a>
+      </div>
+    );
+  }
+
+  if (lowerName.endsWith(".md")) {
+    return (
+      <div
+        className="prose prose-invert max-w-none text-sm leading-relaxed"
+        style={{ color: "var(--text-primary)" }}
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(fileContent) }}
+      />
+    );
+  }
+
+  if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
+    return (
+      <iframe
+        srcDoc={fileContent}
+        className="w-full border-0 rounded-lg"
+        style={{ background: "#fff", height: frameHeight }}
+        title={selectedFile.name}
+        sandbox="allow-same-origin allow-popups"
+      />
+    );
+  }
+
+  if (lowerName.endsWith(".json")) {
+    return (
+      <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+        {(() => { try { return JSON.stringify(JSON.parse(fileContent), null, 2); } catch { return fileContent; } })()}
+      </pre>
+    );
+  }
+
+  return (
+    <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
+      {fileContent}
+    </pre>
+  );
 }
 
 export default function DocsPage() {
@@ -409,11 +606,7 @@ export default function DocsPage() {
     setFileContent(null);
     setFileMeta(null);
     if (options?.updateUrl !== false && typeof window !== "undefined") {
-      const q = new URLSearchParams();
-      q.set("project", project);
-      q.set("base_path", file.base_path);
-      q.set("file_path", file.path);
-      window.history.replaceState(null, "", `/docs?${q.toString()}`);
+      window.history.replaceState(null, "", buildDocViewerUrl(project, file));
     }
     try {
       const r = (await api.getProjectDocContent(project, file.base_path, file.path)) as DocContentResponse;
@@ -434,6 +627,17 @@ export default function DocsPage() {
       setContentLoading(false);
     }
   }, []);
+
+  const handleOpenFile = useCallback((project: string, file: ListedDocFile) => {
+    if (!isDesktop && typeof window !== "undefined") {
+      const opened = window.open(buildDocViewerUrl(project, file), "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.location.assign(buildDocViewerUrl(project, file));
+      }
+      return;
+    }
+    void openFile(project, file);
+  }, [isDesktop, openFile]);
 
   const filteredProjects =
     data?.projects?.filter((project) => selectedProject === "all" || project.project === selectedProject) || [];
@@ -536,6 +740,60 @@ export default function DocsPage() {
     setSearch("");
     void openFile(project, { ...file, project }, { updateUrl: false });
   }, [data, openFile]);
+
+  if (!isDesktop && selectedFile) {
+    return (
+      <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
+        <Header title="📄 문서 보기" />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-3 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex items-start gap-2">
+              <button
+                onClick={() => {
+                  setSelectedFile(null);
+                  setFileContent(null);
+                  setFileMeta(null);
+                  if (typeof window !== "undefined") window.history.replaceState(null, "", "/docs");
+                }}
+                className="shrink-0 px-2.5 py-1.5 text-xs rounded-lg"
+                style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
+              >
+                목록
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${PROJECT_COLORS[selectedFile.project] || "bg-gray-700 text-gray-200"}`}>
+                    {selectedFile.project}
+                  </span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[selectedFile.type] || "bg-gray-700 text-gray-200"}`}>
+                    {TYPE_LABELS[selectedFile.type] || selectedFile.type}
+                  </span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[selectedFile.format || detectFormat(selectedFile.name)] || "bg-gray-700 text-gray-200"}`}>
+                    {FORMAT_LABELS[selectedFile.format || detectFormat(selectedFile.name)] || detectFormat(selectedFile.name)}
+                  </span>
+                </div>
+                <div className="text-sm font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>
+                  {selectedFile.name}
+                </div>
+                <div className="text-xs font-mono mt-1 break-all" style={{ color: "var(--text-secondary)" }}>
+                  {buildFullPath(selectedFile)}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto px-3 py-4">
+            <DocContentViewer
+              selectedFile={selectedFile}
+              fileContent={fileContent}
+              fileMeta={fileMeta}
+              contentLoading={contentLoading}
+              compact
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
@@ -698,7 +956,7 @@ export default function DocsPage() {
                     {electronicContractFiles.map((file) => (
                       <button
                         key={`pinned-${file.project}-${file.base_path}-${file.path}`}
-                        onClick={() => openFile(file.project, file)}
+                        onClick={() => handleOpenFile(file.project, file)}
                         className="w-full text-left px-2 py-1.5 rounded transition-colors"
                         style={{ color: "var(--text-primary)" }}
                         onMouseEnter={(e) => {
@@ -742,7 +1000,7 @@ export default function DocsPage() {
                   return (
                     <button
                       key={`${file.project}-${file.base_path}-${file.path}-${index}`}
-                      onClick={() => openFile(file.project, file)}
+                      onClick={() => handleOpenFile(file.project, file)}
                       className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                       style={{
                         background: isSelected ? "var(--accent)" : "transparent",
