@@ -1721,7 +1721,10 @@
   - `npx tsc --noEmit` succeeded.
   - `npm run build` succeeded and included `/chat`.
 - Deployment:
-  - Pending at handover write time; dashboard deploy and production verification still required.
+  - Commit `38ad51c` pushed to `dashboard-write/main`.
+  - `bash deploy.sh` succeeded at 2026-08-29 10:21:43 KST.
+  - Active slot switched to `blue`; dashboard release confirmed as `38ad51c24bca`.
+  - Step 7 QA returned `UNKNOWN`, so production verification used HTTP/container checks.
 
   - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
   - 결과: 07:56:41 KST blue 내부 헬스체크 통과, 07:56:42 KST nginx reload 완료, 07:56:43 KST 외부 헬스체크 통과, 07:59:08 KST standby-green 동기화 완료.
