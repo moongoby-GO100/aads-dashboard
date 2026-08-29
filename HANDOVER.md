@@ -14,9 +14,12 @@
 - Verification:
   - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
   - `npx tsc --noEmit` passed.
-  - Production build/deploy validation required after commit.
+  - `npm run build` passed and generated `/chat`.
+  - `bash deploy.sh` completed blue/green deployment; active slot: green, release `d77fb5e2f2d0`.
+  - External `/chat` verified HTTP 307 to `/login?redirect=%2Fchat`, then HTTP 200 on `/login`.
 - Deployment:
-  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+  - Commit `d77fb5e` was pushed to `main` and deployed to production.
+  - Deploy Step 7 QA returned `UNKNOWN`, so HTTP/container validation was used as fallback.
 
 ## 2026-08-29 07:45 KST - Chat interruption diagnostics visible in bubbles
 
