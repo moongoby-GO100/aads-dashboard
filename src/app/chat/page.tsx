@@ -44,7 +44,7 @@ const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
 const COMPLETION_ACK_STORAGE_PREFIX = "aads.chat.completionAck.";
 const COMPLETION_ACK_STORAGE_TTL_MS = 30 * 60 * 1000;
-const ENABLE_STANDALONE_RECOVERY_BUBBLE = false;
+const ENABLE_STANDALONE_RECOVERY_BUBBLE = true;
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -56,6 +56,8 @@ type StreamingStatusPayload = {
   partial_content?: string;
   execution_id?: string | null;
   last_event_id?: string | null;
+  placeholder_message_id?: string | null;
+  placeholder_ready?: boolean;
   last_message_id?: string | null;
   message_revision?: string | null;
   placeholder_revision?: string | null;
@@ -4571,6 +4573,8 @@ export default function ChatPage() {
       currentExecutionIdRef.current = initialStatusSettled ? null : initialStatusExecutionId;
       if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
       if (status.is_streaming && !initialStatusSettled) {
+        streamingSessionRef.current = fetchSid;
+        setStreaming(true);
         setWaitingBgResponse(true);
         pendingResponseSessions.current.add(fetchSid);
         // [PATCH-A] partial_content/tool_count/last_tool 즉시 화면 표시 (재진입 빈 버블 방지)
@@ -4750,7 +4754,7 @@ export default function ChatPage() {
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
   useEffect(() => {
-    if (!activeSession?.id || messages.length > 0 || streaming) return;
+    if (!activeSession?.id || messages.length > 0) return;
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;

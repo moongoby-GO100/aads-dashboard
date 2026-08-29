@@ -1705,6 +1705,24 @@
   - `aads-dashboard`, `aads-dashboard-green` 컨테이너 healthy 확인.
 - 배포:
   - 코드 커밋: `07124ad` (`fix(chat): stabilize voice alert toggle`)
+## 2026-08-29 10:15 KST - Chat active response bubble visibility fix
+
+- Request: make the live response bubble visible when a chat session is still running, then deploy immediately.
+- Finding:
+  - Session entry reset `streaming=false`, then restored only `waitingBgResponse=true` after `streaming-status`.
+  - If the messages array was empty during that gap, the empty-message safety retry skipped because `streaming` was true, and the standalone recovery bubble was disabled.
+- Code changes:
+  - Enabled the standalone recovery bubble.
+  - Restored `streamingSessionRef` and `streaming=true` immediately when `streaming-status.is_streaming=true` on session entry.
+  - Allowed the empty-message safety retry to run even while streaming.
+  - Added client type fields for `placeholder_message_id` and `placeholder_ready`.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` succeeded with existing warnings only.
+  - `npx tsc --noEmit` succeeded.
+  - `npm run build` succeeded and included `/chat`.
+- Deployment:
+  - Pending at handover write time; dashboard deploy and production verification still required.
+
   - 스크립트: `/root/aads/aads-dashboard/deploy.sh`
   - 결과: 07:56:41 KST blue 내부 헬스체크 통과, 07:56:42 KST nginx reload 완료, 07:56:43 KST 외부 헬스체크 통과, 07:59:08 KST standby-green 동기화 완료.
   - 운영 상태: 활성 슬롯 `blue`, release `07124ad9992b`, `aads-dashboard`·`aads-dashboard-green` 모두 healthy.
