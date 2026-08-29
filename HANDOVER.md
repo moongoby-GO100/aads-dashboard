@@ -16,7 +16,11 @@
   - `npx tsc --noEmit` passed.
   - `npm run build` passed and generated `/docs`.
 - Deployment:
-  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+  - Commit `024202f` (`fix(docs): open mobile documents in viewer tab`) was pushed to `main`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment.
+  - Active dashboard slot switched to blue; release `024202f028ed` was confirmed by the deploy script.
+  - External `/docs` verified HTTP 307 to `/login?redirect=%2Fdocs`, and `/login?redirect=%2Fdocs` verified HTTP 200.
+  - Deploy Step 7 QA returned `UNKNOWN`, so HTTP/container validation was used as fallback.
 
 ## 2026-08-29 09:37 KST - Chat completion alert waits for persisted final message
 
