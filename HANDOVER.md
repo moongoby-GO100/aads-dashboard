@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-29 09:37 KST - Chat completion alert waits for persisted final message
+
+- Request: Apply the next-step fix for the session where a response appeared completed while the answer was still being generated or changing in place.
+- Cause:
+  - `streaming-status.just_completed` could arrive before the persisted final assistant message was visible to the dashboard merge path.
+  - The dashboard marked executions as settled on `just_completed` alone, which could suppress re-polling and show a premature completion alert.
+- Changes:
+  - `src/app/chat/page.tsx` now reads `final_message_id` / `final_message_ready` from `streaming-status`.
+  - Completion settling is gated on a persisted final assistant message, not just the status event.
+  - Polling and post-SSE completion paths prefer the server-provided final message ID when replacing the streaming placeholder.
+  - If a completion event is received but the final message is not available yet, the UI stays in "응답 작성 중" and keeps polling instead of showing completion.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
+  - `npx tsc --noEmit` passed.
+  - Production build/deploy validation required after commit.
+- Deployment:
+  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+
 ## 2026-08-29 07:45 KST - Chat interruption diagnostics visible in bubbles
 
 - Request: Apply chat cut-off improvements and make response interruption causes visible/analyzable from the chat window.

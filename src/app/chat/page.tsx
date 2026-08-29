@@ -60,6 +60,8 @@ type StreamingStatusPayload = {
   message_revision?: string | null;
   placeholder_revision?: string | null;
   artifact_revision?: string | null;
+  final_message_id?: string | null;
+  final_message_ready?: boolean;
 };
 
 type MessageViewportAnchor = {
@@ -72,6 +74,11 @@ type MessageViewportAnchor = {
 function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
   const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
   return `/chat/sessions/${sessionId}/streaming-status${ack}`;
+}
+
+function isCompletionStatusReadyForUi(status?: StreamingStatusPayload | null): boolean {
+  if (!status?.just_completed) return false;
+  return status.final_message_ready === true || Boolean(status.final_message_id);
 }
 
 function loadPersistedCompletionAck(sessionId: string): string | null {
@@ -3358,8 +3365,9 @@ export default function ChatPage() {
         const currentStatus = status;
         const statusExecutionId = currentStatus.execution_id || currentExecutionIdRef.current;
         const alreadySettled = isExecutionSettled(sid, statusExecutionId);
-        if (currentStatus.just_completed) markExecutionSettled(sid, statusExecutionId);
-        if (currentStatus.just_completed || !currentStatus.is_streaming || alreadySettled) {
+        const completionReady = isCompletionStatusReadyForUi(currentStatus);
+        if (completionReady) markExecutionSettled(sid, statusExecutionId);
+        if (completionReady || (!currentStatus.just_completed && !currentStatus.is_streaming) || alreadySettled) {
           streamingRef.current = false;
           finalizingRef.current = false;
         } else {
@@ -4559,7 +4567,7 @@ export default function ChatPage() {
       if (cancelled) return;
       const initialStatusExecutionId = status.execution_id || activeSession.current_execution_id || null;
       const initialStatusSettled = isExecutionSettled(fetchSid, initialStatusExecutionId);
-      if (status.just_completed) markExecutionSettled(fetchSid, initialStatusExecutionId);
+      if (isCompletionStatusReadyForUi(status)) markExecutionSettled(fetchSid, initialStatusExecutionId);
       currentExecutionIdRef.current = initialStatusSettled ? null : initialStatusExecutionId;
       if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
       if (status.is_streaming && !initialStatusSettled) {
@@ -4945,7 +4953,7 @@ export default function ChatPage() {
         if (cancelled) return;
         const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
         const statusAlreadySettled = isExecutionSettled(sid, statusExecutionId);
-        if (ss.just_completed) markExecutionSettled(sid, statusExecutionId);
+        if (isCompletionStatusReadyForUi(ss)) markExecutionSettled(sid, statusExecutionId);
         if (statusAlreadySettled && !ss.just_completed) {
           ss = { ...ss, is_streaming: false, partial_content: undefined };
         }
@@ -4982,7 +4990,14 @@ export default function ChatPage() {
             const completionExecutionId = statusExecutionId || ss.execution_id || currentExecutionIdRef.current;
             void mergeLatestAssistantFromServer(sid)
               .then((message) => {
-                if (!message || cancelled) return;
+                if (cancelled) return;
+                if (!message) {
+                  pendingResponseSessions.current.add(sid);
+                  setWaitingBgResponse(true);
+                  setStreaming(true);
+                  setToolStatus("응답 작성 중...");
+                  return;
+                }
                 markCompletionSeen(sid, completionStatus);
                 showCompletionToastOnce(
                   message.id,
@@ -5004,7 +5019,11 @@ export default function ChatPage() {
           mergeCooldownUntilRef.current = Date.now() + 5000;
           let completedAi: ChatMessage | undefined;
           if (freshMsgs && freshMsgs.length > 0) {
-            const latestAi = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
+            const latestAi = (
+              ss?.final_message_id
+                ? freshMsgs.find((m) => m.id === ss?.final_message_id && isFinalAssistantMessage(m))
+                : undefined
+            ) || latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss?.execution_id || currentExecutionIdRef.current);
             if (latestAi) {
               completedAi = latestAi;
               setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
@@ -5219,7 +5238,11 @@ export default function ChatPage() {
               mergeCooldownUntilRef.current = Date.now() + 5000;
               if (allMsgs && allMsgs.length > 0) {
                 const fallbackExecutionId = ss?.execution_id || currentExecutionIdRef.current;
-                const latestAi2 = latestFinalAssistantForExecution(allMsgs, fallbackExecutionId);
+                const latestAi2 = (
+                  ss?.final_message_id
+                    ? allMsgs.find((m) => m.id === ss.final_message_id && isFinalAssistantMessage(m))
+                    : undefined
+                ) || latestFinalAssistantForExecution(allMsgs, fallbackExecutionId);
                 if (latestAi2) {
                   markCompletionSeen(sid, ss);
                   markExecutionSettled(sid, latestAi2.execution_id || fallbackExecutionId);
@@ -6854,7 +6877,7 @@ export default function ChatPage() {
               const ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(_sid));
               const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
               const alreadySettled = isExecutionSettled(_sid, statusExecutionId);
-              if (ss.just_completed) markExecutionSettled(_sid, statusExecutionId);
+              if (isCompletionStatusReadyForUi(ss)) markExecutionSettled(_sid, statusExecutionId);
               if (ss.execution_id && !alreadySettled) currentExecutionIdRef.current = ss.execution_id;
               if (ss.last_event_id && !alreadySettled) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {
@@ -6866,7 +6889,11 @@ export default function ChatPage() {
                 if (freshMsgs) {
                   const filtered = freshMsgs;
                   if (filtered.length > 0) {
-                    const latestAi = latestFinalAssistantForExecution(filtered, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
+                    const latestAi = (
+                      ss.final_message_id
+                        ? filtered.find((m) => m.id === ss.final_message_id && isFinalAssistantMessage(m))
+                        : undefined
+                    ) || latestFinalAssistantForExecution(filtered, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
                     if (latestAi) {
                       completedAi = latestAi;
                       setMessagesPreservingViewport(prev => replaceStreamingPlaceholderWithFinal(prev, latestAi));
