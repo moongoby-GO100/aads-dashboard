@@ -361,14 +361,15 @@ function interruptStatusBadge(message: ChatMessage): { label: string; color: str
 }
 
 function isRunnerChatMessage(message: ChatMessage): boolean {
+  const head = String(message.content || "").trimStart().slice(0, 240);
   return message.role === "assistant" && (
     message.intent === "pipeline_runner" ||
     message.intent === "runner_notification" ||
-    message.content?.includes("[Pipeline Runner]") ||
-    message.content?.includes("[Runner]") ||
-    (message.content?.startsWith("Step ") && message.content?.includes("runner-")) ||
-    message.content?.includes("pipeline_runner_approve") ||
-    message.content?.includes("배포 검증 5단계")
+    head.includes("[Pipeline Runner]") ||
+    head.includes("[Runner]") ||
+    (head.startsWith("Step ") && head.includes("runner-")) ||
+    head.includes("pipeline_runner_approve") ||
+    head.includes("배포 검증 5단계")
   );
 }
 
@@ -4830,9 +4831,18 @@ export default function ChatPage() {
         }
       } else if (status.just_completed) {
         if (!isCompletionStatusReadyForUi(status)) {
+          streamingSessionRef.current = fetchSid;
+          setStreaming(true);
           setToolStatus(normalizedStreamStatusLabel(status, "최종저장중"));
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(fetchSid);
+          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
+            sessionId: fetchSid,
+            executionId: status.execution_id || activeSession?.current_execution_id || null,
+            partialContent: status.partial_content || bgPartialContentRef.current || streamBufRef.current,
+            toolCount: status.tool_count,
+            lastTool: status.last_tool,
+          }));
           requestServerFinalization(fetchSid, [0, 1000, 2500, 5000]);
           await loadMessages(false);
           return;
@@ -5226,26 +5236,45 @@ export default function ChatPage() {
             lastTool: streamingStatus.last_tool,
           }));
         }
+        const activeStatus = ss;
         if (
-          !ss.is_streaming &&
-          !isCompletionStatusReadyForUi(ss) &&
-          (isAutoResumeStatus(ss) || ss.stream_status === "finalizing")
+          !activeStatus.is_streaming &&
+          !isCompletionStatusReadyForUi(activeStatus) &&
+          (isAutoResumeStatus(activeStatus) || activeStatus.stream_status === "finalizing")
         ) {
-          setToolStatus(normalizedStreamStatusLabel(ss));
+          streamingSessionRef.current = sid;
+          setStreaming(true);
+          setToolStatus(normalizedStreamStatusLabel(activeStatus));
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
-          if (isAutoResumeStatus(ss)) {
+          setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
+            sessionId: sid,
+            executionId: activeStatus.execution_id || currentExecutionIdRef.current,
+            partialContent: activeStatus.partial_content || bgPartialContentRef.current || streamBufRef.current,
+            toolCount: activeStatus.tool_count,
+            lastTool: activeStatus.last_tool,
+          }));
+          if (isAutoResumeStatus(activeStatus)) {
             void requestResumeOnce(sid, { cooldownMs: 5000 });
           } else {
             requestServerFinalization(sid, [0, 1000, 2500, 5000]);
           }
           return;
         }
-        if (ss.just_completed) {
-          if (!isCompletionStatusReadyForUi(ss)) {
-            setToolStatus(normalizedStreamStatusLabel(ss, "최종저장중"));
+        if (activeStatus.just_completed) {
+          if (!isCompletionStatusReadyForUi(activeStatus)) {
+            streamingSessionRef.current = sid;
+            setStreaming(true);
+            setToolStatus(normalizedStreamStatusLabel(activeStatus, "최종저장중"));
             setWaitingBgResponse(true);
             pendingResponseSessions.current.add(sid);
+            setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
+              sessionId: sid,
+              executionId: activeStatus.execution_id || currentExecutionIdRef.current,
+              partialContent: activeStatus.partial_content || bgPartialContentRef.current || streamBufRef.current,
+              toolCount: activeStatus.tool_count,
+              lastTool: activeStatus.last_tool,
+            }));
             requestServerFinalization(sid, [0, 1000, 2500, 5000]);
             return;
           }

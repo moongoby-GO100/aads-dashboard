@@ -1922,3 +1922,21 @@
   - AADS 서버 상태 `HEALTHY`, DB OK, pipeline `HEALTHY`, stalled `0`.
   - 배포 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
   - 저장 credential 자동 로그인은 실패했고 Browser Bridge snapshot은 로그인 화면까지 확인했다. 채팅 내부 스트림 E2E는 HTTP/API/컨테이너 검증으로 대체했다.
+
+## 2026-08-31 08:39 KST - finalizing 상태에서도 같은 응답 버블 진행 유지
+
+- 요청: 세션 `15782f6e-35ca-475b-ac45-c152c26a42fa`의 최근 응답 문제 개선안 즉시 조치.
+- 원인:
+  - 서버가 `just_completed`를 주더라도 최종 visible message가 아직 준비되지 않은 동안 프론트 일부 경로가 `waitingBgResponse`만 켜고 `streaming`을 유지하지 않았다.
+  - 이때 하단 상태가 `최종저장중`으로 바뀌며 버블 커서/진행 표시가 사라지고, 다음 폴링에서 다시 `생성중`처럼 보일 수 있었다.
+  - 러너 알림 판정도 본문 전체에서 `[Pipeline Runner]`를 찾고 있어, 긴 CEO 보고 본문 중간의 러너 문자열이 전체 assistant 버블 숨김으로 이어질 여지가 있었다.
+- 조치:
+  - 초기 세션 진입과 백그라운드 폴링의 `finalizing`/복구 상태에서 `streaming=true`와 `streamingSessionRef`를 유지하도록 보강했다.
+  - 같은 상태에서 `reconcileMessagesForActiveStreaming()`을 호출해 기존 placeholder ID/render_id를 유지하고 partial content만 갱신한다.
+  - 러너 알림 숨김 판정은 백엔드와 동일하게 메시지 선두 240자만 검사하도록 축소했다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+  - `npx eslint src/app/chat/page.tsx` 통과. 기존 warning 20건, 신규 error 0건.
+  - `git diff --check` 통과.
+- 배포:
+  - 이 기록 시점에는 미배포. 커밋/푸시 후 `/root/aads/aads-dashboard/deploy.sh`로 운영 반영 필요.
