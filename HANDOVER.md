@@ -1833,3 +1833,24 @@
 - 주의:
   - 배포 스크립트 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
   - `capture_screenshot`은 timeout으로 실패해 브라우저 시각 검증은 미완료이며, HTTP/API/컨테이너 검증으로 대체했다.
+
+## 2026-08-30 15:25 KST - 채팅 스트림 상태 enum 및 빠른 복구 UI 반영
+
+- 요청: 응답 끊김/버블 끊김 구분이 어렵고 첫 응답이 완료처럼 보인 뒤 재진행되는 현상을 줄이도록 권장 구현안을 반영하고 배포.
+- 조치:
+  - `StreamingStatusPayload`에 `stream_status`, `stream_status_label`, `auto_resume_seconds`를 추가했다.
+  - 채팅 버블 상태 문구를 `생성중`, `도구실행중`, `복구중`, `최종저장중`, `완료`, `이어쓰기필요`로 단일화했다.
+  - `just_completed`가 내려와도 최종 visible assistant 버블이 없으면 완료 표시를 보류하고 `최종저장중`으로 유지하도록 했다.
+  - `recovering`/`needs_continuation` 상태에서는 5초 쿨다운으로 자동 resume을 요청하도록 했다.
+  - 이전 내부 문구(`자동 이어쓰기 재시도 중`, `복구 대기 중` 등)는 사용자 표시에서 canonical label로 매핑했다.
+- 검증:
+  - `npx tsc --noEmit` 통과.
+  - `npm run build` 통과.
+  - `npm run lint`는 기존 전역 lint 오류가 남아 실패했으나, 변경 파일 `src/app/chat/page.tsx`에는 빌드 차단 오류가 없었다.
+  - Dashboard blue-green deploy completed. Release `ab4634b79704`, active slot `green`, external health OK.
+  - `http://127.0.0.1:3100/chat` returned HTTP 307 to auth flow.
+- Git:
+  - Committed and pushed `ab4634b Improve chat stream recovery UI`.
+- 주의:
+  - 배포 Step 7 QA는 `UNKNOWN`으로 끝나 통과로 간주하지 않았다.
+  - 로그인 기반 브라우저 E2E는 미실행이며, HTTP/API/컨테이너 검증으로 대체했다.
