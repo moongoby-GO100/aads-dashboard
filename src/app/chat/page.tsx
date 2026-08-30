@@ -1874,9 +1874,12 @@ const MessageItem = memo(function MessageItem({
   }, [isLastAssistantMsg, isStreamingPlaceholder, msg.content.length, msg.id, msg.role]);
   const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant" && !contentCollapseTouched);
   const effectiveContentCollapsed = isStreamingPlaceholder || forceContentOpen ? false : contentCollapsed;
-  const displayedStreamingContent = streamingContent && streamingContent.length > LIVE_STREAM_RENDER_LIMIT
-    ? `... 앞 ${streamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${streamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
+  const activeStreamingContent = isActiveStreamingPlaceholder
+    ? (streamingContent || msg.content || "")
     : streamingContent;
+  const displayedStreamingContent = activeStreamingContent && activeStreamingContent.length > LIVE_STREAM_RENDER_LIMIT
+    ? `... 앞 ${activeStreamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${activeStreamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
+    : activeStreamingContent;
 
   return (
     <div
@@ -5318,9 +5321,11 @@ export default function ChatPage() {
             return;
           }
           finalizingRef.current = true; setTimeout(() => { finalizingRef.current = false; }, 5000);  // P0-FIX: 5s lock (완료 알림 중복 방지)
-          pendingResponseSessions.current.delete(sid);
-          setWaitingBgResponse(false); setBgPartialContent("");
-          streamingSessionRef.current = null;
+          streamingSessionRef.current = sid;
+          pendingResponseSessions.current.add(sid);
+          setWaitingBgResponse(true);
+          setStreaming(true);
+          setToolStatus(normalizedStreamStatusLabel(ss, "최종저장중"));
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
@@ -5388,6 +5393,11 @@ export default function ChatPage() {
             return;
           }
           markCompletionSeen(sid, ss);
+          pendingResponseSessions.current.delete(sid);
+          setWaitingBgResponse(false);
+          setBgPartialContent("");
+          setToolStatus(null);
+          if (streamingSessionRef.current === sid) streamingSessionRef.current = null;
           setStreaming(false); setStreamBuf("");
           // scroll: isNearBottomRef preserved — user scroll position respected
           restoreMessageViewportAnchor(captureMessageViewportAnchor());
@@ -9684,23 +9694,25 @@ export default function ChatPage() {
                     replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
                     isActiveStreaming={
                       msg.intent === "streaming_placeholder" &&
-                      streaming &&
+                      (streaming || waitingBgResponse) &&
                       streamingSessionRef.current === activeSession?.id
                     }
                     streamingContent={
-                      msg.intent === "streaming_placeholder" && streaming && streamBuf ? streamBuf : undefined
+                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse)
+                        ? (streamBuf || bgPartialContent || msg.content || undefined)
+                        : undefined
                     }
                     streamingThinking={
-                      msg.intent === "streaming_placeholder" && streaming ? thinkingBuf : undefined
+                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? thinkingBuf : undefined
                     }
                     streamToolStatus={
-                      msg.intent === "streaming_placeholder" && streaming ? toolStatus : undefined
+                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? toolStatus : undefined
                     }
                     streamToolLogs={
-                      msg.intent === "streaming_placeholder" && streaming ? toolLogs : undefined
+                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? toolLogs : undefined
                     }
                     onStopStreaming={
-                      msg.intent === "streaming_placeholder" && streaming ? stopStreaming : undefined
+                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? stopStreaming : undefined
                     }
                     onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                     linkedArtifact={msg.artifact_id ? artifactByIdMap.get(msg.artifact_id) : undefined}

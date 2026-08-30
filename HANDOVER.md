@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-31 08:57 KST - Keep chat bubble live during final-save status
+
+- Request: Fix the chat UI symptom where the assistant bubble keeps working internally but the heartbeat caret disappears, the scroll position jumps upward, and the status flips between `최종저장중` and `생성중` until completion.
+- Cause:
+  - Active placeholder rendering used only `streamBuf`; when final-save polling temporarily cleared `streamBuf`, the bubble still existed but its visible live content/caret path could go blank.
+  - The `just_completed` ready path cleared `waitingBgResponse` and `streamingSessionRef` before the final DB message was merged, creating a short inactive UI window.
+- Changes:
+  - Active streaming placeholders now render `streamingContent || msg.content`, so the same bubble keeps its existing content and caret even when `streamBuf` is momentarily empty.
+  - Final-save polling now keeps `streaming=true`, `waitingBgResponse=true`, and the active session ref until the final assistant message is merged into the placeholder.
+  - The message render call treats `waitingBgResponse` as an active live bubble state for content, thinking, tool status, tool logs, and stop controls.
+- Verification:
+  - `git diff --check -- src/app/chat/page.tsx` passed.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only.
+  - `npm run build` passed and generated `/chat`.
+- Deployment:
+  - Pending at this entry. Commit, push, and dashboard deploy are the next required steps.
+
 ## 2026-08-31 03:05 KST - Chat bubble identity preserved through recovery
 
 - Request: Enforce same-bubble immutability for chat responses so an assistant bubble is not deleted, replaced, or marked complete before the response actually finishes.
