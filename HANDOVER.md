@@ -16,7 +16,12 @@
   - `npm run build` passed and generated `/chat`.
   - `npm exec eslint -- src/app/chat/page.tsx src/hooks/useChatSSE.ts src/services/chatApi.ts` passed with existing warnings only.
 - Deployment:
-  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+  - Committed and pushed `faa701f fix(chat): preserve streaming response bubble`.
+  - Dashboard blue-green deploy completed. Release `faa701f31ef6`, active slot `blue`, standby slot `green`.
+  - `https://aads.newtalk.kr/chat` returned HTTP 307 to `/login?redirect=%2Fchat`; `/login` returned HTTP 200.
+  - `capture_screenshot` saved `https://aads.newtalk.kr/screenshots/screenshot_20260831_031909_ae6d5f.png`.
+  - AADS health/server status checked at 2026-08-31 03:19 KST: status `HEALTHY`, DB OK, pipeline `HEALTHY`, stalled `0`.
+  - Deploy Step 7 QA returned `UNKNOWN`; not counted as pass.
 
 ## 2026-08-30 15:24 KST - Chat stream recovery UI state normalization
 
@@ -1908,5 +1913,10 @@
   - `npm run build` 통과.
   - `npx tsc --noEmit --pretty false --incremental false` 통과.
   - `npm run lint`는 기존 전역 lint 오류로 실패. 이번 변경 파일 `src/app/chat/page.tsx`에는 신규 lint error가 확인되지 않았다.
-- 배포 예정:
-  - 커밋/푸시 후 `/root/aads/aads-dashboard/deploy.sh`로 운영 반영.
+- 배포:
+  - 커밋/푸시 완료: `faa701f fix(chat): preserve streaming response bubble`, 추가 문서 커밋 `bf94187 docs: record chat bubble preservation deployment`.
+  - `/root/aads/aads-dashboard/deploy.sh` 실행 완료. release `faa701f31ef6`, 활성 슬롯 `blue`, standby 슬롯 `green`.
+  - `https://aads.newtalk.kr/chat`은 인증 리다이렉트 후 `/login` HTTP 200 응답을 반환한다.
+  - 화면 캡처 저장: `https://aads.newtalk.kr/screenshots/screenshot_20260831_031909_ae6d5f.png`.
+  - AADS 서버 상태 `HEALTHY`, DB OK, pipeline `HEALTHY`, stalled `0`.
+  - 배포 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
