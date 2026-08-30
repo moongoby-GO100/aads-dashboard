@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-08-31 03:05 KST - Chat bubble identity preserved through recovery
+
+- Request: Enforce same-bubble immutability for chat responses so an assistant bubble is not deleted, replaced, or marked complete before the response actually finishes.
+- Cause:
+  - Recoverable resume events could turn the visible streaming bubble into an `interrupted_partial` message, making the answer appear to stop and then restart.
+  - Final assistant messages could be appended after a placeholder instead of finalizing the existing placeholder, creating visible bubble replacement or duplication.
+- Changes:
+  - Added a recovery-preservation helper that keeps the same assistant placeholder in `streaming_placeholder` state and marks it as `복구중` while finalization/resume is retried.
+  - Treat `resume_unavailable`, `resume_timeout`, and `resume_error` as recoverable UI events in both the chat page and SSE hook.
+  - Preserve placeholder `id`/`render_id` when finalizing a streamed assistant response, and update content in place instead of deleting/replacing the bubble.
+  - Extended the final recovery wait window from 30 seconds to 90 seconds before a partial bubble can be closed.
+- Verification:
+  - `npm exec tsc --noEmit --pretty false` passed.
+  - `npm run build` passed and generated `/chat`.
+  - `npm exec eslint -- src/app/chat/page.tsx src/hooks/useChatSSE.ts src/services/chatApi.ts` passed with existing warnings only.
+- Deployment:
+  - Pending commit, push, dashboard deploy, and production smoke at the time of this handover entry.
+
 ## 2026-08-30 15:24 KST - Chat stream recovery UI state normalization
 
 - Request: Apply the recommended chat recovery UI improvements and verify session behavior after deployment.
