@@ -115,7 +115,7 @@ export interface SSEChunk {
     | "yellow_limit"
     | "tool_turn_limit"
     // AADS-192: resume stream
-    | "resume_done"
+    | "resume_done" | "resume_unavailable" | "resume_timeout" | "resume_error"
     // Partial response preservation before stream reset
     | "partial_preserved"
     // Gemini 재시도 등 스트림 초기화
@@ -125,6 +125,7 @@ export interface SSEChunk {
     // OHVIS 3-Tier task events
     | "task_plan" | "task_update" | "task_card";
   content?: string;
+  reason?: string;
   message?: ChatMessage;
   summary?: string;
   sources?: SourceItem[];

@@ -1873,3 +1873,22 @@
 - 주의:
   - 배포 Step 7 QA는 `UNKNOWN`으로 끝나 통과로 간주하지 않았다.
   - 로그인 기반 브라우저 E2E는 미실행이며, HTTP/API/컨테이너 검증으로 대체했다.
+
+## 2026-08-31 03:06 KST - 채팅 응답 버블 불변성 강제 보강
+
+- 요청: 응답 시작 후 완료 전까지 같은 assistant 버블을 삭제/교체하지 않고, 내용만 append/update하도록 프론트 상태머신을 단순화해 운영 반영.
+- 원인:
+  - recoverable resume/error 경로가 일부에서 `streaming=false`로 즉시 닫히며 retryable incomplete 버블로 전환되어, 완료 전 진행 버블의 상태가 바뀔 수 있었다.
+  - finalization fallback에서 최종 메시지를 append할 때 동일 세션의 streaming placeholder를 필터로 제거하는 경로가 남아 있었다.
+  - 서버 final 메시지 ID가 도착하면 로컬 placeholder ID를 대체할 수 있어 React key와 메시지 identity가 흔들릴 여지가 있었다.
+- 조치:
+  - recoverable resume/error는 완료 전 `keepStreamingBubbleRecovering()`을 통해 같은 `streaming_placeholder` 버블을 유지하고 `복구중` 상태와 partial content만 갱신하도록 했다.
+  - `finalizeAssistantMessage()`에서 진행 중 assistant 버블은 기존 `id/render_id/created_at`를 보존하고 final content/meta만 병합하도록 했다.
+  - `replaceStreamingPlaceholderWithFinal()`에서 final append 전 동일 세션/동일 execution placeholder를 먼저 흡수하고, placeholder 제거 필터를 제거했다.
+  - 복구 대기 timeout은 90초로 늘려 서버 finalization/watchdog이 같은 버블에 이어붙일 시간을 확보했다.
+- 검증:
+  - `npm run build` 통과.
+  - `npx tsc --noEmit --pretty false --incremental false` 통과.
+  - `npm run lint`는 기존 전역 lint 오류로 실패. 이번 변경 파일 `src/app/chat/page.tsx`에는 신규 lint error가 확인되지 않았다.
+- 배포 예정:
+  - 커밋/푸시 후 `/root/aads/aads-dashboard/deploy.sh`로 운영 반영.

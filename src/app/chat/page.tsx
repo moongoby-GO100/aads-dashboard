@@ -45,6 +45,8 @@ const COMPLETION_ALERT_DEDUPE_MAX = 200;
 const COMPLETION_ACK_STORAGE_PREFIX = "aads.chat.completionAck.";
 const COMPLETION_ACK_STORAGE_TTL_MS = 30 * 60 * 1000;
 const ENABLE_STANDALONE_RECOVERY_BUBBLE = true;
+const RECOVERABLE_RESUME_EVENT_TYPES = new Set(["resume_unavailable", "resume_timeout", "resume_error"]);
+const RECOVERY_BUBBLE_TIMEOUT_MS = 90 * 1000;
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -873,7 +875,7 @@ function markStreamingAsRetryableIncomplete(
     : RETRYABLE_INCOMPLETE_RESPONSE_NOTE;
   const reason = String(options.reason || "recoverable_stream_error").trim();
   let touched = false;
-  const next = messages.map((message) => {
+  const next: ChatMessage[] = messages.map((message): ChatMessage => {
     const sameExecution = Boolean(options.executionId && message.execution_id === options.executionId);
     const isCandidate =
       message.session_id === options.sessionId &&
@@ -906,7 +908,7 @@ function markStreamingAsRetryableIncomplete(
       render_id: options.messageId || `ai-retryable-${options.executionId || Date.now()}`,
       session_id: options.sessionId,
       execution_id: options.executionId || undefined,
-      role: "assistant",
+      role: "assistant" as const,
       content: safeContent,
       intent: "interrupted_partial",
       model_used: "interrupted",
@@ -918,6 +920,72 @@ function markStreamingAsRetryableIncomplete(
       created_at: new Date().toISOString(),
     },
   ];
+}
+
+function keepStreamingBubbleRecovering(
+  messages: ChatMessage[],
+  options: {
+    sessionId: string;
+    executionId?: string | null;
+    fallbackContent?: string | null;
+    reason?: string | null;
+    messageId?: string;
+  },
+): ChatMessage[] {
+  const fallbackContent = String(options.fallbackContent || "").trim();
+  const safeContent = fallbackContent && !isPlaceholderOnlyContent(fallbackContent)
+    ? fallbackContent
+    : "AI가 응답을 생성 중입니다...";
+  const reason = String(options.reason || "auto_resume_pending").trim();
+  let touched = false;
+  const next: ChatMessage[] = messages.map((message): ChatMessage => {
+    const sameExecution = Boolean(options.executionId && message.execution_id === options.executionId);
+    const isCandidate =
+      message.session_id === options.sessionId &&
+      message.role === "assistant" &&
+      (isStreamingPlaceholderMessage(message) || sameExecution || message.id === options.messageId);
+    if (!isCandidate) return message;
+    touched = true;
+    const existingDetails = qualityDetailsObject(message);
+    const existingContent = normalizedMessageContent(message);
+    return {
+      ...message,
+      content: existingContent && !isPlaceholderOnlyContent(existingContent) ? message.content : safeContent,
+      intent: "streaming_placeholder",
+      model_used: "streaming",
+      render_id: message.render_id || message.id,
+      execution_id: message.execution_id || options.executionId || undefined,
+      quality_details: {
+        ...existingDetails,
+        interruption_reason: reason,
+        recoverable_retry: true,
+        auto_resume_pending: true,
+        frontend_preserved_bubble: true,
+      },
+    };
+  });
+  if (touched) return next;
+  const fallbackId = options.messageId || `ai-streaming-recovery-${options.executionId || Date.now()}`;
+  return [
+    ...next,
+    {
+      id: fallbackId,
+      render_id: fallbackId,
+      session_id: options.sessionId,
+      execution_id: options.executionId || undefined,
+      role: "assistant" as const,
+      content: safeContent,
+      intent: "streaming_placeholder",
+      model_used: "streaming",
+      quality_details: {
+        interruption_reason: reason,
+        recoverable_retry: true,
+        auto_resume_pending: true,
+        frontend_preserved_bubble: true,
+      },
+      created_at: new Date().toISOString(),
+    },
+  ].sort((a, b) => messageTime(a) - messageTime(b));
 }
 
 function surfaceDbSavedStreamingPlaceholders(
@@ -1135,6 +1203,15 @@ function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serve
   };
 }
 
+function shouldPreserveAssistantBubbleIdentity(existingMessage: ChatMessage): boolean {
+  if (existingMessage.role !== "assistant") return false;
+  return (
+    isStreamingPlaceholderMessage(existingMessage) ||
+    isLocalTransientMessage(existingMessage) ||
+    existingMessage.model_used === "streaming"
+  );
+}
+
 function findAssistantMessageIndexForFinalization(messages: ChatMessage[], finalMessage: ChatMessage): number {
   const finalContent = normalizedMessageContent(finalMessage);
   // P0-FIX (2026-05-26): 1차 패스 — ID/render_id/execution_id 정확 매치 + draft 매치
@@ -1191,19 +1268,26 @@ function findMessageIndexForUpsert(messages: ChatMessage[], nextMessage: ChatMes
 
 function finalizeAssistantMessage(existingMessage: ChatMessage, finalMessage: ChatMessage): ChatMessage {
   const mergedMessage = mergeServerMessageWithExisting(existingMessage, finalMessage);
+  const preserveBubbleIdentity = shouldPreserveAssistantBubbleIdentity(existingMessage);
+  const existingRenderId = existingMessage.render_id || existingMessage.id;
+  const finalRenderId = finalMessage.render_id || mergedMessage.render_id || finalMessage.id;
   const nextIntent = finalMessage.intent === "streaming_placeholder"
     ? undefined
     : finalMessage.intent ?? (existingMessage.intent === "streaming_placeholder" ? undefined : existingMessage.intent);
   return {
     ...existingMessage,
     ...mergedMessage,
-    id: finalMessage.id || mergedMessage.id || existingMessage.id,
+    id: preserveBubbleIdentity
+      ? existingMessage.id
+      : (finalMessage.id || mergedMessage.id || existingMessage.id),
     session_id: finalMessage.session_id || mergedMessage.session_id || existingMessage.session_id,
     execution_id: finalMessage.execution_id || existingMessage.execution_id,
     role: "assistant",
     content: finalMessage.content || mergedMessage.content || existingMessage.content || "",
     intent: nextIntent,
-    render_id: existingMessage.render_id || finalMessage.render_id || mergedMessage.render_id || existingMessage.id || finalMessage.id,
+    render_id: preserveBubbleIdentity
+      ? existingRenderId
+      : (existingMessage.render_id || finalRenderId || existingMessage.id || finalMessage.id),
     created_at: existingMessage.created_at || finalMessage.created_at,
   };
 }
@@ -1234,6 +1318,20 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
   };
   // ★ DEDUP: placeholder 미존재 시 동일 메시지가 이미 있으면 append 차단 (다중 핸들러 경합 방지)
   const _fc = (finalMessage.content || "").trim();
+  let sameSessionPlaceholderIndex = -1;
+  for (let i = prev.length - 1; i >= 0; i--) {
+    const message = prev[i];
+    if (!finalMessage.session_id || message.session_id !== finalMessage.session_id) continue;
+    if (!isStreamingPlaceholderMessage(message)) continue;
+    if (finalMessage.execution_id && message.execution_id && finalMessage.execution_id !== message.execution_id) continue;
+    sameSessionPlaceholderIndex = i;
+    break;
+  }
+  if (sameSessionPlaceholderIndex >= 0 && _fc) {
+    return prev.map((message, index) => (
+      index === sameSessionPlaceholderIndex ? finalizeAssistantMessage(message, finalMessage) : message
+    ));
+  }
   const _dupExists = prev.some((m) =>
     m.role === "assistant" &&
     !isStreamingPlaceholderMessage(m) && (
@@ -1244,12 +1342,9 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
     )
   );
   if (_dupExists) return prev;
-  // 최종 메시지 append 시 동일 세션의 잔존 streaming placeholder도 제거 (placeholder 잔존 방지)
-  const _appendSessionId = appendedMessage.session_id;
   return [
     ...prev.filter((message) =>
-      !message.id.startsWith("ai-partial-") &&
-      !(_appendSessionId && isStreamingPlaceholderMessage(message) && message.session_id === _appendSessionId)
+      !message.id.startsWith("ai-partial-")
     ),
     appendedMessage,
   ].sort((a, b) => messageTime(a) - messageTime(b));
@@ -3961,10 +4056,24 @@ export default function ChatPage() {
               // 무해 — 표시 없음
             } else if (ev.type === "error") {
               setToolStatus("응답 작성 중...");
-            } else if (ev.type === "resume_unavailable" || ev.type === "resume_timeout") {
+            } else if (RECOVERABLE_RESUME_EVENT_TYPES.has(String(ev.type))) {
+              const preserved = full || streamBufRef.current || bgPartialContentRef.current || String(ev.content || "");
               setWaitingBgResponse(true);
-              setBgPartialContent(full || bgPartialContentRef.current || "");
-              setToolStatus("응답 작성 중...");
+              setBgPartialContent(preserved);
+              setStreamBuf(preserved || streamBufRef.current || "");
+              setThinkingBuf("");
+              setStreaming(true);
+              streamingSessionRef.current = attachSessionId;
+              pendingResponseSessions.current.add(attachSessionId);
+              setToolStatus("복구중");
+              setToolLogs([]);
+              setMessagesPreservingViewport((prev) => keepStreamingBubbleRecovering(prev, {
+                sessionId: attachSessionId,
+                executionId: currentExecutionIdRef.current || executionId,
+                fallbackContent: preserved,
+                reason: String(ev.reason || ev.type),
+              }));
+              requestServerFinalization(attachSessionId, [0, 1500, 3500]);
               return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc&include_streaming=true`)
@@ -3993,7 +4102,7 @@ export default function ChatPage() {
         executionAttachAbortRef.current = null;
       }
     }
-  }, [preservePartialAndContinueStreaming, setMessagesPreservingViewport, settleScrollAfterMessageMerge]);
+  }, [preservePartialAndContinueStreaming, requestServerFinalization, setMessagesPreservingViewport, settleScrollAfterMessageMerge]);
 
   // 개선2: 자동 트리거 응답 판별 함수 — 3곳 중복 제거
   const isAutoTriggerResponse = (lastUser: ChatMessage | undefined, lastAi: ChatMessage | undefined): boolean => {
@@ -6465,6 +6574,31 @@ export default function ChatPage() {
                 showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current, undefined, localFinalMessageForAlert);
               }
               restoreMessageViewportAnchor(captureMessageViewportAnchor());
+            } else if (RECOVERABLE_RESUME_EVENT_TYPES.has(String(ev.type))) {
+              const errorReason = String(ev.reason || ev.type);
+              const preserved = full || streamBufRef.current || bgPartialContentRef.current || String(ev.content || "");
+              retryableStreamErrorHandled = true;
+              _invisibleRecoveryActivated = true;
+              _stopDrain();
+              if (!isStale()) {
+                pendingResponseSessions.current.add(requestSessionId!);
+                setWaitingBgResponse(true);
+                setBgPartialContent(preserved);
+                setStreamBuf(preserved || streamBufRef.current || "");
+                setThinkingBuf("");
+                setStreaming(true);
+                streamingSessionRef.current = requestSessionId!;
+                setToolStatus("복구중");
+                setToolLogs([]);
+                setMessagesPreservingViewport((prev) => keepStreamingBubbleRecovering(prev, {
+                  sessionId: requestSessionId!,
+                  executionId: currentExecutionIdRef.current,
+                  fallbackContent: preserved,
+                  reason: errorReason,
+                }));
+                requestServerFinalization(requestSessionId!, [0, 1500, 3500]);
+              }
+              break;
             } else if (ev.type === "tool_use" && ev.tool_name) {
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
@@ -6595,27 +6729,23 @@ export default function ChatPage() {
               const preserved = full || streamBufRef.current || bgPartialContentRef.current || String(ev.content || "");
               if (recoverable) {
                 retryableStreamErrorHandled = true;
+                _invisibleRecoveryActivated = true;
                 _stopDrain();
                 if (!isStale()) {
-                  pendingResponseSessions.current.delete(requestSessionId!);
-                  setWaitingBgResponse(false);
-                  setBgPartialContent("");
-                  setStreamBuf("");
+                  pendingResponseSessions.current.add(requestSessionId!);
+                  setWaitingBgResponse(true);
+                  setBgPartialContent(preserved);
+                  setStreamBuf(preserved || streamBufRef.current || "");
                   setThinkingBuf("");
-                  setStreaming(false);
-                  streamingSessionRef.current = null;
-                  setToolStatus(null);
-                  setMessagesPreservingViewport((prev) => markStreamingAsRetryableIncomplete(prev, {
+                  setStreaming(true);
+                  streamingSessionRef.current = requestSessionId!;
+                  setToolStatus("복구중");
+                  setMessagesPreservingViewport((prev) => keepStreamingBubbleRecovering(prev, {
                     sessionId: requestSessionId!,
                     executionId: currentExecutionIdRef.current,
                     fallbackContent: preserved,
                     reason: errorReason,
                   }));
-                  showInterruptionAlertOnce(
-                    currentExecutionIdRef.current || `retryable-${requestSessionId}`,
-                    requestSessionId,
-                    "응답이 완료 전 종료되어 이어서 작성할 수 있습니다.",
-                  );
                   requestServerFinalization(requestSessionId!, [0, 1500, 3500]);
                 }
                 break;
@@ -6962,7 +7092,7 @@ export default function ChatPage() {
             ));
             setStreaming(false);
             setStreamBuf("");
-          }, 30000);
+          }, RECOVERY_BUBBLE_TIMEOUT_MS);
 
           // last-response 폴백도 시도 (조용히)
           for (let retry = 0; retry < 3; retry++) {
@@ -6996,10 +7126,24 @@ export default function ChatPage() {
               }
             } catch { /* retry */ }
           }
-          // 최종 폴백 실패 시에도 버블 유지 — 폴링(streaming-status)이 partial_content/just_completed 감지
+          // 최종 폴백 실패 시에도 버블 유지 — 서버 finalization/watchdog이 이어붙일 시간을 준다.
           if (!streamGotFinal && frozenContent) {
-            // 부분 텍스트를 ai-partial 메시지로 저장 (streaming 종료 후에도 보이도록)
-            // streaming은 유지 → 폴링에서 just_completed 감지 시 최종 교체
+            _invisibleRecoveryActivated = true;
+            pendingResponseSessions.current.add(sessionId!);
+            setWaitingBgResponse(true);
+            setBgPartialContent(frozenContent);
+            setStreamBuf(frozenContent);
+            setThinkingBuf("");
+            setStreaming(true);
+            streamingSessionRef.current = sessionId!;
+            setToolStatus("복구중");
+            setMessagesPreservingViewport((prev) => keepStreamingBubbleRecovering(prev, {
+              sessionId: sessionId!,
+              executionId: currentExecutionIdRef.current,
+              fallbackContent: frozenContent,
+              reason: "resume_polling_exhausted",
+            }));
+            requestServerFinalization(sessionId!, [0, 1500, 3500]);
           }
         }
       } else {
@@ -7046,7 +7190,7 @@ export default function ChatPage() {
               setStreaming(false);
               setStreamBuf("");
             }
-          }, 30000);
+          }, RECOVERY_BUBBLE_TIMEOUT_MS);
         }
       }
       setToolStatus(null);

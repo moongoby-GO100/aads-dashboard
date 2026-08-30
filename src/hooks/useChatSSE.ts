@@ -88,6 +88,7 @@ const SSE_INACTIVITY_MS = 150_000; // heartbeat 기준 — 150초간 무응답 �
 const MAX_RETRY = 5;
 const MAX_RETRY_DELAY_MS = 30_000; // 최대 단일 대기 30초 캡
 const RENDER_INTERVAL_MS = 30; // 토큰 렌더 루프 간격
+const RECOVERABLE_RESUME_EVENTS = new Set(["resume_unavailable", "resume_timeout", "resume_error"]);
 
 function getReconnectDelayMs(attempt: number): number {
   return Math.min(1000 * Math.pow(2, Math.max(attempt - 1, 0)), MAX_RETRY_DELAY_MS);
@@ -308,6 +309,32 @@ export function useChatSSE() {
         }));
         completeStream(sessionId, finalText);
         onDone?.(finalText, meta);
+      };
+
+      const finishRecoverableResumeFailure = async (reason: string, err?: unknown): Promise<boolean> => {
+        const recovered = await pollFallback();
+        if (recovered) return true;
+
+        const preservedText = flushBufferedText();
+        const msg = err instanceof Error ? err.message : reason;
+        const finalText = preservedText || fullText || "";
+        updateStreamText(sessionId, finalText);
+        reportError({
+          error_type: "SSE_DISCONNECT",
+          message: msg,
+          session_id: sessionId,
+          context: { attempt, maxRetry: MAX_RETRY, resumeReason: reason },
+        });
+        setState((s) => ({
+          ...s,
+          isStreaming: true,
+          isBuffering: true,
+          isResearching: false,
+          streamingText: finalText,
+          researchProgress: "복구중",
+          error: null,
+        }));
+        return false;
       };
 
       const doStream = async (): Promise<void> => {
@@ -538,6 +565,12 @@ export function useChatSSE() {
                         // resume 완료 — 정상 종료 처리
                         resumeSawTerminalEvent = true;
                         finalizeStream(rChunk);
+                        return;
+                      } else if (RECOVERABLE_RESUME_EVENTS.has(String(rChunk.type))) {
+                        resumeSawTerminalEvent = true;
+                        await finishRecoverableResumeFailure(
+                          String(rChunk.reason || rChunk.content || rChunk.type)
+                        );
                         return;
                       }
                     }
