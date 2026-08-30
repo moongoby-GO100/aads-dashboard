@@ -8,14 +8,27 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api
 
 interface AndroidManifest {
   name: string;
+  display_name?: string;
   package: string;
   version: string;
+  version_code?: number;
   server_ws_base_url: string;
   install_page_url: string;
   apk_download_url: string;
+  standard_apk_download_url?: string;
+  fresh_apk_download_url?: string;
   source_zip_url: string;
+  ohvis_web_url?: string;
+  embedded_ohvis_webview?: boolean;
+  launch_route?: string;
+  expired_session_route?: string;
+  admin_settings_route?: string;
+  voice_wake_deep_links?: string[];
+  bixby_quick_command?: string;
   apk_available: boolean;
   apk_size: number;
+  fresh_apk_available?: boolean;
+  fresh_apk_size?: number;
   source_file_count: number;
 }
 
@@ -163,12 +176,12 @@ export default function MobileAgentPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)" }}>
-      <Header title="Android Agent 설치" />
+      <Header title="오비스 앱 설정" />
       <main style={{ padding: "24px 16px", maxWidth: 1120, margin: "0 auto", color: "var(--text-primary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Android Agent 설치</h1>
-            <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>APK 다운로드와 페어링 토큰 발급을 한 화면에서 처리합니다.</p>
+            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>오비스 앱 설정</h1>
+            <p style={{ color: "var(--text-secondary)", fontSize: 14 }}>앱 설치, 페어링, 음성 깨우기, 앱 내부 채팅 진입 상태를 한 화면에서 관리합니다.</p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -222,14 +235,62 @@ export default function MobileAgentPage() {
             <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>{formatBytes(manifest?.apk_size || 0)}</div>
           </div>
           <div style={cardStyle}>
-            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>앱 버전</div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>{manifest?.version || "-"}</div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>{manifest?.package || "-"}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>앱 이름</div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>{manifest?.display_name || manifest?.name || "-"}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>v{manifest?.version || "-"} / code {manifest?.version_code || "-"}</div>
+          </div>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>앱 실행 진입</div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>{manifest?.launch_route || "/chat"}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>세션 만료 시 로그인 후 복귀</div>
+          </div>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>패키지</div>
+            <div style={{ fontSize: 14, fontWeight: 800, wordBreak: "break-all" }}>{manifest?.package || "-"}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>{manifest?.embedded_ohvis_webview ? "내장 WebView 지원" : "WebView 미확인"}</div>
           </div>
           <div style={cardStyle}>
             <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>연결 단말</div>
             <div style={{ fontSize: 20, fontWeight: 800 }}>{connectedAndroidDevices.length}대</div>
             <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>5초마다 갱신</div>
+          </div>
+        </section>
+
+        <section style={{ ...cardStyle, marginBottom: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 12 }}>사용자 실행 흐름</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+            <div style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>앱 실행</div>
+              <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>런처 이름은 오비스이며 앱 실행 직후 앱 안에서 <code>/chat</code>을 엽니다.</div>
+            </div>
+            <div style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>세션 만료</div>
+              <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>웹 인증이 만료되면 <code>{manifest?.expired_session_route || "/login?next=/chat"}</code> 흐름으로 복구합니다.</div>
+            </div>
+            <div style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>음성/빅스비</div>
+              <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>{manifest?.bixby_quick_command || "ohvis://wake"} 딥링크로 앱을 깨우고 채팅으로 진입합니다.</div>
+            </div>
+          </div>
+        </section>
+
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>채팅 URL</div>
+            <div style={{ fontSize: 14, fontWeight: 800, wordBreak: "break-all" }}>{manifest?.ohvis_web_url || "https://aads.newtalk.kr/chat"}</div>
+          </div>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>관리 메뉴</div>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>{manifest?.admin_settings_route || "/ops/mobile-agent"}</div>
+          </div>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>Wake Links</div>
+            <div style={{ fontSize: 13, fontWeight: 800, wordBreak: "break-all" }}>{(manifest?.voice_wake_deep_links || ["ohvis://wake"]).join(", ")}</div>
+          </div>
+          <div style={cardStyle}>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginBottom: 8 }}>소스 파일</div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>{manifest?.source_file_count || 0}</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 6 }}>{manifest?.package || "-"}</div>
           </div>
         </section>
 
