@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-08-30 15:24 KST - Chat stream recovery UI state normalization
+
+- Request: Apply the recommended chat recovery UI improvements and verify session behavior after deployment.
+- Cause:
+  - The dashboard derived progress text from several fallback strings, which could show inconsistent labels while backend recovery was still settling a final message.
+  - Auto-resume prompts were not consistently tied to the backend recovery state enum.
+- Changes:
+  - Added `stream_status`, `stream_status_label`, and `auto_resume_seconds` support to chat API types.
+  - Normalized visible chat progress labels to `생성중`, `도구실행중`, `복구중`, `최종저장중`, `완료`, and `이어쓰기필요`.
+  - Connected `recovering`, `needs_continuation`, and `finalizing` states to the existing resume/polling path with a 5 second cooldown.
+- Verification:
+  - `npm run build` passed and generated `/chat`.
+  - `npm run typecheck` is not available in this repository, so no separate typecheck script was run.
+  - Local `/chat` returned HTTP 307 to `/login?redirect=%2Fchat`, which is expected for an unauthenticated request.
+- Deployment:
+  - Commit `ab4634b` (`Improve chat stream recovery UI`) was pushed to `origin/main`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed; active dashboard container is healthy on `127.0.0.1:3100`.
+  - Deploy QA result was not separately available in the captured output, so HTTP/container validation was used as fallback.
+
 ## 2026-08-29 15:04 KST - Mobile docs open in a readable viewer tab
 
 - Request: Make mobile document clicks open the selected document immediately so it can be read, then deploy to production.
