@@ -5051,7 +5051,7 @@ export default function ChatPage() {
   }, [briefing, settleScrollAfterMessageMerge]);
 
   // ── 백그라운드 메시지 폴링 (Pipeline Runner / Agent 완료 메시지 실시간 수신) ──
-  // P1-FIX: waitingBgResponse=true→1초, 아니면 5초 폴링
+  // P1-FIX: waitingBgResponse=true→빠른 폴링, idle은 내부 skip으로 부하 제한
   // + just_completed 감지 시 자동 reload + 토스트 표시
   // PERF: streaming/waitingBgResponse를 ref로 참조하여 의존성 폭탄 방지
   useEffect(() => {
@@ -5059,7 +5059,8 @@ export default function ChatPage() {
     const sid = activeSession.id;
     // BUG-SESSION-MIX FIX: cancelled 클로저로 세션 전환 시 in-flight 폴링 응답 폐기
     let cancelled = false;
-    // PERF: 3초 interval, waitingBg=true 3초/아닐 때 15초 폴링 (성능 최적화)
+    // P0: 복구/최종저장 상태를 5~10초 안에 화면에 반영하기 위해 1.5초 tick.
+    // idle 세션은 아래 tickCount skip으로 약 7.5초마다만 조회한다.
     let tickCount = 0;
     let prevWaitingBg = false; // waitingBg 전환 감지용
     let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
@@ -5483,7 +5484,7 @@ export default function ChatPage() {
         });
         restoreMessageViewportAnchor(captureMessageViewportAnchor());
       } catch { /* 폴링 실패 무시 */ }
-    }, 5000); // 5초 간격: 브라우저 부하 감소
+    }, 1500);
     return () => { cancelled = true; clearInterval(iv); };
   }, [
     activeSession?.id,
