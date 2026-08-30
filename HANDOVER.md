@@ -22,6 +22,7 @@
   - `capture_screenshot` saved `https://aads.newtalk.kr/screenshots/screenshot_20260831_031909_ae6d5f.png`.
   - AADS health/server status checked at 2026-08-31 03:19 KST: status `HEALTHY`, DB OK, pipeline `HEALTHY`, stalled `0`.
   - Deploy Step 7 QA returned `UNKNOWN`; not counted as pass.
+  - Browser credential E2E login failed and Browser Bridge snapshot showed the login screen; fallback verification used HTTP/API/container health.
 
 ## 2026-08-30 15:24 KST - Chat stream recovery UI state normalization
 
@@ -1920,3 +1921,4 @@
   - 화면 캡처 저장: `https://aads.newtalk.kr/screenshots/screenshot_20260831_031909_ae6d5f.png`.
   - AADS 서버 상태 `HEALTHY`, DB OK, pipeline `HEALTHY`, stalled `0`.
   - 배포 Step 7 QA는 `UNKNOWN`으로 종료되어 통과로 간주하지 않았다.
+  - 저장 credential 자동 로그인은 실패했고 Browser Bridge snapshot은 로그인 화면까지 확인했다. 채팅 내부 스트림 E2E는 HTTP/API/컨테이너 검증으로 대체했다.
