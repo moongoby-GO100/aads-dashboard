@@ -49,6 +49,9 @@ const ENABLE_STANDALONE_RECOVERY_BUBBLE = true;
 type StreamingStatusPayload = {
   is_streaming: boolean;
   just_completed?: boolean;
+  stream_status?: "generating" | "tool_running" | "recovering" | "finalizing" | "completed" | "needs_continuation";
+  stream_status_label?: string;
+  auto_resume_seconds?: number | null;
   completion_token?: string | null;
   content_length?: number;
   tool_count?: number;
@@ -81,6 +84,31 @@ function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | 
 function isCompletionStatusReadyForUi(status?: StreamingStatusPayload | null): boolean {
   if (!status?.just_completed) return false;
   return status.final_message_ready === true || Boolean(status.final_message_id);
+}
+
+function normalizedStreamStatusLabel(status?: StreamingStatusPayload | null, fallback = "생성중"): string {
+  const label = String(status?.stream_status_label || "").trim();
+  if (label) return label;
+  switch (status?.stream_status) {
+    case "tool_running":
+      return "도구실행중";
+    case "recovering":
+      return "복구중";
+    case "finalizing":
+      return "최종저장중";
+    case "completed":
+      return "완료";
+    case "needs_continuation":
+      return "이어쓰기필요";
+    case "generating":
+      return "생성중";
+    default:
+      return fallback;
+  }
+}
+
+function isAutoResumeStatus(status?: StreamingStatusPayload | null): boolean {
+  return status?.stream_status === "recovering" || status?.stream_status === "needs_continuation";
 }
 
 function loadPersistedCompletionAck(sessionId: string): string | null {
@@ -579,9 +607,13 @@ function streamingPlaceholderStatus(
   if (message.intent !== "streaming_placeholder" && !message.intent?.startsWith("streaming")) return null;
   if (isActive) {
     const hint = String(activeStatusHint || "");
-    const label = /도구|실행/.test(hint)
-      ? "도구 확인 중"
-      : "응답 작성 중";
+    const label = /도구실행중|도구|실행/.test(hint)
+      ? "도구실행중"
+      : /복구중|이어쓰기/.test(hint)
+        ? "복구중"
+        : /최종저장중|저장/.test(hint)
+          ? "최종저장중"
+          : "생성중";
     return {
       label,
       color: "#3b82f6",
@@ -596,7 +628,7 @@ function streamingPlaceholderStatus(
   const hasContent = content.length > 0 && !isPlaceholderOnlyContent(content);
   if (reason === "orphan_placeholder_no_execution") {
     return {
-      label: hasContent ? "작성 이어가기 가능" : "응답 작성 중",
+      label: hasContent ? "이어쓰기필요" : "생성중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
@@ -605,7 +637,7 @@ function streamingPlaceholderStatus(
   }
   if (/재시도|retry|rate/i.test(content)) {
     return {
-      label: "응답 작성 중",
+      label: "복구중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
@@ -615,7 +647,7 @@ function streamingPlaceholderStatus(
   // 사용자 화면에는 내부 재시도/복구 상태를 노출하지 않고 같은 작성 흐름으로 유지한다.
   if (/중단|interrupt|stop/i.test(content) || /중단|interrupt/i.test(reason)) {
     return {
-      label: hasContent ? "작성 이어가기 가능" : "응답 작성 중",
+      label: hasContent ? "이어쓰기필요" : "복구중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
@@ -624,7 +656,7 @@ function streamingPlaceholderStatus(
   }
   if (/재연결|reconnect|복구/i.test(content)) {
     return {
-      label: "응답 작성 중",
+      label: "복구중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
@@ -633,7 +665,7 @@ function streamingPlaceholderStatus(
   }
   if (/최종|저장|확인/.test(content)) {
     return {
-      label: "응답 작성 중",
+      label: "최종저장중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
@@ -641,7 +673,7 @@ function streamingPlaceholderStatus(
     };
   }
   return {
-    label: hasContent ? "작성 이어가기 가능" : "응답 작성 중",
+    label: hasContent ? "이어쓰기필요" : "생성중",
     color: "#3b82f6",
     bg: "rgba(59,130,246,0.08)",
     border: "rgba(59,130,246,0.20)",
@@ -653,7 +685,9 @@ function userFacingStreamToolStatus(status?: string | null): string {
   const text = String(status || "").trim();
   if (!text) return "";
   if (/재시도|용량|한도|rate|limit|서버|복구|재연결|중단|interrupt|최종|저장|확인|상태/i.test(text)) {
-    return "응답 작성 중...";
+    if (/최종|저장/.test(text)) return "최종저장중";
+    if (/복구|재연결|재시도|retry|rate|limit|서버|중단|interrupt/i.test(text)) return "복구중";
+    return "생성중";
   }
   return text;
 }
@@ -3692,7 +3726,7 @@ export default function ChatPage() {
     const executionId = currentExecutionIdRef.current || "session";
     const key = `${sessionId}:${executionId}`;
     const now = Date.now();
-    const cooldownMs = options.cooldownMs ?? 60000;
+    const cooldownMs = options.cooldownMs ?? 5000;
     const lastRequestedAt = resumeRequestLastAtRef.current.get(key) || 0;
     if (resumeRequestInFlightRef.current.has(key) || now - lastRequestedAt < cooldownMs) {
       return Promise.resolve(null);
@@ -4664,7 +4698,9 @@ export default function ChatPage() {
           setStreamBuf(status.partial_content);
         }
         if (status.tool_count && status.last_tool) {
-          setToolStatus(`🔧 ${status.last_tool} 실행 중... (도구 ${status.tool_count}회)`);
+          setToolStatus(`도구실행중 (${status.last_tool}, ${status.tool_count}회)`);
+        } else if (status.stream_status && status.stream_status !== "completed") {
+          setToolStatus(normalizedStreamStatusLabel(status));
         }
         if (waitingBgTimeoutRef.current) clearTimeout(waitingBgTimeoutRef.current);
         waitingBgTimeoutRef.current = null; // 서버가 is_streaming=true이면 UI 진행 상태는 status 폴링으로만 종료
@@ -4684,6 +4720,14 @@ export default function ChatPage() {
           attachExecutionReplay(fetchSid, _exec_id_for_attach, false);
         }
       } else if (status.just_completed) {
+        if (!isCompletionStatusReadyForUi(status)) {
+          setToolStatus(normalizedStreamStatusLabel(status, "최종저장중"));
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(fetchSid);
+          requestServerFinalization(fetchSid, [0, 1000, 2500, 5000]);
+          await loadMessages(false);
+          return;
+        }
         // 방금 완료 → placeholder 제외하고 메시지 로드
         pendingResponseSessions.current.delete(fetchSid);
         const msgs = await loadMessages(true);
@@ -4720,6 +4764,7 @@ export default function ChatPage() {
         if (isPending && msgs && msgs.length > 0 && msgs[msgs.length - 1].role === "user") {
           setWaitingBgResponse(true);
           void mergeLatestAssistantFromServer(fetchSid);
+          void requestResumeOnce(fetchSid, { cooldownMs: 5000 });
           setTimeout(() => {
             if (cancelled) return;
             loadMessages(true).then((retryMsgs) => {
@@ -4740,6 +4785,7 @@ export default function ChatPage() {
             setToolStatus("응답 작성 중...");
             setWaitingBgResponse(true);
             pendingResponseSessions.current.add(fetchSid);
+            void requestResumeOnce(fetchSid, { cooldownMs: 5000 });
             // 서버 백그라운드 auto_resume이 처리 중일 수 있으므로 폴링으로 응답 대기
             setTimeout(() => {
               if (cancelled) return;
@@ -5058,7 +5104,9 @@ export default function ChatPage() {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
           if (streamingStatus.tool_count && streamingStatus.last_tool) {
-            setToolStatus(`🔧 ${streamingStatus.last_tool} 실행 중... (도구 ${streamingStatus.tool_count}회)`);
+            setToolStatus(`도구실행중 (${streamingStatus.last_tool}, ${streamingStatus.tool_count}회)`);
+          } else if (streamingStatus.stream_status && streamingStatus.stream_status !== "completed") {
+            setToolStatus(normalizedStreamStatusLabel(streamingStatus));
           }
           setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
             sessionId: sid,
@@ -5068,7 +5116,29 @@ export default function ChatPage() {
             lastTool: streamingStatus.last_tool,
           }));
         }
+        if (
+          !ss.is_streaming &&
+          !isCompletionStatusReadyForUi(ss) &&
+          (isAutoResumeStatus(ss) || ss.stream_status === "finalizing")
+        ) {
+          setToolStatus(normalizedStreamStatusLabel(ss));
+          setWaitingBgResponse(true);
+          pendingResponseSessions.current.add(sid);
+          if (isAutoResumeStatus(ss)) {
+            void requestResumeOnce(sid, { cooldownMs: 5000 });
+          } else {
+            requestServerFinalization(sid, [0, 1000, 2500, 5000]);
+          }
+          return;
+        }
         if (ss.just_completed) {
+          if (!isCompletionStatusReadyForUi(ss)) {
+            setToolStatus(normalizedStreamStatusLabel(ss, "최종저장중"));
+            setWaitingBgResponse(true);
+            pendingResponseSessions.current.add(sid);
+            requestServerFinalization(sid, [0, 1000, 2500, 5000]);
+            return;
+          }
           if (finalizingRef.current) {
             const completionStatus = ss;
             const completionToken = ss.completion_token;
@@ -5230,6 +5300,7 @@ export default function ChatPage() {
           setStreaming(true);
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
+          setToolStatus(normalizedStreamStatusLabel(ss));
           if (ss.partial_content) {
             const statusPartialContent = ss.partial_content;
             setStreamBuf(statusPartialContent);

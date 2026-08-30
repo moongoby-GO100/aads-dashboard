@@ -192,6 +192,9 @@ export const chatApi = {
     req<{
       is_streaming: boolean;
       just_completed?: boolean;
+      stream_status?: "generating" | "tool_running" | "recovering" | "finalizing" | "completed" | "needs_continuation";
+      stream_status_label?: string;
+      auto_resume_seconds?: number | null;
       content_length?: number;
       tool_count?: number;
       last_tool?: string;
