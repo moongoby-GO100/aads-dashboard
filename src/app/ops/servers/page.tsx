@@ -28,12 +28,37 @@ interface ServerHealth {
   role: string;
   status: "healthy" | "warning" | "critical" | "unknown";
   disk_pct?: number;
+  disk_used?: string;
+  disk_total?: string;
+  disk_available?: string;
   load?: number;
+  load_5m?: number;
+  load_15m?: number;
   memory_pct?: number;
+  memory_used_mb?: number;
+  memory_total_mb?: number;
+  memory_available_mb?: number;
   claude_sessions?: number;
   services?: Record<string, boolean>;
   checked_at?: string;
+  source?: string;
   error?: string;
+}
+
+interface ServerConfig {
+  id: string;
+  ip: string;
+  sshPort: number;
+  role: string;
+}
+
+interface PCAgent {
+  agent_id: string;
+  hostname?: string;
+  status?: string;
+  command_types?: string[];
+  capabilities?: string[];
+  heartbeat_age_seconds?: number;
 }
 
 interface WatchLayer {
@@ -88,6 +113,17 @@ function statusColor(s: string): string {
   }
 }
 
+function numberOrUndefined(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function mbLabel(value?: number): string {
+  if (value == null) return "-";
+  if (value >= 1024) return `${(value / 1024).toFixed(1)}GB`;
+  return `${value.toFixed(0)}MB`;
+}
+
 // ─── 서버 헬스 조회 ───────────────────────────────────────────────────────────
 
 async function fetchServerHealth(
@@ -95,44 +131,45 @@ async function fetchServerHealth(
   ip: string,
   role: string
 ): Promise<ServerHealth> {
-  const url = serverId === "contabo116"
-    ? "/api/v1/ops/health-check"
-    : `/api/v1/ops/server-health/${serverId}`;
+  const url = `/api/v1/ops/server-health/${serverId}`;
 
   try {
     const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
-    const headers: Record<string, string> = serverId === "contabo116"
-      ? { Authorization: `Bearer ${token}` }
-      : {};
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     const r = await fetch(url, { headers, signal: AbortSignal.timeout(5000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
-    // contabo116: AADS ops health-check 응답 파싱
-    if (serverId === "contabo116") {
-      return {
-        server_id: serverId,
-        ip,
-        role,
-        status: data.pipeline_healthy ? "healthy" : "warning",
-        checked_at: data.checked_at || new Date().toISOString(),
-        services: data.checks
-          ? Object.fromEntries(Object.entries(data.checks).map(([k, v]) => [k, (v as { ok: boolean }).ok]))
-          : {},
-      };
-    }
-    // contabo14/cafe24_114: health_server.py 응답 파싱
+    const rawStatus = String(data.status || "").toLowerCase();
+    const diskPct = numberOrUndefined(data.disk_pct ?? data.disk_usage_pct);
+    const memoryPct = numberOrUndefined(data.memory_pct ?? data.memory_usage_pct);
+    const load1m = numberOrUndefined(data.load_1m ?? data.load);
+    const status: ServerHealth["status"] =
+      rawStatus === "critical" || rawStatus === "fail" || data.healthy === false ? "critical" :
+      rawStatus === "warning" || (diskPct != null && diskPct >= 80) || (memoryPct != null && memoryPct >= 80) ? "warning" :
+      rawStatus === "ok" || rawStatus === "healthy" || data.healthy === true ? "healthy" :
+      "unknown";
+
     return {
       server_id: serverId,
       ip,
       role,
-      status: data.status === "ok" || data.healthy ? "healthy" : "warning",
-      disk_pct: data.disk_pct,
-      load: data.load_1m,
-      memory_pct: data.memory_pct,
+      status,
+      disk_pct: diskPct,
+      disk_used: data.disk_used,
+      disk_total: data.disk_total,
+      disk_available: data.disk_available,
+      load: load1m,
+      load_5m: numberOrUndefined(data.load_5m),
+      load_15m: numberOrUndefined(data.load_15m),
+      memory_pct: memoryPct,
+      memory_used_mb: numberOrUndefined(data.memory_used_mb),
+      memory_total_mb: numberOrUndefined(data.memory_total_mb),
+      memory_available_mb: numberOrUndefined(data.memory_available_mb),
       claude_sessions: data.claude_sessions,
       services: data.services || {},
+      source: data.source,
       checked_at: data.checked_at || new Date().toISOString(),
     };
   } catch (e) {
@@ -164,10 +201,10 @@ function GaugeBar({ pct, warn = 80 }: { pct?: number; warn?: number }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const SERVERS = [
-  { id: "contabo116", ip: "5.104.86.116", role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
-  { id: "contabo14", ip: "5.104.86.14",   role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
-  { id: "cafe24_114", ip: "114.207.244.86", role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)" },
+const SERVERS: ServerConfig[] = [
+  { id: "contabo116", ip: "5.104.86.116", sshPort: 22, role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
+  { id: "contabo14", ip: "5.104.86.14", sshPort: 22, role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
+  { id: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)" },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [
@@ -189,6 +226,8 @@ export default function ServersPage() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("-");
   const [codexUsage, setCodexUsage] = useState<CodexUsage | null>(null);
+  const [pcAgents, setPcAgents] = useState<PCAgent[]>([]);
+  const [psStatus, setPsStatus] = useState<Record<string, string>>({});
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -202,6 +241,12 @@ export default function ServersPage() {
       setCodexUsage(cu as CodexUsage);
     } catch (e) {
       setCodexUsage({ ok: false, error: String(e).slice(0, 200) });
+    }
+    try {
+      const pc = await api.getPCAgents();
+      setPcAgents(Array.isArray(pc) ? pc : pc.agents || []);
+    } catch {
+      setPcAgents([]);
     }
     setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
     setLoading(false);
@@ -220,6 +265,47 @@ export default function ServersPage() {
     padding: 16,
   };
   const healthById = (serverId: string) => servers.find((s) => String(s.server_id) === serverId);
+  const powershellAgent = pcAgents.find((agent) => {
+    const online = String(agent.status || "").toLowerCase() === "online";
+    const supports = (agent.command_types || []).includes("powershell") || (agent.capabilities || []).includes("pc_control");
+    return online && supports && String(agent.hostname || "").toLowerCase().includes("oby");
+  }) || pcAgents.find((agent) => {
+    const online = String(agent.status || "").toLowerCase() === "online";
+    return online && ((agent.command_types || []).includes("powershell") || (agent.capabilities || []).includes("pc_control"));
+  });
+  const powerShellReady = Boolean(powershellAgent);
+
+  const openPowerShell = async (srv: ServerConfig) => {
+    if (!powershellAgent) return;
+    setPsStatus((prev) => ({ ...prev, [srv.id]: "opening" }));
+    try {
+      const sshCommand = `ssh -p ${srv.sshPort} root@${srv.ip}`;
+      const command = [
+        `$host.UI.RawUI.WindowTitle = 'AADS SSH ${srv.id}'`,
+        `Write-Host 'AADS ${srv.id} 접속: ${sshCommand}'`,
+        sshCommand,
+      ].join("; ");
+      const result = await api.routePCCommand({
+        agent_id: powershellAgent.agent_id,
+        command_type: "powershell",
+        params: {
+          command: `Start-Process powershell.exe -ArgumentList '-NoExit','-Command',${JSON.stringify(command)}`,
+        },
+        required_capabilities: ["pc_control"],
+        wait_for_agent_seconds: 10,
+        command_timeout_seconds: 20,
+        queue_if_busy: true,
+      });
+      const success = typeof result === "object" && result !== null && "status" in result && result.status === "success";
+      setPsStatus((prev) => ({
+        ...prev,
+        [srv.id]: success ? `opened:${powershellAgent.hostname || powershellAgent.agent_id}` : "failed",
+      }));
+    } catch (e) {
+      setPsStatus((prev) => ({ ...prev, [srv.id]: `failed:${String(e).slice(0, 120)}` }));
+    }
+  };
+
   const topologyNodes = [
     { id: "contabo14", label: "contabo14", x: 150, y: 30 },
     { id: "contabo116", label: "contabo116", x: 50, y: 185 },
@@ -346,33 +432,82 @@ export default function ServersPage() {
                     <div style={{ fontSize: 12, color: "var(--danger)" }}>⚠️ {health.error}</div>
                   ) : (
                     <>
-                      {/* 리소스 */}
-                      {(health?.disk_pct != null || health?.memory_pct != null || health?.load != null) && (
-                        <div style={{ marginBottom: 12 }}>
-                          {health.disk_pct != null && (
-                            <div style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>디스크</div>
-                              <GaugeBar pct={health.disk_pct} />
-                            </div>
-                          )}
-                          {health.memory_pct != null && (
-                            <div style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>메모리</div>
-                              <GaugeBar pct={health.memory_pct} />
-                            </div>
-                          )}
-                          {health.load != null && (
-                            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                              Load: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{health.load.toFixed(2)}</span>
-                            </div>
-                          )}
-                          {health.claude_sessions != null && (
-                            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                              Claude 세션: <span style={{ color: "var(--accent)", fontWeight: 600 }}>{health.claude_sessions}</span>
-                            </div>
-                          )}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>디스크</div>
+                        <GaugeBar pct={health?.disk_pct} />
+                        <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
+                          {health?.disk_used && health?.disk_total ? `${health.disk_used} / ${health.disk_total}` : "용량 미수집"}
+                          {health?.disk_available ? ` · 여유 ${health.disk_available}` : ""}
                         </div>
-                      )}
+
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8, marginBottom: 3 }}>메모리</div>
+                        <GaugeBar pct={health?.memory_pct} />
+                        <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
+                          {health?.memory_used_mb && health?.memory_total_mb
+                            ? `${mbLabel(health.memory_used_mb)} / ${mbLabel(health.memory_total_mb)}`
+                            : "메모리 미수집"}
+                          {health?.memory_available_mb ? ` · 가용 ${mbLabel(health.memory_available_mb)}` : ""}
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 10 }}>
+                          {[
+                            ["1m", health?.load],
+                            ["5m", health?.load_5m],
+                            ["15m", health?.load_15m],
+                          ].map(([label, value]) => (
+                            <div key={label as string} style={{ background: "var(--bg-hover)", borderRadius: 6, padding: "6px 8px" }}>
+                              <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>Load {label}</div>
+                              <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 700 }}>
+                                {typeof value === "number" ? value.toFixed(2) : "-"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {health?.claude_sessions != null && (
+                          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>
+                            Claude 세션: <span style={{ color: "var(--accent)", fontWeight: 600 }}>{health.claude_sessions}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Windows PowerShell SSH</div>
+                            <div style={{ fontSize: 11, color: "var(--text-primary)", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              ssh -p {srv.sshPort} root@{srv.ip}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openPowerShell(srv)}
+                            disabled={!powerShellReady || psStatus[srv.id] === "opening"}
+                            title={powerShellReady ? "CEO PC에서 PowerShell SSH 창을 엽니다" : "온라인 PC Agent가 필요합니다"}
+                            style={{
+                              flexShrink: 0,
+                              background: powerShellReady ? "var(--accent)" : "var(--bg-hover)",
+                              color: powerShellReady ? "#fff" : "var(--text-secondary)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              cursor: powerShellReady ? "pointer" : "not-allowed",
+                            }}
+                          >
+                            {psStatus[srv.id] === "opening" ? "여는 중" : "PowerShell"}
+                          </button>
+                        </div>
+                        <div style={{ fontSize: 10, color: psStatus[srv.id]?.startsWith("failed") ? "var(--danger)" : "var(--text-secondary)", marginTop: 5 }}>
+                          {psStatus[srv.id]?.startsWith("opened")
+                            ? `열림 · ${psStatus[srv.id].replace("opened:", "")}`
+                            : psStatus[srv.id]?.startsWith("failed")
+                              ? psStatus[srv.id]
+                              : powerShellReady
+                                ? `준비 · ${powershellAgent?.hostname || powershellAgent?.agent_id}`
+                                : "PC Agent 오프라인"}
+                          {health?.source ? ` · ${health.source}` : ""}
+                        </div>
+                      </div>
 
                       {/* 서비스 상태 */}
                       {health?.services && Object.keys(health.services).length > 0 && (

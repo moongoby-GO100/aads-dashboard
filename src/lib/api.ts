@@ -401,6 +401,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ agent_id, command_type, params: params || {} }),
     }),
+  routePCCommand: (data: {
+    agent_id?: string;
+    command_type: string;
+    params?: Record<string, unknown>;
+    required_capabilities?: string[];
+    wait_for_agent_seconds?: number;
+    command_timeout_seconds?: number;
+    queue_if_busy?: boolean;
+  }) =>
+    request<unknown>("/pc-agent/route-execute", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getPCResult: (command_id: string, timeout = 30) =>
     request<any>(`/pc-agent/result/${encodeURIComponent(command_id)}?timeout=${timeout}`),
   startPCStream: (agent_id: string, config?: { fps?: number; quality?: number; scale?: number }) =>
