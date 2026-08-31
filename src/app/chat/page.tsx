@@ -9664,7 +9664,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {screenSize !== "mobile" && <UsageBar />}
+        <UsageBar />
         {/* Messages */}
         <div
           ref={messagesContainerRef}
