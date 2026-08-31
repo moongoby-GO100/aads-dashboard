@@ -85,6 +85,7 @@ function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | 
 
 function isCompletionStatusReadyForUi(status?: StreamingStatusPayload | null): boolean {
   if (!status?.just_completed) return false;
+  if (status.final_message_ready === false) return false;
   return status.final_message_ready === true || Boolean(status.final_message_id);
 }
 
