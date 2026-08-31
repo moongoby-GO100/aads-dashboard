@@ -73,7 +73,10 @@ type StreamingStatusPayload = {
 
 type MessageViewportAnchor = {
   messageId: string | null;
+  renderId: string | null;
   offsetTop: number;
+  scrollTop: number;
+  scrollHeight: number;
   distanceFromBottom: number;
   wasNearBottom: boolean;
 };
@@ -112,6 +115,10 @@ function normalizedStreamStatusLabel(status?: StreamingStatusPayload | null, fal
 
 function isAutoResumeStatus(status?: StreamingStatusPayload | null): boolean {
   return status?.stream_status === "recovering" || status?.stream_status === "needs_continuation";
+}
+
+function isLiveStreamStatusHint(status?: string | null): boolean {
+  return /생성|작성|분석|사고|도구|실행|복구|재연결|이어쓰기|최종|저장/i.test(String(status || ""));
 }
 
 function loadPersistedCompletionAck(sessionId: string): string | null {
@@ -613,11 +620,13 @@ function streamingPlaceholderStatus(
     const hint = String(activeStatusHint || "");
     const label = /도구실행중|도구|실행/.test(hint)
       ? "도구실행중"
-      : /복구중|이어쓰기/.test(hint)
-        ? "복구중"
-        : /최종저장중|저장/.test(hint)
-          ? "최종저장중"
-          : "생성중";
+      : /이어쓰기/.test(hint)
+        ? "이어쓰기필요"
+        : /복구중/.test(hint)
+          ? "복구중"
+          : /최종저장중|저장/.test(hint)
+            ? "최종저장중"
+            : "생성중";
     return {
       label,
       color: "#3b82f6",
@@ -688,8 +697,9 @@ function streamingPlaceholderStatus(
 function userFacingStreamToolStatus(status?: string | null): string {
   const text = String(status || "").trim();
   if (!text) return "";
+  if (/이어쓰기/.test(text)) return "응답을 자동으로 이어 쓰는 중...";
+  if (/최종|저장/.test(text)) return "최종 응답을 저장하는 중...";
   if (/재시도|용량|한도|rate|limit|서버|복구|재연결|중단|interrupt|최종|저장|확인|상태/i.test(text)) {
-    if (/최종|저장/.test(text)) return "최종저장중";
     if (/복구|재연결|재시도|retry|rate|limit|서버|중단|interrupt/i.test(text)) return "복구중";
     return "생성중";
   }
@@ -1773,7 +1783,7 @@ function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: 
         height: `${height}px`,
         background: color,
         marginLeft: "3px",
-        animation: "ct-blink 1s step-end infinite",
+        animation: "ct-blink 0.9s ease-in-out infinite",
         verticalAlign: "text-bottom",
         borderRadius: "2px",
         flexShrink: 0,
@@ -1830,7 +1840,8 @@ const MessageItem = memo(function MessageItem({
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
   const hasLiveStreamingContent = Boolean(streamingContent && isStreamingPlaceholder);
-  const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent);
+  const hasLiveTransitionStatus = Boolean(isStreamingPlaceholder && isLiveStreamStatusHint(streamToolStatus));
+  const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent || hasLiveTransitionStatus);
   const placeholderStatus = streamingPlaceholderStatus(msg, isActiveStreamingPlaceholder, streamToolStatus);
   const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
@@ -1885,6 +1896,7 @@ const MessageItem = memo(function MessageItem({
   return (
     <div
       data-message-id={msg.id}
+      data-message-render-id={msg.render_id || msg.id}
       className="ct-msg-enter group"
       style={{
         display: "flex",
@@ -2188,6 +2200,7 @@ const MessageItem = memo(function MessageItem({
                     <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--ct-accent)", marginTop: (streamToolLogs?.length || 0) > 0 ? "4px" : "0" }}>
                       <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--ct-accent)", animation: "ct-bounce 1.2s infinite", display: "inline-block" }} />
                       <span>{userFacingStreamToolStatus(streamToolStatus)}</span>
+                      {hasLiveTransitionStatus && <StreamingCaret height={11} />}
                     </div>
                   )}
                 </div>
@@ -3120,6 +3133,8 @@ export default function ChatPage() {
   const isNearBottomRef = useRef(true);
   const userScrollPauseUntilRef = useRef(0);
   const bottomStickUntilRef = useRef(0);
+  const pendingMessageViewportAnchorRef = useRef<MessageViewportAnchor | null>(null);
+  const messageViewportRestoreGenerationRef = useRef(0);
   const localQuestionEchoIdsRef = useRef<Set<string>>(new Set());
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
@@ -3152,41 +3167,76 @@ export default function ChatPage() {
     const anchor = messageNodes.find((el) => el.offsetTop + el.offsetHeight >= container.scrollTop) || null;
     return {
       messageId: anchor?.dataset.messageId || null,
+      renderId: anchor?.dataset.messageRenderId || null,
       offsetTop: anchor ? anchor.offsetTop - container.scrollTop : 0,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
       distanceFromBottom: Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight),
       wasNearBottom: container.scrollTop + container.clientHeight >= container.scrollHeight - 300,
     };
   }, []);
+  const applyMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null): boolean => {
+    if (!anchor) return true;
+    const container = messagesContainerRef.current;
+    if (!container) return false;
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    // Markdown/도구 영역이 재배치되는 짧은 순간에는 높이가 0에 가깝게 줄 수 있다.
+    // 이때 0을 기록하면 다음 프레임에도 상단 점프가 고착되므로 레이아웃 안정화까지 기다린다.
+    if (anchor.scrollTop > 0 && maxScrollTop === 0 && container.scrollHeight < anchor.scrollHeight) {
+      return false;
+    }
+    if (anchor.wasNearBottom) {
+      container.scrollTop = maxScrollTop;
+      isNearBottomRef.current = true;
+      return true;
+    }
+    const renderAnchorEl = anchor.renderId
+      ? container.querySelector<HTMLElement>(`[data-message-render-id="${CSS.escape(anchor.renderId)}"]`)
+      : null;
+    const messageAnchorEl = !renderAnchorEl && anchor.messageId
+      ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchor.messageId)}"]`)
+      : null;
+    const anchorEl = renderAnchorEl || messageAnchorEl;
+    // 서버 메시지 ID가 바뀌어도 render_id를 우선 사용한다. 둘 다 없으면 상태 전환 전의
+    // 절대 scrollTop을 유지해 버블 교체가 화면 상단 이동으로 보이지 않게 한다.
+    const desiredScrollTop = anchorEl
+      ? anchorEl.offsetTop - anchor.offsetTop
+      : anchor.scrollTop;
+    container.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
+    isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+    return true;
+  }, []);
   const restoreMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null) => {
     if (!anchor) return;
+    const generation = ++messageViewportRestoreGenerationRef.current;
+    let framesRemaining = 3;
     const restore = () => {
-      const container = messagesContainerRef.current;
-      if (!container) return;
-      if (anchor.wasNearBottom) {
-        container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        isNearBottomRef.current = true;
-        return;
-      }
-      const anchorEl = anchor.messageId
-        ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchor.messageId)}"]`)
-        : null;
-      if (anchorEl) {
-        container.scrollTop = Math.max(0, anchorEl.offsetTop - anchor.offsetTop);
-      } else {
-        container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - anchor.distanceFromBottom);
-      }
-      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+      requestAnimationFrame(() => {
+        if (generation !== messageViewportRestoreGenerationRef.current) return;
+        applyMessageViewportAnchor(anchor);
+        framesRemaining -= 1;
+        if (framesRemaining > 0) {
+          restore();
+          return;
+        }
+        if (pendingMessageViewportAnchorRef.current === anchor) {
+          pendingMessageViewportAnchorRef.current = null;
+        }
+      });
     };
-    requestAnimationFrame(() => {
-      restore();
-      requestAnimationFrame(restore);
-    });
-  }, []);
+    restore();
+  }, [applyMessageViewportAnchor]);
   const setMessagesPreservingViewport = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
-    const anchor = captureMessageViewportAnchor();
+    // 같은 React 배치에서 여러 폴링/병합이 실행돼도 최초 화면 기준점 하나만 사용한다.
+    const anchor = pendingMessageViewportAnchorRef.current || captureMessageViewportAnchor();
+    pendingMessageViewportAnchorRef.current = anchor;
     setMessages(updater);
     restoreMessageViewportAnchor(anchor);
   }, [captureMessageViewportAnchor, restoreMessageViewportAnchor]);
+  useLayoutEffect(() => {
+    // React 커밋 직후, 브라우저가 그리기 전에 먼저 복원해 상태 전환 순간의 깜빡임도 막는다.
+    applyMessageViewportAnchor(pendingMessageViewportAnchorRef.current);
+  }, [applyMessageViewportAnchor, messages]);
   const updateInterruptBubbleStatus = useCallback((
     interruptContent: string,
     nextIntent: "interrupt_applied" | "interrupt_completed",
@@ -5156,8 +5206,6 @@ export default function ChatPage() {
           });
         }
       } catch { /* polling fallback */ }
-      restoreMessageViewportAnchor(captureMessageViewportAnchor());
-
     }, 800);
     return () => clearTimeout(timer);
   }, [
@@ -5400,8 +5448,7 @@ export default function ChatPage() {
           setToolStatus(null);
           if (streamingSessionRef.current === sid) streamingSessionRef.current = null;
           setStreaming(false); setStreamBuf("");
-          // scroll: isNearBottomRef preserved — user scroll position respected
-          restoreMessageViewportAnchor(captureMessageViewportAnchor());
+          // setMessagesPreservingViewport가 React 커밋 기준으로 사용자 위치를 복원한다.
           // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
           // freshMsgs는 ASC(시간순) → .slice().reverse()로 DESC(최신순) 후 최신 user/ai 기준 판단
           const _lastUser979 = freshMsgs?.slice().reverse().find((m: ChatMessage) => m.role === "user");
@@ -5433,8 +5480,7 @@ export default function ChatPage() {
             }
           }
           setStreaming(false); setStreamBuf("");
-          // scroll: preserve user position
-          restoreMessageViewportAnchor(captureMessageViewportAnchor());
+          // setMessagesPreservingViewport가 React 커밋 기준으로 사용자 위치를 복원한다.
           return;
         }
         // 서버에서 스트리밍 아님 + waitingBg=true → 강제 해제 (placeholder 삭제 등으로 stuck 방지)
@@ -5516,7 +5562,6 @@ export default function ChatPage() {
                 setStreaming(false); setStreamBuf("");
                 setWaitingBgResponse(false); setBgPartialContent("");
                 pendingResponseSessions.current.delete(sid);
-                restoreMessageViewportAnchor(captureMessageViewportAnchor());
                 showCompletionToastOnce(latestFinal.id, sid, statusExecutionId || ss.execution_id, undefined, latestFinal);
                 streamingStuckCount = 0;
                 stuckCooldownUntil = Date.now() + 30000;
@@ -5589,8 +5634,7 @@ export default function ChatPage() {
                 } else {
                   setMessagesPreservingViewport(prev => mergeServerMessagesPreservingLocal(prev, allMsgs));
                 }
-                // scroll: preserve user position
-                restoreMessageViewportAnchor(captureMessageViewportAnchor());
+                // setMessagesPreservingViewport가 React 커밋 기준으로 사용자 위치를 복원한다.
               }
             } catch { /* 재조회 실패 무시 */ }
             // 자동 트리거(시스템 메시지) 응답이면 토스트 생략
@@ -5631,7 +5675,6 @@ export default function ChatPage() {
           if (_streaming) return prev;
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
-        restoreMessageViewportAnchor(captureMessageViewportAnchor());
       } catch { /* 폴링 실패 무시 */ }
     }, 1500);
     return () => { cancelled = true; clearInterval(iv); };
@@ -6613,7 +6656,6 @@ export default function ChatPage() {
               if (locallyRenderedFinalAiId) {
                 showCompletionToastOnce(locallyRenderedFinalAiId, requestSessionId, currentExecutionIdRef.current, undefined, localFinalMessageForAlert);
               }
-              restoreMessageViewportAnchor(captureMessageViewportAnchor());
             } else if (RECOVERABLE_RESUME_EVENT_TYPES.has(String(ev.type))) {
               const errorReason = String(ev.reason || ev.type);
               const preserved = full || streamBufRef.current || bgPartialContentRef.current || String(ev.content || "");
@@ -8495,7 +8537,7 @@ export default function ChatPage() {
           40%{transform:scale(1);opacity:1}
         }
         @keyframes ct-blink {
-          0%,100%{opacity:1} 50%{opacity:0}
+          0%,100%{opacity:1;transform:scaleY(1)} 50%{opacity:0.28;transform:scaleY(0.72)}
         }
         @keyframes ct-theme {
           from{opacity:0.7} to{opacity:1}
@@ -9672,6 +9714,9 @@ export default function ChatPage() {
             const { display, lastAssistantId } = displayData;
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
+              const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
+              const hasLiveStatusHint = msg.intent === "streaming_placeholder" && isLiveStreamStatusHint(toolStatus);
+              const keepStreamingBubbleLive = hasActiveReplyState || hasLiveStatusHint;
               // 시스템 메시지: 접이식 한 줄 표시
               // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
               const isSystemMsg = isHiddenSystemChatMessage(msg);
@@ -9694,26 +9739,25 @@ export default function ChatPage() {
                     onBranch={setBranchPoint}
                     replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
                     isActiveStreaming={
-                      msg.intent === "streaming_placeholder" &&
-                      (streaming || waitingBgResponse) &&
-                      streamingSessionRef.current === activeSession?.id
+                      keepStreamingBubbleLive &&
+                      (streamingSessionRef.current === activeSession?.id || hasLiveStatusHint)
                     }
                     streamingContent={
-                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse)
+                      keepStreamingBubbleLive
                         ? (streamBuf || bgPartialContent || msg.content || undefined)
                         : undefined
                     }
                     streamingThinking={
-                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? thinkingBuf : undefined
+                      keepStreamingBubbleLive ? thinkingBuf : undefined
                     }
                     streamToolStatus={
-                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? toolStatus : undefined
+                      keepStreamingBubbleLive ? toolStatus : undefined
                     }
                     streamToolLogs={
-                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? toolLogs : undefined
+                      keepStreamingBubbleLive ? toolLogs : undefined
                     }
                     onStopStreaming={
-                      msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse) ? stopStreaming : undefined
+                      keepStreamingBubbleLive ? stopStreaming : undefined
                     }
                     onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                     linkedArtifact={msg.artifact_id ? artifactByIdMap.get(msg.artifact_id) : undefined}
