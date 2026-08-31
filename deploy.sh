@@ -32,6 +32,7 @@ MAX_WAIT=90
 LOCKFILE="/tmp/aads-dashboard-deploy.lock"
 DEPLOY_LOG_DIR="${STATE_DIR}/deploy-logs"
 DEPLOY_LOG_FILE="${DEPLOY_LOG_DIR}/dashboard-deploy-$(date '+%Y%m%d-%H%M%S').log"
+RELEASE_CONTEXT_DIR=""
 
 mkdir -p "$DEPLOY_LOG_DIR"
 
@@ -98,6 +99,32 @@ cleanup_lock() {
     fi
 }
 
+cleanup_release_context() {
+    case "${RELEASE_CONTEXT_DIR:-}" in
+        /tmp/aads-dashboard-release.*)
+            rm -rf -- "$RELEASE_CONTEXT_DIR"
+            ;;
+    esac
+    RELEASE_CONTEXT_DIR=""
+}
+
+cleanup_deploy() {
+    cleanup_release_context
+    cleanup_lock
+}
+
+build_release_image() {
+    cleanup_release_context
+    RELEASE_CONTEXT_DIR="$(mktemp -d /tmp/aads-dashboard-release.XXXXXX)"
+    git -C "$STATE_DIR" archive --format=tar HEAD | tar -xf - -C "$RELEASE_CONTEXT_DIR"
+    if [ -f "${STATE_DIR}/.env.local" ]; then
+        install -m 600 "${STATE_DIR}/.env.local" "${RELEASE_CONTEXT_DIR}/.env.local"
+    fi
+    log "clean release context: ${RELEASE_CONTEXT_DIR} (HEAD=${AADS_RELEASE_SHA})"
+    docker build --tag "aads-dashboard:${AADS_RELEASE_SHA}" "$RELEASE_CONTEXT_DIR"
+    cleanup_release_context
+}
+
 if [ -f "$LOCKFILE" ]; then
     LOCK_PID=$(lock_pid)
     LOCK_STARTED_AT=$(lock_value "started_at")
@@ -114,7 +141,7 @@ if [ -f "$LOCKFILE" ]; then
     rm -f "$LOCKFILE"
 fi
 write_lock
-trap cleanup_lock EXIT INT TERM
+trap cleanup_deploy EXIT INT TERM
 log "배포 로그: ${DEPLOY_LOG_FILE}"
 
 # nginx upstream is shared by backend and dashboard blue-green deploys.
@@ -377,7 +404,7 @@ fi
 
 # Step 1: release image를 정확히 한 번 빌드한 뒤 비활성 슬롯을 같은 이미지로 기동
 log "Step 1: release image 1회 빌드 (${AADS_RELEASE_SHA})"
-docker compose "${COMPOSE_ARGS[@]}" build "$TARGET_SERVICE"
+build_release_image
 log "Step 1.5: ${TARGET_SLOT} 슬롯 기동 (--no-build)"
 docker compose "${COMPOSE_ARGS[@]}" up -d --no-build --no-deps "$TARGET_SERVICE"
 log "OK: ${TARGET_SLOT} 슬롯 기동 완료"
