@@ -47,6 +47,7 @@ const COMPLETION_ACK_STORAGE_TTL_MS = 30 * 60 * 1000;
 const ENABLE_STANDALONE_RECOVERY_BUBBLE = true;
 const RECOVERABLE_RESUME_EVENT_TYPES = new Set(["resume_unavailable", "resume_timeout", "resume_error"]);
 const RECOVERY_BUBBLE_TIMEOUT_MS = 90 * 1000;
+const VERSION_REFRESH_VIEWPORT_KEY = "aads.chat.versionRefreshViewport.v1";
 
 type StreamingStatusPayload = {
   is_streaming: boolean;
@@ -1823,6 +1824,8 @@ interface MessageItemProps {
   streamToolStatus?: string | null;
   streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
   onStopStreaming?: () => void;
+  onResumeInterrupted?: (modelOverride?: string) => void;
+  selectedResumeModel?: string;
   onViewReport?: () => void;
   linkedArtifact?: { id: string; title: string; artifact_type: string; content: string };
   onViewArtifact?: (artifactId: string) => void;
@@ -1837,6 +1840,7 @@ const MessageItem = memo(function MessageItem({
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
+  onResumeInterrupted, selectedResumeModel,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
   screenSize, mobileFontPx,
 }: MessageItemProps) {
@@ -2638,6 +2642,23 @@ const MessageItem = memo(function MessageItem({
                   {interruptionDiagnostics.summary}
                 </span>
               )}
+              {(isInterruptedAssistant || isRecoverablePlaceholder) && onResumeInterrupted && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", marginLeft: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={() => onResumeInterrupted(undefined)}
+                    style={{ padding: "2px 8px", fontSize: "10px", borderRadius: "9px", cursor: "pointer", color: "var(--ct-text)", background: "transparent", border: "1px solid var(--ct-border)" }}
+                  >원 모델로 이어쓰기</button>
+                  {selectedResumeModel && (
+                    <button
+                      type="button"
+                      title={`${selectedResumeModel} 모델로 이어서 생성`}
+                      onClick={() => onResumeInterrupted(selectedResumeModel)}
+                      style={{ padding: "2px 8px", fontSize: "10px", borderRadius: "9px", cursor: "pointer", color: "white", background: "var(--ct-accent)", border: "1px solid var(--ct-accent)" }}
+                    >선택 모델로 이어쓰기</button>
+                  )}
+                </span>
+              )}
               {msg.created_at && (
                 <span style={{ marginLeft: msg.model_used ? "6px" : "0" }}>
                   {new Date(msg.created_at).toLocaleString("ko-KR", {
@@ -2669,7 +2690,7 @@ const MessageItem = memo(function MessageItem({
             )}
             {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
               <>
-                {(isInterruptedAssistant || isRecoverablePlaceholder) && (
+                {(isInterruptedAssistant || isRecoverablePlaceholder) && !onResumeInterrupted && (
                   <button
                     onClick={() => onRegenerate(msg.id, "continue")}
                     title="이 응답을 이어서 작성"
@@ -3153,6 +3174,8 @@ export default function ChatPage() {
   const userScrollIntentUntilRef = useRef(0);
   const unexpectedScrollRestoreGenerationRef = useRef(0);
   const isRestoringUnexpectedScrollRef = useRef(false);
+  const isRestoringMessageViewportRef = useRef(false);
+  const versionRefreshViewportRef = useRef<({ sessionId: string; savedAt: number; anchor: MessageViewportAnchor }) | null>(null);
   const localQuestionEchoIdsRef = useRef<Set<string>>(new Set());
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
@@ -3201,7 +3224,11 @@ export default function ChatPage() {
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
     // Markdown/도구 영역이 재배치되는 짧은 순간에는 높이가 0에 가깝게 줄 수 있다.
     // 이때 0을 기록하면 다음 프레임에도 상단 점프가 고착되므로 레이아웃 안정화까지 기다린다.
-    if (anchor.scrollTop > 0 && maxScrollTop === 0 && container.scrollHeight < anchor.scrollHeight) {
+    if (
+      anchor.scrollTop > 0 &&
+      container.scrollHeight < anchor.scrollHeight &&
+      (maxScrollTop === 0 || maxScrollTop < Math.min(anchor.scrollTop, anchor.scrollHeight * 0.5))
+    ) {
       return false;
     }
     if (anchor.wasNearBottom) {
@@ -3231,6 +3258,7 @@ export default function ChatPage() {
     // 이전 복원 cleanup이 같은 anchor의 pending 표시를 지웠을 수 있으므로 새 주기의
     // layout-effect 복원 대상으로 다시 등록한다.
     pendingMessageViewportAnchorRef.current = anchor;
+    isRestoringMessageViewportRef.current = true;
     const generation = ++messageViewportRestoreGenerationRef.current;
     let framesRemaining = 8;
     let observer: ResizeObserver | null = null;
@@ -3250,6 +3278,7 @@ export default function ChatPage() {
       if (pendingMessageViewportAnchorRef.current === anchor) {
         pendingMessageViewportAnchorRef.current = null;
       }
+      isRestoringMessageViewportRef.current = false;
     };
     messageViewportRestoreCleanupRef.current = cleanup;
     const restoreFastFrames = () => {
@@ -3282,6 +3311,33 @@ export default function ChatPage() {
     setMessages(updater);
     restoreMessageViewportAnchor(anchor);
   }, [captureMessageViewportAnchor, restoreMessageViewportAnchor]);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(VERSION_REFRESH_VIEWPORT_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed?.sessionId && parsed?.anchor && Date.now() - Number(parsed.savedAt || 0) < 5 * 60 * 1000) {
+        versionRefreshViewportRef.current = parsed;
+      } else if (raw) {
+        sessionStorage.removeItem(VERSION_REFRESH_VIEWPORT_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(VERSION_REFRESH_VIEWPORT_KEY);
+    }
+    const persistVersionRefreshViewport = () => {
+      const sessionId = activeSessionRef.current;
+      const anchor = captureMessageViewportAnchor();
+      if (!sessionId || !anchor) return;
+      const snapshot = { sessionId, savedAt: Date.now(), anchor };
+      versionRefreshViewportRef.current = snapshot;
+      try {
+        sessionStorage.setItem(VERSION_REFRESH_VIEWPORT_KEY, JSON.stringify(snapshot));
+      } catch {
+        // Storage can be unavailable in strict privacy mode; reload still proceeds.
+      }
+    };
+    window.addEventListener("aads:before-version-refresh", persistVersionRefreshViewport);
+    return () => window.removeEventListener("aads:before-version-refresh", persistVersionRefreshViewport);
+  }, [captureMessageViewportAnchor]);
   useLayoutEffect(() => {
     // React 커밋 직후, 브라우저가 그리기 전에 먼저 복원해 상태 전환 순간의 깜빡임도 막는다.
     applyMessageViewportAnchor(pendingMessageViewportAnchorRef.current);
@@ -3965,14 +4021,19 @@ export default function ChatPage() {
     }
   }, [mergeLatestAssistantFromServer, refreshTodos]);
 
-  const requestResumeOnce = useCallback((sessionId: string, options: { cooldownMs?: number } = {}) => {
+  const requestResumeOnce = useCallback((sessionId: string, options: {
+    cooldownMs?: number;
+    modelOverride?: string;
+    resetRetryCount?: boolean;
+    force?: boolean;
+  } = {}) => {
     if (!sessionId) return Promise.resolve(null);
     const executionId = currentExecutionIdRef.current || "session";
-    const key = `${sessionId}:${executionId}`;
+    const key = `${sessionId}:${executionId}:${options.modelOverride || "original"}`;
     const now = Date.now();
     const cooldownMs = options.cooldownMs ?? 5000;
     const lastRequestedAt = resumeRequestLastAtRef.current.get(key) || 0;
-    if (resumeRequestInFlightRef.current.has(key) || now - lastRequestedAt < cooldownMs) {
+    if (resumeRequestInFlightRef.current.has(key) || (!options.force && now - lastRequestedAt < cooldownMs)) {
       return Promise.resolve(null);
     }
     resumeRequestInFlightRef.current.add(key);
@@ -3980,7 +4041,11 @@ export default function ChatPage() {
     return fetch(`${BASE_URL}/chat/sessions/${sessionId}/resume`, {
       method: "POST",
       credentials: "include",
-      headers: authHdrs(),
+      headers: { ...authHdrs(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model_override: options.modelOverride || null,
+        reset_retry_count: Boolean(options.resetRetryCount),
+      }),
     })
       .then((r) => r.ok ? r.json() : null)
       .finally(() => {
@@ -5231,7 +5296,7 @@ export default function ChatPage() {
       const scrollTop = container.scrollTop;
       const userInitiated = Date.now() < userScrollIntentUntilRef.current;
       if (restoreIfUnexpectedTopReset("scroll")) return;
-      if (!isRestoringUnexpectedScrollRef.current || userInitiated) {
+      if ((!isRestoringUnexpectedScrollRef.current && !isRestoringMessageViewportRef.current) || userInitiated) {
         lastStableMessagesScrollTopRef.current = scrollTop;
         const stableAnchor = captureMessageViewportAnchor();
         if (stableAnchor) {
@@ -5277,6 +5342,22 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     const _grew = messages.length > prevMessagesCountRef.current; prevMessagesCountRef.current = messages.length;
     if (!container) return;
+    const versionRefreshViewport = versionRefreshViewportRef.current;
+    if (
+      messages.length > 0 &&
+      versionRefreshViewport?.sessionId === activeSessionRef.current
+    ) {
+      isInitialLoadRef.current = false;
+      pendingMessageViewportAnchorRef.current = versionRefreshViewport.anchor;
+      restoreMessageViewportAnchor(versionRefreshViewport.anchor);
+      versionRefreshViewportRef.current = null;
+      try {
+        sessionStorage.removeItem(VERSION_REFRESH_VIEWPORT_KEY);
+      } catch {
+        // no-op
+      }
+      return;
+    }
     if (isInitialLoadRef.current) {
       if (messages.length === 0) return; // FIX-2: 빈 DOM에서 stabilizer 낭비 방지
       container.scrollTop = container.scrollHeight;
@@ -5314,7 +5395,7 @@ export default function ChatPage() {
         scrollToMessagesBottom();
       }
     }
-  }, [messages, scrollToMessagesBottom]); // streamBuf 의존성 제거!
+  }, [messages, restoreMessageViewportAnchor, scrollToMessagesBottom]); // streamBuf 의존성 제거!
 
   // 스트리밍 중 스크롤 (200ms interval, near-bottom일 때만, streamBuf 의존성 제거로 렌더 감소)
   useEffect(() => {
@@ -9943,6 +10024,16 @@ export default function ChatPage() {
                     onStopStreaming={
                       keepStreamingBubbleLive ? stopStreaming : undefined
                     }
+                    onResumeInterrupted={(modelOverride) => {
+                      if (!activeSession?.id) return;
+                      void requestResumeOnce(activeSession.id, {
+                        cooldownMs: 0,
+                        modelOverride,
+                        resetRetryCount: true,
+                        force: true,
+                      });
+                    }}
+                    selectedResumeModel={selectedModelValue}
                     onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                     linkedArtifact={msg.artifact_id ? artifactByIdMap.get(msg.artifact_id) : undefined}
                     onViewArtifact={handleViewArtifactStable}
@@ -9977,6 +10068,16 @@ export default function ChatPage() {
                       onBranch={setBranchPoint}
                       replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
                       isActiveStreaming={false}
+                      onResumeInterrupted={(modelOverride) => {
+                        if (!activeSession?.id) return;
+                        void requestResumeOnce(activeSession.id, {
+                          cooldownMs: 0,
+                          modelOverride,
+                          resetRetryCount: true,
+                          force: true,
+                        });
+                      }}
+                      selectedResumeModel={selectedModelValue}
                       onViewReport={hm.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                       linkedArtifact={hm.artifact_id ? artifactByIdMap.get(hm.artifact_id) : undefined}
                       onViewArtifact={handleViewArtifactStable}

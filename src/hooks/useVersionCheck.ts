@@ -28,7 +28,11 @@ export function useVersionCheck(intervalMs: number = 30000) {
   }, []);
 
   const doRefresh = useCallback(() => {
-    window.location.reload();
+    // Give stateful pages one synchronous turn to persist their viewport before
+    // the new bundle replaces the document.  The chat page stores a
+    // session-scoped message anchor in sessionStorage.
+    window.dispatchEvent(new CustomEvent('aads:before-version-refresh'));
+    window.setTimeout(() => window.location.reload(), 0);
   }, []);
 
   useEffect(() => {

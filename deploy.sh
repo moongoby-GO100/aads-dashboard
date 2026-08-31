@@ -35,6 +35,13 @@ DEPLOY_LOG_FILE="${DEPLOY_LOG_DIR}/dashboard-deploy-$(date '+%Y%m%d-%H%M%S').log
 
 mkdir -p "$DEPLOY_LOG_DIR"
 
+if [ -x "/root/aads/aads-server/scripts/verify-bluegreen-release-contract.sh" ]; then
+    /root/aads/aads-server/scripts/verify-bluegreen-release-contract.sh /root/aads/aads-server
+else
+    echo "[dashboard deploy] FAIL: global release contract verifier missing" >&2
+    exit 1
+fi
+
 log() {
     local line
     line="[$(date '+%H:%M:%S')] $1"
@@ -111,13 +118,28 @@ trap cleanup_lock EXIT INT TERM
 log "배포 로그: ${DEPLOY_LOG_FILE}"
 
 # nginx upstream is shared by backend and dashboard blue-green deploys.
-# Hold a common lock for the whole deployment to prevent concurrent rewrites.
+# The shared lock protects only the nginx cutover. Builds and health checks do
+# not mutate shared routing and must not block unrelated API/dashboard builds.
 NGINX_SWITCH_LOCK="/tmp/aads-nginx-upstream.lock"
 exec 8>"$NGINX_SWITCH_LOCK"
-if ! flock -w 300 8; then
-    log "FAIL: nginx upstream 공통 락 획득 실패. 다른 배포가 진행 중입니다."
-    exit 1
-fi
+NGINX_LOCK_HELD=false
+acquire_nginx_switch_lock() {
+    if [ "$NGINX_LOCK_HELD" = "true" ]; then return 0; fi
+    if ! flock -w 300 8; then
+        log "FAIL: nginx upstream 공통 락 획득 실패. 다른 배포가 전환 중입니다."
+        return 1
+    fi
+    NGINX_LOCK_HELD=true
+    log "OK: nginx 전환 락 획득"
+}
+
+release_nginx_switch_lock() {
+    if [ "$NGINX_LOCK_HELD" = "true" ]; then
+        flock -u 8
+        NGINX_LOCK_HELD=false
+        log "OK: nginx 전환 락 해제"
+    fi
+}
 
 if git -C "$STATE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-$(git -C "$STATE_DIR" rev-parse --short=12 HEAD)}"
@@ -207,6 +229,10 @@ container_release_sha() {
         | awk -F= '$1=="AADS_RELEASE_SHA"{print $2; exit}'
 }
 
+container_image_id() {
+    docker inspect "$1" --format '{{.Image}}' 2>/dev/null || true
+}
+
 sync_dashboard_standby() {
     local slot="$1" service="$2" container="$3" health_url="$4"
     local args=(-f "$COMPOSE_FILE")
@@ -217,7 +243,7 @@ sync_dashboard_standby() {
 
     log "Step 5: 이전 슬롯 standby 동기화 (${container})"
     remove_container_if_foreign "$container" "$service"
-    docker compose "${args[@]}" up -d --build --no-deps "$service"
+    docker compose "${args[@]}" up -d --no-build --no-deps "$service"
     if wait_health "$health_url" "$MAX_WAIT" "standby-${slot}"; then
         log "OK: 이전 슬롯 standby 동기화 완료 (${container})"
         return 0
@@ -349,9 +375,11 @@ if docker ps -a --format '{{.Names}}' | grep -Fx "$TARGET_CONTAINER" >/dev/null 
     docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 fi
 
-# Step 1: 비활성 슬롯 빌드 + 기동
-log "Step 1: ${TARGET_SLOT} 슬롯 빌드 및 기동"
-docker compose "${COMPOSE_ARGS[@]}" up -d --build --no-deps "$TARGET_SERVICE"
+# Step 1: release image를 정확히 한 번 빌드한 뒤 비활성 슬롯을 같은 이미지로 기동
+log "Step 1: release image 1회 빌드 (${AADS_RELEASE_SHA})"
+docker compose "${COMPOSE_ARGS[@]}" build "$TARGET_SERVICE"
+log "Step 1.5: ${TARGET_SLOT} 슬롯 기동 (--no-build)"
+docker compose "${COMPOSE_ARGS[@]}" up -d --no-build --no-deps "$TARGET_SERVICE"
 log "OK: ${TARGET_SLOT} 슬롯 기동 완료"
 
 # Step 2: 내부 헬스체크
@@ -362,6 +390,7 @@ fi
 
 # Step 3: upstream 전환
 log "Step 3: nginx upstream → ${TARGET_SLOT}"
+acquire_nginx_switch_lock
 backup_upstream
 switch_dashboard_upstream "$TARGET_SLOT"
 if ! verify_upstream_shape || ! nginx_test; then
@@ -381,6 +410,7 @@ if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
     exit 1
 fi
 write_active_state "$TARGET_CONTAINER" "$TARGET_PORT"
+release_nginx_switch_lock
 
 # Step 5: 이전 슬롯 동기화
 if [ "${AADS_DASHBOARD_STOP_PREVIOUS:-false}" = "true" ]; then
@@ -394,6 +424,12 @@ fi
 STATUS=$(docker inspect "$TARGET_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "unknown")
 TARGET_RELEASE=$(container_release_sha "$TARGET_CONTAINER")
 PREV_RELEASE=$(container_release_sha "$PREV_CONTAINER")
+TARGET_IMAGE=$(container_image_id "$TARGET_CONTAINER")
+PREV_IMAGE=$(container_image_id "$PREV_CONTAINER")
+if [ -n "$PREV_IMAGE" ] && [ -n "$TARGET_IMAGE" ] && [ "$PREV_IMAGE" != "$TARGET_IMAGE" ]; then
+    log "FAIL: active/standby image digest 불일치 (active=${TARGET_IMAGE}, standby=${PREV_IMAGE})"
+    exit 1
+fi
 if [ -n "$PREV_RELEASE" ] && [ -n "$TARGET_RELEASE" ] && [ "$PREV_RELEASE" != "$TARGET_RELEASE" ]; then
     log "WARN: standby release 불일치 감지 (active=${TARGET_RELEASE}, standby=${PREV_RELEASE})"
 elif [ -n "$TARGET_RELEASE" ]; then

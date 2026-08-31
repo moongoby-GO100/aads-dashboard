@@ -1,6 +1,7 @@
 version: '3.9'
 services:
   aads-dashboard:
+    image: aads-dashboard:${AADS_RELEASE_SHA:-local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,6 +11,37 @@ services:
       # Host-only dashboard port. Public traffic must enter through nginx :443.
       - '127.0.0.1:3100:3100'
     environment:
+      - AADS_RELEASE_SHA=${AADS_RELEASE_SHA:-local}
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://aads.newtalk.kr/api/v1
+      - PORT=3100
+      - TZ=Asia/Seoul
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://$(hostname -i):3100 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aads_network
+
+  aads-dashboard-green:
+    image: aads-dashboard:${AADS_RELEASE_SHA:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["green"]
+    container_name: aads-dashboard-green
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3101:3100'
+    environment:
+      - AADS_RELEASE_SHA=${AADS_RELEASE_SHA:-local}
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://aads.newtalk.kr/api/v1
       - PORT=3100
