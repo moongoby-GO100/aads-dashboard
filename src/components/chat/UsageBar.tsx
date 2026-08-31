@@ -38,6 +38,9 @@ type RelayAcquireMetric = {
 type RelayCapacity = {
   status: "ok" | "unavailable";
   max_concurrent: number;
+  desired_max_concurrent?: number;
+  capacity_transition_pending?: boolean;
+  capacity_transition_blocked_by_active_leases?: number;
   used: number;
   available: number;
   usage_percent: number;
@@ -203,6 +206,9 @@ export default function UsageBar() {
   const relayTitle = relay?.status === "ok"
     ? [
         `릴레이 점유 ${relay.used}/${relay.max_concurrent} · 가용 ${relay.available}`,
+        relay.capacity_transition_pending
+          ? `목표 ${relay.desired_max_concurrent ?? relay.max_concurrent} · 활성 ${relay.capacity_transition_blocked_by_active_leases ?? 0}건 종료 후 무중단 전환`
+          : `적용 용량 ${relay.max_concurrent}`,
         `Claude ${relay.active_leases.claude ?? 0} · Codex ${relay.active_leases.codex ?? 0}`,
         waitSuccessPct == null
           ? "슬롯 대기 표본 없음"
@@ -229,9 +235,18 @@ export default function UsageBar() {
           }}
         >
           <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: relayColor }} />
-          <strong style={{ color: relayColor }}>Relay {relay.status === "ok" ? `${relay.used}/${relay.max_concurrent}` : "확인 중"}</strong>
+          <strong style={{ color: relayColor }}>
+            Relay {relay.status === "ok"
+              ? `${relay.used}/${relay.max_concurrent}${relay.capacity_transition_pending ? ` → 목표 ${relay.desired_max_concurrent ?? relay.max_concurrent}` : ""}`
+              : "확인 중"}
+          </strong>
           {relay.status === "ok" && (
             <>
+              {relay.capacity_transition_pending && (
+                <span style={{ color: "#f59e0b", fontWeight: 700 }}>
+                  전환대기 {relay.capacity_transition_blocked_by_active_leases ?? 0}
+                </span>
+              )}
               <span>여유 {relay.available}</span>
               <span>C {relay.active_leases.claude ?? 0}</span>
               <span>X {relay.active_leases.codex ?? 0}</span>
