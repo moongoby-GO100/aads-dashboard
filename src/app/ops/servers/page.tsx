@@ -78,6 +78,8 @@ interface CrossCheckEdge {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const SERVER_HEALTH_TIMEOUT_MS = 20000;
+
 function toKST(dtStr: string | null | undefined): string {
   if (!dtStr) return "-";
   try {
@@ -118,6 +120,20 @@ function numberOrUndefined(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function encodePowerShellCommand(command: string): string {
+  const bytes = new Uint8Array(command.length * 2);
+  for (let i = 0; i < command.length; i += 1) {
+    const code = command.charCodeAt(i);
+    bytes[i * 2] = code & 0xff;
+    bytes[i * 2 + 1] = code >> 8;
+  }
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
 function mbLabel(value?: number): string {
   if (value == null) return "-";
   if (value >= 1024) return `${(value / 1024).toFixed(1)}GB`;
@@ -137,7 +153,7 @@ async function fetchServerHealth(
     const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const r = await fetch(url, { headers, signal: AbortSignal.timeout(5000) });
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(SERVER_HEALTH_TIMEOUT_MS) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
@@ -177,7 +193,7 @@ async function fetchServerHealth(
       server_id: serverId,
       ip,
       role,
-      status: "critical",
+      status: "unknown",
       error: String(e),
       checked_at: new Date().toISOString(),
     };
@@ -285,11 +301,12 @@ export default function ServersPage() {
         `Write-Host 'AADS ${srv.id} 접속: ${sshCommand}'`,
         sshCommand,
       ].join("; ");
+      const encodedCommand = encodePowerShellCommand(command);
       const result = await api.routePCCommand({
         agent_id: powershellAgent.agent_id,
         command_type: "powershell",
         params: {
-          command: `Start-Process powershell.exe -ArgumentList '-NoExit','-Command',${JSON.stringify(command)}`,
+          command: `Start-Process powershell.exe -ArgumentList '-NoExit','-EncodedCommand','${encodedCommand}'`,
         },
         required_capabilities: ["pc_control"],
         wait_for_agent_seconds: 10,
