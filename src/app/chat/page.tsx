@@ -3135,6 +3135,10 @@ export default function ChatPage() {
   const bottomStickUntilRef = useRef(0);
   const pendingMessageViewportAnchorRef = useRef<MessageViewportAnchor | null>(null);
   const messageViewportRestoreGenerationRef = useRef(0);
+  const lastStableMessagesScrollTopRef = useRef(0);
+  const userScrollIntentUntilRef = useRef(0);
+  const unexpectedScrollRestoreGenerationRef = useRef(0);
+  const isRestoringUnexpectedScrollRef = useRef(false);
   const localQuestionEchoIdsRef = useRef<Set<string>>(new Set());
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
@@ -3145,6 +3149,7 @@ export default function ChatPage() {
       if (!force && Date.now() < userScrollPauseUntilRef.current) return;
       if (!force && !isNearBottomRef.current) return;
       container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      lastStableMessagesScrollTopRef.current = container.scrollTop;
     };
     requestAnimationFrame(() => {
       scroll();
@@ -3237,6 +3242,34 @@ export default function ChatPage() {
     // React 커밋 직후, 브라우저가 그리기 전에 먼저 복원해 상태 전환 순간의 깜빡임도 막는다.
     applyMessageViewportAnchor(pendingMessageViewportAnchorRef.current);
   }, [applyMessageViewportAnchor, messages]);
+  const restoreUnexpectedMessagesScroll = useCallback((previousScrollTop: number) => {
+    const generation = ++unexpectedScrollRestoreGenerationRef.current;
+    isRestoringUnexpectedScrollRef.current = true;
+    let framesRemaining = 12;
+    const restore = () => {
+      requestAnimationFrame(() => {
+        if (generation !== unexpectedScrollRestoreGenerationRef.current) return;
+        const container = messagesContainerRef.current;
+        if (!container) {
+          isRestoringUnexpectedScrollRef.current = false;
+          return;
+        }
+        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        if (maxScrollTop > 0) {
+          const desiredScrollTop = Math.min(previousScrollTop, maxScrollTop);
+          container.scrollTop = desiredScrollTop;
+          if (desiredScrollTop > 0) lastStableMessagesScrollTopRef.current = desiredScrollTop;
+        }
+        framesRemaining -= 1;
+        if (framesRemaining > 0) {
+          restore();
+          return;
+        }
+        isRestoringUnexpectedScrollRef.current = false;
+      });
+    };
+    restore();
+  }, []);
   const updateInterruptBubbleStatus = useCallback((
     interruptContent: string,
     nextIntent: "interrupt_applied" | "interrupt_completed",
@@ -5075,9 +5108,47 @@ export default function ChatPage() {
   // 스크롤 이벤트로 near-bottom 감지. 과거 메시지는 버튼으로만 로드해 대형 세션의 scroll anchoring 루프를 막는다.
   const loadingOlderRef = useRef(false);
   useEffect(() => {
+    // 세션 전환 시 이전 세션의 scrollTop을 새 세션에 적용하지 않는다.
+    unexpectedScrollRestoreGenerationRef.current += 1;
+    isRestoringUnexpectedScrollRef.current = false;
+    lastStableMessagesScrollTopRef.current = 0;
+    userScrollIntentUntilRef.current = Date.now() + 1000;
+  }, [activeSession?.id]);
+  useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
+    const markUserScrollIntent = () => {
+      userScrollIntentUntilRef.current = Date.now() + 1000;
+      unexpectedScrollRestoreGenerationRef.current += 1;
+      isRestoringUnexpectedScrollRef.current = false;
+    };
+    const markKeyboardScrollIntent = (event: KeyboardEvent) => {
+      if (["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", " "].includes(event.key)) {
+        markUserScrollIntent();
+      }
+    };
     const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const previousScrollTop = lastStableMessagesScrollTopRef.current;
+      const userInitiated = Date.now() < userScrollIntentUntilRef.current;
+      const unexpectedTopReset =
+        !isInitialLoadRef.current &&
+        !userInitiated &&
+        !isRestoringUnexpectedScrollRef.current &&
+        previousScrollTop > Math.max(320, container.clientHeight * 0.75) &&
+        scrollTop <= 16;
+      if (unexpectedTopReset) {
+        console.warn("[chat-scroll] unexpected top reset restored", {
+          sessionId: activeSessionRef.current,
+          previousScrollTop,
+          scrollHeight: container.scrollHeight,
+        });
+        restoreUnexpectedMessagesScroll(previousScrollTop);
+        return;
+      }
+      if (!isRestoringUnexpectedScrollRef.current || userInitiated) {
+        lastStableMessagesScrollTopRef.current = scrollTop;
+      }
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       if (!isNearBottomRef.current) {
         userScrollPauseUntilRef.current = Date.now() + 4000;
@@ -5085,8 +5156,18 @@ export default function ChatPage() {
       }
     };
     container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
+    container.addEventListener("wheel", markUserScrollIntent, { passive: true });
+    container.addEventListener("touchstart", markUserScrollIntent, { passive: true });
+    container.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
+    window.addEventListener("keydown", markKeyboardScrollIntent);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      container.removeEventListener("wheel", markUserScrollIntent);
+      container.removeEventListener("touchstart", markUserScrollIntent);
+      container.removeEventListener("pointerdown", markUserScrollIntent);
+      window.removeEventListener("keydown", markKeyboardScrollIntent);
+    };
+  }, [restoreUnexpectedMessagesScroll]);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
