@@ -251,6 +251,11 @@ function isProviderCapacityOrLimitText(value: string): boolean {
     || (lowered.includes("resets ") && lowered.includes("limit"));
 }
 
+function formatChatDocumentTitle(session?: ChatSession | null): string {
+  const title = String(session?.title || "").replace(/\s+/g, " ").trim();
+  return `${title || "AI Chat"} | AADS Chat`;
+}
+
 const LEGACY_CANONICAL_DISPLAY_MODEL_ID: Record<string, string> = {
   "claude-sonnet": "claude-sonnet-4-6",
   "claude-opus": "claude-opus-5",
@@ -2882,6 +2887,10 @@ export default function ChatPage() {
     [activeWs, workspaces],
   );
   const activeWsName = activeWsObj?.display_name || activeWsObj?.name || "워크스페이스";
+
+  useEffect(() => {
+    document.title = formatChatDocumentTitle(activeSession);
+  }, [activeSession]);
 
   // ── Chat state ──
   const [input, setInput] = useState("");

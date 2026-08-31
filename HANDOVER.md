@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-08-31 17:29 KST - Browser tab titles per page and chat session
+
+- Request: Change browser tab titles to match each dashboard page, and make the chat tab show the active session name.
+- Changes:
+  - Added a shared `PageTitleManager` that maps dashboard routes to user-facing page titles and updates `document.title` on client-side navigation.
+  - Added `/chat#sessionId` handling that fetches the session title and sets the tab to `세션명 | AADS Chat`.
+  - Added a direct chat-page title effect so session selection and rename immediately update the current tab title.
+- Verification:
+  - `git diff --check -- src/components/PageTitleManager.tsx src/components/ClientLayout.tsx src/app/chat/page.tsx HANDOVER.md` passed.
+  - `npx eslint src/components/PageTitleManager.tsx src/components/ClientLayout.tsx src/app/chat/page.tsx` passed with existing `chat/page.tsx` warnings only.
+  - `npm run build` passed and generated `/chat`, `/chat/[id]`, and dashboard routes.
+  - Deployment and external HTTP/browser checks are still pending at this entry.
+
 ## 2026-08-31 08:57 KST - Keep chat bubble live during final-save status
 
 - Request: Fix the chat UI symptom where the assistant bubble keeps working internally but the heartbeat caret disappears, the scroll position jumps upward, and the status flips between `최종저장중` and `생성중` until completion.

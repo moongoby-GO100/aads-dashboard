@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import PageTitleManager from "@/components/PageTitleManager";
 import { initGlobalErrorHandlers } from "@/services/errorReporter";
 import { getMe, type CurrentUser } from "@/lib/auth";
 
@@ -89,7 +90,12 @@ export default function ClientLayout({
     isUnniNaengmyeon;
 
   if (hideSidebar) {
-    return <>{children}</>;
+    return (
+      <>
+        <PageTitleManager disabled={isKakaobot || isUnniNaengmyeon} />
+        {children}
+      </>
+    );
   }
 
   const isInternalAdmin = Boolean(currentUser?.is_internal_admin);
@@ -102,6 +108,7 @@ export default function ClientLayout({
 
   return (
     <div className="flex h-screen bg-gray-950">
+      <PageTitleManager disabled={isKakaobot || isUnniNaengmyeon} />
       <Sidebar
         isOpen={isMenuOpen}
         isInternalAdmin={isInternalAdmin}
