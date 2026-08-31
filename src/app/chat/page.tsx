@@ -541,10 +541,19 @@ function hasIncompleteQualityFlag(message: ChatMessage): boolean {
   const violations = Array.isArray(details.completion_contract_violations)
     ? details.completion_contract_violations
     : [];
+  const category = String(details.category || details.interrupt_category || "").trim();
+  const reasonGroup = String(details.interruption_reason_group || "").trim();
+  const reason = String(details.interruption_reason || details.interrupt_reason || "").trim();
+  const explicitIncompleteInterruption =
+    ["producer_incomplete", "process_interrupt", "final_save_missing", "completion_guard", "watchdog_timeout"]
+      .includes(category) ||
+    /background_producer_incomplete_exit|terminal_execution_closed|missing_done_event|cancelled/i.test(`${reasonGroup} ${reason}`);
   return (
     details.completion_gate_missing === true ||
     details.completion_contract_adjusted === true ||
-    violations.includes("final_report_missing")
+    violations.includes("final_report_missing") ||
+    explicitIncompleteInterruption ||
+    (details.interrupted_saw_done === false && Boolean(reasonGroup || reason))
   );
 }
 
