@@ -50,6 +50,7 @@ interface ServerConfig {
   ip: string;
   sshPort: number;
   role: string;
+  sshIdentity?: string;
 }
 
 interface PCAgent {
@@ -220,7 +221,7 @@ function GaugeBar({ pct, warn = 80 }: { pct?: number; warn?: number }) {
 const SERVERS: ServerConfig[] = [
   { id: "contabo116", ip: "5.104.86.116", sshPort: 22, role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
   { id: "contabo14", ip: "5.104.86.14", sshPort: 22, role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
-  { id: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)" },
+  { id: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)", sshIdentity: "id_rsa_final" },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [
@@ -295,7 +296,8 @@ export default function ServersPage() {
     if (!powershellAgent) return;
     setPsStatus((prev) => ({ ...prev, [srv.id]: "opening" }));
     try {
-      const sshCommand = `ssh -p ${srv.sshPort} root@${srv.ip}`;
+      const sshIdentityArg = srv.sshIdentity ? `-i "$env:USERPROFILE\\.ssh\\${srv.sshIdentity}" ` : "";
+      const sshCommand = `ssh ${sshIdentityArg}-p ${srv.sshPort} root@${srv.ip}`;
       const command = [
         `$host.UI.RawUI.WindowTitle = 'AADS SSH ${srv.id}'`,
         `Write-Host 'AADS ${srv.id} 접속: ${sshCommand}'`,
@@ -492,7 +494,7 @@ export default function ServersPage() {
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Windows PowerShell SSH</div>
                             <div style={{ fontSize: 11, color: "var(--text-primary)", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              ssh -p {srv.sshPort} root@{srv.ip}
+                              ssh {srv.sshIdentity ? `-i %USERPROFILE%\\.ssh\\${srv.sshIdentity} ` : ""}-p {srv.sshPort} root@{srv.ip}
                             </div>
                           </div>
                           <button
