@@ -3144,7 +3144,12 @@ export default function ChatPage() {
   const bottomStickUntilRef = useRef(0);
   const pendingMessageViewportAnchorRef = useRef<MessageViewportAnchor | null>(null);
   const messageViewportRestoreGenerationRef = useRef(0);
+  const messageViewportRestoreCleanupRef = useRef<(() => void) | null>(null);
   const lastStableMessagesScrollTopRef = useRef(0);
+  const lastStableMessagesViewportRef = useRef<{
+    sessionId: string | null;
+    anchor: MessageViewportAnchor;
+  } | null>(null);
   const userScrollIntentUntilRef = useRef(0);
   const unexpectedScrollRestoreGenerationRef = useRef(0);
   const isRestoringUnexpectedScrollRef = useRef(false);
@@ -3222,23 +3227,53 @@ export default function ChatPage() {
   }, []);
   const restoreMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null) => {
     if (!anchor) return;
+    messageViewportRestoreCleanupRef.current?.();
+    // 이전 복원 cleanup이 같은 anchor의 pending 표시를 지웠을 수 있으므로 새 주기의
+    // layout-effect 복원 대상으로 다시 등록한다.
+    pendingMessageViewportAnchorRef.current = anchor;
     const generation = ++messageViewportRestoreGenerationRef.current;
-    let framesRemaining = 3;
-    const restore = () => {
+    let framesRemaining = 8;
+    let observer: ResizeObserver | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const applyIfCurrent = () => {
+      if (generation !== messageViewportRestoreGenerationRef.current) return false;
+      return applyMessageViewportAnchor(anchor);
+    };
+    const cleanup = () => {
+      observer?.disconnect();
+      observer = null;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (messageViewportRestoreCleanupRef.current === cleanup) {
+        messageViewportRestoreCleanupRef.current = null;
+      }
+      if (pendingMessageViewportAnchorRef.current === anchor) {
+        pendingMessageViewportAnchorRef.current = null;
+      }
+    };
+    messageViewportRestoreCleanupRef.current = cleanup;
+    const restoreFastFrames = () => {
       requestAnimationFrame(() => {
-        if (generation !== messageViewportRestoreGenerationRef.current) return;
-        applyMessageViewportAnchor(anchor);
-        framesRemaining -= 1;
-        if (framesRemaining > 0) {
-          restore();
+        if (generation !== messageViewportRestoreGenerationRef.current) {
+          cleanup();
           return;
         }
-        if (pendingMessageViewportAnchorRef.current === anchor) {
-          pendingMessageViewportAnchorRef.current = null;
+        applyIfCurrent();
+        framesRemaining -= 1;
+        if (framesRemaining > 0) {
+          restoreFastFrames();
         }
       });
     };
-    restore();
+    // 상태 버블 교체 뒤 Markdown/도구 영역의 높이가 늦게 확정되는 경우까지 같은
+    // 메시지 기준점을 유지한다. 사용자 스크롤이 시작되면 cleanup으로 즉시 해제한다.
+    const container = messagesContainerRef.current;
+    if (container && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(applyIfCurrent);
+      observer.observe(container);
+    }
+    timeoutId = setTimeout(cleanup, 3000);
+    restoreFastFrames();
   }, [applyMessageViewportAnchor]);
   const setMessagesPreservingViewport = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
     // 같은 React 배치에서 여러 폴링/병합이 실행돼도 최초 화면 기준점 하나만 사용한다.
@@ -3251,34 +3286,51 @@ export default function ChatPage() {
     // React 커밋 직후, 브라우저가 그리기 전에 먼저 복원해 상태 전환 순간의 깜빡임도 막는다.
     applyMessageViewportAnchor(pendingMessageViewportAnchorRef.current);
   }, [applyMessageViewportAnchor, messages]);
-  const restoreUnexpectedMessagesScroll = useCallback((previousScrollTop: number) => {
+  const restoreUnexpectedMessagesScroll = useCallback((
+    previousScrollTop: number,
+    stableAnchor: MessageViewportAnchor | null,
+  ) => {
     const generation = ++unexpectedScrollRestoreGenerationRef.current;
     isRestoringUnexpectedScrollRef.current = true;
-    let framesRemaining = 12;
+    const restoreDeadline = Date.now() + 4000;
+    let fastFramesRemaining = 12;
     const restore = () => {
-      requestAnimationFrame(() => {
+      const run = () => {
         if (generation !== unexpectedScrollRestoreGenerationRef.current) return;
         const container = messagesContainerRef.current;
         if (!container) {
-          isRestoringUnexpectedScrollRef.current = false;
+          if (Date.now() < restoreDeadline) setTimeout(restore, 100);
+          else isRestoringUnexpectedScrollRef.current = false;
           return;
         }
+        if (stableAnchor) applyMessageViewportAnchor(stableAnchor);
         const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        if (maxScrollTop > 0) {
+        if (!stableAnchor && maxScrollTop > 0) {
           const desiredScrollTop = Math.min(previousScrollTop, maxScrollTop);
           container.scrollTop = desiredScrollTop;
-          if (desiredScrollTop > 0) lastStableMessagesScrollTopRef.current = desiredScrollTop;
         }
-        framesRemaining -= 1;
-        if (framesRemaining > 0) {
+        if (container.scrollTop > 16) {
+          lastStableMessagesScrollTopRef.current = container.scrollTop;
+        }
+        fastFramesRemaining -= 1;
+        if (Date.now() < restoreDeadline) {
           restore();
           return;
         }
         isRestoringUnexpectedScrollRef.current = false;
-      });
+        const restoredAnchor = captureMessageViewportAnchor();
+        if (restoredAnchor && restoredAnchor.scrollTop > 16) {
+          lastStableMessagesViewportRef.current = {
+            sessionId: activeSessionRef.current,
+            anchor: restoredAnchor,
+          };
+        }
+      };
+      if (fastFramesRemaining > 0) requestAnimationFrame(run);
+      else setTimeout(run, 100);
     };
     restore();
-  }, []);
+  }, [applyMessageViewportAnchor, captureMessageViewportAnchor]);
   const updateInterruptBubbleStatus = useCallback((
     interruptContent: string,
     nextIntent: "interrupt_applied" | "interrupt_completed",
@@ -5120,7 +5172,10 @@ export default function ChatPage() {
     // 세션 전환 시 이전 세션의 scrollTop을 새 세션에 적용하지 않는다.
     unexpectedScrollRestoreGenerationRef.current += 1;
     isRestoringUnexpectedScrollRef.current = false;
+    messageViewportRestoreGenerationRef.current += 1;
+    messageViewportRestoreCleanupRef.current?.();
     lastStableMessagesScrollTopRef.current = 0;
+    lastStableMessagesViewportRef.current = null;
     userScrollIntentUntilRef.current = Date.now() + 1000;
   }, [activeSession?.id]);
   useEffect(() => {
@@ -5130,13 +5185,23 @@ export default function ChatPage() {
       userScrollIntentUntilRef.current = Date.now() + 1000;
       unexpectedScrollRestoreGenerationRef.current += 1;
       isRestoringUnexpectedScrollRef.current = false;
+      messageViewportRestoreGenerationRef.current += 1;
+      messageViewportRestoreCleanupRef.current?.();
+    };
+    const markScrollbarPointerIntent = (event: PointerEvent) => {
+      // 버블/이어쓰기 버튼 클릭은 스크롤 의도가 아니다. 실제 스크롤바를 누른 경우만
+      // 복원 방어를 해제해 상태 전환 직후의 상단 점프를 놓치지 않게 한다.
+      const rect = container.getBoundingClientRect();
+      const nativeScrollbarWidth = Math.max(0, container.offsetWidth - container.clientWidth);
+      const scrollbarHitWidth = Math.max(16, nativeScrollbarWidth + 4);
+      if (event.clientX >= rect.right - scrollbarHitWidth) markUserScrollIntent();
     };
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       if (["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", " "].includes(event.key)) {
         markUserScrollIntent();
       }
     };
-    const handleScroll = () => {
+    const restoreIfUnexpectedTopReset = (source: "scroll" | "mutation") => {
       const scrollTop = container.scrollTop;
       const previousScrollTop = lastStableMessagesScrollTopRef.current;
       const userInitiated = Date.now() < userScrollIntentUntilRef.current;
@@ -5151,12 +5216,30 @@ export default function ChatPage() {
           sessionId: activeSessionRef.current,
           previousScrollTop,
           scrollHeight: container.scrollHeight,
+          source,
         });
-        restoreUnexpectedMessagesScroll(previousScrollTop);
-        return;
+        const stableViewport = lastStableMessagesViewportRef.current;
+        const stableAnchor = stableViewport?.sessionId === activeSessionRef.current
+          ? stableViewport.anchor
+          : null;
+        restoreUnexpectedMessagesScroll(previousScrollTop, stableAnchor);
+        return true;
       }
+      return false;
+    };
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const userInitiated = Date.now() < userScrollIntentUntilRef.current;
+      if (restoreIfUnexpectedTopReset("scroll")) return;
       if (!isRestoringUnexpectedScrollRef.current || userInitiated) {
         lastStableMessagesScrollTopRef.current = scrollTop;
+        const stableAnchor = captureMessageViewportAnchor();
+        if (stableAnchor) {
+          lastStableMessagesViewportRef.current = {
+            sessionId: activeSessionRef.current,
+            anchor: stableAnchor,
+          };
+        }
       }
       isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
       if (!isNearBottomRef.current) {
@@ -5164,19 +5247,30 @@ export default function ChatPage() {
         bottomStickUntilRef.current = 0;
       }
     };
+    let mutationAuditFrame = 0;
+    const mutationObserver = new MutationObserver(() => {
+      if (mutationAuditFrame) return;
+      mutationAuditFrame = requestAnimationFrame(() => {
+        mutationAuditFrame = 0;
+        restoreIfUnexpectedTopReset("mutation");
+      });
+    });
+    mutationObserver.observe(container, { childList: true, subtree: true, characterData: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
     container.addEventListener("wheel", markUserScrollIntent, { passive: true });
     container.addEventListener("touchstart", markUserScrollIntent, { passive: true });
-    container.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
+    container.addEventListener("pointerdown", markScrollbarPointerIntent, { passive: true });
     window.addEventListener("keydown", markKeyboardScrollIntent);
     return () => {
+      mutationObserver.disconnect();
+      if (mutationAuditFrame) cancelAnimationFrame(mutationAuditFrame);
       container.removeEventListener("scroll", handleScroll);
       container.removeEventListener("wheel", markUserScrollIntent);
       container.removeEventListener("touchstart", markUserScrollIntent);
-      container.removeEventListener("pointerdown", markUserScrollIntent);
+      container.removeEventListener("pointerdown", markScrollbarPointerIntent);
       window.removeEventListener("keydown", markKeyboardScrollIntent);
     };
-  }, [restoreUnexpectedMessagesScroll]);
+  }, [captureMessageViewportAnchor, restoreUnexpectedMessagesScroll]);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
