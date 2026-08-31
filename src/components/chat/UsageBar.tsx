@@ -196,6 +196,12 @@ export default function UsageBar() {
   const waitAttempts = relayMetrics.reduce((sum, metric) => sum + (metric.wait_attempts ?? 0), 0);
   const waitedSuccesses = relayMetrics.reduce((sum, metric) => sum + (metric.waited_successes ?? 0), 0);
   const waitSuccessPct = waitAttempts > 0 ? (100 * waitedSuccesses / waitAttempts) : null;
+  const desiredRelayMax = relay?.desired_max_concurrent ?? 15;
+  const relayTransitionPending = relay
+    ? (relay.capacity_transition_pending ?? relay.max_concurrent !== desiredRelayMax)
+    : false;
+  const relayTransitionBlockers = relay?.capacity_transition_blocked_by_active_leases
+    ?? Object.values(relay?.active_leases ?? {}).reduce((sum, count) => sum + (count ?? 0), 0);
   const relayColor = relayStale || relay?.status !== "ok"
     ? "#94a3b8"
     : (relay?.usage_percent ?? 0) >= 90
@@ -206,8 +212,8 @@ export default function UsageBar() {
   const relayTitle = relay?.status === "ok"
     ? [
         `릴레이 점유 ${relay.used}/${relay.max_concurrent} · 가용 ${relay.available}`,
-        relay.capacity_transition_pending
-          ? `목표 ${relay.desired_max_concurrent ?? relay.max_concurrent} · 활성 ${relay.capacity_transition_blocked_by_active_leases ?? 0}건 종료 후 무중단 전환`
+        relayTransitionPending
+          ? `목표 ${desiredRelayMax} · 활성 ${relayTransitionBlockers}건 종료 후 무중단 전환`
           : `적용 용량 ${relay.max_concurrent}`,
         `Claude ${relay.active_leases.claude ?? 0} · Codex ${relay.active_leases.codex ?? 0}`,
         waitSuccessPct == null
@@ -237,14 +243,14 @@ export default function UsageBar() {
           <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: relayColor }} />
           <strong style={{ color: relayColor }}>
             Relay {relay.status === "ok"
-              ? `${relay.used}/${relay.max_concurrent}${relay.capacity_transition_pending ? ` → 목표 ${relay.desired_max_concurrent ?? relay.max_concurrent}` : ""}`
+              ? `${relay.used}/${relay.max_concurrent}${relayTransitionPending ? ` → 목표 ${desiredRelayMax}` : ""}`
               : "확인 중"}
           </strong>
           {relay.status === "ok" && (
             <>
-              {relay.capacity_transition_pending && (
+              {relayTransitionPending && (
                 <span style={{ color: "#f59e0b", fontWeight: 700 }}>
-                  전환대기 {relay.capacity_transition_blocked_by_active_leases ?? 0}
+                  전환대기 {relayTransitionBlockers}
                 </span>
               )}
               <span>여유 {relay.available}</span>
