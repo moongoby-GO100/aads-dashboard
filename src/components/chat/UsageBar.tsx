@@ -44,6 +44,8 @@ type RelayCapacity = {
   active_leases: { claude?: number; codex?: number; antigravity?: number };
   acquire_metrics?: Record<string, RelayAcquireMetric>;
   sampled_at?: string;
+  stale?: boolean;
+  stale_age_sec?: number;
 };
 
 function formatTokens(n: number): string {
@@ -148,7 +150,7 @@ export default function UsageBar() {
       if (!response.ok) throw new Error(`relay capacity ${response.status}`);
       const data = await response.json() as RelayCapacity;
       setRelay(data);
-      setRelayStale(data.status !== "ok");
+      setRelayStale(data.status !== "ok" || data.stale === true);
     } catch {
       setRelayStale(true);
     }
@@ -206,6 +208,7 @@ export default function UsageBar() {
           ? "슬롯 대기 표본 없음"
           : `슬롯 대기 성공 ${waitedSuccesses}/${waitAttempts} (${waitSuccessPct.toFixed(1)}%)`,
         relay.sampled_at ? `측정 ${new Date(relay.sampled_at).toLocaleTimeString()}` : "",
+        relay.stale ? `최근 정상값 (${(relay.stale_age_sec ?? 0).toFixed(1)}초 전)` : "",
       ].filter(Boolean).join("\n")
     : "릴레이 상태를 불러오지 못했습니다. 2초마다 자동 재시도합니다.";
 
