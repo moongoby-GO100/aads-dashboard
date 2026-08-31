@@ -29,7 +29,7 @@ const SIZE_LABELS: Record<string, string> = {
 
 const LEGACY_AVAILABLE_MODELS = [
   { group: "Claude (월정액)", models: ["claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] },
-  { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.5", "codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex", "codex:gpt-5.3-codex-spark", "codex:gpt-5.2"] },
+  { group: "Codex/GPT (월정액)", models: ["codex:gpt-5.6-sol", "codex:gpt-5.6-terra", "codex:gpt-5.6-luna", "codex:gpt-5.5", "codex:gpt-5.4", "codex:gpt-5.4-mini", "codex:gpt-5.3-codex", "codex:gpt-5.3-codex-spark", "codex:gpt-5.2"] },
   { group: "MiniMax (월정액)", models: ["litellm:minimax-m2.7", "litellm:minimax-m2.5"] },
   { group: "Groq (무료)", models: ["litellm:groq-llama-70b", "litellm:groq-qwen3-32b", "litellm:groq-kimi-k2", "litellm:groq-llama4-scout"] },
   { group: "Gemini", models: ["litellm:gemini-2.5-flash", "litellm:gemini-2.5-pro", "litellm:gemini-3-flash-preview", "litellm:gemini-3-pro-preview", "litellm:gemini-3.1-flash-lite-preview", "litellm:gemini-3.1-pro-preview"] },
@@ -59,6 +59,7 @@ interface RunnerAvailableModelGroup {
 interface ModelConfig {
   size: string;
   models: string[];
+  effective_models?: string[];
   updated_at: string | null;
   updated_by: string;
 }
@@ -606,6 +607,14 @@ function RunnerModelConfig() {
               </div>
             ))}
           </div>
+          {Array.isArray(cfg.effective_models) && cfg.effective_models.length > 0 && (
+            <div className="mt-3 rounded-lg px-3 py-2" style={{ background: "rgba(16,163,127,0.08)", border: "1px solid rgba(16,163,127,0.18)" }}>
+              <p className="text-[11px] font-semibold mb-1" style={{ color: "var(--success)" }}>실제 자동 폴백 체인</p>
+              <p className="text-[11px] font-mono break-all" style={{ color: "var(--text-secondary)" }}>
+                {cfg.effective_models.join(" → ")}
+              </p>
+            </div>
+          )}
           <div className="flex gap-2 mt-2">
             <select
               value={newModel[cfg.size] || ""}
@@ -629,7 +638,7 @@ function RunnerModelConfig() {
       ))}
       </div>
       <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        러너 모델 추가 목록은 활성 레지스트리 기준으로 자동 갱신되며, 레지스트리 조회 실패 시에만 정적 목록으로 폴백됩니다.
+        러너는 저장된 size 순서를 먼저 쓰고, 실패하거나 비어 있으면 AI Review 설정과 LLM 라우팅 순서로 자동 폴백합니다.
       </p>
       <div className="flex items-center gap-3 pt-2">
         <button onClick={save} disabled={saving}
