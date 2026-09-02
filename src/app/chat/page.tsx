@@ -1314,7 +1314,8 @@ function finalizeAssistantMessage(existingMessage: ChatMessage, finalMessage: Ch
     intent: nextIntent,
     render_id: preserveBubbleIdentity
       ? existingRenderId
-      : (existingMessage.render_id || finalRenderId || existingMessage.id || finalMessage.id),
+      // AADS-BUBBLE-FLASH-P0: server UUID promotion changes React key -> bubble remount
+      : (existingMessage.render_id || existingMessage.id || finalRenderId || finalMessage.id),
     created_at: existingMessage.created_at || finalMessage.created_at,
   };
 }
@@ -1852,7 +1853,7 @@ const MessageItem = memo(function MessageItem({
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
-  const LIVE_STREAM_RENDER_LIMIT = 3000;
+  const LIVE_STREAM_RENDER_LIMIT = 8000;  // AADS-BUBBLE-FLASH-P1
   // reply_to_id가 있으면 원본 메시지 찾기
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
@@ -6409,11 +6410,11 @@ export default function ChatPage() {
       if (!_existingMsgId) {
         setMessagesPreservingViewport(prev => [...prev,
           { id: `tmp-${Date.now()}`, session_id: _optimisticPending!, role: "user" as const, content, created_at: new Date().toISOString() },
-          { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+          { id: _optPhId, render_id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
         ]);
       } else {
         setMessagesPreservingViewport(prev => [...prev,
-          { id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+          { id: _optPhId, render_id: _optPhId, session_id: _optimisticPending!, role: "assistant" as const, content: "⏳ 세션 생성 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
         ]);
       }
       const s = await createSession();
@@ -6489,15 +6490,15 @@ export default function ChatPage() {
         return [
           ...frozen,
           currentPlaceholder
-            ? { ...currentPlaceholder, session_id: sessionId!, content: "\u23F3 분석 중...", intent: "streaming_placeholder" }
-            : { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() },
+            ? { ...currentPlaceholder, render_id: currentPlaceholder.render_id || currentPlaceholder.id, session_id: sessionId!, content: "\u23F3 분석 중...", intent: "streaming_placeholder" }
+            : { id: streamingPlaceholderId, render_id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() },
         ].sort((a, b) => messageTime(a) - messageTime(b));
       });
     } else if (!_existingMsgId) {
       setMessagesPreservingViewport(prev => [
         ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
         userMsg,
-        { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+        { id: streamingPlaceholderId, render_id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
       ]);
     } else {
       setMessagesPreservingViewport(prev => {
@@ -6513,7 +6514,7 @@ export default function ChatPage() {
         }
         return [
           ...freezeStreamingPlaceholders(prev, streamBufRef.current || bgPartialContent),
-          { id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
+          { id: streamingPlaceholderId, render_id: streamingPlaceholderId, session_id: sessionId!, role: "assistant" as const, content: "\u23F3 분석 중...", intent: "streaming_placeholder", created_at: new Date(Date.now() + 1).toISOString() }
         ];
       });
     }

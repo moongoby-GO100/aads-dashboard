@@ -37,6 +37,8 @@ export interface ChatMessage {
   status?: "streaming" | "rate_limited" | "completed";
   render_id?: string;
   model_used?: string;
+  requested_model?: string | null;   // AADS: CEO가 선택한 요청 모델
+  fallback_reason?: string | null;   // AADS: 실행 모델이 바뀐 사유
   intent?: string;
   input_tokens?: number;
   output_tokens?: number;
