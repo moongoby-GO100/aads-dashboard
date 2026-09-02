@@ -11,7 +11,12 @@
   - `git diff --check -- src/app/admin/users/page.tsx src/app/login/page.tsx` passed.
   - `npm run build` passed and generated `/admin/users` and `/login`.
 - Deployment:
-  - Dashboard release deployment is the next step after commit; external route verification must be performed after `deploy.sh`.
+  - Committed and pushed `6218af6 Add admin user login shortcut`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment for release `6218af6b9217`; active slot `green`, standby `blue`, both dashboard containers healthy on image `aads-dashboard:6218af6b9217`.
+  - External `/login?email=dossau2018%40gmail.com` returned HTTP 200 with the email input prefilled.
+  - External `/admin/users` returned HTTP 307 for unauthenticated access, matching the protected admin route behavior.
+  - 5-minute P0/P1 monitor completed with repeated `/login` HTTP 200, `/admin/users` HTTP 307, and active container release SHA `6218af6b9217`.
+  - Step 7 frontend QA ended `UNKNOWN`; manual/API/container verification above is the completion basis.
 
 ## 2026-08-31 17:29 KST - Browser tab titles per page and chat session
 
