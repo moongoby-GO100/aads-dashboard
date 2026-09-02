@@ -55,6 +55,7 @@ export default function ClientLayout({
     const publicPath =
       pathname === "/login" ||
       pathname === "/signup" ||
+      pathname === "/impersonate" ||
       pathname.startsWith("/invite/accept") ||
       pathname.startsWith("/unni-naengmyeon") ||
       pathname.startsWith("/gomyunghee-naengmyeon") ||
@@ -80,6 +81,7 @@ export default function ClientLayout({
   const hideSidebar =
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname === "/impersonate" ||
     pathname.startsWith("/invite/accept") ||
     pathname === "/onboarding" ||
     pathname.startsWith("/chat") ||

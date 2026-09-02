@@ -2007,3 +2007,21 @@
   - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment for release `7647e86d51a3`; active slot `green`, standby `blue`, both dashboard containers healthy on image `aads-dashboard:7647e86d51a3`.
   - External `/login` returned HTTP 200 and `/exports/llm-models-current.html` returned HTTP 200.
   - Step 7 QA ended `UNKNOWN`; do not count it as passed.
+## 2026-09-02 20:25 KST - Admin users impersonation login fix
+
+- Request:
+  - `/admin/users` user icon must open a new window already logged in as that user, not just prefill `/login?email=...`.
+- Finding:
+  - The previous deployed shortcut only opened the login page.
+  - The new `/impersonate` handoff route was still blocked by dashboard middleware and redirected to `/login?redirect=%2Fimpersonate...`, so browser E2E was not actually complete.
+- Change:
+  - `src/app/admin/users/page.tsx`: opens a blank tab synchronously, calls `/auth/admin/impersonate/{user_id}`, then sends that tab to `/impersonate?token=...&next=/chat`.
+  - `src/app/impersonate/page.tsx`: stores the issued user token in `localStorage` and cookie, then redirects to a same-origin `next` path, default `/chat`.
+  - `src/components/ClientLayout.tsx`: treats `/impersonate` as a token handoff page without auth/sidebar gating.
+  - `src/middleware.ts`: adds `/impersonate` to public paths so middleware does not redirect before token storage.
+  - `src/lib/api.ts`: adds `adminImpersonate()`.
+- Verification before commit:
+  - `npm run build` passed.
+  - Live pre-fix `curl -I https://aads.newtalk.kr/impersonate?token=test` returned HTTP 307 to `/login?...`, confirming the bug.
+- Deployment:
+  - Pending at this note. Commit and dashboard blue/green deploy are required before reporting live completion.

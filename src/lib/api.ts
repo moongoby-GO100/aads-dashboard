@@ -530,6 +530,11 @@ export const api = {
   },
   getAdminSessionDetail: (sessionId: string, limit = 80) =>
     request<AdminSessionDetailResponse>(`/admin/sessions/${encodeURIComponent(sessionId)}?limit=${limit}`),
+  adminImpersonate: (userId: string) =>
+    request<{ token: string; user_id: string; email: string; name: string | null; tenant_id: string | null }>(
+      `/auth/admin/impersonate/${encodeURIComponent(userId)}`, { method: "POST" },
+    ),
+
   getAdminUsersOverview: (params?: { days?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));

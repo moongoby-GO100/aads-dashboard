@@ -46,10 +46,6 @@ function statusColor(value: string): string {
   return "var(--text-secondary)";
 }
 
-function userLoginUrl(email: string): string {
-  return `/login?email=${encodeURIComponent(email)}`;
-}
-
 const cardStyle = {
   background: "var(--bg-card)",
   border: "1px solid var(--border)",
@@ -308,31 +304,46 @@ export default function AdminUsersPage() {
                         <div style={{ fontWeight: 600 }}>{user.name || "-"}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "12px" }}>
                           <span>{user.email}</span>
-                          <a
-                            href={userLoginUrl(user.email)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`${user.email} 로그인 페이지 새창으로 열기`}
-                            title="로그인 페이지 새창으로 열기"
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const impersonationWindow = window.open("about:blank", "_blank");
+                              try {
+                                const res = await api.adminImpersonate(user.user_id);
+                                const nextUrl = `/impersonate?token=${encodeURIComponent(res.token)}&next=${encodeURIComponent("/chat")}`;
+                                if (impersonationWindow) {
+                                  impersonationWindow.location.href = nextUrl;
+                                } else {
+                                  window.open(nextUrl, "_blank");
+                                }
+                              } catch (err) {
+                                if (impersonationWindow) {
+                                  impersonationWindow.close();
+                                }
+                                alert(err instanceof Error ? err.message : "대리 로그인 실패");
+                              }
+                            }}
+                            aria-label={`${user.email} 로 대리 로그인`}
+                            title="대리 로그인 (새 창에서 해당 사용자로 로그인)"
                             style={loginIconLinkStyle}
                           >
                             <svg aria-hidden="true" viewBox="0 0 20 20" width="14" height="14" fill="none">
                               <path
-                                d="M7 5H5.5A2.5 2.5 0 0 0 3 7.5v7A2.5 2.5 0 0 0 5.5 17h7a2.5 2.5 0 0 0 2.5-2.5V13"
+                                d="M8 16H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4"
                                 stroke="currentColor"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth="1.7"
                               />
                               <path
-                                d="M10 3h7v7M9 11 16.5 3.5"
+                                d="M12 14l4-4-4-4M16 10H7"
                                 stroke="currentColor"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth="1.7"
                               />
                             </svg>
-                          </a>
+                          </button>
                         </div>
                       </td>
                       <td style={tdStyle}>{user.role}</td>
@@ -541,4 +552,5 @@ const loginIconLinkStyle = {
   color: "var(--accent)",
   textDecoration: "none",
   flex: "0 0 auto",
+  cursor: "pointer",
 };
