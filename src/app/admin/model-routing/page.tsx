@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 
-type RouteKey = "image" | "edit_image" | "video" | "llm" | "music" | "audio" | "runner_llm";
+type RouteKey = string;
 
 interface RoutingPreference {
   route_key: RouteKey;
@@ -30,7 +30,9 @@ interface RoutingPreference {
 
 interface RoutingPreferencesResponse {
   preferences?: RoutingPreference[];
-  blocked_counts?: Partial<Record<RouteKey, number>>;
+  blocked_counts?: Record<string, number>;
+  route_keys?: string[];
+  route_groups?: Record<string, string>;
   fallback_chain?: RoutingPreference[];
   error_models?: ErrorModel[];
 }
@@ -50,15 +52,28 @@ interface ErrorModel {
   last_verified_at?: string | null;
 }
 
-const ROUTES: Array<{ key: RouteKey; label: string; desc: string }> = [
-  { key: "image", label: "이미지", desc: "generate_image 기본 라우팅" },
-  { key: "edit_image", label: "이미지 편집", desc: "edit_image 기본 라우팅" },
-  { key: "video", label: "동영상", desc: "generate_video job 라우팅" },
-  { key: "llm", label: "채팅 LLM", desc: "채팅 기본 모델과 장애 시 폴백 순서" },
-  { key: "music", label: "음악", desc: "generate_music 기본 라우팅" },
-  { key: "audio", label: "음성", desc: "TTS/audio 기본 라우팅" },
-  { key: "runner_llm", label: "Runner LLM", desc: "Pipeline Runner 모델 후보" },
-];
+const ROUTE_META: Record<string, { label: string; desc: string; group: string }> = {
+  llm: { label: "채팅 LLM", desc: "채팅 기본 모델과 장애 시 폴백 순서", group: "텍스트" },
+  background_llm: { label: "배경 LLM", desc: "압축·메모리·평가 등 백그라운드 작업", group: "텍스트" },
+  runner_llm: { label: "Runner LLM", desc: "Pipeline Runner 모델 후보", group: "러너" },
+  search: { label: "검색", desc: "SearXNG/Naver/Kakao/grounding 검색", group: "리서치" },
+  deep_research: { label: "딥리서치", desc: "자체 검색·크롤링·종합 보고서", group: "리서치" },
+  url_analyze: { label: "URL 분석", desc: "Jina/Crawl4AI 원문 추출과 요약", group: "리서치" },
+  fact_check: { label: "팩트체크", desc: "검색 근거 교차검증", group: "리서치" },
+  image_analyze: { label: "이미지 분석", desc: "첨부 이미지·화면 분석", group: "멀티모달" },
+  video_analyze: { label: "영상 분석", desc: "영상 프레임 추출·분석", group: "멀티모달" },
+  visual_qa: { label: "Visual QA", desc: "화면/스크린샷 품질 검증", group: "멀티모달" },
+  embedding: { label: "임베딩", desc: "메시지·기억 벡터화", group: "메모리" },
+  semantic_search: { label: "시맨틱 검색", desc: "pgvector 유사도 검색", group: "메모리" },
+  image: { label: "이미지 생성", desc: "generate_image 기본 라우팅", group: "미디어" },
+  edit_image: { label: "이미지 편집", desc: "edit_image 기본 라우팅", group: "미디어" },
+  video: { label: "동영상 생성", desc: "generate_video job 라우팅", group: "미디어" },
+  music: { label: "음악", desc: "generate_music 기본 라우팅", group: "미디어" },
+  audio: { label: "음성", desc: "TTS/audio 기본 라우팅", group: "미디어" },
+  code_exec: { label: "코드 실행", desc: "Codex/CLI 기반 코드 실행", group: "도구" },
+};
+
+const ROUTE_ORDER = Object.keys(ROUTE_META);
 
 function availabilityStyle(value: string): { background: string; color: string; border: string } {
   if (value === "available") {
@@ -93,10 +108,11 @@ function hasModelIssue(item: ErrorModel): boolean {
 
 export default function ModelRoutingPage() {
   const [items, setItems] = useState<RoutingPreference[]>([]);
-  const [blockedCounts, setBlockedCounts] = useState<Partial<Record<RouteKey, number>>>({});
+  const [blockedCounts, setBlockedCounts] = useState<Record<string, number>>({});
   const [fallbackChain, setFallbackChain] = useState<RoutingPreference[]>([]);
   const [errorModels, setErrorModels] = useState<ErrorModel[]>([]);
-  const [activeRoute, setActiveRoute] = useState<RouteKey>("image");
+  const [routeKeys, setRouteKeys] = useState<RouteKey[]>(ROUTE_ORDER);
+  const [activeRoute, setActiveRoute] = useState<RouteKey>("llm");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -110,6 +126,12 @@ export default function ModelRoutingPage() {
         setBlockedCounts(res.blocked_counts || {});
         setFallbackChain(Array.isArray(res.fallback_chain) ? res.fallback_chain : []);
         setErrorModels(Array.isArray(res.error_models) ? res.error_models.filter(hasModelIssue) : []);
+        const preferences = Array.isArray(res.preferences) ? res.preferences : [];
+        const apiRoutes = Array.isArray(res.route_keys) ? res.route_keys : [];
+        const itemRoutes = Array.from(new Set(preferences.map((item) => item.route_key)));
+        const nextRoutes = Array.from(new Set([...ROUTE_ORDER, ...apiRoutes, ...itemRoutes]));
+        setRouteKeys(nextRoutes);
+        setActiveRoute((prev) => nextRoutes.includes(prev) ? prev : (nextRoutes[0] || "llm"));
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "모델 라우팅 설정을 불러오지 못했습니다."))
       .finally(() => setLoading(false));
@@ -118,11 +140,11 @@ export default function ModelRoutingPage() {
   useEffect(() => { load(); }, [load]);
 
   const grouped = useMemo(() => {
-    return ROUTES.reduce((acc, route) => {
-      acc[route.key] = items.filter((item) => item.route_key === route.key);
+    return routeKeys.reduce((acc, key) => {
+      acc[key] = items.filter((item) => item.route_key === key);
       return acc;
     }, {} as Record<RouteKey, RoutingPreference[]>);
-  }, [items]);
+  }, [items, routeKeys]);
 
   const visibleItems = useMemo(() => grouped[activeRoute] || [], [activeRoute, grouped]);
   const defaultItem = visibleItems.find((item) => item.is_default);
@@ -161,12 +183,12 @@ export default function ModelRoutingPage() {
   };
 
   const save = async () => {
-    const missingDefault = ROUTES.find((route) => (
-      items.some((item) => item.route_key === route.key)
-      && !items.some((item) => item.route_key === route.key && item.is_default)
+    const missingDefault = routeKeys.find((key) => (
+      items.some((item) => item.route_key === key)
+      && !items.some((item) => item.route_key === key && item.is_default)
     ));
     if (missingDefault) {
-      setMessage(`${missingDefault.label} 기본 모델을 선택하세요.`);
+      setMessage(`${ROUTE_META[missingDefault]?.label || missingDefault} 기본 모델을 선택하세요.`);
       return;
     }
     setSaving(true);
@@ -232,14 +254,15 @@ export default function ModelRoutingPage() {
         </section>
 
         <section className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          {ROUTES.map((route) => {
-            const routeItems = grouped[route.key] || [];
-            const active = activeRoute === route.key;
+          {routeKeys.map((key) => {
+            const meta = ROUTE_META[key] || { label: key, desc: "DB 라우팅 설정", group: "기타" };
+            const routeItems = grouped[key] || [];
+            const active = activeRoute === key;
             const routeDefault = routeItems.find((item) => item.is_default);
             return (
               <button
-                key={route.key}
-                onClick={() => setActiveRoute(route.key)}
+                key={key}
+                onClick={() => setActiveRoute(key)}
                 className="text-left rounded-xl p-4"
                 style={{
                   background: active ? "rgba(59,130,246,0.12)" : "var(--bg-card)",
@@ -247,13 +270,14 @@ export default function ModelRoutingPage() {
                 }}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{route.label}</span>
+                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{meta.label}</span>
                   <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
                     {routeItems.length}개
-                    {(blockedCounts[route.key] || 0) > 0 ? ` · 오류 ${blockedCounts[route.key]}` : ""}
+                    {(blockedCounts[key] || 0) > 0 ? ` · 오류 ${blockedCounts[key]}` : ""}
                   </span>
                 </div>
-                <p className="text-[11px] mb-2" style={{ color: "var(--text-secondary)" }}>{route.desc}</p>
+                <p className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>{meta.group}</p>
+                <p className="text-[11px] mb-2" style={{ color: "var(--text-secondary)" }}>{meta.desc}</p>
                 <p className="text-xs font-mono truncate" style={{ color: "var(--accent)" }}>
                   {routeDefault ? `${routeDefault.provider}:${routeDefault.model_id}` : "default 없음"}
                 </p>
@@ -367,7 +391,7 @@ export default function ModelRoutingPage() {
           <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: "1px solid var(--border)" }}>
             <div>
               <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {ROUTES.find((route) => route.key === activeRoute)?.label} 모델
+                {ROUTE_META[activeRoute]?.label || activeRoute} 모델
               </h3>
               <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
                 현재 기본값: {defaultItem ? `${defaultItem.provider}:${defaultItem.model_id}` : "-"}
