@@ -40,6 +40,7 @@ const navItems = [
   { href: "/admin/governance", label: "Governance", icon: "🏛️", adminOnly: true },
   { href: "/admin/model-routing", label: "모델 라우팅", icon: "🧭", adminOnly: true },
   { href: "/admin/model-parity", label: "모델 패리티", icon: "⚖️", adminOnly: true },
+  { href: "/exports/llm-models-current.html", label: "LLM 모델 현황 2026", icon: "🤖", adminOnly: true, external: true },
   { href: "/admin/deploy", label: "배포 현황", icon: "🚀", adminOnly: true },
   { href: "/admin/app-settings", label: "오비스 앱 설정", icon: "📱", adminOnly: true },
   { href: "/admin/loops", label: "루프 관리", icon: "🔁", adminOnly: true },
@@ -110,6 +111,8 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
               <Link
                 key={item.href}
                 href={item.href}
+                target={"external" in item && item.external ? "_blank" : undefined}
+                rel={"external" in item && item.external ? "noopener noreferrer" : undefined}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"
                 style={isActive
                   ? { background: "var(--accent)", color: "#fff" }

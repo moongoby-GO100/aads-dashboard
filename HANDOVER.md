@@ -1971,3 +1971,18 @@
   - `git diff --check` 통과.
 - 배포:
   - 이 기록 시점에는 미배포. 커밋/푸시 후 `/root/aads/aads-dashboard/deploy.sh`로 운영 반영 필요.
+
+## 2026-09-02 16:55 KST - LLM market report admin link
+
+- CEO request:
+  - Add an admin-accessible button for the latest LLM company/model HTML report.
+- Change:
+  - `src/components/Sidebar.tsx`: added admin-only external link `LLM 모델 현황 2026` pointing to `/exports/llm-models-current.html`.
+  - `public/reports/llm-models-current.html`: stored a generated copy of the report for the dashboard source tree.
+- Runtime note:
+  - Current dashboard containers do not serve newly added `public/reports/llm-models-current.html` without a rebuild, so the live browser URL is served through nginx `/exports/`: `https://aads.newtalk.kr/exports/llm-models-current.html`.
+- Verification:
+  - `npx eslint src/components/Sidebar.tsx` passed.
+  - Public report URL returned HTTP 200 and was captured at `https://aads.newtalk.kr/screenshots/screenshot_20260902_165256_c5fc8f.png`.
+- Deployment:
+  - Dashboard source change is not deployed yet. Run dashboard blue/green deploy from a clean release tree before declaring the sidebar button live in the running dashboard.
