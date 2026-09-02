@@ -608,7 +608,13 @@ export default function ChatBubble({
         {/* 메타 정보 */}
         {!isStreaming && (
           <p className="text-xs mt-1 ml-1 flex items-center flex-wrap gap-1" style={{ color: "var(--text-secondary)" }}>
-            {message.model_used && <span>[{message.model_used}</span>}
+            {message.model_used && <span>[{message.requested_model && message.requested_model !== message.model_used ? (
+              <>
+                <span style={{ textDecoration: "line-through", opacity: 0.6 }}>{message.requested_model}</span>
+                <span style={{ color: "#f59e0b" }}>{" \u2192 "}{message.model_used}</span>
+                {message.fallback_reason && <span style={{ color: "#f59e0b" }}>{" \u26A0\uFE0F"}{message.fallback_reason}</span>}
+              </>
+            ) : message.model_used}</span>}
             {displayTokensIn ? ` · ${displayTokensIn.toLocaleString()}in` : ""}
             {displayTokensOut ? ` · ${displayTokensOut.toLocaleString()}out` : ""}
             {displayCost && Number(displayCost) > 0 ? ` · $${Number(displayCost).toFixed(4)}` : ""}

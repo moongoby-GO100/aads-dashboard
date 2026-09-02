@@ -6872,6 +6872,8 @@ export default function ChatPage() {
                     role: "assistant" as const,
                     content: full,
                     model_used: ev.model || undefined,
+                    requested_model: ev.requested_model || undefined,
+                    fallback_reason: ev.fallback_reason || undefined,
                     intent: ev.intent || undefined,
                     created_at: new Date().toISOString(),
                   }
@@ -6889,6 +6891,8 @@ export default function ChatPage() {
                     role: "assistant" as const,
                     content: full,
                     model_used: ev.model || undefined,
+                    requested_model: ev.requested_model || undefined,
+                    fallback_reason: ev.fallback_reason || undefined,
                     intent: ev.intent || undefined,
                     input_tokens: ev.input_tokens || undefined,
                     output_tokens: ev.output_tokens || undefined,

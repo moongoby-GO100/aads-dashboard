@@ -93,6 +93,8 @@ export interface ChatMessage {
   branch_point_id?: string | null;
   created_at: string;
   confidence_label?: "db_realtime" | "ai_inference" | "mixed" | null;
+  requested_model?: string | null;
+  fallback_reason?: string | null;
 }
 
 export interface SourceItem {
