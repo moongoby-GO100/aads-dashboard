@@ -1985,4 +1985,7 @@
   - `npx eslint src/components/Sidebar.tsx` passed.
   - Public report URL returned HTTP 200 and was captured at `https://aads.newtalk.kr/screenshots/screenshot_20260902_165256_c5fc8f.png`.
 - Deployment:
-  - Dashboard source change is not deployed yet. Run dashboard blue/green deploy from a clean release tree before declaring the sidebar button live in the running dashboard.
+  - Committed and pushed `7647e86 Add LLM market report admin link`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment for release `7647e86d51a3`; active slot `green`, standby `blue`, both dashboard containers healthy on image `aads-dashboard:7647e86d51a3`.
+  - External `/login` returned HTTP 200 and `/exports/llm-models-current.html` returned HTTP 200.
+  - Step 7 QA ended `UNKNOWN`; do not count it as passed.
