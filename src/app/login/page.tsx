@@ -39,7 +39,7 @@ function getKakaobotServerSnapshot() {
 function LoginForm({ isKakaobot }: { isKakaobot: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

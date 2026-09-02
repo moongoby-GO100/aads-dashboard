@@ -46,6 +46,10 @@ function statusColor(value: string): string {
   return "var(--text-secondary)";
 }
 
+function userLoginUrl(email: string): string {
+  return `/login?email=${encodeURIComponent(email)}`;
+}
+
 const cardStyle = {
   background: "var(--bg-card)",
   border: "1px solid var(--border)",
@@ -302,7 +306,34 @@ export default function AdminUsersPage() {
                     <tr key={user.user_id} style={bodyRowStyle}>
                       <td style={tdStyle}>
                         <div style={{ fontWeight: 600 }}>{user.name || "-"}</div>
-                        <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{user.email}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "12px" }}>
+                          <span>{user.email}</span>
+                          <a
+                            href={userLoginUrl(user.email)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`${user.email} 로그인 페이지 새창으로 열기`}
+                            title="로그인 페이지 새창으로 열기"
+                            style={loginIconLinkStyle}
+                          >
+                            <svg aria-hidden="true" viewBox="0 0 20 20" width="14" height="14" fill="none">
+                              <path
+                                d="M7 5H5.5A2.5 2.5 0 0 0 3 7.5v7A2.5 2.5 0 0 0 5.5 17h7a2.5 2.5 0 0 0 2.5-2.5V13"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.7"
+                              />
+                              <path
+                                d="M10 3h7v7M9 11 16.5 3.5"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.7"
+                              />
+                            </svg>
+                          </a>
+                        </div>
                       </td>
                       <td style={tdStyle}>{user.role}</td>
                       <td style={{ ...tdStyle, color: statusColor(user.status) }}>{user.status}</td>
@@ -496,4 +527,18 @@ const smallButtonStyle = {
   cursor: "pointer",
   fontSize: "12px",
   fontWeight: 600,
+};
+
+const loginIconLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "24px",
+  height: "24px",
+  borderRadius: "6px",
+  border: "1px solid var(--border)",
+  background: "var(--bg-hover)",
+  color: "var(--accent)",
+  textDecoration: "none",
+  flex: "0 0 auto",
 };

@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-09-02 17:45 KST - Admin users login-page shortcut
+
+- Request: Add an icon on `https://aads.newtalk.kr/admin/users` so each user row opens that user's login page in a new browser tab.
+- Changes:
+  - Added an icon-only external-window link beside each user email on `/admin/users`.
+  - The link opens `/login?email={encoded_email}` with `target="_blank"` and `rel="noopener noreferrer"`.
+  - Updated `/login` to prefill the email field from the `email` query parameter.
+- Verification:
+  - `git diff --check -- src/app/admin/users/page.tsx src/app/login/page.tsx` passed.
+  - `npm run build` passed and generated `/admin/users` and `/login`.
+- Deployment:
+  - Dashboard release deployment is the next step after commit; external route verification must be performed after `deploy.sh`.
+
 ## 2026-08-31 17:29 KST - Browser tab titles per page and chat session
 
 - Request: Change browser tab titles to match each dashboard page, and make the chat tab show the active session name.
