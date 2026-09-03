@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -121,7 +122,7 @@ export default function MemoryPage() {
             >
               🔄 새로고침
             </button>
-            <a
+            <Link
               href="/chat"
               style={{
                 padding: "8px 16px", fontSize: "13px",
@@ -130,7 +131,7 @@ export default function MemoryPage() {
               }}
             >
               💬 채팅으로
-            </a>
+            </Link>
           </div>
         </div>
 

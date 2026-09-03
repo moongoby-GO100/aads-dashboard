@@ -72,14 +72,13 @@ function DonutChart({ data }: { data: { label: string; value: number }[] }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total === 0) return <div style={{ color: "var(--text-secondary)", fontSize: 12, padding: 20 }}>데이터 없음</div>;
   const R = 40, r = 24;
-  let cumAngle = -Math.PI / 2;
   const slices = data.map((d, i) => {
     const angle = (d.value / total) * 2 * Math.PI;
-    const startAngle = cumAngle;
-    cumAngle += angle;
+    const startAngle = -Math.PI / 2 + data.slice(0, i).reduce((sum, item) => sum + (item.value / total) * 2 * Math.PI, 0);
+    const endAngle = startAngle + angle;
     const x1o = 50 + R * Math.cos(startAngle), y1o = 50 + R * Math.sin(startAngle);
-    const x2o = 50 + R * Math.cos(cumAngle), y2o = 50 + R * Math.sin(cumAngle);
-    const x1i = 50 + r * Math.cos(cumAngle), y1i = 50 + r * Math.sin(cumAngle);
+    const x2o = 50 + R * Math.cos(endAngle), y2o = 50 + R * Math.sin(endAngle);
+    const x1i = 50 + r * Math.cos(endAngle), y1i = 50 + r * Math.sin(endAngle);
     const x2i = 50 + r * Math.cos(startAngle), y2i = 50 + r * Math.sin(startAngle);
     const largeArc = angle > Math.PI ? 1 : 0;
     return { d: `M ${x1o} ${y1o} A ${R} ${R} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${r} ${r} 0 ${largeArc} 0 ${x2i} ${y2i} Z`, color: COLORS[i % COLORS.length], label: d.label, value: d.value };
