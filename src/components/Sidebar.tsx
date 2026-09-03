@@ -27,6 +27,7 @@ const navItems = [
   { href: "/ops/memory", label: "메모리", icon: "🧠", adminOnly: true },
   { href: "/ops/pc-agents", label: "PC Agent", icon: "💻", adminOnly: true },
   { href: "/browser-tasks", label: "브라우저 실행", icon: "🌐", adminOnly: true },
+  { href: "/authenticated-collector", label: "로그인 수집 허브", icon: "🔐", adminOnly: true },
   { href: "/agent-vault", label: "Agent Vault", icon: "🔐", adminOnly: true },
   { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱", adminOnly: true },
   { href: "/lessons", label: "교훈", icon: "💡", adminOnly: true },
