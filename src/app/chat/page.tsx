@@ -1908,7 +1908,12 @@ const MessageItem = memo(function MessageItem({
   const activeStreamingContent = isActiveStreamingPlaceholder
     ? (streamingContent || msg.content || "")
     : streamingContent;
-  const displayedStreamingContent = activeStreamingContent && activeStreamingContent.length > LIVE_STREAM_RENDER_LIMIT
+  // AADS-SCROLL-JUMP-P1: 8,000자 절단은 "라이브 스트림 버퍼(streamingContent)가 소스일 때"만 적용한다.
+  // "복구중" 같은 상태 힌트만으로 라이브 렌더로 전환되면 소스가 msg.content(전체 본문)로 바뀌는데,
+  // 이때도 절단하면 scrollHeight가 급감해 뷰포트 복원이 실패하고 화면이 상단으로 튄다.
+  // 버퍼가 소스인 경우는 스트리밍 중에도 이미 절단돼 있어 전환 시 높이 변화가 없다.
+  const isLiveBufferSource = Boolean(streamingContent) && activeStreamingContent === streamingContent;
+  const displayedStreamingContent = isLiveBufferSource && activeStreamingContent && activeStreamingContent.length > LIVE_STREAM_RENDER_LIMIT
     ? `... 앞 ${activeStreamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${activeStreamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
     : activeStreamingContent;
 
@@ -2694,7 +2699,7 @@ const MessageItem = memo(function MessageItem({
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
-            {onRegenerate && !streaming && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
+            {onRegenerate && (!streaming || isInterruptedAssistant || isRecoverablePlaceholder) && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
               <>
                 {(isInterruptedAssistant || isRecoverablePlaceholder) && !onResumeInterrupted && (
                   <button
@@ -3227,7 +3232,7 @@ export default function ChatPage() {
       wasNearBottom: container.scrollTop + container.clientHeight >= container.scrollHeight - 300,
     };
   }, []);
-  const applyMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null): boolean => {
+  const applyMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null, options?: { force?: boolean }): boolean => {
     if (!anchor) return true;
     const container = messagesContainerRef.current;
     if (!container) return false;
@@ -3235,6 +3240,7 @@ export default function ChatPage() {
     // Markdown/도구 영역이 재배치되는 짧은 순간에는 높이가 0에 가깝게 줄 수 있다.
     // 이때 0을 기록하면 다음 프레임에도 상단 점프가 고착되므로 레이아웃 안정화까지 기다린다.
     if (
+      !options?.force &&
       anchor.scrollTop > 0 &&
       container.scrollHeight < anchor.scrollHeight &&
       (maxScrollTop === 0 || maxScrollTop < Math.min(anchor.scrollTop, anchor.scrollHeight * 0.5))
@@ -3297,10 +3303,18 @@ export default function ChatPage() {
           cleanup();
           return;
         }
-        applyIfCurrent();
+        const applied = applyIfCurrent();
         framesRemaining -= 1;
         if (framesRemaining > 0) {
           restoreFastFrames();
+        } else if (
+          !applied &&
+          generation === messageViewportRestoreGenerationRef.current &&
+          messageViewportRestoreCleanupRef.current === cleanup
+        ) {
+          // 본문 축소가 확정돼 가드가 계속 복원을 보류하면 상단 점프가 고착된다.
+          // 사용자가 그 사이 스크롤해 cleanup이 호출된 경우는 제외하고 1회만 근사 복원한다.
+          applyMessageViewportAnchor(anchor, { force: true });
         }
       });
     };
@@ -7861,7 +7875,17 @@ export default function ChatPage() {
   // ── AI 응답 재생성 (Regenerate) ──
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const handleRegenerate = useCallback(async (msgId: string, mode: "regenerate" | "continue" = "regenerate") => {
-    if (!activeSessionObjRef.current || streaming) return;
+    if (!activeSessionObjRef.current) return;
+    if (streaming) {
+      abortCtrl.current?.abort();
+      streamingSessionRef.current = null;
+      streamingRef.current = false;
+      setStreaming(false);
+      setStreamBuf("");
+      setWaitingBgResponse(false);
+      setToolStatus(null);
+      await new Promise(r => setTimeout(r, 150));
+    }
     const sessionId = activeSessionObjRef.current.id;
     const regenPlaceholderId = `ai-streaming-regen-${msgId}`;
 
