@@ -45,8 +45,11 @@ interface ServerHealth {
   error?: string;
 }
 
+type StandardConnectName = "contabo116" | "contabo14" | "cafe24_114";
+
 interface ServerConfig {
-  id: string;
+  id: StandardConnectName;
+  connectName: StandardConnectName;
   ip: string;
   sshPort: number;
   role: string;
@@ -218,10 +221,11 @@ function GaugeBar({ pct, warn = 80 }: { pct?: number; warn?: number }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Standard SSH names for ops docs, cards, and CEO PC PowerShell aliases.
 const SERVERS: ServerConfig[] = [
-  { id: "contabo116", ip: "5.104.86.116", sshPort: 22, role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
-  { id: "contabo14", ip: "5.104.86.14", sshPort: 22, role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
-  { id: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)", sshIdentity: "id_rsa_final" },
+  { id: "contabo116", connectName: "contabo116", ip: "5.104.86.116", sshPort: 22, role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
+  { id: "contabo14", connectName: "contabo14", ip: "5.104.86.14", sshPort: 22, role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
+  { id: "cafe24_114", connectName: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)", sshIdentity: "id_rsa_final" },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [
@@ -299,8 +303,8 @@ export default function ServersPage() {
       const sshIdentityArg = srv.sshIdentity ? `-i "$env:USERPROFILE\\.ssh\\${srv.sshIdentity}" ` : "";
       const sshCommand = `ssh ${sshIdentityArg}-p ${srv.sshPort} root@${srv.ip}`;
       const command = [
-        `$host.UI.RawUI.WindowTitle = 'AADS SSH ${srv.id}'`,
-        `Write-Host 'AADS ${srv.id} 접속: ${sshCommand}'`,
+        `$host.UI.RawUI.WindowTitle = 'AADS SSH ${srv.connectName}'`,
+        `Write-Host 'AADS ${srv.connectName} 접속: ${sshCommand}'`,
         sshCommand,
       ].join("; ");
       const encodedCommand = encodePowerShellCommand(command);
@@ -426,8 +430,10 @@ export default function ServersPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                     <span style={{ fontSize: 22 }}>{statusIcon(statusVal)}</span>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>서버 {srv.id}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{srv.ip}</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text-primary)" }}>{srv.connectName}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                        표준 접속명 <span style={{ fontFamily: "monospace", color: "var(--text-primary)" }}>ssh {srv.connectName}</span> · {srv.ip}
+                      </div>
                     </div>
                     <span
                       style={{
@@ -495,6 +501,9 @@ export default function ServersPage() {
                             <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Windows PowerShell SSH</div>
                             <div style={{ fontSize: 11, color: "var(--text-primary)", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               ssh {srv.sshIdentity ? `-i %USERPROFILE%\\.ssh\\${srv.sshIdentity} ` : ""}-p {srv.sshPort} root@{srv.ip}
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontFamily: "monospace", marginTop: 3 }}>
+                              표준 접속명: ssh {srv.connectName}
                             </div>
                           </div>
                           <button

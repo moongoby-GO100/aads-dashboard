@@ -142,6 +142,7 @@ function statusColor(status: string): string {
     case "queued": return "var(--warning)";
     case "error": return "var(--danger)";
     case "requeued": return "#f97316";
+    case "review_hold": return "#f59e0b";
     default: return "var(--text-secondary)";
   }
 }
@@ -153,6 +154,7 @@ function statusLabel(status: string): string {
     case "queued": return "대기";
     case "error": return "오류";
     case "requeued": return "재큐";
+    case "review_hold": return "리뷰보류";
     default: return status;
   }
 }
@@ -576,6 +578,7 @@ export default function OpsPage() {
               <option value="queued">대기</option>
               <option value="error">오류</option>
               <option value="requeued">재큐</option>
+              <option value="review_hold">리뷰보류</option>
             </select>
             <input
               type="date"

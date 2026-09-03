@@ -2085,3 +2085,22 @@
 - Deployment:
   - Not deployed in this entry. Dashboard deployment requires committing the selected chat/HANDOVER changes, pushing, then running `/root/aads/aads-dashboard/deploy.sh` with the blue/green release contract.
   - Unrelated dirty files remain in the dashboard worktree and must not be included in the release.
+
+## 2026-09-03 12:32 KST - Ops visibility polish before dashboard release
+
+- Request:
+  - Re-check runner approval status, improve any additional issues found, then commit, push, deploy, verify, and report if dependency checks pass.
+- Runner status:
+  - Current session runner list was empty.
+  - Global `awaiting_approval` runner list was empty, so no approval action was available.
+- Additional issues found:
+  - `/ops` did not expose the `review_hold` Pipeline Runner status in its color/label/filter mapping, making review-held jobs harder to triage from the dashboard.
+  - `/ops/servers` mixed internal card labels with SSH connection names, making the standard CEO/ops connection aliases less obvious.
+- Change:
+  - `src/app/ops/page.tsx`: added `review_hold` status color, Korean label, and status filter option.
+  - `src/app/ops/servers/page.tsx`: made server IDs typed standard connection names and displayed `ssh contabo116`, `ssh contabo14`, and `ssh cafe24_114` consistently in cards and PowerShell window titles.
+- Verification before commit:
+  - `npx eslint src/app/chat/page.tsx src/components/Sidebar.tsx src/app/ops/page.tsx src/app/ops/servers/page.tsx` passed with 0 errors and existing warnings only.
+  - `npm run build` passed.
+- Release note:
+  - `public/reports/llm-models-current.html` and other generated report artifacts are intentionally excluded from this ops patch until separately reviewed, because they are large generated content and not required for the chat/ops release.
