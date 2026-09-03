@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { CollectorJob, CollectorOverview, CollectorSite } from "@/lib/api";
 
-const PROJECTS = ["ALL", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS", "CUSTOM"];
+const PROJECTS = ["ALL", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS", "STORE_ASSISTANT", "MARKETING", "BANKING", "CUSTOM"];
 const statusLabel: Record<string, string> = {
   queued: "대기",
   running: "실행 중",
@@ -15,6 +15,8 @@ const statusLabel: Record<string, string> = {
 };
 const runtimeLabel: Record<string, string> = {
   webview2: "Windows 앱",
+  windows_collector: "Windows 수집기",
+  pc_agent: "PC Agent 실행",
   chrome_extension: "Chrome 확장",
   chrome_cdp: "Chrome 연결",
   playwright_server: "서버 브라우저",
