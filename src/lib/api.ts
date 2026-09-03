@@ -1,9 +1,9 @@
 // T-072: Flat API response types
 export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
 export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
-export interface CollectorOverview { projects: Array<{ project_key: string; site_count: number; active_account_count: number }>; totals: { connected_sites: number; active_accounts: number; running_jobs: number; action_required_jobs: number; failed_jobs: number }; job_statuses: Record<string, number>; demo: boolean; }
+export interface CollectorOverview { projects: Array<{ project_key: string; site_count: number; active_account_count: number }>; totals: { connected_sites: number; active_accounts: number; running_jobs: number; action_required_jobs: number; failed_jobs: number }; job_statuses: Record<string, number>; demo: boolean; challenge_contract?: { auto_bypass_allowed: boolean; user_approved_automation_allowed?: boolean; responsibility_acceptance_required?: boolean; challenge_values_persisted: boolean; supported_challenge_kinds: string[]; allowed_resume_resolutions: string[]; resume_strategy: string; physical_input_challenge_kinds?: string[] }; }
 export interface CollectorSite { id: string; project_key: string; site_key: string; display_name: string; runtime: string; data_categories: string[]; account_count: number; connected_account_count: number; last_collected_at?: string; enabled: boolean; }
-export interface CollectorJob { id: string; status: string; site_key: string; work_key: string; runtime: string; error_code?: string; message?: string; updated_at: string; payload: { project_key?: string; recipe_id?: string }; }
+export interface CollectorJob { id: string; status: string; site_key: string; work_key: string; runtime: string; error_code?: string; message?: string; updated_at: string; payload: { project_key?: string; recipe_id?: string }; challenge?: { kind?: string; page_url?: string; evidence?: string[]; resume_token?: string; auto_bypass_allowed?: boolean; user_approved_automation_allowed?: boolean; responsibility_acceptance_required?: boolean; requires_user_approval?: boolean; requires_user_physical_input?: boolean; challenge_values_persisted?: boolean; requires_user_intervention?: boolean; allowed_resolutions?: string[]; resume_strategy?: string; resolved_by_user?: boolean; approved_automation_requested?: boolean; responsibility_accepted?: boolean; physical_input_completed?: boolean }; }
 export interface ChatWorkspaceRoleOption {
   value: string;
   role?: string;
@@ -234,10 +234,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  resumeCollectorJob: (jobId: string, resolution: string, note = "") =>
+  reportCollectorChallenge: (jobId: string, data: { challenge_kind: string; page_url?: string; message?: string; evidence?: string[]; approval_scope?: Record<string, unknown> }) =>
+    request<{ status: string; same_work_key: boolean; job: CollectorJob }>(
+      `/authenticated-site-collector/jobs/${encodeURIComponent(jobId)}/challenge-action-required`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  resumeCollectorJob: (
+    jobId: string,
+    resolution: string,
+    note = "",
+    options: { responsibility_accepted?: boolean; physical_input_completed?: boolean } = {},
+  ) =>
     request<{ status: string; same_work_key: boolean; job: CollectorJob }>(
       `/authenticated-site-collector/jobs/${encodeURIComponent(jobId)}/resume`,
-      { method: "POST", body: JSON.stringify({ resolution, note }) },
+      { method: "POST", body: JSON.stringify({ resolution, note, ...options }) },
     ),
   dryRunCollectorRecipe: (recipeId: string, version = "v1", targetUrl = "") =>
     request<unknown>(
