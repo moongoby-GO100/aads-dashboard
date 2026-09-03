@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, CollectorJob, CollectorOverview, CollectorSite } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { CollectorJob, CollectorOverview, CollectorSite } from "@/lib/api";
 
 const PROJECTS = ["ALL", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS", "CUSTOM"];
 const statusLabel: Record<string, string> = {
