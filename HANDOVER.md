@@ -2040,3 +2040,48 @@
   - Live pre-fix `curl -I https://aads.newtalk.kr/impersonate?token=test` returned HTTP 307 to `/login?...`, confirming the bug.
 - Deployment:
   - Pending at this note. Commit and dashboard blue/green deploy are required before reporting live completion.
+
+## 2026-09-03 11:02 KST - Chat recovery scroll jump fix
+
+- Request:
+  - Prevent the chat viewport from jumping to the top when an assistant bubble changes to "복구중"; verify impact, deploy if safe, and report results.
+- Finding:
+  - Recovery status could make an existing streaming placeholder render through the live-stream path while using full `msg.content` as its source.
+  - The 8,000 character live-render truncation then shortened a long bubble during recovery, reducing `scrollHeight` and allowing the browser to clamp `scrollTop`.
+  - Viewport restoration could keep deferring when the post-update height was lower than the pre-update anchor height, leaving the user at the wrong scroll position.
+- Change:
+  - `src/app/chat/page.tsx`: applies the 8,000 character limit only when the live stream buffer is the actual content source.
+  - `src/app/chat/page.tsx`: keeps the viewport anchor restore loop, but performs a final forced approximate restore if repeated guarded restores never apply.
+  - `src/app/chat/page.tsx`: allows continue/regenerate from interrupted or recoverable bubbles by stopping the stale local stream state before starting the retry.
+- Verification:
+  - `npx tsc --noEmit` passed.
+  - `npx eslint src/app/chat/page.tsx` passed with existing warnings only; new errors 0.
+  - `npm run build` passed locally.
+  - Dashboard deploy built release `06f9279cc290` from `git archive HEAD`, so unrelated dirty files were not included in the image.
+  - Blue/green deploy completed with active slot `green` on port `3101`; standby `blue` was synchronized to the same Docker image digest.
+  - External `/login` returned HTTP 200; unauthenticated `/chat` returned expected 307 to `/login?redirect=%2Fchat`.
+  - Screenshot captured: `https://aads.newtalk.kr/screenshots/screenshot_20260903_105831_acac3c.png`.
+  - Five-minute post-deploy log check found no new dashboard container errors.
+- Deployment:
+  - Committed and pushed `06f9279 fix(chat): prevent recovery scroll jump`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue/green deployment for release `06f9279cc290`.
+  - Deploy Step 7 QA ended `UNKNOWN`; do not count it as passed. HTTP/container/log checks passed.
+
+## 2026-09-03 12:20 KST - Chat scroll residual P2 patch verification
+
+- Request:
+  - Check runner status and approval needs, apply remaining recommended chat-window improvements, and report additional risks.
+- Runner status:
+  - `runner-a5606cf0` finished `done` for the residual chat scroll-jump P2 patch.
+  - No Pipeline Runner job was in `awaiting_approval` at verification time, so no approval action was available.
+- Change:
+  - `src/app/chat/page.tsx`: keeps an assistant report expanded after it has once been the latest assistant response, preventing a later message append from collapsing a long bubble and shrinking the viewport outside the anchor restore path.
+  - `src/app/chat/page.tsx`: routes older-message prepend through `setMessagesPreservingViewport()` instead of a separate double-`requestAnimationFrame` scroll calculation, so prepend/merge/recovery share the same ResizeObserver-backed anchor restore logic.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with 0 errors and existing warnings only.
+  - First `npx tsc --noEmit` failed because `.next/types/**/*.ts` references were stale/missing before a fresh Next build.
+  - `npm run build` passed and regenerated `.next/types`.
+  - Second `npx tsc --noEmit` passed after the build.
+- Deployment:
+  - Not deployed in this entry. Dashboard deployment requires committing the selected chat/HANDOVER changes, pushing, then running `/root/aads/aads-dashboard/deploy.sh` with the blue/green release contract.
+  - Unrelated dirty files remain in the dashboard worktree and must not be included in the release.

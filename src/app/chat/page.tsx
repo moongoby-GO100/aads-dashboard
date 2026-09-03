@@ -1896,7 +1896,16 @@ const MessageItem = memo(function MessageItem({
   const [contentCollapsed, setContentCollapsed] = useState(
     () => msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg
   );
+  // AADS-SCROLL-JUMP-P2: 한 번이라도 "마지막 어시스턴트 메시지"로 펼쳐져 있던 보고서는
+  // 이후 새 메시지가 붙어 isLastAssistantMsg가 false로 바뀌어도 되접지 않는다.
+  // 이 자동 접힘은 뷰포트 앵커 경로를 타지 않고 overflowAnchor:none 때문에
+  // 브라우저 기본 보정도 없어, 수천 px 높이가 한 번에 사라지며 scrollTop이 0쪽으로 클램프된다.
+  const wasEverLastAssistantRef = useRef(isLastAssistantMsg);
   useEffect(() => {
+    if (isLastAssistantMsg) wasEverLastAssistantRef.current = true;
+  }, [isLastAssistantMsg]);
+  useEffect(() => {
+    if (wasEverLastAssistantRef.current && !isLastAssistantMsg) return;
     const timeout = window.setTimeout(() => {
       setContentCollapseTouched(false);
       setContentCollapsed(msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg);
@@ -3918,15 +3927,6 @@ export default function ChatPage() {
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
   const loadOlderMessages = useCallback(async () => {
     if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
-    const container = messagesContainerRef.current;
-    const prevScrollHeight = container?.scrollHeight || 0;
-    const prevScrollTop = container?.scrollTop || 0;
-    const anchor = container
-      ? Array.from(container.querySelectorAll<HTMLElement>("[data-message-id]"))
-        .find((el) => el.offsetTop + el.offsetHeight >= container.scrollTop)
-      : null;
-    const anchorId = anchor?.dataset.messageId || null;
-    const anchorOffset = anchor ? anchor.offsetTop - (container?.scrollTop || 0) : 0;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
       `/chat/messages?session_id=${activeSession.id}&limit=120&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
     ).catch(() => null);
@@ -3934,29 +3934,17 @@ export default function ChatPage() {
       setHasMoreMessages(result.has_more);
       setNextCursor(result.next_cursor);
       const filtered = surfaceDbSavedStreamingPlaceholders(result.messages, { keepEmpty: true });
-      setMessages(prev => {
+      // AADS-SCROLL-JUMP-P2: 공용 앵커 시스템(ResizeObserver 재시도 + force 폴백)에 위임한다.
+      setMessagesPreservingViewport(prev => {
         const existingIds = new Set(prev.map(m => m.id));
         const unique = filtered.filter(m => !existingIds.has(m.id));
         return [...unique, ...prev];
-      });
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!container) return;
-          const nextAnchor = anchorId
-            ? container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorId)}"]`)
-            : null;
-          if (nextAnchor) {
-            container.scrollTop = nextAnchor.offsetTop - anchorOffset;
-          } else {
-            container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
-          }
-        });
       });
     } else {
       setHasMoreMessages(false);
       setNextCursor(null);
     }
-  }, [activeSession?.id, messages.length, nextCursor]);
+  }, [activeSession?.id, messages.length, nextCursor, setMessagesPreservingViewport]);
 
   const mergeLatestAssistantFromServer = useCallback(async (sessionId: string): Promise<ChatMessage | null> => {
     if (!sessionId) return null;
