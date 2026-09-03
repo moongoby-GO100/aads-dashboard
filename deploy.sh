@@ -364,6 +364,53 @@ verify_upstream_shape() {
     return 0
 }
 
+monitor_post_cutover() {
+    local started_at="$1"
+    local interval="${AADS_DASHBOARD_MONITOR_INTERVAL_SECONDS:-60}"
+    local rounds="${AADS_DASHBOARD_MONITOR_ROUNDS:-5}"
+    local round logs container
+
+    if ! [[ "$interval" =~ ^[0-9]+$ ]] || [ "$interval" -lt 1 ]; then
+        interval=60
+    fi
+    if ! [[ "$rounds" =~ ^[0-9]+$ ]] || [ "$rounds" -lt 1 ]; then
+        rounds=5
+    fi
+
+    log "Step 8: 5분 P0/P1 모니터링 시작 (since=${started_at}, rounds=${rounds}, interval=${interval}s)"
+    for round in $(seq 1 "$rounds"); do
+        if ! wget -q --spider "$HEALTH_EXTERNAL" 2>/dev/null; then
+            log "FAIL: post-cutover external health 실패 (${round}/${rounds})"
+            return 1
+        fi
+        if ! wget -q --spider "$HEALTH_BLUE" 2>/dev/null; then
+            log "FAIL: post-cutover blue health 실패 (${round}/${rounds})"
+            return 1
+        fi
+        if ! wget -q --spider "$HEALTH_GREEN" 2>/dev/null; then
+            log "FAIL: post-cutover green health 실패 (${round}/${rounds})"
+            return 1
+        fi
+
+        for container in "$BLUE_CONTAINER" "$GREEN_CONTAINER"; do
+            logs=$(docker logs --since "$started_at" "$container" 2>&1 \
+                | grep -Eai 'uncaught|unhandled|fatal|panic|out of memory|ENOMEM|EADDRINUSE|ECONNREFUSED|failed to start|cannot find module|TypeError|ReferenceError|SyntaxError|HTTP 500|status=500' \
+                || true)
+            if [ -n "$logs" ]; then
+                log "FAIL: post-cutover P0/P1 로그 감지 (${container})"
+                printf '%s\n' "$logs" | tail -20 | tee -a "$DEPLOY_LOG_FILE"
+                return 1
+            fi
+        done
+
+        log "OK: post-cutover monitor ${round}/${rounds} external/blue/green 정상"
+        if [ "$round" -lt "$rounds" ]; then
+            sleep "$interval"
+        fi
+    done
+    log "OK: 5분 P0/P1 모니터링 통과"
+}
+
 cd "$COMPOSE_DIR"
 
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
@@ -438,6 +485,7 @@ if ! wait_health "$HEALTH_EXTERNAL" 30 "external(${TARGET_SLOT})"; then
 fi
 write_active_state "$TARGET_CONTAINER" "$TARGET_PORT"
 release_nginx_switch_lock
+POST_CUTOVER_STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 # Step 5: 이전 슬롯 동기화
 if [ "${AADS_DASHBOARD_STOP_PREVIOUS:-false}" = "true" ]; then
@@ -462,8 +510,7 @@ if [ -n "$PREV_RELEASE" ] && [ -n "$TARGET_RELEASE" ] && [ "$PREV_RELEASE" != "$
 elif [ -n "$TARGET_RELEASE" ]; then
     log "OK: dashboard release 확인 (${TARGET_RELEASE})"
 fi
-log "배포 완료 — 활성 슬롯: ${TARGET_SLOT}, 상태: $STATUS"
-log "AADS Dashboard blue-green 배포 성공"
+log "cutover 완료 — 활성 슬롯: ${TARGET_SLOT}, 상태: $STATUS"
 
 # Step 7: 프론트엔드 QA 자동 실행
 log "Step 7: 프론트엔드 QA 실행 (30초 안정화 대기 후)"
@@ -514,3 +561,11 @@ elif [[ "$QA_RESULT" == "ERROR" || "$QA_RESULT" == "UNKNOWN" || -z "$QA_RESULT" 
 else
     log "Step 7: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
 fi
+
+if ! monitor_post_cutover "$POST_CUTOVER_STARTED_AT"; then
+    log "FAIL: 배포 후 P0/P1 모니터링 실패 — release certification 중단"
+    exit 1
+fi
+
+log "배포 완료 — 활성 슬롯: ${TARGET_SLOT}, 상태: $STATUS"
+log "AADS Dashboard blue-green 배포 성공"

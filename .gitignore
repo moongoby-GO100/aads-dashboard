@@ -5,6 +5,10 @@ node_modules/
 npm-debug.log*
 page.tsx.bak_refactor
 public/manager/env_5.json
+*.bak
+*.bak_*
+public/exports/
+public/reports/ACCT_*.html
 
 # BG runtime markers
 .active_container

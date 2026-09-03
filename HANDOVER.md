@@ -2122,3 +2122,16 @@
   - `npm run build` passed.
 - Release note:
   - `public/reports/llm-models-current.html` and other generated report artifacts are intentionally excluded from this ops patch until separately reviewed, because they are large generated content and not required for the chat/ops release.
+
+## 2026-09-03 13:22 KST - Dashboard release gate hardening
+
+- Request:
+  - Improve additional issues found, then commit, push, deploy, verify, and report if dependency checks pass.
+- Additional issues found:
+  - `deploy.sh` logged dashboard blue/green success before the required post-cutover monitoring finished.
+  - Generated dashboard artifacts and backup files could remain in the worktree and become accidental build-context inputs for manual Docker builds.
+- Change:
+  - `deploy.sh`: renamed early success to cutover completion, added a post-cutover health/log monitor, and moved final success reporting after the monitor passes.
+  - `.gitignore` and `.dockerignore`: exclude backup files, `public/exports/`, and generated ACCT report artifacts.
+- Verification:
+  - Pending at this note. Run shell syntax check, lint/build as needed, commit/push, then dashboard blue/green deploy.

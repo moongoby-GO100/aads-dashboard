@@ -2,3 +2,7 @@ node_modules
 .next
 .next_old
 .git
+*.bak
+*.bak_*
+public/exports
+public/reports/ACCT_*.html
