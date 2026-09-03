@@ -1,5 +1,20 @@
 # AADS Dashboard Handover
 
+## 2026-09-03 11:02 KST - SaaS customer home, BYOK UI, and user server router UI
+
+- Request:
+  - Implement customer home, BYOK UI, and "my server" execution router first, then deploy and report.
+- Changes:
+  - Added `/home` customer operations dashboard showing workspace count, BYOK status, user server status, and shortcuts.
+  - Added `/settings/api-keys` for user-owned provider API key registration, validation, and deletion via `/api/v1/user/api-keys`.
+  - Added `/settings/servers` for user-owned server registration and execution target routing via `/api/v1/user/project-servers/route-execute`.
+  - Exposed customer routes in the sidebar and browser title manager.
+- Verification before deploy:
+  - `npm run build` passed and generated `/home`, `/settings/api-keys`, and `/settings/servers`.
+  - `npx tsc --noEmit` passed.
+- Deployment:
+  - Pending at this entry. Commit, push, dashboard deploy, external HTTP checks, and five-minute P0/P1 monitoring are required before completion.
+
 ## 2026-09-02 17:45 KST - Admin users login-page shortcut
 
 - Request: Add an icon on `https://aads.newtalk.kr/admin/users` so each user row opens that user's login page in a new browser tab.

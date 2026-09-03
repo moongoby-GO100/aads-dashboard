@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏠", adminOnly: true },
+  { href: "/home", label: "고객 홈", icon: "🏠" },
   { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
   { href: "/assistant", label: "Assistant Hub", icon: "🧭", adminOnly: true },
   { href: "/braming", label: "브레인스토밍", icon: "🧠" },
@@ -32,6 +33,8 @@ const navItems = [
   { href: "/flow", label: "FLOW", icon: "🔄", adminOnly: true },
   { href: "/reports", label: "Reports", icon: "📊", adminOnly: true },
   { href: "/kakaobot", label: "KakaoBot", icon: "💬" },
+  { href: "/settings/api-keys", label: "AI API", icon: "🔑" },
+  { href: "/settings/servers", label: "내 서버 실행", icon: "🖥️" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
   { href: "/admin/users", label: "사용자 현황", icon: "👤", adminOnly: true },
   { href: "/admin/prompts", label: "Prompts", icon: "📝", adminOnly: true },
@@ -106,7 +109,7 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.filter((item) => isInternalAdmin || !item.adminOnly).map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
             return (
               <Link
                 key={item.href}

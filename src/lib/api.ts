@@ -102,6 +102,47 @@ export interface AdminUsersOverviewResponse {
   daily: Array<{ day: string; signups: number }>;
 }
 
+export interface UserApiKeyItem {
+  id: string;
+  provider: string;
+  masked_key: string;
+  display_name?: string | null;
+  is_active: boolean;
+  last_used_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserProjectServerItem {
+  id: string;
+  label: string;
+  host: string;
+  ssh_user: string;
+  ssh_port: number;
+  auth_type: string;
+  status: string;
+  connection_state: string;
+  workspace_id?: string | null;
+  project_key: string;
+  metadata: Record<string, unknown>;
+  last_checked_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProjectServerRouteResponse {
+  ok: boolean;
+  status: string;
+  event_id: number;
+  created_at: string;
+  route_target: string;
+  will_use_ohvis_resources: boolean;
+  requires_user_server_connection: boolean;
+  server?: UserProjectServerItem | null;
+  routing: Record<string, unknown>;
+  next_action: string;
+}
+
 import type {
   HealthResponse,
   ProjectListResponse,
@@ -423,6 +464,40 @@ export const api = {
     }),
   stopPCStream: (agent_id: string) =>
     request<any>(`/pc-agent/stream/${encodeURIComponent(agent_id)}/stop`, { method: "POST" }),
+
+  // SaaS customer resources
+  getUserApiKeys: () => request<UserApiKeyItem[]>("/user/api-keys"),
+  createUserApiKey: (data: { provider: string; key: string; display_name?: string }) =>
+    request<UserApiKeyItem>("/user/api-keys", { method: "POST", body: JSON.stringify(data) }),
+  testUserApiKey: (keyId: string) =>
+    request<{ ok: boolean; reason: string; provider?: string }>(`/user/api-keys/${encodeURIComponent(keyId)}/test`, { method: "POST" }),
+  deleteUserApiKey: (keyId: string) =>
+    request<{ ok: boolean; id: string }>(`/user/api-keys/${encodeURIComponent(keyId)}`, { method: "DELETE" }),
+  getUserProjectServers: () => request<UserProjectServerItem[]>("/user/project-servers"),
+  createUserProjectServer: (data: {
+    label?: string;
+    host: string;
+    ssh_user?: string;
+    ssh_port?: number;
+    auth_type?: string;
+    workspace_id?: string | null;
+    project_key?: string;
+    metadata?: Record<string, unknown>;
+  }) => request<UserProjectServerItem>("/user/project-servers", { method: "POST", body: JSON.stringify(data) }),
+  deleteUserProjectServer: (serverId: string) =>
+    request<{ ok: boolean; id: string }>(`/user/project-servers/${encodeURIComponent(serverId)}`, { method: "DELETE" }),
+  routeUserProjectExecution: (data: {
+    server_id?: string;
+    workspace_id?: string | null;
+    project_key?: string;
+    instruction: string;
+    size?: string;
+    dry_run?: boolean;
+  }) =>
+    request<UserProjectServerRouteResponse>("/user/project-servers/route-execute", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   // Device / Android Agent
   getDevices: (deviceType?: string) =>
