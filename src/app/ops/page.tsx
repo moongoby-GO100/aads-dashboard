@@ -81,6 +81,59 @@ interface DesignReviewItem {
   created_at: string;
 }
 
+interface DeployQueueItem {
+  id?: number;
+  project?: string;
+  release_sha?: string | null;
+  runner_job_id?: string | null;
+  status?: string;
+  phase?: string;
+  queue_position?: number | null;
+  phase_started_at?: string | null;
+  phase_completed_at?: string | null;
+  estimated_remaining_ms?: number | null;
+  duration_ms?: number | null;
+  bg_sync_status?: string;
+}
+
+interface DeployDurationItem {
+  project?: string;
+  sample_count?: number;
+  avg_duration_ms?: number | null;
+  p50_duration_ms?: number | null;
+  p90_duration_ms?: number | null;
+  last_completed_at?: string | null;
+  source?: string;
+}
+
+interface DeploySignalItem {
+  runner_job_id?: string;
+  project?: string;
+  status?: string;
+  phase?: string;
+  signal?: string;
+  idle_seconds?: number | null;
+  requires_ceo_approval?: boolean;
+}
+
+interface DeployObservabilityStatus {
+  generated_at?: string;
+  degraded?: boolean;
+  degraded_reasons?: string[];
+  active_deployments?: DeployQueueItem[];
+  queued_deployments?: DeployQueueItem[];
+  recent_durations_per_project?: DeployDurationItem[];
+  phase_timeline?: DeployQueueItem[];
+  stale_zombie_signals?: DeploySignalItem[];
+  legacy_stale_candidates?: unknown[];
+  bg_digest_sync?: DeployQueueItem[];
+  next_deploy_readiness?: {
+    ready?: boolean;
+    blockers?: string[];
+    next_queued_runner_job_id?: string | null;
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toKST(dtStr: string | null | undefined): string {
@@ -110,6 +163,12 @@ function formatDuration(secs: number | null | undefined): string {
 
 function safeNum(v: unknown): number {
   return typeof v === "number" ? v : 0;
+}
+
+function formatMillis(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return "-";
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  return formatDuration(seconds);
 }
 
 function infraStatusText(v: unknown): string {
@@ -156,6 +215,31 @@ function statusLabel(status: string): string {
     case "requeued": return "재큐";
     case "review_hold": return "리뷰보류";
     default: return status;
+  }
+}
+
+function deployTone(status: string | undefined): string {
+  switch ((status || "").toLowerCase()) {
+    case "ready":
+    case "completed":
+    case "success":
+    case "synced":
+      return "var(--success)";
+    case "queued":
+    case "awaiting_approval":
+    case "verifying":
+    case "syncing_standby":
+    case "unknown":
+      return "var(--warning)";
+    case "running":
+      return "var(--accent)";
+    case "error":
+    case "failed":
+    case "mismatch":
+    case "blocked":
+      return "var(--danger)";
+    default:
+      return "var(--text-secondary)";
   }
 }
 
@@ -318,6 +402,7 @@ export default function OpsPage() {
   const [bridgeLog, setBridgeLog] = useState<BridgeLogItem[]>([]);
   const [qaResults, setQaResults] = useState<QaResultItem[]>([]);
   const [designReviews, setDesignReviews] = useState<DesignReviewItem[]>([]);
+  const [deployStatus, setDeployStatus] = useState<DeployObservabilityStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("-");
@@ -345,7 +430,7 @@ export default function OpsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [healthData, lifecycleData, costData, envData, bridgeData, qaData, designData] = await Promise.allSettled([
+      const [healthData, lifecycleData, costData, envData, bridgeData, qaData, designData, deployData] = await Promise.allSettled([
         api.getOpsHealthCheck(),
         api.getOpsDirectiveLifecycle(20),
         api.getOpsCostSummary(),
@@ -353,6 +438,7 @@ export default function OpsPage() {
         api.getOpsBridgeLog(30),
         api.getOpsQaResults(20),
         api.getOpsDesignReviews(10),
+        api.getOpsCommonDeployStatus(),
       ]);
 
       if (healthData.status === "fulfilled") setHealth(healthData.value);
@@ -374,6 +460,7 @@ export default function OpsPage() {
         const items = designData.value?.items || designData.value || [];
         setDesignReviews(Array.isArray(items) ? items : []);
       }
+      if (deployData.status === "fulfilled") setDeployStatus(deployData.value);
 
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
       setError(null);
@@ -411,6 +498,15 @@ export default function OpsPage() {
   const greenStatus = infraStatusText(infra?.["aads-server-green"]);
   const activeSlot = deriveActiveSlot(infra, blueStatus, greenStatus);
   const greenRollbackBlocked = greenStatus !== "running";
+  const activeDeployments = deployStatus?.active_deployments || [];
+  const queuedDeployments = deployStatus?.queued_deployments || [];
+  const staleSignals = deployStatus?.stale_zombie_signals || [];
+  const recentDurations = deployStatus?.recent_durations_per_project || [];
+  const deployReady = Boolean(deployStatus?.next_deploy_readiness?.ready);
+  const deployReadinessLabel = deployStatus
+    ? deployReady ? "진행 가능" : "대기 필요"
+    : loading ? "로딩" : "미수집";
+  const deployGeneratedAt = deployStatus?.generated_at ? toKST(deployStatus.generated_at) : "-";
 
   const cardStyle: React.CSSProperties = {
     background: "var(--bg-card)",
@@ -551,6 +647,94 @@ export default function OpsPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        {/* ─── 섹션 1-2: 공통 배포 관제 ─── */}
+        <section style={{ ...cardStyle, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>공통 배포 관제</h3>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>수집: {deployGeneratedAt}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
+            {[
+              { label: "다음 배포", value: deployReadinessLabel, tone: deployReady ? "ready" : "blocked" },
+              { label: "진행중", value: `${activeDeployments.length}건`, tone: activeDeployments.length ? "running" : "success" },
+              { label: "대기", value: `${queuedDeployments.length}건`, tone: queuedDeployments.length ? "queued" : "success" },
+              { label: "재조정", value: `${staleSignals.length}건`, tone: staleSignals.length ? "error" : "success" },
+            ].map((item) => {
+              const color = deployTone(item.tone);
+              return (
+                <div key={item.label} style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color, overflowWrap: "anywhere" }}>{item.value}</div>
+                </div>
+              );
+            })}
+          </div>
+          {deployStatus?.degraded && (
+            <div style={{ border: "1px solid var(--warning)", background: "rgba(245,158,11,0.1)", borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12, color: "var(--warning)", overflowWrap: "anywhere" }}>
+              제한 수집: {(deployStatus.degraded_reasons || []).join(", ") || "unknown"}
+            </div>
+          )}
+          {(activeDeployments.length > 0 || queuedDeployments.length > 0) && (
+            <div style={{ overflowX: "auto", marginBottom: 14 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    {["프로젝트", "상태", "Phase", "SHA", "Runner", "대기순서", "예상잔여"].map((h) => (
+                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...activeDeployments, ...queuedDeployments].slice(0, 10).map((item, i) => (
+                    <tr key={`${item.runner_job_id || item.id || i}-${i}`} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "6px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{item.project || "-"}</td>
+                      <td style={{ padding: "6px 8px", color: deployTone(item.status), whiteSpace: "nowrap" }}>{item.status || "-"}</td>
+                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{item.phase || "-"}</td>
+                      <td style={{ padding: "6px 8px", fontFamily: "monospace", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.release_sha || "-"}</td>
+                      <td style={{ padding: "6px 8px", fontFamily: "monospace", whiteSpace: "nowrap" }}>{item.runner_job_id || "-"}</td>
+                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{item.queue_position ?? "-"}</td>
+                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{formatMillis(item.estimated_remaining_ms)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>프로젝트별 배포시간</div>
+              {recentDurations.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>측정값 없음</div>
+              ) : recentDurations.slice(0, 6).map((item) => (
+                <div key={item.project || "unknown"} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", overflowWrap: "anywhere" }}>{item.project || "-"}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>P50 {formatMillis(item.p50_duration_ms)} / P90 {formatMillis(item.p90_duration_ms)}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{item.sample_count || 0}건</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>차단 요인</div>
+              {(deployStatus?.next_deploy_readiness?.blockers || []).length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--success)" }}>없음</div>
+              ) : (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(deployStatus?.next_deploy_readiness?.blockers || []).map((blocker) => (
+                    <span key={blocker} style={{ border: "1px solid var(--warning)", color: "var(--warning)", borderRadius: 999, padding: "3px 8px", fontSize: 11, overflowWrap: "anywhere" }}>
+                      {blocker}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {staleSignals.slice(0, 4).map((signal) => (
+                <div key={signal.runner_job_id} style={{ marginTop: 8, fontSize: 12, color: "var(--danger)", overflowWrap: "anywhere" }}>
+                  {signal.project || "-"} · {signal.signal || "-"} · {signal.runner_job_id || "-"}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 

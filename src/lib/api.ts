@@ -407,6 +407,7 @@ export const api = {
   getOpsInfraCheck: () => request<any>("/ops/infra-check"),
   getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
   getOpsFullHealth: () => request<any>("/ops/full-health"),
+  getOpsCommonDeployStatus: () => request<any>("/ops/deploy/status"),
 
   // AADS-169: Claude Bot Status + Process Control
   getClaudeProcesses: (limit = 5) => request<any>(`/ops/claude-processes?limit=${limit}`),
