@@ -16,6 +16,17 @@ interface PCAgent {
   status: string;
   is_online?: boolean;
   heartbeat_age_seconds?: number;
+  last_seen?: string | null;
+  last_event?: string;
+  last_disconnect_reason?: string;
+  known_from_event_log?: boolean;
+}
+
+interface PCAgentSummary {
+  total_count: number;
+  online_count: number;
+  offline_count: number;
+  backend_source?: string;
 }
 
 const COMMAND_TYPES = [
@@ -40,6 +51,11 @@ function getParamPlaceholder(commandType: string): string {
 
 export default function PCAgentsPage() {
   const [agents, setAgents] = useState<PCAgent[]>([]);
+  const [agentSummary, setAgentSummary] = useState<PCAgentSummary>({
+    total_count: 0,
+    online_count: 0,
+    offline_count: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
@@ -61,10 +77,21 @@ export default function PCAgentsPage() {
   const fetchAgents = async () => {
     try {
       const data = await api.getPCAgents();
-      setAgents(Array.isArray(data) ? data : data.agents || []);
+      const list = Array.isArray(data) ? data : data.agents || [];
+      const onlineCount = list.filter((agent: PCAgent) => isConnected(agent)).length;
+      setAgents(list);
+      setAgentSummary({
+        total_count: Array.isArray(data) ? list.length : data.total_count ?? list.length,
+        online_count: Array.isArray(data) ? onlineCount : data.online_count ?? onlineCount,
+        offline_count: Array.isArray(data)
+          ? Math.max(list.length - onlineCount, 0)
+          : data.offline_count ?? Math.max(list.length - onlineCount, 0),
+        backend_source: Array.isArray(data) ? undefined : data.backend_source,
+      });
       setAgentsError(null);
     } catch (e) {
       setAgents([]);
+      setAgentSummary({ total_count: 0, online_count: 0, offline_count: 0 });
       setAgentsError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -148,6 +175,8 @@ export default function PCAgentsPage() {
     return Number.isFinite(last) && Date.now() - last < 30000;
   };
 
+  const onlineAgents = agents.filter((agent) => isConnected(agent));
+
   const formatHeartbeat = (value?: string | null) => {
     if (!value) return "-";
     const parsed = new Date(value);
@@ -210,7 +239,24 @@ export default function PCAgentsPage() {
 
       {/* PC 목록 */}
       <section>
-        <h2 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>연결된 PC</h2>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>연결된 PC</h2>
+          <div className="flex items-center gap-2 text-xs">
+            {[
+              ["전체", agentSummary.total_count, "var(--text-primary)"],
+              ["온라인", agentSummary.online_count, "#22c55e"],
+              ["오프라인", agentSummary.offline_count, "#f97316"],
+            ].map(([label, value, color]) => (
+              <span
+                key={String(label)}
+                className="rounded px-2 py-1"
+                style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: String(color) }}
+              >
+                {label} {value}
+              </span>
+            ))}
+          </div>
+        </div>
         {loading ? (
           <div className="text-sm" style={{ color: "var(--text-secondary)" }}>로딩 중...</div>
         ) : agentsError ? (
@@ -232,8 +278,13 @@ export default function PCAgentsPage() {
                   style={{
                     background: "var(--bg-card)",
                     border: selectedAgent === agent.agent_id ? "1px solid var(--accent)" : "1px solid var(--border)",
+                    opacity: connected ? 1 : 0.72,
                   }}
-                  onClick={() => { setSelectedAgent(agent.agent_id); setStreamAgent(agent.agent_id); }}
+                  onClick={() => {
+                    if (!connected) return;
+                    setSelectedAgent(agent.agent_id);
+                    setStreamAgent(agent.agent_id);
+                  }}
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span
@@ -246,6 +297,12 @@ export default function PCAgentsPage() {
                     <div>OS: {agent.os_info || agent.os || "-"}</div>
                     <div>ID: <span className="font-mono">{agent.agent_id.slice(0, 12)}…</span></div>
                     <div>마지막 하트비트: {formatHeartbeat(agent.last_heartbeat)}</div>
+                    {!connected && (
+                      <div>
+                        상태: 오프라인{agent.last_event ? ` / ${agent.last_event}` : ""}
+                        {agent.last_disconnect_reason ? ` / ${agent.last_disconnect_reason}` : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -268,7 +325,7 @@ export default function PCAgentsPage() {
                 onChange={(e) => setSelectedAgent(e.target.value)}
               >
                 <option value="">-- PC 선택 --</option>
-                {agents.map((a) => (
+                {onlineAgents.map((a) => (
                   <option key={a.agent_id} value={a.agent_id}>{a.agent_name || a.hostname || a.agent_id} ({a.agent_id.slice(0, 8)}…)</option>
                 ))}
               </select>
@@ -356,7 +413,7 @@ export default function PCAgentsPage() {
                 disabled={streaming}
               >
                 <option value="">-- PC 선택 --</option>
-                {agents.map((a) => (
+                {onlineAgents.map((a) => (
                   <option key={a.agent_id} value={a.agent_id}>{a.agent_name || a.hostname || a.agent_id} ({a.agent_id.slice(0, 8)}…)</option>
                 ))}
               </select>
