@@ -15,9 +15,57 @@ const ROLE_LABELS: Record<string, string> = {
   Analyst: "Analyst",
 };
 
+const ACTIVE_SESSION_WINDOW_MS = 90 * 1000;
+const RECENT_SESSION_WINDOW_MS = 10 * 60 * 1000;
+
 function getWorkspaceDefaultRole(workspace?: Workspace): string {
   const value = String(workspace?.settings?.default_role_key || "");
   return ROLE_LABELS[value] ? value : "CEO";
+}
+
+function sessionUpdatedAgeMs(session: ChatSession): number | null {
+  const updatedAt = Date.parse(session.updated_at || "");
+  if (!Number.isFinite(updatedAt)) return null;
+  return Date.now() - updatedAt;
+}
+
+function getSessionStatus(session: ChatSession): {
+  label: string;
+  color: string;
+  title: string;
+  pulse: boolean;
+} {
+  if (session.current_execution_id) {
+    return {
+      label: "작업중",
+      color: "#22c55e",
+      title: "현재 응답 또는 도구 작업이 진행 중입니다",
+      pulse: true,
+    };
+  }
+  const ageMs = sessionUpdatedAgeMs(session);
+  if (ageMs !== null && ageMs >= 0 && ageMs < ACTIVE_SESSION_WINDOW_MS) {
+    return {
+      label: "방금",
+      color: "#38bdf8",
+      title: "방금 갱신된 세션입니다",
+      pulse: false,
+    };
+  }
+  if (ageMs !== null && ageMs >= 0 && ageMs < RECENT_SESSION_WINDOW_MS) {
+    return {
+      label: "최근",
+      color: "#a78bfa",
+      title: "최근 갱신된 세션입니다",
+      pulse: false,
+    };
+  }
+  return {
+    label: "대기",
+    color: "#94a3b8",
+    title: "대기 중인 세션입니다",
+    pulse: false,
+  };
 }
 
 export interface ChatSidebarProps {
@@ -302,6 +350,14 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                   const unpinned = visibleSessions.filter((s) => !s.pinned);
                   const workspaceDefaultRole = getWorkspaceDefaultRole(ws);
                   const sessionRoleLabel = (s: ChatSession) => ROLE_LABELS[s.role_key || workspaceDefaultRole] || s.role_key || workspaceDefaultRole;
+                  const statusDotStyle = (status: ReturnType<typeof getSessionStatus>, isActive: boolean): CSSProperties => ({
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "999px",
+                    background: isActive ? "#fff" : status.color,
+                    boxShadow: status.pulse ? `0 0 0 4px ${status.color}30` : "none",
+                    flexShrink: 0,
+                  });
                   const actionStyle = (isActive: boolean): CSSProperties => ({
                     width: "22px",
                     height: "22px",
@@ -316,7 +372,10 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                     fontSize: "11px",
                     flexShrink: 0,
                   });
-                  const renderSession = (s: ChatSession) => (
+                  const renderSession = (s: ChatSession) => {
+                    const status = getSessionStatus(s);
+                    const isActiveSession = activeSession?.id === s.id;
+                    return (
                     <div key={s.id} style={{ marginBottom: "1px" }}>
                       {renaming?.id === s.id ? (
                         <div style={{ padding: "3px 6px" }}>
@@ -353,7 +412,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                             gap: "4px",
                             padding: "2px 4px",
                             borderRadius: "7px",
-                            background: activeSession?.id === s.id ? "var(--ct-accent)" : "transparent",
+                            background: isActiveSession ? "var(--ct-accent)" : "transparent",
                           }}
                         >
                           <a
@@ -374,17 +433,17 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                               border: "none",
                               borderRadius: "6px",
                               cursor: "pointer",
-                              color: activeSession?.id === s.id ? "#fff" : "var(--ct-text2)",
+                              color: isActiveSession ? "#fff" : "var(--ct-text2)",
                               overflow: "hidden",
                               textDecoration: "none",
                               fontFamily: "inherit",
                               boxSizing: "border-box",
                             }}
                             onMouseEnter={(e) => {
-                              if (activeSession?.id !== s.id) e.currentTarget.style.background = "var(--ct-hover)";
+                              if (!isActiveSession) e.currentTarget.style.background = "var(--ct-hover)";
                             }}
                             onMouseLeave={(e) => {
-                              if (activeSession?.id !== s.id) e.currentTarget.style.background = "transparent";
+                              if (!isActiveSession) e.currentTarget.style.background = "transparent";
                             }}
                           >
                             <div
@@ -397,6 +456,11 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 gap: "4px",
                               }}
                             >
+                              <span
+                                style={statusDotStyle(status, isActiveSession)}
+                                title={status.title}
+                                aria-label={status.title}
+                              />
                               {s.pinned && <span style={{ fontSize: "10px", flexShrink: 0 }}>📌</span>}
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {s.title || "새 대화"}
@@ -418,12 +482,25 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 style={{
                                   padding: "0 4px",
                                   borderRadius: "5px",
-                                  background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
+                                  background: isActiveSession ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
                                   fontSize: "9px",
                                   fontWeight: 700,
                                 }}
                               >
                                 {sessionRoleLabel(s)}
+                              </span>
+                              <span
+                                title={status.title}
+                                style={{
+                                  padding: "0 4px",
+                                  borderRadius: "5px",
+                                  background: isActiveSession ? "rgba(255,255,255,0.18)" : "var(--ct-hover)",
+                                  color: isActiveSession ? "#fff" : status.color,
+                                  fontSize: "9px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {status.label}
                               </span>
                               {(s.tags || []).length > 0 && (
                                 <span style={{ display: "inline-flex", gap: "2px", marginLeft: "2px" }}>
@@ -433,7 +510,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                       style={{
                                         padding: "0 4px",
                                         borderRadius: "6px",
-                                        background: activeSession?.id === s.id ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
+                                        background: isActiveSession ? "rgba(255,255,255,0.2)" : "var(--ct-hover)",
                                         fontSize: "9px",
                                       }}
                                     >
@@ -454,7 +531,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 e.stopPropagation();
                                 window.open(`${window.location.origin}/chat#${s.id}`, "_blank");
                               }}
-                              style={actionStyle(activeSession?.id === s.id)}
+                              style={actionStyle(isActiveSession)}
                             >
                               ↗
                             </button>
@@ -464,7 +541,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 e.stopPropagation();
                                 setRenaming({ id: s.id, value: s.title });
                               }}
-                              style={actionStyle(activeSession?.id === s.id)}
+                              style={actionStyle(isActiveSession)}
                             >
                               ✎
                             </button>
@@ -474,7 +551,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 e.stopPropagation();
                                 deleteSession(s.id);
                               }}
-                              style={actionStyle(activeSession?.id === s.id)}
+                              style={actionStyle(isActiveSession)}
                             >
                               ×
                             </button>
@@ -484,7 +561,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                                 e.stopPropagation();
                                 onSessionContextMenu(e, s);
                               }}
-                              style={actionStyle(activeSession?.id === s.id)}
+                              style={actionStyle(isActiveSession)}
                             >
                               ⋯
                             </button>
@@ -492,7 +569,8 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                         </div>
                       )}
                     </div>
-                  );
+                    );
+                  };
                   return (
                     <>
                       {workspaceSessionLoading[ws.id] && (

@@ -2154,3 +2154,17 @@
   - `.gitignore` and `.dockerignore`: exclude backup files, `public/exports/`, and generated ACCT report artifacts.
 - Verification:
   - Pending at this note. Run shell syntax check, lint/build as needed, commit/push, then dashboard blue/green deploy.
+
+## 2026-09-04 12:57 KST - Chat title source consolidation and sidebar status indicators
+
+- Request:
+  - Apply the remaining recommended improvements after the tab-title report, deploy them, and report the result.
+- Changes:
+  - `src/components/PageTitleManager.tsx`: removed the duplicate route title map and now uses `resolveRouteTitle()` from `src/lib/navigation.ts` as the single source of truth.
+  - `src/app/chat/ChatSidebar.tsx`: added session status indicators in the chat sidebar. Sessions with `current_execution_id` show `작업중`, very recent sessions show `방금`, recently updated sessions show `최근`, and idle sessions show `대기`.
+- Verification before release:
+  - `npm exec eslint -- src/components/PageTitleManager.tsx src/app/chat/ChatSidebar.tsx` passed.
+  - `npm exec tsc -- --noEmit` passed.
+  - `npm run build` passed.
+- Deployment:
+  - Pending at this note. Commit, push, and dashboard blue/green deployment are required before this is considered operationally reflected.
