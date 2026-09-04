@@ -7,11 +7,15 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api
 
 interface PCAgent {
   agent_id: string;
+  agent_name?: string;
   hostname: string;
-  os: string;
-  connected_at: string;
-  last_heartbeat: string;
+  os?: string;
+  os_info?: string;
+  connected_at?: string | null;
+  last_heartbeat?: string | null;
   status: string;
+  is_online?: boolean;
+  heartbeat_age_seconds?: number;
 }
 
 const COMMAND_TYPES = [
@@ -37,6 +41,7 @@ function getParamPlaceholder(commandType: string): string {
 export default function PCAgentsPage() {
   const [agents, setAgents] = useState<PCAgent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [commandType, setCommandType] = useState("screenshot");
   const [paramsText, setParamsText] = useState("{}");
@@ -57,8 +62,10 @@ export default function PCAgentsPage() {
     try {
       const data = await api.getPCAgents();
       setAgents(Array.isArray(data) ? data : data.agents || []);
-    } catch {
+      setAgentsError(null);
+    } catch (e) {
       setAgents([]);
+      setAgentsError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -136,8 +143,16 @@ export default function PCAgentsPage() {
   };
 
   const isConnected = (agent: PCAgent) => {
-    const last = new Date(agent.last_heartbeat).getTime();
-    return Date.now() - last < 30000;
+    if (typeof agent.is_online === "boolean") return agent.is_online;
+    const last = new Date(agent.last_heartbeat || "").getTime();
+    return Number.isFinite(last) && Date.now() - last < 30000;
+  };
+
+  const formatHeartbeat = (value?: string | null) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleTimeString("ko-KR");
   };
 
   const handleDownloadExe = () => {
@@ -198,6 +213,10 @@ export default function PCAgentsPage() {
         <h2 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>연결된 PC</h2>
         {loading ? (
           <div className="text-sm" style={{ color: "var(--text-secondary)" }}>로딩 중...</div>
+        ) : agentsError ? (
+          <div className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-card)", color: "#fca5a5", border: "1px solid #7f1d1d" }}>
+            PC Agent 목록 조회 실패: {agentsError}
+          </div>
         ) : agents.length === 0 ? (
           <div className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-card)", color: "var(--text-secondary)" }}>
             연결된 PC Agent 없음
@@ -221,12 +240,12 @@ export default function PCAgentsPage() {
                       className="w-2 h-2 rounded-full inline-block"
                       style={{ background: connected ? "#22c55e" : "#ef4444" }}
                     />
-                    <span className="font-medium text-sm">{agent.hostname}</span>
+                    <span className="font-medium text-sm">{agent.agent_name || agent.hostname || agent.agent_id}</span>
                   </div>
                   <div className="text-xs space-y-1" style={{ color: "var(--text-secondary)" }}>
-                    <div>OS: {agent.os}</div>
+                    <div>OS: {agent.os_info || agent.os || "-"}</div>
                     <div>ID: <span className="font-mono">{agent.agent_id.slice(0, 12)}…</span></div>
-                    <div>마지막 하트비트: {new Date(agent.last_heartbeat).toLocaleTimeString("ko-KR")}</div>
+                    <div>마지막 하트비트: {formatHeartbeat(agent.last_heartbeat)}</div>
                   </div>
                 </div>
               );
@@ -250,7 +269,7 @@ export default function PCAgentsPage() {
               >
                 <option value="">-- PC 선택 --</option>
                 {agents.map((a) => (
-                  <option key={a.agent_id} value={a.agent_id}>{a.hostname} ({a.agent_id.slice(0, 8)}…)</option>
+                  <option key={a.agent_id} value={a.agent_id}>{a.agent_name || a.hostname || a.agent_id} ({a.agent_id.slice(0, 8)}…)</option>
                 ))}
               </select>
             </div>
@@ -338,7 +357,7 @@ export default function PCAgentsPage() {
               >
                 <option value="">-- PC 선택 --</option>
                 {agents.map((a) => (
-                  <option key={a.agent_id} value={a.agent_id}>{a.hostname} ({a.agent_id.slice(0, 8)}…)</option>
+                  <option key={a.agent_id} value={a.agent_id}>{a.agent_name || a.hostname || a.agent_id} ({a.agent_id.slice(0, 8)}…)</option>
                 ))}
               </select>
             </div>
