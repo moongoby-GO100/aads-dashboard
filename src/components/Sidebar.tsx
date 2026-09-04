@@ -2,55 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-
-const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏠", adminOnly: true },
-  { href: "/home", label: "고객 홈", icon: "🏠" },
-  { href: "/chat", label: "AI Chat", icon: "💬", highlight: true },
-  { href: "/assistant", label: "Assistant Hub", icon: "🧭", adminOnly: true },
-  { href: "/braming", label: "브레인스토밍", icon: "🧠", adminOnly: true },
-  { href: "/project-status", label: "Project Status", icon: "📊", adminOnly: true },
-  { href: "/conversations", label: "Conversations", icon: "🗨️", adminOnly: true },
-  { href: "/channels", label: "대화창 관리", icon: "📌", adminOnly: true },
-  { href: "/managers", label: "Managers", icon: "👥", adminOnly: true },
-  { href: "/team", label: "Team", icon: "👥", adminOnly: true },
-  { href: "/agenda", label: "아젠다", icon: "📌", adminOnly: true },
-  { href: "/marketing/ably", label: "에이블리 광고분석", icon: "📈", adminOnly: true },
-  { href: "/decisions", label: "CEO Decisions", icon: "🎯", adminOnly: true },
-  { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true },
-  { href: "/docs", label: "문서 통합", icon: "📄", adminOnly: true },
-  { href: "/design/modifications", label: "Design Studio", icon: "🎨", adminOnly: true },
-  { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true },
-  { href: "/ops", label: "운영 현황", icon: "📊", adminOnly: true },
-  { href: "/ops/recovery", label: "Recovery", icon: "🔄", adminOnly: true },
-  { href: "/ops/servers", label: "Servers", icon: "🖥️", adminOnly: true },
-  { href: "/ops/memory", label: "메모리", icon: "🧠", adminOnly: true },
-  { href: "/ops/pc-agents", label: "PC Agent", icon: "💻", adminOnly: true },
-  { href: "/browser-tasks", label: "브라우저 실행", icon: "🌐", adminOnly: true },
-  { href: "/authenticated-collector", label: "로그인 수집 허브", icon: "🔐", adminOnly: true },
-  { href: "/agent-vault", label: "Agent Vault", icon: "🔐", adminOnly: true },
-  { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱", adminOnly: true },
-  { href: "/lessons", label: "교훈", icon: "💡", adminOnly: true },
-  { href: "/flow", label: "FLOW", icon: "🔄", adminOnly: true },
-  { href: "/reports", label: "Reports", icon: "📊", adminOnly: true },
-  { href: "/kakaobot", label: "KakaoBot", icon: "💬", adminOnly: true },
-  { href: "/settings/api-keys", label: "AI API", icon: "🔑" },
-  { href: "/settings/servers", label: "내 서버 실행", icon: "🖥️" },
-  { href: "/settings", label: "Settings", icon: "⚙️" },
-  { href: "/admin/users", label: "사용자 현황", icon: "👤", adminOnly: true },
-  { href: "/admin/prompts", label: "Prompts", icon: "📝", adminOnly: true },
-  { href: "/admin/tasks", label: "Task Board", icon: "🗂️", adminOnly: true },
-  { href: "/admin/agents", label: "Agent Registry", icon: "🧩", adminOnly: true },
-  { href: "/admin/governance", label: "Governance", icon: "🏛️", adminOnly: true },
-  { href: "/admin/model-routing", label: "모델 라우팅", icon: "🧭", adminOnly: true },
-  { href: "/admin/model-parity", label: "모델 패리티", icon: "⚖️", adminOnly: true },
-  { href: "/exports/llm-models-current.html", label: "LLM 모델 현황 2026", icon: "🤖", adminOnly: true, external: true },
-  { href: "/admin/deploy", label: "배포 현황", icon: "🚀", adminOnly: true },
-  { href: "/admin/app-settings", label: "오비스 앱 설정", icon: "📱", adminOnly: true },
-  { href: "/admin/loops", label: "루프 관리", icon: "🔁", adminOnly: true },
-  { href: "/admin/sessions", label: "세션 리플레이", icon: "📹", adminOnly: true },
-  { href: "/admin/emergency", label: "Emergency", icon: "🚨", adminOnly: true },
-];
+import { APP_NAV_ITEMS } from "@/lib/navigation";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -109,7 +61,7 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
           </button>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.filter((item) => isInternalAdmin || !item.adminOnly).map((item) => {
+          {APP_NAV_ITEMS.filter((item) => isInternalAdmin || !item.adminOnly).map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
             return (
               <Link

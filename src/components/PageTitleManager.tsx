@@ -3,10 +3,15 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { syncTokenCookieFromStorage } from "@/lib/auth";
+import { APP_NAV_ITEMS } from "@/lib/navigation";
+import { CHAT_SESSION_TITLE_EVENT, type ChatSessionTitleEventDetail } from "@/lib/pageTitleEvents";
 
 const APP_SUFFIX = "AADS";
 const CHAT_SUFFIX = "AADS Chat";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+const NAV_ROUTE_TITLES: Record<string, string> = Object.fromEntries(
+  APP_NAV_ITEMS.map((item) => [item.href, item.pageTitle || item.label]),
+);
 
 type RouteTitleRule = {
   pattern: RegExp;
@@ -113,7 +118,7 @@ function fallbackRouteTitle(pathname: string): string {
 
 function resolveRouteTitle(pathname: string): string {
   const cleanPath = pathname.replace(/\/+$/, "") || "/";
-  const exact = EXACT_ROUTE_TITLES[cleanPath];
+  const exact = NAV_ROUTE_TITLES[cleanPath] || EXACT_ROUTE_TITLES[cleanPath];
   if (exact) return exact;
   for (const rule of DYNAMIC_ROUTE_TITLES) {
     const match = cleanPath.match(rule.pattern);
@@ -158,19 +163,26 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
   useEffect(() => {
     if (disabled || typeof document === "undefined") return;
     let abortController: AbortController | null = null;
+    let titleRequestId = 0;
 
-    const applyTitle = () => {
+    const cancelPendingSessionLookup = () => {
+      titleRequestId += 1;
       if (abortController) abortController.abort();
       abortController = null;
+    };
+
+    const applyTitle = () => {
+      cancelPendingSessionLookup();
 
       if (pathname === "/chat") {
         const sessionId = currentChatSessionId();
         document.title = formatDocumentTitle("AI Chat", CHAT_SUFFIX);
         if (!sessionId) return;
+        const requestId = titleRequestId;
         abortController = new AbortController();
         fetchChatSessionTitle(sessionId, abortController.signal)
           .then((title) => {
-            if (title) document.title = formatDocumentTitle(title, CHAT_SUFFIX);
+            if (title && requestId === titleRequestId) document.title = formatDocumentTitle(title, CHAT_SUFFIX);
           })
           .catch(() => {
             // Keep the route-level title if session lookup fails.
@@ -181,12 +193,23 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
       document.title = formatDocumentTitle(resolveRouteTitle(pathname));
     };
 
+    const handleChatSessionTitleChange = (event: Event) => {
+      if (pathname !== "/chat") return;
+      const detail = (event as CustomEvent<ChatSessionTitleEventDetail>).detail;
+      if (!detail || detail.sessionId !== currentChatSessionId()) return;
+      cancelPendingSessionLookup();
+      const nextTitle = detail.deleted ? "AI Chat" : detail.title || "AI Chat";
+      document.title = formatDocumentTitle(nextTitle, CHAT_SUFFIX);
+    };
+
     applyTitle();
     window.addEventListener("hashchange", applyTitle);
     window.addEventListener("popstate", applyTitle);
+    window.addEventListener(CHAT_SESSION_TITLE_EVENT, handleChatSessionTitleChange);
     return () => {
       window.removeEventListener("hashchange", applyTitle);
       window.removeEventListener("popstate", applyTitle);
+      window.removeEventListener(CHAT_SESSION_TITLE_EVENT, handleChatSessionTitleChange);
       if (abortController) abortController.abort();
     };
   }, [disabled, pathname]);

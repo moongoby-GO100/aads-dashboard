@@ -37,6 +37,7 @@ import {
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
+import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -6049,6 +6050,7 @@ export default function ChatPage() {
       await chatApi(`/chat/sessions/${id}`, { method: "DELETE" });
       setSessions((prev) => prev.filter((s) => s.id !== id));
       removeCachedSession(id);
+      emitChatSessionTitleChange({ sessionId: id, deleted: true });
       if (activeSession?.id === id) { setActiveSession(null); setMessages([]); }
     } catch { /* ignore */ }
     setContextMenu(null);
@@ -6094,6 +6096,7 @@ export default function ChatPage() {
       });
       setSessions((prev) => prev.map((s) => (s.id === renaming.id ? updated : s)));
       patchCachedSession(updated);
+      emitChatSessionTitleChange({ sessionId: updated.id, title: updated.title });
       if (activeSession?.id === renaming.id) setActiveSession(updated);
     } catch { /* ignore */ }
     setRenaming(null);

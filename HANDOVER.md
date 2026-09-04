@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-09-04 12:14 KST - Chat tab title events and shared navigation title map
+
+- Request:
+  - Fix browser tab title updates after chat session rename/delete without requiring refresh.
+  - Unify route title mapping with sidebar menu labels to prevent page title drift.
+  - Review DB MCP 30-second SELECT timeout symptoms and prepare sidebar task-status icon plan.
+- Changes:
+  - Added `src/lib/pageTitleEvents.ts` for chat session title change/delete browser events.
+  - Added `src/lib/navigation.ts` as the shared sidebar navigation source.
+  - Updated `src/components/Sidebar.tsx` to render `APP_NAV_ITEMS`.
+  - Updated `src/components/PageTitleManager.tsx` to prioritize titles from `APP_NAV_ITEMS` and ignore stale async chat-title fetches after local title events.
+  - Updated `src/app/chat/page.tsx` to emit title events after successful session rename/delete.
+- Verification:
+  - `npx eslint src/components/PageTitleManager.tsx src/components/Sidebar.tsx src/app/chat/page.tsx src/lib/navigation.ts src/lib/pageTitleEvents.ts` passed with 0 errors and existing chat-page warnings only.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `npm run build` passed and generated the dashboard route set.
+- Deployment:
+  - Not deployed in this entry. Commit, push, dashboard deploy, external HTTP checks, and mobile/browser E2E remain pending.
+
 ## 2026-09-03 12:51 KST - Dashboard dependency security cleanup and lint gate recovery
 
 - Request:
