@@ -14,7 +14,14 @@
   - `git diff --check -- src/app/chat/page.tsx HANDOVER.md` passed.
   - `npm run build` passed and generated the dashboard route set including `/chat`.
 - Deployment:
-  - Pending at this entry. Commit, push, dashboard deploy, external HTTP checks, and five-minute P0/P1 monitoring remain required.
+  - Committed and pushed `a2a6eda feat(chat): add response overview panel`.
+  - `/root/aads/aads-dashboard/deploy.sh` completed blue-green deployment for release `a2a6eda40506`; active slot `blue`, standby slot `green`.
+  - Both dashboard containers are healthy and expose `AADS_RELEASE_SHA=a2a6eda40506`.
+  - Active and standby containers use the same image digest `sha256:33b603dd8c5835047ba8360cb5baa84959fca5c71a2a1e8fc00af50f9b18a561`.
+  - External `/chat` returned HTTP 307 to `/login?redirect=%2Fchat`, matching the protected chat route behavior; `/login` returned HTTP 200.
+  - `capture_screenshot` saved `https://aads.newtalk.kr/screenshots/screenshot_20260906_002413_561113.png`.
+  - Deploy Step 7 QA returned `UNKNOWN`; fallback verification used HTTP, container health, release SHA, same digest, and deployed bundle string check.
+  - 5-minute P0/P1 monitor completed with external/blue/green all normal.
 
 ## 2026-09-04 12:14 KST - Chat tab title events and shared navigation title map
 
