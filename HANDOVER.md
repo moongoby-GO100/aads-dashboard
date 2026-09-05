@@ -1,5 +1,21 @@
 # AADS Dashboard Handover
 
+## 2026-09-06 00:05 KST - Chat response overview panel
+
+- Request:
+  - Implement the chat response readability structure so long assistant replies can be understood at a glance, then deploy.
+- Changes:
+  - Added an automatic response overview panel to `src/app/chat/page.tsx` for completed assistant replies over 1,200 characters.
+  - The panel extracts the first conclusion lines, up to seven `##`/`###` sections, the next-action line, and coverage badges for evidence, verification, risk, and next step.
+  - The original Markdown body remains fully rendered below the overview; streaming/recovery placeholders do not render the overview to avoid scroll-height churn during generation.
+- Verification before deploy:
+  - `npx eslint src/app/chat/page.tsx` passed with 0 errors and 20 existing warnings.
+  - `npx tsc --noEmit --pretty false` passed.
+  - `git diff --check -- src/app/chat/page.tsx HANDOVER.md` passed.
+  - `npm run build` passed and generated the dashboard route set including `/chat`.
+- Deployment:
+  - Pending at this entry. Commit, push, dashboard deploy, external HTTP checks, and five-minute P0/P1 monitoring remain required.
+
 ## 2026-09-04 12:14 KST - Chat tab title events and shared navigation title map
 
 - Request:

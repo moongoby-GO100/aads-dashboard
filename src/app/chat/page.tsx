@@ -1809,6 +1809,180 @@ function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: 
   );
 }
 
+const RESPONSE_OVERVIEW_MIN_CHARS = 1200;
+const RESPONSE_OVERVIEW_MAX_SECTIONS = 7;
+const RESPONSE_OVERVIEW_SOURCE_TAG_RE = /\[(?:DB\s*조회|코드\s*확인|로그|명령|도구|검증|실측|출처|공식문서|미측정)[^\]]*\]/gi;
+
+type ResponseOverview = {
+  leadLines: string[];
+  sections: string[];
+  nextAction: string;
+  hasVerification: boolean;
+  hasRisk: boolean;
+  hasEvidence: boolean;
+  sourceTagCount: number;
+  tableCount: number;
+  codeBlockCount: number;
+};
+
+function cleanOverviewLine(line: string): string {
+  return line
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/^\d+\.\s+/, "")
+    .replace(/\*\*/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .trim();
+}
+
+function summarizeLeadLines(content: string): string[] {
+  const lines = content
+    .split("\n")
+    .map(cleanOverviewLine)
+    .filter((line) => line.length > 0 && !/^\|/.test(line) && !/^[-:|\s]+$/.test(line));
+
+  const preferred = lines.filter((line) => /^(✅|⚠️|❌|결론|요약|판정|현황|답변|수행 내역)/.test(line));
+  const source = preferred.length > 0 ? preferred : lines;
+  return source.slice(0, 2).map((line) => line.length > 150 ? `${line.slice(0, 147)}...` : line);
+}
+
+function extractResponseSections(content: string): string[] {
+  const sections: string[] = [];
+  const headingRe = /^\s{0,3}#{2,4}\s+(.+)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = headingRe.exec(content)) !== null) {
+    const title = cleanOverviewLine(match[1] || "");
+    if (title && !sections.includes(title)) sections.push(title);
+    if (sections.length >= RESPONSE_OVERVIEW_MAX_SECTIONS) break;
+  }
+  return sections;
+}
+
+function extractNextAction(content: string): string {
+  const lines = content.split("\n").map(cleanOverviewLine).filter(Boolean);
+  const direct = lines.find((line) => /^(→\s*)?(다음 단계|권장 조치|즉시 실행|후속 조치)/.test(line));
+  if (direct) return direct.length > 150 ? `${direct.slice(0, 147)}...` : direct;
+  const arrow = lines.find((line) => line.startsWith("→"));
+  return arrow ? (arrow.length > 150 ? `${arrow.slice(0, 147)}...` : arrow) : "";
+}
+
+function buildResponseOverview(content: string): ResponseOverview | null {
+  if (content.length < RESPONSE_OVERVIEW_MIN_CHARS) return null;
+  const sections = extractResponseSections(content);
+  const tableCount = (content.match(/\|[^\n]+\|\s*\n\s*\|[\s\-:|]+\|/g) || []).length;
+  const codeBlockCount = (content.match(/```/g) || []).length / 2;
+  const sourceTagCount = (content.match(RESPONSE_OVERVIEW_SOURCE_TAG_RE) || []).length;
+  const hasOverviewSignals = sections.length > 1 || tableCount > 0 || codeBlockCount > 0 || sourceTagCount > 0;
+  if (!hasOverviewSignals && content.length < 3000) return null;
+
+  return {
+    leadLines: summarizeLeadLines(content),
+    sections,
+    nextAction: extractNextAction(content),
+    hasVerification: /(검증|테스트|완료기준|성공 기준|health|build|lint|py_compile)/i.test(content),
+    hasRisk: /(리스크|문제|문제점|이상 항목|미완료|주의|한계)/.test(content),
+    hasEvidence: /(근거|출처|실측|DB|로그|코드 확인|명령)/.test(content),
+    sourceTagCount,
+    tableCount,
+    codeBlockCount: Math.floor(codeBlockCount),
+  };
+}
+
+function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverview; isMobile: boolean }) {
+  const indicators = [
+    { label: "근거", ok: overview.hasEvidence || overview.sourceTagCount > 0 },
+    { label: "검증", ok: overview.hasVerification },
+    { label: "리스크", ok: overview.hasRisk },
+    { label: "다음", ok: Boolean(overview.nextAction) },
+  ];
+
+  return (
+    <div
+      aria-label="응답 개요"
+      style={{
+        marginBottom: "10px",
+        padding: isMobile ? "10px" : "10px 12px",
+        borderRadius: "8px",
+        border: "1px solid rgba(94, 234, 212, 0.28)",
+        borderLeft: "3px solid #14b8a6",
+        background: "rgba(20, 184, 166, 0.08)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "7px" }}>
+        <div style={{ fontSize: "12px", fontWeight: 700, color: "#5eead4" }}>응답 개요</div>
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {indicators.map((item) => (
+            <span
+              key={item.label}
+              title={item.ok ? `${item.label} 항목 확인됨` : `${item.label} 항목이 본문에서 명확하지 않음`}
+              style={{
+                fontSize: "10px",
+                lineHeight: 1,
+                padding: "4px 6px",
+                borderRadius: "999px",
+                color: item.ok ? "#ccfbf1" : "var(--ct-text2)",
+                background: item.ok ? "rgba(20, 184, 166, 0.18)" : "rgba(148, 163, 184, 0.10)",
+                border: `1px solid ${item.ok ? "rgba(94, 234, 212, 0.24)" : "rgba(148, 163, 184, 0.16)"}`,
+              }}
+            >
+              {item.ok ? "✓" : "!"} {item.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {overview.leadLines.length > 0 && (
+        <div style={{ display: "grid", gap: "4px", marginBottom: overview.sections.length > 0 ? "8px" : "0" }}>
+          {overview.leadLines.map((line, lineIdx) => (
+            <div key={`${lineIdx}-${line}`} style={{ fontSize: isMobile ? "13px" : "12.5px", lineHeight: 1.55, color: "var(--ct-text)" }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {overview.sections.length > 0 && (
+        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginBottom: overview.nextAction ? "8px" : "0" }}>
+          {overview.sections.map((section) => (
+            <span
+              key={section}
+              style={{
+                maxWidth: isMobile ? "100%" : "220px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontSize: "11px",
+                padding: "4px 7px",
+                borderRadius: "6px",
+                color: "var(--ct-text)",
+                background: "rgba(15, 23, 42, 0.22)",
+                border: "1px solid rgba(148, 163, 184, 0.16)",
+              }}
+            >
+              {section}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {overview.nextAction && (
+        <div style={{ fontSize: "11.5px", lineHeight: 1.5, color: "var(--ct-text2)" }}>
+          {overview.nextAction}
+        </div>
+      )}
+
+      {(overview.tableCount > 0 || overview.codeBlockCount > 0 || overview.sourceTagCount > 0) && (
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px", fontSize: "10.5px", color: "var(--ct-text2)" }}>
+          {overview.tableCount > 0 && <span>표 {overview.tableCount}개</span>}
+          {overview.codeBlockCount > 0 && <span>코드 {overview.codeBlockCount}개</span>}
+          {overview.sourceTagCount > 0 && <span>출처태그 {overview.sourceTagCount}개</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MessageItem: React.memo로 개별 메시지 리렌더링 최적화 ──
 interface MessageItemProps {
   msg: ChatMessage;
@@ -1926,6 +2100,10 @@ const MessageItem = memo(function MessageItem({
   const displayedStreamingContent = isLiveBufferSource && activeStreamingContent && activeStreamingContent.length > LIVE_STREAM_RENDER_LIMIT
     ? `... 앞 ${activeStreamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${activeStreamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
     : activeStreamingContent;
+  const responseOverview = useMemo(
+    () => (msg.role === "assistant" && !isVisiblyStreaming ? buildResponseOverview(msg.content || "") : null),
+    [isVisiblyStreaming, msg.content, msg.role],
+  );
 
   return (
     <div
@@ -2430,6 +2608,7 @@ const MessageItem = memo(function MessageItem({
                   </div>
                 </details>
               )}
+              {responseOverview && <ResponseOverviewPanel overview={responseOverview} isMobile={isMobileMessage} />}
               {/* P1: 인라인 아티팩트 카드 — 긴 메시지 접이식 */}
               {msg.role === "assistant" && effectiveContentCollapsed && msg.content.length > 800 ? (
                 <div>
