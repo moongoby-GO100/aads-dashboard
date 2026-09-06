@@ -38,7 +38,7 @@
   - Dashboard Step 7 Visual QA API returned `UNKNOWN`; deployment was certified by HTTP/container/log checks, not by visual QA.
   - Dashboard build context was 473.12MB, so `.dockerignore`/artifact pruning needs follow-up before the next release.
   - `src/app/chat/page.tsx` is still over 500KB; it should be split to reduce chat UI build/runtime risk.
-  - API logs still show stale `streaming_state_expired` warnings for older sessions and unrelated PC Agent/GO100 service warnings. The last 30-minute DB sample had no `interrupted`/`cancelled` chat executions and no empty assistant messages, but older stale stream cleanup still needs a backend follow-up.
+  - API logs still show stale `streaming_state_expired` warnings for older sessions and unrelated PC Agent/GO100 service warnings. The final post-deploy DB sample after 08:20 KST had one `interrupted/superseded` row and one `completed/producer_incomplete` row; visible assistant messages were present, so this was not confirmed as a final-response disappearance, but stale stream cleanup still needs a backend follow-up.
 
 ## 2026-09-07 07:32 KST - Chat stop button UX and scroll stability
 
