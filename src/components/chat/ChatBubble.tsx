@@ -9,7 +9,7 @@
  * - 출처 카드 (sources)
  * - 북마크 / 복사 / 지시서 생성 액션
  */
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import type { ChatMessage } from "@/services/chatApi";
 import SourceCard from "./SourceCard";
 import ConfidenceBadge from "./ConfidenceBadge";
@@ -61,7 +61,13 @@ function renderInline(text: string, key?: number): React.ReactNode {
       parts.push(
         imgSrc
           ? <img key={`img${key}-${idx++}`} src={imgSrc} alt={m[2] || ""} loading="lazy"
-              style={{ maxWidth: "100%", borderRadius: "8px", margin: "4px 0" }} />
+              style={{
+                maxWidth: "100%", borderRadius: "12px", margin: "8px 0",
+                cursor: "pointer", transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+              }}
+              onMouseOver={(e) => Object.assign(e.currentTarget.style, { transform: "scale(1.02)", boxShadow: "0 8px 30px rgba(167,139,250,0.2)" })}
+              onMouseOut={(e) => Object.assign(e.currentTarget.style, { transform: "scale(1)", boxShadow: "0 2px 12px rgba(0,0,0,0.15)" })} />
           : <span key={`img${key}-${idx++}`}>[image blocked: unsafe URL]</span>
       );
     } else if (m[5]) {
@@ -292,6 +298,49 @@ function ThoughtSummary({ summary }: { summary: string }) {
   );
 }
 
+// ─── Image Lightbox ────────────────────────────────────────────────────────
+
+function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "zoom-out", animation: "lbFadeIn 0.2s ease-out",
+      }}
+    >
+      <img
+        src={src} alt=""
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "92vw", maxHeight: "90vh",
+          borderRadius: "12px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          cursor: "default", animation: "lbScaleIn 0.25s ease-out",
+        }}
+      />
+      <button
+        onClick={onClose}
+        style={{
+          position: "absolute", top: "16px", right: "20px",
+          background: "rgba(255,255,255,0.15)", border: "none",
+          color: "#fff", fontSize: "20px", width: "40px", height: "40px",
+          borderRadius: "50%", cursor: "pointer", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "background 0.2s",
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.25)"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.15)"; }}
+      >✕</button>
+      <style>{`
+        @keyframes lbFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes lbScaleIn { from { opacity: 0; transform: scale(0.92) } to { opacity: 1; transform: scale(1) } }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── Attachment File Cards ────────────────────────────────────────────────────
 
 function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
@@ -316,10 +365,16 @@ function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
         return (
           <div
             key={i}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs"
-            style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.85)" }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs"
+            style={{
+              background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.85)",
+              border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(4px)",
+              transition: "all 0.2s ease",
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: "rgba(167,139,250,0.15)", transform: "translateY(-1px)" })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: "rgba(255,255,255,0.06)", transform: "translateY(0)" })}
           >
-            <span>{fileIcon(name)}</span>
+            <span style={{ fontSize: "14px" }}>{fileIcon(name)}</span>
             <span className="truncate" style={{ maxWidth: "120px" }}>{name}</span>
           </div>
         );
@@ -367,6 +422,14 @@ export default function ChatBubble({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [autoExpanded, setAutoExpanded] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  const handleImageClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === "IMG" && target.closest("[data-lightbox-zone]")) {
+      setLightboxSrc((target as HTMLImageElement).src);
+    }
+  }, []);
 
   const isUser = message.role === "user";
   const rawContent = isStreaming && streamingText !== undefined ? streamingText : message.content;
@@ -530,9 +593,15 @@ export default function ChatBubble({
           }}
           onMouseEnter={() => setShowActions(true)}
           onMouseLeave={() => setShowActions(false)}
+          onClick={handleImageClick}
+          data-lightbox-zone="true"
         >
           {isStreaming && !displayContent ? (
-            <span className="animate-pulse" style={{ color: "var(--text-secondary)" }}>···</span>
+            <div className="flex flex-col gap-2.5 py-1" style={{ minWidth: "200px" }}>
+              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.18)", width: "78%" }} />
+              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.13)", width: "55%", animationDelay: "150ms" }} />
+              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.09)", width: "38%", animationDelay: "300ms" }} />
+            </div>
           ) : intent === "auto_reaction" ? (
             autoExpanded ? (
               <>
@@ -555,7 +624,11 @@ export default function ChatBubble({
           {showActions && !isStreaming && (
             <div
               className="absolute top-2 right-2 flex gap-1"
-              style={{ opacity: showActions ? 1 : 0, transition: "opacity 0.15s" }}
+              style={{
+                opacity: showActions ? 1 : 0, transition: "opacity 0.15s",
+                backdropFilter: "blur(8px)", borderRadius: "8px", padding: "2px",
+                background: "rgba(0,0,0,0.3)",
+              }}
             >
               {onBookmark && (
                 <button
@@ -604,6 +677,8 @@ export default function ChatBubble({
 
         {/* 출처 카드 */}
         {sources.length > 0 && <SourceCard sources={sources} />}
+
+        {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
         {/* 메타 정보 */}
         {!isStreaming && (
