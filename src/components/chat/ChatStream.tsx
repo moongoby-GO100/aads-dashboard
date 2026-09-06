@@ -60,6 +60,7 @@ export default function ChatStream({
   // AADS-TOKEN-BUFFER: 버퍼 대기 typing indicator용 지연 표시 (300ms 후 표시)
   const [showBufferingIndicator, setShowBufferingIndicator] = useState(false);
   const bufferingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isBuffering && isStreaming && streamingText.length > 0) {
@@ -87,27 +88,40 @@ export default function ChatStream({
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    isNearBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 100;
+    isNearBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 200;
     if (isNearBottomRef.current) setShowNewMessage(false);
   }, []);
 
   useEffect(() => {
     if (isNearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const el = containerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
       setShowNewMessage(false);
     } else if (messages.length > 0) {
       setShowNewMessage(true);
     }
-  }, [messages.length, streamingText]);
+  }, [messages.length]);
 
   useEffect(() => {
     if (isStreaming && isNearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        const el = containerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+        rafRef.current = null;
+      });
     }
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
   }, [isStreaming, streamingText, toolEvents]);
 
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = containerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     setShowNewMessage(false);
   };
 
@@ -123,7 +137,6 @@ export default function ChatStream({
         ref={containerRef}
         className="h-full overflow-y-auto px-4 py-4"
         onScroll={handleScroll}
-        style={{ scrollBehavior: "smooth" }}
       >
         {isEmpty && (emptyState ?? <DefaultEmptyState />)}
 
