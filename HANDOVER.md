@@ -17,6 +17,28 @@
 - Deployment:
   - Not deployed in this entry. `/root/aads/aads-dashboard` still has unrelated dirty report files, so dashboard release contract blocks building from that worktree until those files are resolved or a deploy script supports a clean alternate `STATE_DIR`.
 
+## 2026-09-07 08:10 KST - Chat stop-button dashboard release verification
+
+- Request:
+  - Deploy the recommended chat-window fixes, verify whether response interruption/disappearance still occurs, and report remaining issues.
+- Release:
+  - Deployed dashboard commit `5a0660efab9c` (`fix(chat): make stop button immediate and stable`) with `/root/aads/aads-dashboard/deploy.sh`.
+  - Active dashboard slot switched from `green` to `blue`; standby `green` was synchronized to the same release image.
+- Verification:
+  - `deploy.sh` release-contract check passed.
+  - Docker build passed; `npm ci` reported 0 vulnerabilities.
+  - `next build --webpack` passed with warnings only: Next middleware deprecation, Edge Runtime `process.cwd`, and `src/app/chat/page.tsx` Babel deopt over 500KB.
+  - Internal `blue` `/login`, standby `green` `/login`, and external `https://aads.newtalk.kr/login` health checks passed.
+  - Five post-cutover monitor rounds passed at 08:03-08:07 KST with external/blue/green health normal and no P0/P1 dashboard container logs.
+  - Operational containers `aads-dashboard` and `aads-dashboard-green` both report `AADS_RELEASE_SHA=5a0660efab9c`.
+  - API external and both local slots returned `{"status":"ok","graph_ready":true,"version":"0.2.1"}`.
+  - Unauthenticated `/chat` returned expected redirect to `/login?redirect=%2Fchat`.
+- Remaining risks:
+  - Dashboard Step 7 Visual QA API returned `UNKNOWN`; deployment was certified by HTTP/container/log checks, not by visual QA.
+  - Dashboard build context was 473.12MB, so `.dockerignore`/artifact pruning needs follow-up before the next release.
+  - `src/app/chat/page.tsx` is still over 500KB; it should be split to reduce chat UI build/runtime risk.
+  - API logs still show stale `streaming_state_expired` warnings for older sessions and unrelated PC Agent/GO100 service warnings. The last 30-minute DB sample had no `interrupted`/`cancelled` chat executions and no empty assistant messages, but older stale stream cleanup still needs a backend follow-up.
+
 ## 2026-09-07 07:32 KST - Chat stop button UX and scroll stability
 
 - Request:
