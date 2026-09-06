@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 08:08 KST - Chat model selector alias filtering
+
+- Request:
+  - Fix model selector confusion where Fable 5.1 and Fable Latest could appear as separate choices and ensure selecting Latest maps to canonical Fable 5.1.
+- Finding:
+  - Main `/chat` already canonicalizes `claude-fable-latest` to `claude-fable-5-1` and hides `accepted_alias` registry rows.
+  - The reusable `src/components/chat/ModelSelector.tsx` still treated `is_active || is_selectable || is_executable` as selectable, so inactive alias rows could remain visible if the full `/llm-models` registry was returned.
+- Change:
+  - `src/components/chat/ModelSelector.tsx`: added `isSelectableRegistryModel()` and now excludes `metadata.alias_of`, `metadata.model_source='accepted_alias'`, inactive rows, and non-selectable rows before building options.
+- Verification:
+  - `npx eslint src/components/chat/ModelSelector.tsx` passed.
+  - DB SELECT confirmed Fable alias rows `claude-fable-5.1` and `claude-fable-latest` are inactive/non-selectable alias rows, while canonical `claude-fable-5-1` is active/selectable/executable.
+- Commit:
+  - `ba93375 fix(chat): hide alias models from selector` pushed to `origin/main`.
+- Deployment:
+  - Not deployed in this entry. `/root/aads/aads-dashboard` still has unrelated dirty report files, so dashboard release contract blocks building from that worktree until those files are resolved or a deploy script supports a clean alternate `STATE_DIR`.
+
 ## 2026-09-07 07:32 KST - Chat stop button UX and scroll stability
 
 - Request:
