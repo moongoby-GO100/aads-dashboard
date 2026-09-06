@@ -43,6 +43,9 @@ interface RunnerRegistryModel {
   provider: string;
   model_id: string;
   display_name?: string;
+  is_active?: boolean;
+  is_selectable?: boolean;
+  is_executable?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -145,6 +148,8 @@ const RUNNER_PROVIDER_ORDER = [
 ];
 
 function buildRunnerModelValue(model: RunnerRegistryModel): string {
+  const aliasOf = String(model.metadata?.["alias_of"] || "").trim();
+  if (aliasOf) return "";
   const provider = (model.provider || "").trim().toLowerCase();
   const backend = String(model.metadata?.["execution_backend"] || "").trim().toLowerCase();
   if (provider === "codex") return `codex:${model.model_id}`;
@@ -160,10 +165,16 @@ function buildRunnerModelValue(model: RunnerRegistryModel): string {
   return model.model_id;
 }
 
+function isRunnerRegistryModelSelectable(model: RunnerRegistryModel): boolean {
+  const metadata = model.metadata || {};
+  if (metadata["alias_of"] || metadata["model_source"] === "accepted_alias") return false;
+  return model.is_selectable === true && model.is_active !== false;
+}
+
 function buildRunnerModelGroups(models: RunnerRegistryModel[]): RunnerAvailableModelGroup[] {
   const grouped = new Map<string, RunnerAvailableModelOption[]>();
   const seen = new Set<string>();
-  const sorted = [...models].sort((a, b) => {
+  const sorted = models.filter(isRunnerRegistryModelSelectable).sort((a, b) => {
     const providerOrder =
       RUNNER_PROVIDER_ORDER.indexOf((a.provider || "").toLowerCase()) -
       RUNNER_PROVIDER_ORDER.indexOf((b.provider || "").toLowerCase());

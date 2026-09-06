@@ -1684,14 +1684,24 @@ function collectMetadataAliases(metadata: Record<string, unknown>): string[] {
 function buildRuntimeModelAliasMap(rows: LlmRegistryModel[]): Map<string, string> {
   const aliasMap = new Map<string, string>();
   for (const row of rows) {
-    const canonicalModelId = String(row.model_id || "").trim();
+    const metadata = coerceModelMetadata(row.metadata);
+    const aliasOf = String(metadata.alias_of || metadata.canonical_model || "").trim();
+    const canonicalModelId = aliasOf || String(row.model_id || "").trim();
     if (!canonicalModelId) continue;
+    const rowModelId = String(row.model_id || "").trim();
+    if (rowModelId) aliasMap.set(rowModelId, canonicalModelId);
     aliasMap.set(canonicalModelId, canonicalModelId);
-    for (const alias of collectMetadataAliases(coerceModelMetadata(row.metadata))) {
+    for (const alias of collectMetadataAliases(metadata)) {
       aliasMap.set(alias, canonicalModelId);
     }
   }
   return aliasMap;
+}
+
+function isSelectableRegistryModel(row: LlmRegistryModel): boolean {
+  const metadata = coerceModelMetadata(row.metadata);
+  if (metadata.alias_of || metadata.model_source === "accepted_alias") return false;
+  return row.is_selectable === true && row.is_active !== false;
 }
 
 function getLegacyModelOption(modelId?: string | null): (typeof MODEL_OPTIONS)[number] | null {
@@ -3227,7 +3237,8 @@ export default function ChatPage() {
 
   const selectableModels = useMemo<SelectableModelOption[]>(() => {
     const preferenceMap = buildNormalizedPreferenceMap(modelPreferences, modelAliasMap);
-    const modelIdCounts = (runtimeModels || []).reduce((acc, row) => {
+    const selectableRows = (runtimeModels || []).filter(isSelectableRegistryModel);
+    const modelIdCounts = selectableRows.reduce((acc, row) => {
       acc.set(row.model_id, (acc.get(row.model_id) || 0) + 1);
       return acc;
     }, new Map<string, number>());
@@ -3283,7 +3294,7 @@ export default function ChatPage() {
     }
 
     const currentModelId = normalizeModelIdForSelector(model, modelAliasMap);
-    const activeOptions = runtimeModels.map((row) => {
+    const activeOptions = selectableRows.map((row) => {
       const option = buildSelectableModelOption(row, duplicateModelIds);
       const preference = preferenceMap.get(option.preferenceKey) || (!duplicateModelIds.has(row.model_id) ? preferenceMap.get(option.modelId) : undefined);
       return {
