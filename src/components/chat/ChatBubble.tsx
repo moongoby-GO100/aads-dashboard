@@ -1,15 +1,5 @@
 "use client";
-/**
- * AADS-172-B: ChatBubble
- * 메시지 버블 컴포넌트
- * - 사용자: 우측 보라 배경
- * - AI: 좌측 다크그레이 배경 + 마크다운 렌더링
- * - 코드 블록 복사 버튼
- * - 사고 과정 (thought_summary) 접이식
- * - 출처 카드 (sources)
- * - 북마크 / 복사 / 지시서 생성 액션
- */
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import type { ChatMessage } from "@/services/chatApi";
 import SourceCard from "./SourceCard";
 import ConfidenceBadge from "./ConfidenceBadge";
@@ -17,61 +7,134 @@ import InlineChart from "./InlineChart";
 import { isFileDownloadHref, normalizeDocumentHref } from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
 
+// ─── Scoped Styles (inject once into head) ───────────────────────────────────
+
+const CB_STYLE_ID = "chatbubble-v2";
+const CB_CSS = `
+@keyframes cb-shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes cb-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes cb-lb-bg{from{opacity:0}to{opacity:1}}
+@keyframes cb-lb-img{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+.cb-shimmer{background:linear-gradient(90deg,rgba(167,139,250,.06) 25%,rgba(167,139,250,.18) 50%,rgba(167,139,250,.06) 75%);background-size:200% 100%;animation:cb-shimmer 1.8s ease-in-out infinite;border-radius:8px}
+.cb-enter{animation:cb-enter .22s ease-out both}
+.cb-code{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.1);margin:8px 0;position:relative}
+.cb-code::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px}
+.cb-code[data-lang=python]::before,.cb-code[data-lang=py]::before{background:#3572A5}
+.cb-code[data-lang=javascript]::before,.cb-code[data-lang=js]::before{background:#f7df1e}
+.cb-code[data-lang=typescript]::before,.cb-code[data-lang=ts]::before,.cb-code[data-lang=tsx]::before,.cb-code[data-lang=jsx]::before{background:#3178c6}
+.cb-code[data-lang=sql]::before{background:#e38c00}
+.cb-code[data-lang=bash]::before,.cb-code[data-lang=sh]::before,.cb-code[data-lang=shell]::before{background:#89e051}
+.cb-code[data-lang=json]::before,.cb-code[data-lang=yaml]::before,.cb-code[data-lang=yml]::before{background:#a78bfa}
+.cb-code[data-lang=""]::before,.cb-code[data-lang=code]::before{background:rgba(148,163,184,.4)}
+.cb-code[data-lang=css]::before{background:#563d7c}
+.cb-code[data-lang=html]::before{background:#e34c26}
+.cb-code[data-lang=go]::before{background:#00ADD8}
+.cb-code[data-lang=rust]::before,.cb-code[data-lang=rs]::before{background:#dea584}
+.cb-tbl{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.08);margin:8px 0}
+.cb-tbl table{width:100%;border-collapse:collapse;font-size:12px}
+.cb-tbl thead tr{background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.06))}
+.cb-tbl th{padding:6px 10px;text-align:left;font-weight:600;font-size:11px;color:#c4b5fd;border-bottom:1px solid rgba(255,255,255,.1);letter-spacing:.3px}
+.cb-tbl td{padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:#cbd5e1}
+.cb-tbl tbody tr{transition:background .15s}
+.cb-tbl tbody tr:nth-child(even){background:rgba(255,255,255,.02)}
+.cb-tbl tbody tr:hover{background:rgba(167,139,250,.06)!important}
+.cb-tbl tbody tr:last-child td{border-bottom:none}
+.cb-glass{background:rgba(15,23,42,.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:8px}
+.cb-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid rgba(255,255,255,.06)}
+.cb-img-wrap{overflow:hidden;border-radius:12px;margin:8px 0;cursor:pointer;display:inline-block;max-width:100%}
+.cb-img-wrap img{transition:transform .3s ease,box-shadow .3s ease;display:block;max-width:100%;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+.cb-img-wrap:hover img{transform:scale(1.02);box-shadow:0 8px 30px rgba(167,139,250,.2)}
+.cb-heading{position:relative;padding-left:10px;margin:10px 0 6px}
+.cb-heading::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:2px;background:linear-gradient(180deg,#6366f1,#a78bfa)}
+.cb-action-btn{font-size:12px;padding:4px 8px;border-radius:6px;transition:all .15s;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:28px;min-height:28px;background:transparent;color:var(--text-secondary)}
+.cb-action-btn:hover{background:rgba(255,255,255,.12)!important}
+@media(hover:none){.cb-hover-show{opacity:.5!important;display:flex!important}}
+`;
+
+function useInjectStyles() {
+  useEffect(() => {
+    if (document.getElementById(CB_STYLE_ID)) return;
+    const el = document.createElement("style");
+    el.id = CB_STYLE_ID;
+    el.textContent = CB_CSS;
+    document.head.appendChild(el);
+  }, []);
+}
+
+// ─── ResponseMiniMap — content overview pills ────────────────────────────────
+
+function ResponseMiniMap({ content }: { content: string }) {
+  const pills = useMemo(() => {
+    const tableRows = (content.match(/^\|.+\|$/gm) || []).length;
+    const tbl = tableRows > 0 ? Math.max(1, Math.floor(tableRows / 3)) : 0;
+    const allFences = (content.match(/^```/gm) || []).length;
+    const charts = (content.match(/^```chart/gm) || []).length;
+    const code = Math.max(0, Math.floor(allFences / 2) - charts);
+    const imgs = (content.match(/!\[.*?\]\(.*?\)/g) || []).length;
+    const secs = (content.match(/^#{1,4}\s/gm) || []).length;
+
+    const items: { icon: string; label: string; bg: string }[] = [];
+    if (tbl > 0) items.push({ icon: "📊", label: `표 ${tbl}`, bg: "rgba(99,102,241,0.12)" });
+    if (code > 0) items.push({ icon: "💻", label: `코드 ${code}`, bg: "rgba(34,197,94,0.1)" });
+    if (charts > 0) items.push({ icon: "📈", label: `차트 ${charts}`, bg: "rgba(245,158,11,0.1)" });
+    if (imgs > 0) items.push({ icon: "🖼️", label: `이미지 ${imgs}`, bg: "rgba(236,72,153,0.1)" });
+    if (secs >= 3) items.push({ icon: "📑", label: `섹션 ${secs}`, bg: "rgba(148,163,184,0.1)" });
+    return items;
+  }, [content]);
+
+  if (!pills.length) return null;
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px", paddingBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      {pills.map((p, i) => (
+        <span key={i} className="cb-pill" style={{ background: p.bg, color: "var(--text-secondary)" }}>
+          {p.icon} {p.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ─── Inline Markdown Renderer ────────────────────────────────────────────────
 
 function isSafeUrl(url: string): boolean {
   const trimmed = url.trim().toLowerCase();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return true;
   if (trimmed.startsWith("/") || trimmed.startsWith("#")) return true;
-  // Block dangerous schemes
   if (trimmed.startsWith("javascript:") || trimmed.startsWith("data:") || trimmed.startsWith("vbscript:")) return false;
-  // Relative URLs without scheme are safe
   if (!trimmed.includes(":")) return true;
   return false;
 }
 
 function renderInline(text: string, key?: number): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // 멘션, 이미지, 링크, 볼드, 이탤릭, 인라인코드 순으로 매칭
   const re = /(@(?:KIS|GO100|AADS|SF|NTV2|NAS)\b|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|(https?:\/\/[^\s<>)"\]]+))/gi;
   let last = 0, m: RegExpExecArray | null, idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last)
       parts.push(<span key={`t${key}-${idx++}`}>{text.slice(last, m.index)}</span>);
     if (m[0].startsWith("@") && /^@(?:KIS|GO100|AADS|SF|NTV2|NAS)$/i.test(m[0])) {
-      // P2-7: 멘션 칩 렌더링
       parts.push(
         <span key={`mention${key}-${idx++}`}
           style={{
-            display: "inline-block",
-            padding: "1px 6px",
-            borderRadius: 4,
-            fontSize: "0.85em",
-            fontWeight: 600,
-            background: "rgba(99,102,241,0.15)",
-            color: "#818cf8",
+            display: "inline-block", padding: "1px 6px", borderRadius: 4,
+            fontSize: "0.85em", fontWeight: 600,
+            background: "rgba(99,102,241,0.15)", color: "#818cf8",
             verticalAlign: "baseline",
           }}>
           {m[0]}
         </span>
       );
     } else if (m[3]) {
-      // 이미지: ![alt](url) — only allow safe URLs
       const imgSrc = isSafeUrl(m[3]) ? m[3] : "";
       parts.push(
         imgSrc
-          ? <img key={`img${key}-${idx++}`} src={imgSrc} alt={m[2] || ""} loading="lazy"
-              style={{
-                maxWidth: "100%", borderRadius: "12px", margin: "8px 0",
-                cursor: "pointer", transition: "transform 0.2s ease, box-shadow 0.2s ease",
-                boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-              }}
-              onMouseOver={(e) => Object.assign(e.currentTarget.style, { transform: "scale(1.02)", boxShadow: "0 8px 30px rgba(167,139,250,0.2)" })}
-              onMouseOut={(e) => Object.assign(e.currentTarget.style, { transform: "scale(1)", boxShadow: "0 2px 12px rgba(0,0,0,0.15)" })} />
+          ? <span key={`img${key}-${idx++}`} className="cb-img-wrap">
+              <img src={imgSrc} alt={m[2] || ""} loading="lazy" />
+            </span>
           : <span key={`img${key}-${idx++}`}>[image blocked: unsafe URL]</span>
       );
     } else if (m[5]) {
-      // 링크: [text](url) — only allow safe URLs
       const linkHref = isSafeUrl(m[5]) ? normalizeDocumentHref(m[5]) : "#";
       const managedFile = isFileDownloadHref(linkHref);
       parts.push(
@@ -103,7 +166,6 @@ function renderInline(text: string, key?: number): React.ReactNode {
           style={{ background: "rgba(255,255,255,0.1)", color: "#f9c74f" }}>{m[8]}</code>
       );
     else if (m[9]) {
-      // plain URL 자동 링크 변환
       const linkHref = normalizeDocumentHref(m[9]);
       const managedFile = isFileDownloadHref(linkHref);
       parts.push(
@@ -134,6 +196,8 @@ function renderInline(text: string, key?: number): React.ReactNode {
   return parts.length ? parts : text;
 }
 
+// ─── CodeBlock ───────────────────────────────────────────────────────────────
+
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -143,25 +207,24 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
     });
   };
   return (
-    <div className="my-2 rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
-      <div className="flex items-center justify-between px-3 py-1"
-        style={{ background: "rgba(0,0,0,0.4)" }}>
+    <div className="cb-code" data-lang={lang || ""}>
+      <div className="flex items-center justify-between px-3 py-1.5"
+        style={{ background: "linear-gradient(135deg, rgba(0,0,0,0.45) 0%, rgba(30,41,59,0.7) 100%)" }}>
         <span className="text-xs font-mono" style={{ color: "#94a3b8" }}>{lang || "code"}</span>
-        <button
-          onClick={copy}
-          className="text-xs px-2 py-0.5 rounded transition-colors"
-          style={{ background: copied ? "#22c55e22" : "rgba(255,255,255,0.08)", color: copied ? "#22c55e" : "#94a3b8" }}
-        >
-          {copied ? "복사됨" : "복사"}
+        <button onClick={copy} className="cb-action-btn"
+          style={{ color: copied ? "#22c55e" : "#94a3b8", background: copied ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)", fontSize: "11px", padding: "2px 8px" }}>
+          {copied ? "✓ 복사됨" : "복사"}
         </button>
       </div>
       <pre className="p-3 text-xs font-mono overflow-auto max-h-80 whitespace-pre"
-        style={{ background: "rgba(0,0,0,0.35)", color: "#e2e8f0" }}>
+        style={{ background: "rgba(0,0,0,0.3)", color: "#e2e8f0", margin: 0 }}>
         {code}
       </pre>
     </div>
   );
 }
+
+// ─── MarkdownContent ─────────────────────────────────────────────────────────
 
 function MarkdownContent({ content }: { content: string }) {
   const lines = content.split("\n");
@@ -197,22 +260,20 @@ function MarkdownContent({ content }: { content: string }) {
         i++;
       }
       elements.push(
-        <div key={`tbl${i}`} className="my-2 overflow-auto">
-          <table className="w-full text-xs border-collapse">
+        <div key={`tbl${i}`} className="cb-tbl" style={{ overflowX: "auto" }}>
+          <table>
             <thead>
-              <tr style={{ background: "rgba(255,255,255,0.07)" }}>
+              <tr>
                 {rows[0]?.map((cell, ci) => (
-                  <th key={ci} className="px-2 py-1 text-left font-semibold"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)" }}>{renderInline(cell, ci)}</th>
+                  <th key={ci}>{renderInline(cell, ci)}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.slice(1).map((row, ri) => (
-                <tr key={ri} style={{ background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.03)" }}>
+                <tr key={ri}>
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-2 py-1"
-                      style={{ border: "1px solid rgba(255,255,255,0.08)", color: "#cbd5e1" }}>{renderInline(cell)}</td>
+                    <td key={ci}>{renderInline(cell)}</td>
                   ))}
                 </tr>
               ))}
@@ -227,8 +288,11 @@ function MarkdownContent({ content }: { content: string }) {
     if (hMatch) {
       const level = hMatch[1].length;
       const sizeMap: Record<number, string> = { 1: "text-base", 2: "text-sm", 3: "text-xs", 4: "text-xs" };
+      const useAccent = level <= 2;
       elements.push(
-        <p key={`h${i}`} className={`font-bold my-2 ${sizeMap[level]}`}>{renderInline(hMatch[2], i)}</p>
+        <p key={`h${i}`} className={`font-bold ${sizeMap[level]} ${useAccent ? "cb-heading" : "my-2"}`}>
+          {renderInline(hMatch[2], i)}
+        </p>
       );
       i++; continue;
     }
@@ -247,8 +311,8 @@ function MarkdownContent({ content }: { content: string }) {
     if (liMatch) {
       const items: React.ReactNode[] = [];
       while (i < lines.length && lines[i].trim().match(/^(-|\*|\d+\.)\s+/)) {
-        const m = lines[i].trim().match(/^(-|\*|\d+\.)\s+(.+)/);
-        if (m) items.push(<li key={i}>{renderInline(m[2], i)}</li>);
+        const lm = lines[i].trim().match(/^(-|\*|\d+\.)\s+(.+)/);
+        if (lm) items.push(<li key={i}>{renderInline(lm[2], i)}</li>);
         i++;
       }
       elements.push(
@@ -275,22 +339,23 @@ function MarkdownContent({ content }: { content: string }) {
   return <div>{elements}</div>;
 }
 
-// ─── ThoughtSummary ────────────────────────────────────────────────────────
+// ─── ThoughtSummary ──────────────────────────────────────────────────────────
 
 function ThoughtSummary({ summary }: { summary: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mb-2 rounded-lg overflow-hidden" style={{ border: "1px solid rgba(167,139,250,0.3)" }}>
+    <div className="mb-2 rounded-lg overflow-hidden"
+      style={{ border: "1px solid rgba(167,139,250,0.2)", background: "rgba(139,92,246,0.04)" }}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left"
-        style={{ background: "rgba(139,92,246,0.1)", color: "#a78bfa" }}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors"
+        style={{ background: open ? "rgba(139,92,246,0.12)" : "rgba(139,92,246,0.06)", color: "#a78bfa" }}
       >
-        <span>{open ? "▼" : "▶"}</span>
+        <span style={{ transition: "transform 0.2s", transform: open ? "rotate(90deg)" : "rotate(0)", display: "inline-block" }}>▶</span>
         <span className="font-medium">사고 과정</span>
       </button>
       {open && (
-        <div className="px-3 py-2 text-xs" style={{ background: "rgba(0,0,0,0.2)", color: "#94a3b8" }}>
+        <div className="px-3 py-2 text-xs" style={{ background: "rgba(0,0,0,0.15)", color: "#94a3b8", lineHeight: 1.6 }}>
           {summary}
         </div>
       )}
@@ -298,9 +363,15 @@ function ThoughtSummary({ summary }: { summary: string }) {
   );
 }
 
-// ─── Image Lightbox ────────────────────────────────────────────────────────
+// ─── Image Lightbox ──────────────────────────────────────────────────────────
 
 function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
   return (
     <div
       onClick={onClose}
@@ -308,7 +379,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
         position: "fixed", inset: 0, zIndex: 9999,
         background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "zoom-out", animation: "lbFadeIn 0.2s ease-out",
+        cursor: "zoom-out", animation: "cb-lb-bg 0.2s ease-out",
       }}
     >
       <img
@@ -317,31 +388,27 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
         style={{
           maxWidth: "92vw", maxHeight: "90vh",
           borderRadius: "12px", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-          cursor: "default", animation: "lbScaleIn 0.25s ease-out",
+          cursor: "default", animation: "cb-lb-img 0.25s ease-out",
         }}
       />
       <button
         onClick={onClose}
         style={{
           position: "absolute", top: "16px", right: "20px",
-          background: "rgba(255,255,255,0.15)", border: "none",
+          background: "rgba(255,255,255,0.12)", border: "none",
           color: "#fff", fontSize: "20px", width: "40px", height: "40px",
           borderRadius: "50%", cursor: "pointer", backdropFilter: "blur(4px)",
           display: "flex", alignItems: "center", justifyContent: "center",
           transition: "background 0.2s",
         }}
         onMouseOver={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.25)"; }}
-        onMouseOut={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.15)"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
       >✕</button>
-      <style>{`
-        @keyframes lbFadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes lbScaleIn { from { opacity: 0; transform: scale(0.92) } to { opacity: 1; transform: scale(1) } }
-      `}</style>
     </div>
   );
 }
 
-// ─── Attachment File Cards ────────────────────────────────────────────────────
+// ─── Attachment File Cards ───────────────────────────────────────────────────
 
 function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
   if (!attachments || attachments.length === 0) return null;
@@ -368,11 +435,11 @@ function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs"
             style={{
               background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.85)",
-              border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(4px)",
+              border: "1px solid rgba(255,255,255,0.08)",
               transition: "all 0.2s ease",
             }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: "rgba(167,139,250,0.15)", transform: "translateY(-1px)" })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: "rgba(255,255,255,0.06)", transform: "translateY(0)" })}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: "rgba(167,139,250,0.12)", borderColor: "rgba(167,139,250,0.2)", transform: "translateY(-1px)" })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.08)", transform: "translateY(0)" })}
           >
             <span style={{ fontSize: "14px" }}>{fileIcon(name)}</span>
             <span className="truncate" style={{ maxWidth: "120px" }}>{name}</span>
@@ -383,7 +450,7 @@ function FileAttachmentCards({ attachments }: { attachments: unknown[] }) {
   );
 }
 
-// ─── Sanitize raw XML tool blocks ─────────────────────────────────────────────
+// ─── Sanitize raw XML tool blocks ────────────────────────────────────────────
 
 function stripToolXml(text: string): string {
   return text
@@ -392,7 +459,7 @@ function stripToolXml(text: string): string {
     .trim();
 }
 
-// ─── Main ChatBubble ──────────────────────────────────────────────────────────
+// ─── Main ChatBubble ─────────────────────────────────────────────────────────
 
 interface ChatBubbleProps {
   message: ChatMessage;
@@ -417,6 +484,7 @@ export default function ChatBubble({
   onEditResend,
   onCopyToInput,
 }: ChatBubbleProps) {
+  useInjectStyles();
   const [showActions, setShowActions] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -444,12 +512,12 @@ export default function ChatBubble({
     onCopy?.(displayContent);
   };
 
-  // 사용자 메시지에서 [첨부파일: ...] 참조 텍스트 분리 (깔끔한 표시)
   const userDisplayContent = isUser
     ? displayContent.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim()
     : displayContent;
   const userAttachments = (message.attachments || []) as unknown[];
 
+  // ─── User Message ─────────────────────────────────────────────────
   if (isUser) {
     const startEdit = () => {
       setEditText(message.content.replace(/\n\n\[첨부파일:[^\]]+\]/g, "").trim());
@@ -470,14 +538,13 @@ export default function ChatBubble({
     };
 
     return (
-      <div className="flex justify-end mb-3 group">
+      <div className="flex justify-end mb-3 group cb-enter">
         <div className="max-w-[75%]">
           {userAttachments.length > 0 && (
             <FileAttachmentCards attachments={userAttachments} />
           )}
 
           {isEditing ? (
-            /* 인라인 편집 모드 */
             <div className="rounded-2xl overflow-hidden" style={{ border: "2px solid var(--accent)", borderBottomRightRadius: "6px" }}>
               <textarea
                 autoFocus
@@ -500,7 +567,6 @@ export default function ChatBubble({
               </div>
             </div>
           ) : (
-            /* 일반 표시 모드 */
             <div
               className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed relative"
               style={{ background: "var(--accent)", color: "#fff", borderBottomRightRadius: "6px" }}
@@ -509,22 +575,21 @@ export default function ChatBubble({
             >
               {userDisplayContent}
 
-              {/* 호버 액션 버튼 */}
               {showActions && !isStreaming && (
-                <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex gap-1"
+                <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex gap-1 cb-hover-show"
                   style={{ opacity: 1, transition: "opacity 0.15s" }}>
                   {onEditResend && (
                     <button onClick={startEdit}
-                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
-                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      className="cb-action-btn"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", width: "28px", height: "28px" }}
                       title="수정 후 재전송">
                       ✏️
                     </button>
                   )}
                   {onCopyToInput && (
                     <button onClick={() => onCopyToInput(userDisplayContent)}
-                      className="text-xs w-7 h-7 flex items-center justify-center rounded-full transition-colors"
-                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                      className="cb-action-btn"
+                      style={{ background: "var(--bg-card)", border: "1px solid var(--border)", width: "28px", height: "28px" }}
                       title="입력창에 복사 (재지시)">
                       🔄
                     </button>
@@ -545,7 +610,7 @@ export default function ChatBubble({
     );
   }
 
-  // ─── Intent 기반 출처 배지 ─────────────────────────────────────
+  // ─── Intent Badge ─────────────────────────────────────────────────
   const intent = (message as ChatMessage & { intent?: string | null }).intent;
   const intentBadge = (() => {
     if (!intent || intent === "casual" || intent === "status_check") return null;
@@ -558,31 +623,28 @@ export default function ChatBubble({
     return map[intent] || null;
   })();
 
-  // ─── 비용 표시 (REST API: tokens_in/tokens_out/cost, SSE: input_tokens/output_tokens/cost_usd) ───
+  // ─── Cost / Token Display ─────────────────────────────────────────
   const displayTokensIn = message.input_tokens || message.tokens_in || null;
   const displayTokensOut = message.output_tokens || message.tokens_out || null;
   const displayCost = message.cost_usd || message.cost || null;
+  const costNum = displayCost ? Number(displayCost) : 0;
+  const costColor = costNum > 0.1 ? "#ef4444" : costNum > 0.01 ? "#f59e0b" : "#22c55e";
 
-  // AI 메시지
+  // ─── AI Message ───────────────────────────────────────────────────
   return (
-    <div className="flex justify-start mb-3 group">
+    <div className="flex justify-start mb-3 group cb-enter">
       <div className="max-w-[80%] min-w-0">
-        {/* 출처 배지 */}
         {intentBadge && (
           <div className="flex items-center gap-1.5 mb-1 ml-1">
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-              style={{ background: intentBadge.bg, color: intentBadge.color, border: `1px solid ${intentBadge.color}33` }}
-            >
+            <span className="cb-pill"
+              style={{ background: intentBadge.bg, color: intentBadge.color, border: `1px solid ${intentBadge.color}33`, fontWeight: 600 }}>
               {intentBadge.icon} {intentBadge.label}
             </span>
           </div>
         )}
 
-        {/* 사고 과정 */}
         {message.thought_summary && <ThoughtSummary summary={message.thought_summary} />}
 
-        {/* 메시지 버블 */}
         <div
           className="px-4 py-3 rounded-2xl text-sm relative"
           style={{
@@ -597,10 +659,10 @@ export default function ChatBubble({
           data-lightbox-zone="true"
         >
           {isStreaming && !displayContent ? (
-            <div className="flex flex-col gap-2.5 py-1" style={{ minWidth: "200px" }}>
-              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.18)", width: "78%" }} />
-              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.13)", width: "55%", animationDelay: "150ms" }} />
-              <div className="h-3 rounded-full animate-pulse" style={{ background: "rgba(167,139,250,0.09)", width: "38%", animationDelay: "300ms" }} />
+            <div className="flex flex-col gap-3 py-1" style={{ minWidth: "220px" }}>
+              <div className="cb-shimmer" style={{ height: "12px", width: "82%" }} />
+              <div className="cb-shimmer" style={{ height: "12px", width: "58%", animationDelay: "0.15s" }} />
+              <div className="cb-shimmer" style={{ height: "12px", width: "40%", animationDelay: "0.3s" }} />
             </div>
           ) : intent === "auto_reaction" ? (
             autoExpanded ? (
@@ -617,95 +679,79 @@ export default function ChatBubble({
               </div>
             )
           ) : (
-            <MarkdownContent content={displayContent} />
+            <>
+              {displayContent.length > 300 && <ResponseMiniMap content={displayContent} />}
+              <MarkdownContent content={displayContent} />
+            </>
           )}
 
-          {/* 호버 액션 버튼 */}
           {showActions && !isStreaming && (
-            <div
-              className="absolute top-2 right-2 flex gap-1"
-              style={{
-                opacity: showActions ? 1 : 0, transition: "opacity 0.15s",
-                backdropFilter: "blur(8px)", borderRadius: "8px", padding: "2px",
-                background: "rgba(0,0,0,0.3)",
-              }}
-            >
+            <div className="absolute top-2 right-2 flex gap-0.5 cb-glass cb-hover-show" style={{ padding: "3px" }}>
               {onBookmark && (
-                <button
-                  onClick={() => onBookmark(message.id)}
-                  className="text-xs px-1.5 py-1 rounded transition-colors"
-                  style={{
-                    background: message.bookmarked ? "rgba(234,179,8,0.2)" : "var(--bg-hover)",
-                    color: message.bookmarked ? "#eab308" : "var(--text-secondary)",
-                  }}
-                  title="북마크"
-                >
+                <button onClick={() => onBookmark(message.id)} className="cb-action-btn"
+                  style={{ color: message.bookmarked ? "#eab308" : undefined, background: message.bookmarked ? "rgba(234,179,8,0.15)" : undefined }}
+                  title="북마크">
                   {message.bookmarked ? "★" : "☆"}
                 </button>
               )}
-              <button
-                onClick={handleCopy}
-                className="text-xs px-1.5 py-1 rounded transition-colors"
-                style={{ background: "var(--bg-hover)", color: copiedMsg ? "#22c55e" : "var(--text-secondary)" }}
-                title="복사"
-              >
+              <button onClick={handleCopy} className="cb-action-btn"
+                style={{ color: copiedMsg ? "#22c55e" : undefined }}
+                title="복사">
                 {copiedMsg ? "✓" : "⎘"}
               </button>
               {onCreateDirective && (
-                <button
-                  onClick={() => onCreateDirective(displayContent)}
-                  className="text-xs px-1.5 py-1 rounded transition-colors"
-                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-                  title="지시서 생성"
-                >
-                  📋
-                </button>
+                <button onClick={() => onCreateDirective(displayContent)} className="cb-action-btn" title="지시서 생성">📋</button>
               )}
               {onViewInPanel && (
-                <button
-                  onClick={() => onViewInPanel(displayContent)}
-                  className="text-xs px-1.5 py-1 rounded transition-colors"
-                  style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-                  title="패널에서 보기"
-                >
-                  🗂
-                </button>
+                <button onClick={() => onViewInPanel(displayContent)} className="cb-action-btn" title="패널에서 보기">🗂</button>
               )}
             </div>
           )}
         </div>
 
-        {/* 출처 카드 */}
         {sources.length > 0 && <SourceCard sources={sources} />}
-
         {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
-        {/* 메타 정보 */}
         {!isStreaming && (
-          <p className="text-xs mt-1 ml-1 flex items-center flex-wrap gap-1" style={{ color: "var(--text-secondary)" }}>
-            {message.model_used && <span>[{message.requested_model && message.requested_model !== message.model_used ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.6 }}>{message.requested_model}</span>
-                <span style={{ color: "#f59e0b" }}>{" \u2192 "}{message.model_used}</span>
-                {message.fallback_reason && <span style={{ color: "#f59e0b" }}>{" \u26A0\uFE0F"}{message.fallback_reason}</span>}
-              </>
-            ) : message.model_used}</span>}
-            {displayTokensIn ? ` · ${displayTokensIn.toLocaleString()}in` : ""}
-            {displayTokensOut ? ` · ${displayTokensOut.toLocaleString()}out` : ""}
-            {displayCost && Number(displayCost) > 0 ? ` · $${Number(displayCost).toFixed(4)}` : ""}
-            {message.model_used && <span>]</span>}
+          <div className="flex items-center flex-wrap gap-1.5 mt-1.5 ml-1">
+            {message.model_used && (
+              <span className="cb-pill" style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8" }}>
+                {message.requested_model && message.requested_model !== message.model_used ? (
+                  <>
+                    <span style={{ textDecoration: "line-through", opacity: 0.5, fontSize: "10px" }}>{message.requested_model}</span>
+                    <span style={{ color: "#f59e0b" }}>{" → "}</span>
+                    <span>{message.model_used}</span>
+                  </>
+                ) : message.model_used}
+              </span>
+            )}
+            {(displayTokensIn || displayTokensOut) && (
+              <span className="cb-pill" style={{ background: "rgba(148,163,184,0.08)", color: "var(--text-secondary)" }}>
+                {displayTokensIn ? `${displayTokensIn.toLocaleString()}↓` : ""}
+                {displayTokensIn && displayTokensOut ? " " : ""}
+                {displayTokensOut ? `${displayTokensOut.toLocaleString()}↑` : ""}
+              </span>
+            )}
+            {costNum > 0 && (
+              <span className="cb-pill" style={{ background: `${costColor}15`, color: costColor, fontWeight: 600 }}>
+                ${costNum.toFixed(4)}
+              </span>
+            )}
+            {message.fallback_reason && (
+              <span className="cb-pill" style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>
+                ⚠️ {message.fallback_reason}
+              </span>
+            )}
             {message.created_at && (
-              <span style={{ marginLeft: message.model_used ? "6px" : "0" }}>
+              <span style={{ color: "var(--text-secondary)", fontSize: "11px", marginLeft: "2px" }}>
                 {new Date(message.created_at).toLocaleString("ko-KR", {
                   month: "numeric", day: "numeric",
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
                 })}
               </span>
             )}
-            {message.confidence_label && (
-              <ConfidenceBadge label={message.confidence_label} />
-            )}
-          </p>
+            {message.confidence_label && <ConfidenceBadge label={message.confidence_label} />}
+          </div>
         )}
       </div>
     </div>
