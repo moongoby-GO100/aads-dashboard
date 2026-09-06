@@ -2771,7 +2771,16 @@ const MessageItem = memo(function MessageItem({
               animation: isActiveStreamingPlaceholder ? "pulse 1.5s ease-in-out infinite" : undefined,
             }}>{placeholderStatus.label}</span>
             {isActiveStreamingPlaceholder && onStopStreaming && (
-              <button type="button" onClick={onStopStreaming} style={{
+              <button
+                type="button"
+                title="응답 생성 중단"
+                aria-label="응답 생성 중단"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onStopStreaming();
+                }}
+                style={{
                 padding: "2px 8px",
                 fontSize: "11px", fontWeight: 500,
                 background: "transparent", color: "var(--ct-muted)",
@@ -3675,6 +3684,8 @@ export default function ChatPage() {
   const abortCtrl = useRef<AbortController | null>(null);
   const sessionSwitchRef = useRef(false);
   const activeSessionRef = useRef<string | null>(null);
+  const userStopRequestedRef = useRef(false);
+  const [stopRequesting, setStopRequesting] = useState(false);
   const refreshTodos = useCallback(async (sessionId?: string | null) => {
     const sid = sessionId || activeSessionRef.current;
     if (!sid) {
@@ -7434,6 +7445,9 @@ export default function ChatPage() {
         sessionSwitchRef.current = false;
         return;
       }
+      if (isAbort && userStopRequestedRef.current) {
+        return;
+      }
       if (isAbort || isNetwork) {
         // ── Invisible Recovery: 같은 버블 유지 + 무음 재연결 ──
         // SSE가 끊겨도 streaming=true 유지, streamBuf에 기존 텍스트 보존 (버블 사라짐 방지)
@@ -7890,56 +7904,83 @@ export default function ChatPage() {
   ]);
 
   function stopStreaming() {
+    const sid = activeSessionObjRef.current?.id || activeSessionRef.current || activeSession?.id;
+    if (!sid || stopRequesting) return;
+    userStopRequestedRef.current = true;
+    setStopRequesting(true);
+    const buf = streamBufRef.current || streamBuf || bgPartialContentRef.current || bgPartialContent || "";
+    const stoppedContent = buf.trim()
+      ? `${buf}\n\n_(응답 중지됨)_`
+      : "응답 생성을 중지했습니다. 생성된 내용이 아직 없습니다.";
+    const stoppedAt = new Date().toISOString();
+    const stoppedExecutionId = currentExecutionIdRef.current || undefined;
     abortCtrl.current?.abort();
-    const buf = streamBuf;
     setStreaming(false);
     setStreamBuf("");
+    setThinkingBuf("");
+    setWaitingBgResponse(false);
+    setBgPartialContent("");
     setToolStatus(null);
+    setToolLogs([]);
     setYellowWarning(null);
     setToolTurnInfo(null);
-    isNearBottomRef.current = true;
-    if (buf && activeSession) {
-      // ★ in-place 업데이트: placeholder를 stopped 메시지로 교체
-      setMessagesPreservingViewport((prev) => {
-        const hasPlaceholder = prev.some(m => m.intent === "streaming_placeholder");
-        const stoppedId = hasPlaceholder
-          ? (prev.find(m => m.intent === "streaming_placeholder")?.id || `stopped-${Date.now()}`)
-          : `stopped-${Date.now()}`;
-        const stoppedMsg: ChatMessage = {
-          id: stoppedId,
-          session_id: activeSession!.id,
-          role: "assistant",
-          content: buf + "\n\n_(응답 중지됨)_",
-          model_used: "stopped",
-        };
-        if (hasPlaceholder) {
-          return prev.map(m => m.intent === "streaming_placeholder" ? stoppedMsg : m);
-        }
-        return [...prev, stoppedMsg];
-      });
-      const stoppedAlertId = currentExecutionIdRef.current || `stopped-${activeSession.id}`;
-      showInterruptionAlertOnce(stoppedAlertId, activeSession.id, "사용자 요청으로 응답을 중지했습니다.");
-    }
-    // FIX: 중지 후 스크롤 맨 아래로 강제 이동 (스트리밍 버블 제거로 인한 스크롤 점프 방지)
-    isNearBottomRef.current = true;
-    scrollToMessagesBottom(true);
+    pendingResponseSessions.current.delete(sid);
+    // 중단 버튼은 현재 읽는 위치를 보존해야 한다. 강제 하단 이동은 상단 점프처럼 보인다.
+    setMessagesPreservingViewport((prev) => {
+      const hasPlaceholder = prev.some((m) => m.session_id === sid && isStreamingPlaceholderMessage(m));
+      const stoppedId = hasPlaceholder
+        ? (prev.find((m) => m.session_id === sid && isStreamingPlaceholderMessage(m))?.id || `stopped-${Date.now()}`)
+        : `stopped-${Date.now()}`;
+      const stoppedMsg: ChatMessage = {
+        id: stoppedId,
+        render_id: stoppedId,
+        session_id: sid,
+        execution_id: stoppedExecutionId,
+        role: "assistant",
+        content: stoppedContent,
+        model_used: "stopped",
+        created_at: stoppedAt,
+      };
+      if (hasPlaceholder) {
+        return prev.map((m) => (
+          m.session_id === sid && isStreamingPlaceholderMessage(m) ? stoppedMsg : m
+        ));
+      }
+      return [...prev, stoppedMsg];
+    });
+    const stoppedAlertId = stoppedExecutionId || `stopped-${sid}`;
+    showInterruptionAlertOnce(stoppedAlertId, sid, "사용자 요청으로 응답을 중지했습니다.");
     // 백엔드 프로세스도 강제 중단
-    if (activeSession) {
-      fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
+    fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
         method: "POST",
         credentials: "include",
         headers: { ...authHdrs() },
-      }).catch(() => {});
+      })
+        .then((res) => res.ok ? res.json() : Promise.reject(new Error(`stop failed ${res.status}`)))
+        .then((result) => {
+          if (!result?.stopped) {
+            console.warn("[chat-stop] backend did not confirm stop", { sessionId: sid, result });
+          }
+        })
+        .catch((error) => {
+          console.warn("[chat-stop] backend stop request failed", { sessionId: sid, error });
+        })
+        .finally(() => {
+          if (activeSessionRef.current === sid) {
+            setStopRequesting(false);
+            window.setTimeout(() => { userStopRequestedRef.current = false; }, 1500);
+          }
+        });
+    if (activeSession) {
       // 중지 후 DB에서 최신 상태를 한 번 fetch하여 동기화 (폴링 중복 방지)
       setTimeout(() => {
-        if (!activeSession) return;
-        chatApi<ChatMessage[]>(`/chat/messages?session_id=${activeSession.id}&limit=120&sort=desc&include_streaming=true`)
+        if (activeSessionRef.current !== sid) return;
+        chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=120&sort=desc&include_streaming=true`)
           .then((msgs) => msgs.reverse())
           .then((msgs) => {
-            if (activeSessionRef.current !== activeSession.id) return;
+            if (activeSessionRef.current !== sid) return;
             const filtered = surfaceDbSavedStreamingPlaceholders(msgs, { keepEmpty: true });
             // FIX: placeholder 삭제 금지 — stopped/interrupt 메시지가 있으면 유지하면서 DB 메시지와 병합
-            isNearBottomRef.current = false;
             setMessagesPreservingViewport((prev) => {
               const localMsgs = prev.filter((m) => m.id.startsWith("stopped-") || m.id.startsWith("interrupt-"));
               const dbIds = new Set(filtered.map((m) => m.id));
@@ -7949,9 +7990,6 @@ export default function ChatPage() {
                 (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
               );
             });
-            // FIX: DB 동기화 후에도 스크롤 맨 아래로
-            isNearBottomRef.current = true;
-            scrollToMessagesBottom(true);
           })
           .catch(() => {});
       }, 1500);
@@ -10377,7 +10415,13 @@ export default function ChatPage() {
               </div>
               <button
                 type="button"
-                onClick={stopBackgroundStreaming}
+                title="응답 생성 중단"
+                aria-label="응답 생성 중단"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  stopBackgroundStreaming();
+                }}
                 style={{
                   marginTop: "4px", marginLeft: "4px",
                   padding: "2px 8px",

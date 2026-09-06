@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 07:32 KST - Chat stop button UX and scroll stability
+
+- Request:
+  - Apply the recommended chat improvements and fix the response bubble bottom stop button not working, considering loading speed, user convenience, visibility, and polished design.
+- Finding:
+  - The bubble bottom stop button called `stopStreaming()` without preventing click propagation.
+  - `stopStreaming()` only showed a local stopped bubble when `streamBuf` had content, so first-token delay could make the button appear ineffective.
+  - The stop path forced `scrollToMessagesBottom(true)`, which conflicts with the existing scroll anchor preservation and can look like the chat jumps while the user is reading.
+- Change:
+  - `src/app/chat/page.tsx`: added a user-stop guard so a deliberate abort does not enter invisible recovery.
+  - `src/app/chat/page.tsx`: always replaces the streaming placeholder with a visible stopped bubble, even before first token.
+  - `src/app/chat/page.tsx`: prevents stop button event propagation, adds accessible labels, clears recovery/pending state, and removes forced bottom scrolling from the stop path.
+- Verification:
+  - `npm run build` passed and generated the route set including `/chat`.
+  - `npm run lint` passed with 0 errors and existing warnings only.
+  - `git diff --check -- src/app/chat/page.tsx` passed.
+- Deployment:
+  - Not deployed in this entry. Commit/push and dashboard blue/green deployment remain pending.
+
 ## 2026-09-06 16:25 KST - Chat model selector immediate persistence for Fable 5.1
 
 - Request:
