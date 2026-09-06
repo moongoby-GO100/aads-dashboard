@@ -9764,8 +9764,26 @@ export default function ChatPage() {
             value={selectedModelValue}
             onChange={(e) => {
               const newModel = e.target.value;
+              modelRef.current = newModel;
               setModel(newModel);
               if (activeSession) {
+                const updatedSession = { ...activeSession, current_model: newModel };
+                setActiveSession(updatedSession);
+                setSessions((prev) =>
+                  prev.map((session) =>
+                    session.id === activeSession.id ? { ...session, current_model: newModel } : session
+                  )
+                );
+                setSidebarSessionsByWorkspace((prev) => {
+                  const workspaceId = activeSession.workspace_id;
+                  const current = prev[workspaceId] || [];
+                  return {
+                    ...prev,
+                    [workspaceId]: current.map((session) =>
+                      session.id === activeSession.id ? { ...session, current_model: newModel } : session
+                    ),
+                  };
+                });
                 chatApi(`/chat/sessions/${activeSession.id}`, {
                   method: "PUT",
                   body: JSON.stringify({ current_model: newModel }),

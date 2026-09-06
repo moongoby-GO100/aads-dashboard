@@ -1,5 +1,18 @@
 # AADS Dashboard Handover
 
+## 2026-09-06 16:25 KST - Chat model selector immediate persistence for Fable 5.1
+
+- Request:
+  - Fix the issue where selecting Fable 5.1 in the chat model selector could still send the previous model, causing DB execution rows to show Opus.
+- Finding:
+  - The chat send path reads `modelRef.current` for `model_override`. The model selector `onChange` updated React state, but did not synchronously update `modelRef.current`, so a send immediately after changing models could use the previous value.
+- Change:
+  - `src/app/chat/page.tsx`: updates `modelRef.current` immediately in the model selector `onChange` handler, and updates active session/sidebar session state locally before the async session PUT finishes.
+- Verification:
+  - `npx eslint src/app/chat/page.tsx` passed with 0 errors and existing warnings only.
+- Deployment:
+  - Pending at this note. Commit selected dashboard file, push, run dashboard blue/green deploy, then verify `/chat` rendering and model selection persistence.
+
 ## 2026-09-06 00:05 KST - Chat response overview panel
 
 - Request:
