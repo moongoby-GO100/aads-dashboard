@@ -202,6 +202,7 @@ interface RegistryModel {
   is_active?: boolean;
   is_selectable?: boolean;
   is_executable?: boolean;
+  metadata?: Record<string, unknown> | string | null;
 }
 
 // ─── preferences 적용 헬퍼 ──────────────────────────────────────────────────
@@ -263,21 +264,30 @@ function formatRegistryCost(inputCost?: string | number | null, outputCost?: str
   return `$${input}/$${output}`;
 }
 
+function isSelectableRegistryModel(model: RegistryModel): boolean {
+  const metadata =
+    model.metadata && typeof model.metadata === "object" && !Array.isArray(model.metadata)
+      ? model.metadata
+      : {};
+  if (metadata.alias_of || metadata.model_source === "accepted_alias") return false;
+  return model.is_selectable === true && model.is_active !== false;
+}
+
 function registryModelToChatOption(model: RegistryModel, duplicateIds: Set<string>): ChatModelOption | null {
   const modelId = String(model.model_id || "").trim();
   if (!modelId) return null;
+  if (!isSelectableRegistryModel(model)) return null;
   const provider = String(model.provider || "legacy").trim().toLowerCase();
   const id = duplicateIds.has(modelId) ? `${provider}:${modelId}` : modelId;
   const staticOption = CHAT_MODEL_OPTIONS.find((option) => option.id === modelId);
   const cost = formatRegistryCost(model.input_cost, model.output_cost);
-  const selectable = Boolean(model.is_active || model.is_selectable || model.is_executable);
   return {
     id,
     label: model.display_name || staticOption?.label || modelId,
     cost: cost !== "변동" ? cost : staticOption?.cost || cost,
-    description: `${provider}${selectable ? "" : " · 비활성"}`,
+    description: provider,
     isDeepResearch: staticOption?.isDeepResearch,
-    isSelectable: selectable,
+    isSelectable: true,
   };
 }
 
@@ -318,7 +328,7 @@ async function fetchRegisteredChatModels(): Promise<ChatModelOption[]> {
     });
     if (!res.ok) return [];
     const data: { models?: RegistryModel[] } = await res.json();
-    const rows = Array.isArray(data.models) ? data.models : [];
+    const rows = (Array.isArray(data.models) ? data.models : []).filter(isSelectableRegistryModel);
     const idCounts = rows.reduce((acc, row) => {
       const modelId = String(row.model_id || "").trim();
       if (modelId) acc.set(modelId, (acc.get(modelId) || 0) + 1);
