@@ -36,10 +36,9 @@ import {
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
-import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
+import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
-const CrfMarkdown = ({ content }: { content: string }) => <MarkdownBlock text={content} />;
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -74,6 +73,79 @@ type StreamingStatusPayload = {
   final_message_id?: string | null;
   final_message_ready?: boolean;
 };
+
+type ProjectDocContentResponse = {
+  project?: string;
+  file_path?: string;
+  full_path?: string;
+  content?: string;
+  encoding?: string;
+  mime_type?: string;
+  format?: string;
+  is_binary?: boolean;
+};
+
+function titleFromHref(href: string, fallback: string): string {
+  const cleanFallback = fallback.trim();
+  try {
+    const url = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr");
+    const path = url.searchParams.get("file_path") || url.searchParams.get("path") || url.pathname;
+    const name = decodeURIComponent((path.split("/").filter(Boolean).pop() || cleanFallback || "문서").replace(/\+/g, " "));
+    return name || cleanFallback || "문서";
+  } catch {
+    const name = href.split(/[/?#]/).filter(Boolean).pop() || cleanFallback || "문서";
+    try {
+      return decodeURIComponent(name);
+    } catch {
+      return name;
+    }
+  }
+}
+
+function parseDocsPreviewHref(href: string): { project: string; basePath: string; filePath: string } | null {
+  if (!href.startsWith("/docs?")) return null;
+  const query = href.slice(href.indexOf("?") + 1).split("#", 1)[0];
+  const params = new URLSearchParams(query);
+  const project = params.get("project") || "";
+  const basePath = params.get("base_path") || "";
+  const filePath = params.get("file_path") || "";
+  if (!project || !basePath || !filePath) return null;
+  return { project, basePath, filePath };
+}
+
+function artifactTypeForDocument(title: string, mimeType?: string, format?: string): Artifact["artifact_type"] {
+  const lower = title.toLowerCase();
+  const mime = (mimeType || "").toLowerCase();
+  const fmt = (format || "").toLowerCase();
+  if (mime.includes("html") || fmt.includes("html") || lower.endsWith(".html") || lower.endsWith(".htm")) return "html_preview";
+  if (lower.endsWith(".json") || lower.endsWith(".sql") || lower.endsWith(".py") || lower.endsWith(".ts") || lower.endsWith(".tsx")) return "code";
+  return "report";
+}
+
+function languageForDocument(title: string, format?: string): string {
+  const ext = title.toLowerCase().split(".").pop() || "";
+  const fmt = (format || "").toLowerCase();
+  if (fmt.includes("typescript") || ext === "ts" || ext === "tsx") return "ts";
+  if (fmt.includes("javascript") || ext === "js" || ext === "jsx") return "js";
+  if (fmt.includes("python") || ext === "py") return "py";
+  if (fmt.includes("sql") || ext === "sql") return "sql";
+  if (fmt.includes("shell") || ext === "sh") return "sh";
+  if (ext === "json") return "json";
+  if (ext === "css") return "css";
+  return "text";
+}
+
+function buildProjectDocContentPath(params: { project: string; basePath: string; filePath: string }): string {
+  const q = new URLSearchParams();
+  q.set("project", params.project);
+  q.set("base_path", params.basePath);
+  q.set("file_path", params.filePath);
+  return `/project-docs/content?${q.toString()}`;
+}
+
+function documentArtifactIdFromHref(href: string): string {
+  return `doc-link-${href.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120)}`;
+}
 
 type MessageViewportAnchor = {
   messageId: string | null;
@@ -2073,6 +2145,7 @@ interface MessageItemProps {
   onViewReport?: () => void;
   linkedArtifact?: { id: string; title: string; artifact_type: string; content: string };
   onViewArtifact?: (artifactId: string) => void;
+  onDocumentLinkClick?: DocumentLinkHandler;
   onOpenLightbox?: (srcs: string[], idx: number) => void;
   isLastAssistantMsg?: boolean;
   screenSize: ScreenSize;
@@ -2085,13 +2158,19 @@ const MessageItem = memo(function MessageItem({
   onRegenerate, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming, stopRequesting,
   onResumeInterrupted, selectedResumeModel,
-  onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
+  onViewReport, linkedArtifact, onViewArtifact, onDocumentLinkClick, onOpenLightbox, isLastAssistantMsg,
   screenSize, mobileFontPx,
 }: MessageItemProps) {
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
   const LIVE_STREAM_RENDER_LIMIT = 8000;  // AADS-BUBBLE-FLASH-P1
+  const CrfMarkdown = useCallback(
+    ({ content }: { content: string }) => (
+      <MarkdownBlock text={content} onDocumentLinkClick={onDocumentLinkClick} />
+    ),
+    [onDocumentLinkClick],
+  );
   // reply_to_id가 있으면 원본 메시지 찾기
 
   const isStreamingPlaceholder = msg.intent === "streaming_placeholder" || msg.intent?.startsWith("streaming");
@@ -2486,10 +2565,10 @@ const MessageItem = memo(function MessageItem({
                   <span style={{ opacity: 0.7 }}>{msg.content.split("\n")[0]}</span>
                 </summary>
                 <div style={{ marginTop: "6px", paddingLeft: "10px", borderLeft: "2px solid rgba(99,102,241,0.3)" }}>
-                  <MarkdownBlock text={msg.content.split("\n").slice(1).join("\n")} />
+                <MarkdownBlock text={msg.content.split("\n").slice(1).join("\n")} onDocumentLinkClick={onDocumentLinkClick} />
                 </div>
               </details>
-            ) : msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} /> : processInline(msg.content, { linkColor: "#fff" })
+            ) : msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} onDocumentLinkClick={onDocumentLinkClick} /> : processInline(msg.content, { linkColor: "#fff", onDocumentLinkClick })
           ) : (isActiveStreaming || Boolean(streamingContent)) ? (
             <>
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
@@ -2553,7 +2632,7 @@ const MessageItem = memo(function MessageItem({
               ) : null}
               {displayedStreamingContent ? (
                 <>
-                  <MarkdownBlock text={displayedStreamingContent} />
+                  <MarkdownBlock text={displayedStreamingContent} onDocumentLinkClick={onDocumentLinkClick} />
                   <StreamingCaret />
                 </>
               ) : !streamToolStatus && (!streamToolLogs || streamToolLogs.length === 0) ? (
@@ -2744,7 +2823,7 @@ const MessageItem = memo(function MessageItem({
                       </div>
                     )}
                     <div style={{ fontSize: "13px", color: "var(--ct-text)", lineHeight: "1.6" }}>
-                      <MarkdownBlock text={msg.content.substring(0, 300) + "\n\n..."} />
+                      <MarkdownBlock text={msg.content.substring(0, 300) + "\n\n..."} onDocumentLinkClick={onDocumentLinkClick} />
                     </div>
                     <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                       <button
@@ -2792,7 +2871,7 @@ const MessageItem = memo(function MessageItem({
                 </div>
               ) : (
                 <div data-response-body="true">
-                  {detectCrfSections(msg.content) ? (<SectionCardContent content={msg.content} MarkdownRenderer={CrfMarkdown} modelUsed={msg.model_used} createdAt={msg.created_at} />) : (<MarkdownBlock text={msg.content} />)}
+                  {detectCrfSections(msg.content) ? (<SectionCardContent content={msg.content} MarkdownRenderer={CrfMarkdown} modelUsed={msg.model_used} createdAt={msg.created_at} />) : (<MarkdownBlock text={msg.content} onDocumentLinkClick={onDocumentLinkClick} />)}
                   {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
                       <button
@@ -2882,7 +2961,7 @@ const MessageItem = memo(function MessageItem({
                   e.preventDefault();
                   e.stopPropagation();
                   if (stopRequesting) return;
-                  onStopStreaming();
+                  onStopStreaming?.();
                 }}
                 style={{
                 minHeight: "26px",
@@ -8740,6 +8819,115 @@ export default function ChatPage() {
     setArtifactMode("full");
     setArtifactTab("report");
   }, []);
+  const handleDocumentLinkClickStable = useCallback<DocumentLinkHandler>(async (href, label) => {
+    const title = titleFromHref(href, label);
+    const id = documentArtifactIdFromHref(href);
+    const now = new Date().toISOString();
+    const showArtifact = (artifact: Artifact) => {
+      const nextTab: ArtifactTab =
+        artifact.artifact_type === "html_preview"
+          ? "html_preview"
+          : artifact.artifact_type === "code"
+            ? "code"
+            : "report";
+      setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifactTab(nextTab);
+      setSelectedArtifactIdx(0);
+      setArtifactMode("full");
+      if (screenSize !== "desktop") setMobileOverlay("artifact");
+    };
+
+    showArtifact({
+      id,
+      session_id: activeSession?.id ?? "",
+      workspace_id: activeWs ?? undefined,
+      artifact_type: "report",
+      title,
+      content: `문서를 불러오는 중입니다.\n\n원본: ${href}`,
+      metadata: { source_url: href, transient: true, loading: true },
+      created_at: now,
+    });
+
+    try {
+      const docsParams = parseDocsPreviewHref(href);
+      if (docsParams) {
+        const doc = await chatApi<ProjectDocContentResponse>(buildProjectDocContentPath(docsParams));
+        const docTitle = titleFromHref(doc.full_path || doc.file_path || href, title);
+        const artifactType = doc.is_binary ? "file" : artifactTypeForDocument(docTitle, doc.mime_type, doc.format);
+        const content = doc.is_binary && doc.content
+          ? `data:${doc.mime_type || "application/octet-stream"};base64,${doc.content}`
+          : (doc.content || "");
+        showArtifact({
+          id,
+          session_id: activeSession?.id ?? "",
+          workspace_id: activeWs ?? undefined,
+          artifact_type: artifactType,
+          title: docTitle,
+          content,
+          metadata: {
+            source_url: href,
+            project: doc.project || docsParams.project,
+            base_path: docsParams.basePath,
+            file_path: doc.file_path || docsParams.filePath,
+            full_path: doc.full_path,
+            mime_type: doc.mime_type,
+            format: doc.format,
+            language: languageForDocument(docTitle, doc.format),
+            transient: true,
+          },
+          created_at: now,
+        });
+        return;
+      }
+
+      const url = new URL(href, window.location.origin);
+      const response = await fetch(url.toString(), { credentials: "include", headers: authHdrs() });
+      if (!response.ok) throw new Error(`${response.status}`);
+      const contentType = response.headers.get("content-type") || "";
+      const artifactType = artifactTypeForDocument(title, contentType);
+      if (contentType.startsWith("image/") || contentType.includes("pdf")) {
+        showArtifact({
+          id,
+          session_id: activeSession?.id ?? "",
+          workspace_id: activeWs ?? undefined,
+          artifact_type: "file",
+          title,
+          content: url.toString(),
+          metadata: { source_url: href, mime_type: contentType, transient: true },
+          created_at: now,
+        });
+        return;
+      }
+      const content = await response.text();
+      showArtifact({
+        id,
+        session_id: activeSession?.id ?? "",
+        workspace_id: activeWs ?? undefined,
+        artifact_type: artifactType,
+        title,
+        content,
+        metadata: {
+          source_url: href,
+          mime_type: contentType,
+          language: languageForDocument(title),
+          transient: true,
+        },
+        created_at: now,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "알 수 없는 오류";
+      showArtifact({
+        id,
+        session_id: activeSession?.id ?? "",
+        workspace_id: activeWs ?? undefined,
+        artifact_type: "report",
+        title,
+        content: `⚠️ 문서를 우측 패널에서 열지 못했습니다.\n\n- 원본: ${href}\n- 오류: ${reason}\n\n원본 링크를 새 탭에서 다시 열어 확인하십시오.`,
+        metadata: { source_url: href, transient: true, error: reason },
+        created_at: now,
+      });
+    }
+  }, [activeSession?.id, activeWs, screenSize, setMobileOverlay]);
 
   useEffect(() => {
     if (!activeWs || activeSession) return;
@@ -10448,6 +10636,7 @@ export default function ChatPage() {
                     onViewReport={msg.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                     linkedArtifact={msg.artifact_id ? artifactByIdMap.get(msg.artifact_id) : undefined}
                     onViewArtifact={handleViewArtifactStable}
+                    onDocumentLinkClick={handleDocumentLinkClickStable}
                     onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
                     screenSize={screenSize}
@@ -10492,6 +10681,7 @@ export default function ChatPage() {
                       onViewReport={hm.intent === "pipeline_runner" ? handleViewReportStable : undefined}
                       linkedArtifact={hm.artifact_id ? artifactByIdMap.get(hm.artifact_id) : undefined}
                       onViewArtifact={handleViewArtifactStable}
+                      onDocumentLinkClick={handleDocumentLinkClickStable}
                       onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
                       screenSize={screenSize}
@@ -10529,7 +10719,7 @@ export default function ChatPage() {
               >
                 {bgPartialContent ? (
                   <>
-                    <MarkdownBlock text={bgPartialContent} />
+                    <MarkdownBlock text={bgPartialContent} onDocumentLinkClick={handleDocumentLinkClickStable} />
                     <StreamingCaret />
                   </>
                 ) : (

@@ -10,6 +10,8 @@ import InlineChart from "@/components/chat/InlineChart";
 import { isFileDownloadHref, isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
 
+export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
+
 const isSafeUrl = (url: string) => {
   return !isUnsafeLink(url);
 };
@@ -287,7 +289,37 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
   );
 }
 
-const createMarkdownComponents = (linkColor?: string, inlineMode = false): Components => ({
+function isArtifactPreviewHref(href: string): boolean {
+  if (href.startsWith("/docs?")) return true;
+  if (href.startsWith("/reports/") || href.startsWith("/exports/")) return true;
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr";
+    const url = new URL(href, base);
+    const sameOrigin = typeof window !== "undefined" ? url.origin === window.location.origin : url.origin === "https://aads.newtalk.kr";
+    if (sameOrigin && (url.pathname.startsWith("/reports/") || url.pathname.startsWith("/exports/"))) return true;
+    if (
+      sameOrigin &&
+      (url.pathname.startsWith("/static/reports/") || url.pathname.startsWith("/static/docs/"))
+    ) return true;
+  } catch {
+    /* keep existing conservative link behavior */
+  }
+  if (href.startsWith("/api/v1/files/download")) {
+    try {
+      const url = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr");
+      return url.searchParams.get("inline") === "1";
+    } catch {
+      return href.includes("inline=1");
+    }
+  }
+  return false;
+}
+
+const createMarkdownComponents = (
+  linkColor?: string,
+  inlineMode = false,
+  onDocumentLinkClick?: DocumentLinkHandler,
+): Components => ({
   p({ children }) {
     if (inlineMode) return <>{children}</>;
     return <p style={{ margin: "0 0 8px", lineHeight: 1.65 }}>{children}</p>;
@@ -310,14 +342,28 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
     if (!normalizedHref) return <span>{children}</span>;
     // AADS-FILES: 산출물 파일은 토큰 인증 fetch로 받아 저장/열람 (직접 이동 시 401/404 발생)
     const managedFile = isFileDownloadHref(normalizedHref);
+    const canOpenInArtifact = Boolean(onDocumentLinkClick && isArtifactPreviewHref(normalizedHref));
+    const label = React.Children.toArray(children).join("").trim() || normalizedHref;
     return (
       <a
         href={normalizedHref}
-        target="_blank"
+        target={canOpenInArtifact ? undefined : "_blank"}
         rel="noopener noreferrer"
-        title={managedFile ? "클릭하면 파일을 내려받습니다" : undefined}
+        title={
+          canOpenInArtifact
+            ? "클릭하면 우측 아티팩트창에서 엽니다"
+            : managedFile
+              ? "클릭하면 파일을 내려받습니다"
+              : undefined
+        }
         onClick={
-          managedFile
+          canOpenInArtifact
+            ? (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onDocumentLinkClick?.(normalizedHref, label);
+              }
+            : managedFile
             ? (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -329,7 +375,7 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
         }
         style={{ color: linkColor || "var(--ct-accent)", textDecoration: "underline", wordBreak: "break-all", cursor: "pointer" }}
       >
-        {managedFile ? "📥 " : ""}{children}
+        {canOpenInArtifact ? "📄 " : managedFile ? "📥 " : ""}{children}
       </a>
     );
   },
@@ -497,12 +543,15 @@ const createMarkdownComponents = (linkColor?: string, inlineMode = false): Compo
   },
 });
 
-function processInline(text: string, opts?: { linkColor?: string }): React.ReactNode {
-  return <InlineMd text={text} linkColor={opts?.linkColor} />;
+function processInline(text: string, opts?: { linkColor?: string; onDocumentLinkClick?: DocumentLinkHandler }): React.ReactNode {
+  return <InlineMd text={text} linkColor={opts?.linkColor} onDocumentLinkClick={opts?.onDocumentLinkClick} />;
 }
 
-function InlineMd({ text, linkColor }: { text: string; linkColor?: string }) {
-  const components = useMemo(() => createMarkdownComponents(linkColor, true), [linkColor]);
+function InlineMd({ text, linkColor, onDocumentLinkClick }: { text: string; linkColor?: string; onDocumentLinkClick?: DocumentLinkHandler }) {
+  const components = useMemo(
+    () => createMarkdownComponents(linkColor, true, onDocumentLinkClick),
+    [linkColor, onDocumentLinkClick],
+  );
 
   return (
     <ReactMarkdown
@@ -517,8 +566,19 @@ function InlineMd({ text, linkColor }: { text: string; linkColor?: string }) {
   );
 }
 
-const MarkdownBlock = React.memo(function MarkdownBlock({ text, linkColor }: { text: string; linkColor?: string }) {
-  const components = useMemo(() => createMarkdownComponents(linkColor, false), [linkColor]);
+const MarkdownBlock = React.memo(function MarkdownBlock({
+  text,
+  linkColor,
+  onDocumentLinkClick,
+}: {
+  text: string;
+  linkColor?: string;
+  onDocumentLinkClick?: DocumentLinkHandler;
+}) {
+  const components = useMemo(
+    () => createMarkdownComponents(linkColor, false, onDocumentLinkClick),
+    [linkColor, onDocumentLinkClick],
+  );
 
   return (
     <div className="aads-markdown" style={{ lineHeight: 1.65 }}>
