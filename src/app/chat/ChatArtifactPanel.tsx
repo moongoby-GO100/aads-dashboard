@@ -84,6 +84,10 @@ interface DeployQueueItem {
   duration_ms?: number | null;
   bg_sync_status?: string | null;
   stalled?: boolean;
+  release_title?: string | null;
+  release_summary?: string | null;
+  changed_files?: string[];
+  changed_file_count?: number | null;
 }
 
 interface DeployDurationItem {
@@ -112,6 +116,7 @@ interface DeployObservabilityStatus {
   degraded_reasons?: string[];
   active_deployments?: DeployQueueItem[];
   queued_deployments?: DeployQueueItem[];
+  recent_completed_deployments?: DeployQueueItem[];
   recent_durations_per_project?: DeployDurationItem[];
   phase_timeline?: DeployQueueItem[];
   stale_zombie_signals?: DeploySignalItem[];
@@ -216,6 +221,56 @@ function deployElapsed(item: DeployQueueItem, nowMs: number): string {
   return formatDurationText((nowMs - startMs) / 1000);
 }
 
+function deployAppliedSummary(item: DeployQueueItem): string {
+  const title = (item.release_title || item.release_summary || "").trim();
+  if (title) return title;
+  const files = item.changed_files || [];
+  if (files.length > 0) return `${files[0]} 등 ${item.changed_file_count || files.length}개 파일 변경`;
+  return "적용 내용 미기록";
+}
+
+function DeployChangeSummary({ item }: { item: DeployQueueItem }) {
+  const files = item.changed_files || [];
+  return (
+    <div style={{
+      marginTop: 8,
+      borderTop: "1px solid var(--ct-border)",
+      paddingTop: 8,
+      minWidth: 0,
+    }}>
+      <div style={{ fontSize: 10, color: "var(--ct-text2)", marginBottom: 3 }}>적용 내용</div>
+      <div style={{ fontSize: 12, fontWeight: 750, color: "var(--ct-text)", lineHeight: 1.35, overflowWrap: "anywhere" }}>
+        {deployAppliedSummary(item)}
+      </div>
+      {files.length > 0 && (
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+          {files.slice(0, 4).map((file) => (
+            <span key={file} style={{
+              border: "1px solid var(--ct-border)",
+              borderRadius: 6,
+              padding: "2px 6px",
+              fontSize: 10,
+              color: "var(--ct-text2)",
+              fontFamily: "monospace",
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {file}
+            </span>
+          ))}
+          {(item.changed_file_count || files.length) > files.slice(0, 4).length && (
+            <span style={{ fontSize: 10, color: "var(--ct-text2)", padding: "2px 0" }}>
+              +{(item.changed_file_count || files.length) - files.slice(0, 4).length}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DeployStatusCard({
   status,
   loading,
@@ -231,6 +286,7 @@ function DeployStatusCard({
 }) {
   const active = status?.active_deployments || [];
   const queued = status?.queued_deployments || [];
+  const completed = status?.recent_completed_deployments || [];
   const durations = status?.recent_durations_per_project || [];
   const staleSignals = status?.stale_zombie_signals || [];
   const blockers = status?.next_deploy_readiness?.blockers || [];
@@ -388,6 +444,7 @@ function DeployStatusCard({
                   {item.runner_job_id && <span>{item.runner_job_id}</span>}
                   {item.bg_sync_status && <span>bg {item.bg_sync_status}</span>}
                 </div>
+                <DeployChangeSummary item={item} />
               </div>
             );
           })}
@@ -436,6 +493,29 @@ function DeployStatusCard({
           {signal.project || "-"} · {signal.signal || "-"} · {signal.runner_job_id || "-"}
         </div>
       ))}
+
+      {completed.length > 0 && (
+        <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 반영 내역</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {completed.slice(0, 5).map((item, index) => (
+              <div key={`${item.id || item.release_sha || index}-completed`} style={{ borderTop: index === 0 ? "none" : "1px solid var(--ct-border)", paddingTop: index === 0 ? 0 : 8, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>{item.project || "-"}</span>
+                  <span style={{ fontSize: 10, color: "#22c55e", whiteSpace: "nowrap" }}>{item.status || "success"}</span>
+                  <span style={{ fontSize: 10, color: "var(--ct-text2)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {shortSha(item.release_sha)}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--ct-text2)", marginLeft: "auto", whiteSpace: "nowrap" }}>
+                    {formatKst(item.phase_completed_at || item.updated_at || item.created_at)}
+                  </span>
+                </div>
+                <DeployChangeSummary item={item} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {durations.length > 0 && (
         <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
@@ -899,7 +979,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       : `${desktopPanelWidthPx}px`;
   const deployBadgeCount =
     (deployStatus?.active_deployments?.length || 0) +
-    (deployStatus?.queued_deployments?.length || 0);
+    (deployStatus?.queued_deployments?.length || 0) +
+    (deployStatus?.recent_completed_deployments?.length || 0);
 
   // artifactCounts 변경 감지 → 증가한 탭에 펄스 트리거
   useEffect(() => {
