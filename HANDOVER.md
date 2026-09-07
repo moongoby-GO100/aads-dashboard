@@ -2308,3 +2308,20 @@
   - `npm run build` passed.
 - Deployment:
   - Pending at this note. Commit, push, and dashboard blue/green deployment are required before this is considered operationally reflected.
+
+## 2026-09-07 15:04 KST - Chat response overview and stop-button visibility follow-up
+
+- Request:
+  - Restore chat features discussed in this session that appeared and then disappeared on screen, and deploy the P1/P2 recommendations.
+- Findings:
+  - The seven-chip response overview was present in `src/app/chat/page.tsx`, but it still had a 1,200-character hard gate. Short final reports with `목표/계획/진행/결과/검증/리스크/다음` could therefore hide the overview panel.
+  - The assistant-bubble bottom stop button depended on the active streaming placeholder state. In background/recovery states it could disappear even though a stop request handler was available.
+- Change prepared:
+  - `src/app/chat/page.tsx`: added workflow-signal detection so the seven-chip overview remains visible for shorter structured responses.
+  - `src/app/chat/page.tsx`: decoupled the bottom stop button from the narrower active-stream visual state and keeps it visible whenever the current streaming placeholder has a stop handler.
+- Verification before release:
+  - `npx eslint src/app/chat/page.tsx`: passed with 0 errors and 20 pre-existing warnings.
+  - `git diff --check -- src/app/chat/page.tsx`: passed.
+  - `npm run typecheck`: not available in this repository.
+- Remaining before completion:
+  - Commit/push this HANDOVER entry and `src/app/chat/page.tsx`, then run the dashboard blue/green deploy and verify `/chat`.

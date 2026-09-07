@@ -1822,6 +1822,7 @@ function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: 
 const RESPONSE_OVERVIEW_MIN_CHARS = 1200;
 const RESPONSE_OVERVIEW_MAX_SECTIONS = 7;
 const RESPONSE_OVERVIEW_SOURCE_TAG_RE = /\[(?:DB\s*조회|코드\s*확인|로그|명령|도구|검증|실측|출처|공식문서|미측정)[^\]]*\]/gi;
+const RESPONSE_OVERVIEW_WORKFLOW_RE = /(목표|요청|목적|계획|플랜|진행|수행\s*내역|조치\s*내역|결과|완료|검증|테스트|리스크|문제점|다음\s*단계|권장\s*조치)/;
 
 type ResponseOverview = {
   leadLines: string[];
@@ -1882,12 +1883,13 @@ function extractNextAction(content: string): string {
 }
 
 function buildResponseOverview(content: string): ResponseOverview | null {
-  if (content.length < RESPONSE_OVERVIEW_MIN_CHARS) return null;
   const sections = extractResponseSections(content);
   const tableCount = (content.match(/\|[^\n]+\|\s*\n\s*\|[\s\-:|]+\|/g) || []).length;
   const codeBlockCount = (content.match(/```/g) || []).length / 2;
   const sourceTagCount = (content.match(RESPONSE_OVERVIEW_SOURCE_TAG_RE) || []).length;
-  const hasOverviewSignals = sections.length > 1 || tableCount > 0 || codeBlockCount > 0 || sourceTagCount > 0;
+  const hasWorkflowSignals = RESPONSE_OVERVIEW_WORKFLOW_RE.test(content);
+  const hasOverviewSignals = hasWorkflowSignals || sections.length > 1 || tableCount > 0 || codeBlockCount > 0 || sourceTagCount > 0;
+  if (content.length < RESPONSE_OVERVIEW_MIN_CHARS && !hasWorkflowSignals) return null;
   if (!hasOverviewSignals && content.length < 3000) return null;
 
   return {
@@ -2089,7 +2091,8 @@ const MessageItem = memo(function MessageItem({
   const isInterruptedAssistant = msg.role === "assistant" && (msg.intent === "interrupted_partial" || msg.model_used === "interrupted");
   const hasLiveStreamingContent = Boolean(streamingContent && isStreamingPlaceholder);
   const hasLiveTransitionStatus = Boolean(isStreamingPlaceholder && isLiveStreamStatusHint(streamToolStatus));
-  const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent || hasLiveTransitionStatus);
+  const canRequestStop = Boolean(onStopStreaming && isStreamingPlaceholder);
+  const isActiveStreamingPlaceholder = Boolean(isActiveStreaming || hasLiveStreamingContent || hasLiveTransitionStatus || canRequestStop);
   const placeholderStatus = streamingPlaceholderStatus(msg, isActiveStreamingPlaceholder, streamToolStatus);
   const isRecoverablePlaceholder = Boolean(placeholderStatus?.recoverable && !isActiveStreamingPlaceholder);
   const assistantBubbleOpacity = (msg.intent === "regenerated" || msg.intent === "continued") ? ((msg.content?.length ?? 0) > 200 ? 0.82 : 0.6) : isStreamingPlaceholder ? 0.92 : 1;
@@ -2861,7 +2864,7 @@ const MessageItem = memo(function MessageItem({
               border: `1px solid ${placeholderStatus.border}`,
               animation: isActiveStreamingPlaceholder ? "pulse 1.5s ease-in-out infinite" : undefined,
             }}>{placeholderStatus.label}</span>
-            {isActiveStreamingPlaceholder && onStopStreaming && (
+            {canRequestStop && (
               <button
                 type="button"
                 title={stopRequesting ? "응답 중단 요청 중" : "응답 생성 중단"}
