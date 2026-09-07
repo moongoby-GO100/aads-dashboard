@@ -1828,8 +1828,10 @@ type ResponseOverview = {
   leadLines: string[];
   sections: string[];
   nextAction: string;
+  hasBrief: boolean;
   hasGoal: boolean;
   hasPlan: boolean;
+  hasSteps: boolean;
   hasProgress: boolean;
   hasResult: boolean;
   hasVerification: boolean;
@@ -1857,7 +1859,7 @@ function summarizeLeadLines(content: string): string[] {
     .map(cleanOverviewLine)
     .filter((line) => line.length > 0 && !/^\|/.test(line) && !/^[-:|\s]+$/.test(line));
 
-  const preferred = lines.filter((line) => /^(✅|⚠️|❌|결론|요약|판정|현황|답변|목표|계획|플랜|진행|수행 내역|결과|검증|리스크|다음)/.test(line));
+  const preferred = lines.filter((line) => /^(✅|⚠️|❌|결론|요약|판정|현황|답변|지시 파악|지시파악|요청 파악|목표|계획|플랜|실행순서|실행 순서|진행|수행 내역|결과|검증|리스크|다음)/.test(line));
   const source = preferred.length > 0 ? preferred : lines;
   return source.slice(0, 2).map((line) => line.length > 150 ? `${line.slice(0, 147)}...` : line);
 }
@@ -1896,8 +1898,10 @@ function buildResponseOverview(content: string): ResponseOverview | null {
     leadLines: summarizeLeadLines(content),
     sections,
     nextAction: extractNextAction(content),
+    hasBrief: /(지시\s*(?:확인|파악|정리|요약|범위)|요청\s*(?:확인|파악|정리|요약|범위)|질문\s*(?:확인|파악))/.test(content),
     hasGoal: /(목표|요청|목적|완료\s*기준|성공\s*기준)/.test(content),
     hasPlan: /(계획|플랜|작업\s*순서|수행\s*계획|조치\s*계획|진행\s*방식)/.test(content),
+    hasSteps: /(실행\s*순서|작업\s*순서|진행\s*순서|실행\s*단계|수행\s*단계|수행\s*내역|조치\s*내역|\d\s*단계)/.test(content),
     hasProgress: /(진행|수행\s*내역|조치\s*내역|작업\s*내역|적용\s*범위|반영\s*상태)/.test(content),
     hasResult: /(결과|완료|반영|적용|성공|실패|미완료|처리됨|해소)/.test(content),
     hasVerification: /(검증|테스트|완료기준|성공 기준|health|build|lint|py_compile)/i.test(content),
@@ -1919,9 +1923,10 @@ function ResponseOverviewPanel({
   onJumpTo?: (target: string) => void;
 }) {
   const indicators = [
+    { label: "지시파악", ok: overview.hasBrief },
     { label: "목표", ok: overview.hasGoal },
     { label: "계획", ok: overview.hasPlan },
-    { label: "진행", ok: overview.hasProgress },
+    { label: "실행순서", ok: overview.hasSteps || overview.hasProgress },
     { label: "결과", ok: overview.hasResult },
     { label: "검증", ok: overview.hasVerification },
     { label: "리스크", ok: overview.hasRisk },
@@ -2168,9 +2173,10 @@ const MessageItem = memo(function MessageItem({
     setContentCollapsed(false);
     const normalizedTarget = target.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
     const aliases: Record<string, string[]> = {
+      지시파악: ["지시파악", "지시확인", "지시정리", "요청확인", "요청파악", "요청정리", "요청범위", "질문파악"],
       목표: ["목표", "요청", "목적", "완료기준", "성공기준"],
       계획: ["계획", "플랜", "작업순서", "수행계획", "조치계획", "진행방식"],
-      진행: ["진행", "수행내역", "조치내역", "작업내역", "적용범위", "반영상태"],
+      실행순서: ["실행순서", "작업순서", "진행순서", "실행단계", "수행단계", "수행내역", "조치내역", "작업내역", "적용범위", "반영상태"],
       결과: ["결과", "완료", "반영", "적용", "성공", "실패", "미완료", "처리됨", "해소"],
       검증: ["검증", "테스트", "완료기준", "성공기준", "health", "build", "lint", "pycompile"],
       리스크: ["리스크", "문제", "문제점", "이상항목", "미완료", "주의", "한계"],
