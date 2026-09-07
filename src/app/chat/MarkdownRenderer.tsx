@@ -251,17 +251,28 @@ const _IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|ico|bmp)$/i;
 function _isFilePath(t: string) { const s = t.trim(); return _FILE_EXT_RE.test(s) || _FILE_PATH_RE.test(s); }
 function _isImagePath(t: string) { return _IMAGE_EXT_RE.test(t.trim()); }
 
-function FilePathChip({ text, children }: { text: string; children: React.ReactNode }) {
+function FilePathChip({
+  text,
+  children,
+  onDocumentLinkClick,
+}: {
+  text: string;
+  children: React.ReactNode;
+  onDocumentLinkClick?: DocumentLinkHandler;
+}) {
   const [copied, setCopied] = React.useState(false);
   const isImg = _isImagePath(text);
   const docsHref = normalizeDocumentHref(text);
   const hasDocsLink = docsHref.startsWith("/docs?");
+  const opensInArtifact = Boolean(hasDocsLink && onDocumentLinkClick);
   return (
     <code
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (hasDocsLink) {
+        if (opensInArtifact) {
+          void onDocumentLinkClick?.(docsHref, text);
+        } else if (hasDocsLink) {
           window.open(docsHref, "_blank");
         } else {
           navigator.clipboard?.writeText(text).then(() => {
@@ -270,7 +281,7 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
           });
         }
       }}
-      title={hasDocsLink ? "클릭하여 문서 열기" : (copied ? "✅ 복사됨" : "클릭하여 복사")}
+      title={opensInArtifact ? "클릭하면 우측 아티팩트창에서 엽니다" : hasDocsLink ? "클릭하여 문서 열기" : (copied ? "✅ 복사됨" : "클릭하여 복사")}
       style={{
         background: copied ? "rgba(34,197,94,0.15)" : hasDocsLink ? "rgba(59,130,246,0.12)" : "rgba(108,99,255,0.12)",
         padding: "2px 6px",
@@ -284,7 +295,7 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
         userSelect: "none",
       }}
     >
-      {hasDocsLink ? "📄↗" : isImg ? "🖼️" : "📄"} {copied ? "복사됨" : children}
+      {hasDocsLink ? (opensInArtifact ? "📄" : "📄↗") : isImg ? "🖼️" : "📄"} {copied ? "복사됨" : children}
     </code>
   );
 }
@@ -510,7 +521,7 @@ const createMarkdownComponents = (
     if (isInline) {
       const _codeText = String(children ?? "").trim();
       if (_isFilePath(_codeText)) {
-        return <FilePathChip text={_codeText}>{children}</FilePathChip>;
+        return <FilePathChip text={_codeText} onDocumentLinkClick={onDocumentLinkClick}>{children}</FilePathChip>;
       }
       return (
         <code
