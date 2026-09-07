@@ -140,7 +140,7 @@ export interface Artifact {
 
 export type Theme = "dark" | "light";
 export type ArtifactMode = "wide" | "full" | "mini" | "hidden";
-export type ArtifactTab = "report" | "code" | "chart" | "agenda" | "tasks" | "log" | "dialog" | "html_preview";
+export type ArtifactTab = "report" | "code" | "chart" | "agenda" | "tasks" | "log" | "deploy" | "dialog" | "html_preview";
 export type ScreenSize = "desktop" | "tablet" | "mobile";
 
 // Theme CSS variables

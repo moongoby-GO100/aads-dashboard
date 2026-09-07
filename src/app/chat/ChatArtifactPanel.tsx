@@ -68,6 +68,61 @@ interface RunnerJob {
   updated_at: string | null;
 }
 
+interface DeployQueueItem {
+  id?: number;
+  project?: string;
+  release_sha?: string | null;
+  runner_job_id?: string | null;
+  status?: string;
+  phase?: string;
+  queue_position?: number | null;
+  phase_started_at?: string | null;
+  phase_completed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  estimated_remaining_ms?: number | null;
+  duration_ms?: number | null;
+  bg_sync_status?: string | null;
+  stalled?: boolean;
+}
+
+interface DeployDurationItem {
+  project?: string;
+  sample_count?: number;
+  avg_duration_ms?: number | null;
+  p50_duration_ms?: number | null;
+  p90_duration_ms?: number | null;
+  last_completed_at?: string | null;
+  source?: string;
+}
+
+interface DeploySignalItem {
+  runner_job_id?: string;
+  project?: string;
+  status?: string;
+  phase?: string;
+  signal?: string;
+  idle_seconds?: number | null;
+  requires_ceo_approval?: boolean;
+}
+
+interface DeployObservabilityStatus {
+  generated_at?: string;
+  degraded?: boolean;
+  degraded_reasons?: string[];
+  active_deployments?: DeployQueueItem[];
+  queued_deployments?: DeployQueueItem[];
+  recent_durations_per_project?: DeployDurationItem[];
+  phase_timeline?: DeployQueueItem[];
+  stale_zombie_signals?: DeploySignalItem[];
+  bg_digest_sync?: DeployQueueItem[];
+  next_deploy_readiness?: {
+    ready?: boolean;
+    blockers?: string[];
+    next_queued_runner_job_id?: string | null;
+  };
+}
+
 export interface ChatArtifactPanelProps {
   screenSize: ScreenSize;
   showArtifactPanel: boolean;
@@ -92,6 +147,311 @@ export interface ChatArtifactPanelProps {
 }
 
 /** 우측 아티팩트 패널 — 보고서/코드/차트/대시보드/작업 탭 */
+
+function formatDurationText(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return "-";
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  if (safeSeconds < 60) return `${safeSeconds}초`;
+  const minutes = Math.floor(safeSeconds / 60);
+  const restSeconds = safeSeconds % 60;
+  if (minutes < 60) return `${minutes}분 ${restSeconds}초`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return `${hours}시간 ${restMinutes}분`;
+}
+
+function formatMillis(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return "-";
+  return formatDurationText(Math.round(ms / 1000));
+}
+
+function formatKst(value: string | null | undefined): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+  return date.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function deployTone(status: string | undefined | null): string {
+  switch ((status || "").toLowerCase()) {
+    case "ready":
+    case "completed":
+    case "success":
+    case "synced":
+      return "#22c55e";
+    case "queued":
+    case "awaiting_approval":
+    case "verifying":
+    case "syncing_standby":
+    case "unknown":
+      return "#f59e0b";
+    case "running":
+      return "#3b82f6";
+    case "error":
+    case "failed":
+    case "mismatch":
+    case "blocked":
+      return "#ef4444";
+    default:
+      return "var(--ct-text2)";
+  }
+}
+
+function shortSha(value: string | null | undefined): string {
+  return value ? value.slice(0, 10) : "-";
+}
+
+function deployElapsed(item: DeployQueueItem, nowMs: number): string {
+  const start = item.phase_started_at || item.created_at || item.updated_at;
+  if (!start) return "-";
+  const startMs = new Date(start).getTime();
+  if (Number.isNaN(startMs)) return "-";
+  return formatDurationText((nowMs - startMs) / 1000);
+}
+
+function DeployStatusCard({
+  status,
+  loading,
+  error,
+  nowMs,
+  onRefresh,
+}: {
+  status: DeployObservabilityStatus | null;
+  loading: boolean;
+  error: string | null;
+  nowMs: number;
+  onRefresh: () => void;
+}) {
+  const active = status?.active_deployments || [];
+  const queued = status?.queued_deployments || [];
+  const durations = status?.recent_durations_per_project || [];
+  const staleSignals = status?.stale_zombie_signals || [];
+  const blockers = status?.next_deploy_readiness?.blockers || [];
+  const current = active[0] || queued[0] || null;
+  const currentProject = current?.project;
+  const currentDuration = currentProject
+    ? durations.find((item) => item.project === currentProject)
+    : null;
+  const estimatedRemaining = current?.estimated_remaining_ms != null
+    ? formatMillis(current.estimated_remaining_ms)
+    : currentDuration?.p50_duration_ms != null
+      ? `P50 ${formatMillis(currentDuration.p50_duration_ms)}`
+      : "-";
+  const cards = [
+    { label: "현재 Phase", value: current?.phase || "대기 없음", tone: deployTone(current?.status || current?.phase) },
+    { label: "경과시간", value: current ? deployElapsed(current, nowMs) : "-", tone: "var(--ct-text)" },
+    { label: "예상잔여", value: estimatedRemaining, tone: "var(--ct-text)" },
+    { label: "대기건", value: `${queued.length}건`, tone: queued.length ? "#f59e0b" : "#22c55e" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--ct-text)" }}>배포 상태</div>
+          <div style={{ fontSize: 11, color: "var(--ct-text2)", marginTop: 2 }}>
+            수집 {status?.generated_at ? formatKst(status.generated_at) : "-"}
+          </div>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          title="배포 상태 새로고침"
+          style={{
+            padding: "5px 9px",
+            borderRadius: 6,
+            border: "1px solid var(--ct-border)",
+            background: "var(--ct-hover)",
+            color: "var(--ct-text2)",
+            fontSize: 11,
+            cursor: loading ? "wait" : "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          새로고침
+        </button>
+      </div>
+
+      {error && (
+        <div style={{
+          border: "1px solid rgba(239,68,68,0.35)",
+          background: "rgba(239,68,68,0.1)",
+          color: "#fca5a5",
+          borderRadius: 8,
+          padding: "8px 10px",
+          fontSize: 11,
+          lineHeight: 1.45,
+          overflowWrap: "anywhere",
+        }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        {cards.map((card) => (
+          <div key={card.label} style={{
+            background: "var(--ct-card)",
+            border: "1px solid var(--ct-border)",
+            borderRadius: 8,
+            padding: "9px 10px",
+            minWidth: 0,
+          }}>
+            <div style={{ fontSize: 10, color: "var(--ct-text2)", marginBottom: 5 }}>{card.label}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: card.tone, overflowWrap: "anywhere" }}>{card.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {status?.degraded && (
+        <div style={{
+          border: "1px solid rgba(245,158,11,0.42)",
+          background: "rgba(245,158,11,0.1)",
+          color: "#fbbf24",
+          borderRadius: 8,
+          padding: "8px 10px",
+          fontSize: 11,
+          lineHeight: 1.45,
+          overflowWrap: "anywhere",
+        }}>
+          제한 수집: {(status.degraded_reasons || []).join(", ") || "unknown"}
+        </div>
+      )}
+
+      {[...active, ...queued].length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[...active, ...queued].slice(0, 8).map((item, index) => {
+            const tone = deployTone(item.status || item.phase);
+            return (
+              <div key={`${item.id || item.runner_job_id || index}-${index}`} style={{
+                background: "var(--ct-card)",
+                border: `1px solid ${item.stalled ? "#ef4444" : "var(--ct-border)"}`,
+                borderRadius: 8,
+                padding: "10px 11px",
+                minWidth: 0,
+              }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", whiteSpace: "nowrap" }}>
+                    {item.project || "-"}
+                  </span>
+                  <span style={{
+                    fontSize: 10,
+                    color: tone,
+                    border: `1px solid ${tone}`,
+                    borderRadius: 999,
+                    padding: "1px 7px",
+                    whiteSpace: "nowrap",
+                  }}>
+                    {item.status || "-"}
+                  </span>
+                  {item.queue_position != null && (
+                    <span style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
+                      #{item.queue_position}
+                    </span>
+                  )}
+                </div>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 7,
+                  fontSize: 11,
+                }}>
+                  <div>
+                    <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>Phase</div>
+                    <div style={{ color: "var(--ct-text)", fontWeight: 700, overflowWrap: "anywhere" }}>{item.phase || "-"}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>경과</div>
+                    <div style={{ color: "var(--ct-text)", fontWeight: 700 }}>{deployElapsed(item, nowMs)}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>잔여</div>
+                    <div style={{ color: "var(--ct-text)", fontWeight: 700 }}>{formatMillis(item.estimated_remaining_ms)}</div>
+                  </div>
+                </div>
+                <div style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  marginTop: 7,
+                  fontSize: 10,
+                  color: "var(--ct-text2)",
+                  fontFamily: "monospace",
+                }}>
+                  <span>sha {shortSha(item.release_sha)}</span>
+                  {item.runner_job_id && <span>{item.runner_job_id}</span>}
+                  {item.bg_sync_status && <span>bg {item.bg_sync_status}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{
+          background: "var(--ct-card)",
+          border: "1px solid var(--ct-border)",
+          borderRadius: 8,
+          padding: "14px 12px",
+          fontSize: 12,
+          color: "var(--ct-text2)",
+          textAlign: "center",
+        }}>
+          진행 중인 배포가 없습니다
+        </div>
+      )}
+
+      {blockers.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {blockers.map((blocker) => (
+            <span key={blocker} style={{
+              border: "1px solid rgba(245,158,11,0.5)",
+              color: "#fbbf24",
+              borderRadius: 999,
+              padding: "3px 8px",
+              fontSize: 10,
+              overflowWrap: "anywhere",
+            }}>
+              {blocker}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {staleSignals.slice(0, 4).map((signal) => (
+        <div key={`${signal.runner_job_id || signal.project}-${signal.signal}`} style={{
+          fontSize: 11,
+          color: "#fca5a5",
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.22)",
+          borderRadius: 8,
+          padding: "7px 9px",
+          overflowWrap: "anywhere",
+        }}>
+          {signal.project || "-"} · {signal.signal || "-"} · {signal.runner_job_id || "-"}
+        </div>
+      ))}
+
+      {durations.length > 0 && (
+        <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 배포시간</div>
+          {durations.slice(0, 5).map((item) => (
+            <div key={item.project || "unknown"} style={{ display: "grid", gridTemplateColumns: "56px 1fr auto", gap: 7, padding: "4px 0", borderTop: "1px solid var(--ct-border)", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 700 }}>{item.project || "-"}</span>
+              <span style={{ fontSize: 11, color: "var(--ct-text2)" }}>P50 {formatMillis(item.p50_duration_ms)} / P90 {formatMillis(item.p90_duration_ms)}</span>
+              <span style={{ fontSize: 10, color: "var(--ct-text2)" }}>{item.sample_count || 0}건</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** 아티팩트 본문 영역 — 스크롤 끝 도달 시 자동 전환 + 키보드 ←→ */
 function ArtifactContentArea({ artifactTab, filteredArtifacts, selectedArtifactIdx, setSelectedArtifactIdx, children }: {
@@ -191,6 +551,37 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   // Runner 작업 폴링 상태
   const [runnerJobs, setRunnerJobs] = useState<RunnerJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
+  const [deployStatus, setDeployStatus] = useState<DeployObservabilityStatus | null>(null);
+  const [deployLoading, setDeployLoading] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [deployNowMs, setDeployNowMs] = useState(() => Date.now());
+
+  const loadDeployStatus = useCallback(async () => {
+    setDeployLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/ops/deploy/status`, { headers: authHdrs(), credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setDeployStatus(data);
+      setDeployError(null);
+    } catch (e) {
+      setDeployError((e as Error).message || "배포 상태를 불러오지 못했습니다.");
+    } finally {
+      setDeployLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const panelVisible = showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden");
+    if (!panelVisible) return;
+    void loadDeployStatus();
+    const statusInterval = setInterval(() => void loadDeployStatus(), 15000);
+    const clockInterval = setInterval(() => setDeployNowMs(Date.now()), 1000);
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(clockInterval);
+    };
+  }, [artifactMode, loadDeployStatus, screenSize, showArtifactPanel]);
 
   useEffect(() => {
     if (!sessionId || artifactTab !== "log") return;
@@ -506,6 +897,9 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     artifactMode === "mini" || artifactMode === "hidden"
       ? "48px"
       : `${desktopPanelWidthPx}px`;
+  const deployBadgeCount =
+    (deployStatus?.active_deployments?.length || 0) +
+    (deployStatus?.queued_deployments?.length || 0);
 
   // artifactCounts 변경 감지 → 증가한 탭에 펄스 트리거
   useEffect(() => {
@@ -686,6 +1080,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 {(
                   [
                     { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                    { key: "deploy" as ArtifactTab, icon: "🚀", label: "배포" },
                     { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
                     { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                     { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
@@ -695,7 +1090,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
                 ).filter((tab) => {
-                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "agenda") return true;
+                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
                 }).map((tab) => (
                   <button
@@ -729,6 +1124,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     {tab.key === "log" && (unreadLogCount ?? 0) > 0 && (
                       <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
                         ({unreadLogCount})
+                      </span>
+                    )}
+                    {tab.key === "deploy" && deployBadgeCount > 0 && (
+                      <span style={{ marginLeft: '3px', fontSize: '10px', opacity: 0.7 }}>
+                        ({deployBadgeCount})
                       </span>
                     )}
                     {tab.key === "agenda" && agendaItems.length > 0 && (
@@ -895,6 +1295,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             >
               {artifactTab === "tasks" ? (
                 <ArtifactTaskMonitor sessionId={activeSession?.id} />
+              ) : artifactTab === "deploy" ? (
+                <DeployStatusCard
+                  status={deployStatus}
+                  loading={deployLoading}
+                  error={deployError}
+                  nowMs={deployNowMs}
+                  onRefresh={() => void loadDeployStatus()}
+                />
               ) : artifactTab === "agenda" ? (
                 <div>
                   <div style={{
@@ -1808,6 +2216,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             {(
               [
                 { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
+                { key: "deploy" as ArtifactTab, icon: "🚀", label: "배포" },
                 { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
                 { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                 { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
@@ -1864,6 +2273,21 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       minWidth: '14px',
                       textAlign: 'center',
                     }}>{agendaItems.length}</span>
+                  )}
+                  {tab.key === "deploy" && deployBadgeCount > 0 && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-8px',
+                      fontSize: '9px',
+                      background: 'var(--ct-accent)',
+                      color: '#fff',
+                      borderRadius: '6px',
+                      padding: '0 4px',
+                      lineHeight: '14px',
+                      minWidth: '14px',
+                      textAlign: 'center',
+                    }}>{deployBadgeCount}</span>
                   )}
                 </span>
               </button>

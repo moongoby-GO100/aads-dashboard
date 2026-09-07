@@ -8709,6 +8709,7 @@ export default function ChatPage() {
     if (artifactTab === "code") return a.artifact_type === "code";
     if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
     if (artifactTab === "agenda") return false;
+    if (artifactTab === "deploy") return false;
     if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
     return false;
   }), [artifacts, artifactTab]);
@@ -8766,6 +8767,7 @@ export default function ChatPage() {
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
     agenda: 0,
     log: systemMessages.length,
+    deploy: 0,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
   }), [artifacts, systemMessages.length]);
 

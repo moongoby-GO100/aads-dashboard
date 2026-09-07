@@ -1,5 +1,19 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 17:04 KST - Chat artifact deploy status tab
+
+- Request:
+  - Show `/ops/deploy/status` in the chat-side artifact panel so deployment phase, elapsed time, and estimated remaining time are visible without leaving the chat.
+- Changes:
+  - `src/app/chat/types.ts`: added `deploy` to `ArtifactTab`.
+  - `src/app/chat/page.tsx`: excluded the deploy tab from regular artifact filtering and count handling.
+  - `src/app/chat/ChatArtifactPanel.tsx`: added a deploy tab that polls `/ops/deploy/status` every 15 seconds and shows current phase, elapsed time, estimated remaining time, queued count, blockers, stale signals, SHA, runner id, B/G sync status, and recent P50/P90 deploy durations.
+- Verification before release:
+  - `npm run lint` passed with 0 errors and existing warnings only.
+  - `npm run build` passed and generated the `/chat` route.
+- Scope note:
+  - Unrelated dirty report artifact `public/reports/nicechip_logo_concepts_20260903.html` was not included.
+
 ## 2026-09-07 09:44 KST - Chat response overview P1/P2 and stop timeout UX
 
 - Request:
