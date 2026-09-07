@@ -2058,6 +2058,7 @@ interface MessageItemProps {
   streamToolStatus?: string | null;
   streamToolLogs?: Array<{icon: string; text: string; sub?: string}>;
   onStopStreaming?: () => void;
+  stopRequesting?: boolean;
   onResumeInterrupted?: (modelOverride?: string) => void;
   selectedResumeModel?: string;
   onViewReport?: () => void;
@@ -2073,7 +2074,7 @@ const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onReplyTo, onBranch, replyTarget,
-  isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming,
+  isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming, stopRequesting,
   onResumeInterrupted, selectedResumeModel,
   onViewReport, linkedArtifact, onViewArtifact, onOpenLightbox, isLastAssistantMsg,
   screenSize, mobileFontPx,
@@ -2186,11 +2187,11 @@ const MessageItem = memo(function MessageItem({
         const text = (node.textContent || "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
         return text && candidates.some((candidate) => text.includes(candidate));
       }) || body;
-      targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
       const previousOutline = targetNode.style.outline;
       const previousOffset = targetNode.style.scrollMarginTop;
       targetNode.style.scrollMarginTop = "96px";
       targetNode.style.outline = "2px solid rgba(20, 184, 166, 0.55)";
+      targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
       window.setTimeout(() => {
         targetNode.style.outline = previousOutline;
         targetNode.style.scrollMarginTop = previousOffset;
@@ -2863,23 +2864,40 @@ const MessageItem = memo(function MessageItem({
             {isActiveStreamingPlaceholder && onStopStreaming && (
               <button
                 type="button"
-                title="응답 생성 중단"
-                aria-label="응답 생성 중단"
+                title={stopRequesting ? "응답 중단 요청 중" : "응답 생성 중단"}
+                aria-label={stopRequesting ? "응답 중단 요청 중" : "응답 생성 중단"}
+                disabled={stopRequesting}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (stopRequesting) return;
                   onStopStreaming();
                 }}
                 style={{
-                padding: "2px 8px",
-                fontSize: "11px", fontWeight: 500,
-                background: "transparent", color: "var(--ct-muted)",
-                border: "1px solid var(--ct-border)", borderRadius: "10px",
-                cursor: "pointer", transition: "all 0.15s",
+                minHeight: "26px",
+                padding: "2px 9px",
+                fontSize: "11px", fontWeight: 700,
+                background: stopRequesting ? "rgba(239, 68, 68, 0.12)" : "transparent",
+                color: stopRequesting ? "#ef4444" : "var(--ct-muted)",
+                border: `1px solid ${stopRequesting ? "rgba(239, 68, 68, 0.35)" : "var(--ct-border)"}`,
+                borderRadius: "10px",
+                cursor: stopRequesting ? "wait" : "pointer",
+                opacity: stopRequesting ? 0.82 : 1,
+                transition: "all 0.15s",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
-              >■ 중지</button>
+              onMouseEnter={(e) => {
+                if (stopRequesting) return;
+                e.currentTarget.style.background = "#ef4444";
+                e.currentTarget.style.color = "#fff";
+                e.currentTarget.style.borderColor = "#ef4444";
+              }}
+              onMouseLeave={(e) => {
+                if (stopRequesting) return;
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--ct-muted)";
+                e.currentTarget.style.borderColor = "var(--ct-border)";
+              }}
+              >{stopRequesting ? "중지중" : "■ 중지"}</button>
             )}
           </div>
         )}
@@ -8092,22 +8110,29 @@ export default function ChatPage() {
 
   /** 백그라운드 생성 중(waitingBgResponse) 전용 — 서버 /stop + 플래그·타이머 정리 (UI에 중지 버튼 없을 때 대비) */
   function stopBackgroundStreaming() {
-    if (!activeSession) return;
+    if (!activeSession || stopRequesting) return;
+    setStopRequesting(true);
     if (waitingBgTimeoutRef.current) {
       clearTimeout(waitingBgTimeoutRef.current);
       waitingBgTimeoutRef.current = null;
     }
     setWaitingBgResponse(false);
     setBgPartialContent("");
+    const sid = activeSession.id;
     const stopAbort = new AbortController();
     const stopTimeout = window.setTimeout(() => stopAbort.abort(), 8000);
-    fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
+    fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
       method: "POST",
       credentials: "include",
       headers: { ...authHdrs() },
       signal: stopAbort.signal,
-    }).catch(() => {}).finally(() => window.clearTimeout(stopTimeout));
-    const sid = activeSession.id;
+    }).catch(() => {}).finally(() => {
+      window.clearTimeout(stopTimeout);
+      if (activeSessionRef.current === sid) {
+        setStopRequesting(false);
+        window.setTimeout(() => { userStopRequestedRef.current = false; }, 1500);
+      }
+    });
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
       chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true`)
@@ -10396,6 +10421,7 @@ export default function ChatPage() {
                     onStopStreaming={
                       keepStreamingBubbleLive ? stopStreaming : undefined
                     }
+                    stopRequesting={stopRequesting}
                     onResumeInterrupted={(modelOverride) => {
                       if (!activeSession?.id) return;
                       void requestResumeOnce(activeSession.id, {
@@ -10512,25 +10538,41 @@ export default function ChatPage() {
               </div>
               <button
                 type="button"
-                title="응답 생성 중단"
-                aria-label="응답 생성 중단"
+                title={stopRequesting ? "응답 중단 요청 중" : "응답 생성 중단"}
+                aria-label={stopRequesting ? "응답 중단 요청 중" : "응답 생성 중단"}
+                disabled={stopRequesting}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (stopRequesting) return;
                   stopBackgroundStreaming();
                 }}
                 style={{
                   marginTop: "4px", marginLeft: "4px",
-                  padding: "2px 8px",
-                  fontSize: "11px", fontWeight: 500,
-                  background: "transparent", color: "var(--ct-muted)",
-                  border: "1px solid var(--ct-border)", borderRadius: "10px",
-                  cursor: "pointer",
+                  minHeight: "26px",
+                  padding: "2px 9px",
+                  fontSize: "11px", fontWeight: 700,
+                  background: stopRequesting ? "rgba(239, 68, 68, 0.12)" : "transparent",
+                  color: stopRequesting ? "#ef4444" : "var(--ct-muted)",
+                  border: `1px solid ${stopRequesting ? "rgba(239, 68, 68, 0.35)" : "var(--ct-border)"}`,
+                  borderRadius: "10px",
+                  cursor: stopRequesting ? "wait" : "pointer",
+                  opacity: stopRequesting ? 0.82 : 1,
                   transition: "all 0.15s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#ef4444"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--ct-muted)"; e.currentTarget.style.borderColor = "var(--ct-border)"; }}
-              >■ 중지</button>
+                onMouseEnter={(e) => {
+                  if (stopRequesting) return;
+                  e.currentTarget.style.background = "#ef4444";
+                  e.currentTarget.style.color = "#fff";
+                  e.currentTarget.style.borderColor = "#ef4444";
+                }}
+                onMouseLeave={(e) => {
+                  if (stopRequesting) return;
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--ct-muted)";
+                  e.currentTarget.style.borderColor = "var(--ct-border)";
+                }}
+              >{stopRequesting ? "중지중" : "■ 중지"}</button>
             </div>
           )}
 
