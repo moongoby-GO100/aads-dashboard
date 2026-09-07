@@ -263,8 +263,8 @@ function FilePathChip({
   const [copied, setCopied] = React.useState(false);
   const isImg = _isImagePath(text);
   const docsHref = normalizeDocumentHref(text);
-  const hasDocsLink = docsHref.startsWith("/docs?");
-  const opensInArtifact = Boolean(hasDocsLink && onDocumentLinkClick);
+  const canPreview = isArtifactPreviewHref(docsHref);
+  const opensInArtifact = Boolean(canPreview && onDocumentLinkClick);
   return (
     <code
       onClick={(e) => {
@@ -272,7 +272,7 @@ function FilePathChip({
         e.stopPropagation();
         if (opensInArtifact) {
           void onDocumentLinkClick?.(docsHref, text);
-        } else if (hasDocsLink) {
+        } else if (canPreview) {
           window.open(docsHref, "_blank");
         } else {
           navigator.clipboard?.writeText(text).then(() => {
@@ -281,21 +281,21 @@ function FilePathChip({
           });
         }
       }}
-      title={opensInArtifact ? "클릭하면 우측 아티팩트창에서 엽니다" : hasDocsLink ? "클릭하여 문서 열기" : (copied ? "✅ 복사됨" : "클릭하여 복사")}
+      title={opensInArtifact ? "클릭하면 우측 아티팩트창에서 엽니다" : canPreview ? "클릭하여 문서 열기" : (copied ? "✅ 복사됨" : "클릭하여 복사")}
       style={{
-        background: copied ? "rgba(34,197,94,0.15)" : hasDocsLink ? "rgba(59,130,246,0.12)" : "rgba(108,99,255,0.12)",
+        background: copied ? "rgba(34,197,94,0.15)" : canPreview ? "rgba(59,130,246,0.12)" : "rgba(108,99,255,0.12)",
         padding: "2px 6px",
         borderRadius: "4px",
         fontFamily: "monospace",
         fontSize: "90%",
         cursor: "pointer",
-        color: copied ? "#22c55e" : hasDocsLink ? "#60a5fa" : "var(--ct-accent)",
-        borderBottom: copied ? "1px solid #22c55e" : hasDocsLink ? "1px solid #60a5fa" : "1px dashed var(--ct-accent)",
+        color: copied ? "#22c55e" : canPreview ? "#60a5fa" : "var(--ct-accent)",
+        borderBottom: copied ? "1px solid #22c55e" : canPreview ? "1px solid #60a5fa" : "1px dashed var(--ct-accent)",
         transition: "all 0.2s",
         userSelect: "none",
       }}
     >
-      {hasDocsLink ? (opensInArtifact ? "📄" : "📄↗") : isImg ? "🖼️" : "📄"} {copied ? "복사됨" : children}
+      {canPreview ? (opensInArtifact ? "📄" : "📄↗") : isImg ? "🖼️" : "📄"} {copied ? "복사됨" : children}
     </code>
   );
 }
