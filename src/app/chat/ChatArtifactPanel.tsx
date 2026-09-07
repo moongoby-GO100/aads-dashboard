@@ -76,6 +76,9 @@ interface DeployQueueItem {
   status?: string;
   phase?: string;
   queue_position?: number | null;
+  requested_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
   phase_started_at?: string | null;
   phase_completed_at?: string | null;
   created_at?: string | null;
@@ -213,12 +216,27 @@ function shortSha(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "-";
 }
 
+function isTerminalDeployStatus(status: string | null | undefined): boolean {
+  return ["completed", "success", "failed", "error", "blocked", "superseded", "cancelled"].includes((status || "").toLowerCase());
+}
+
+function deployStartedAt(item: DeployQueueItem): string | null {
+  return item.started_at || item.requested_at || item.created_at || item.phase_started_at || item.updated_at || null;
+}
+
+function deployFinishedAt(item: DeployQueueItem): string | null {
+  return item.completed_at || item.phase_completed_at || (isTerminalDeployStatus(item.status) ? item.updated_at || null : null);
+}
+
 function deployElapsed(item: DeployQueueItem, nowMs: number): string {
-  const start = item.phase_started_at || item.created_at || item.updated_at;
+  const start = deployStartedAt(item);
   if (!start) return "-";
   const startMs = new Date(start).getTime();
   if (Number.isNaN(startMs)) return "-";
-  return formatDurationText((nowMs - startMs) / 1000);
+  const end = deployFinishedAt(item);
+  const endMs = end ? new Date(end).getTime() : nowMs;
+  if (Number.isNaN(endMs)) return "-";
+  return formatDurationText((endMs - startMs) / 1000);
 }
 
 function deployAppliedSummary(item: DeployQueueItem): string {
@@ -414,13 +432,21 @@ function DeployStatusCard({
                 </div>
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))",
                   gap: 7,
                   fontSize: 11,
                 }}>
                   <div>
                     <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>Phase</div>
                     <div style={{ color: "var(--ct-text)", fontWeight: 700, overflowWrap: "anywhere" }}>{item.phase || "-"}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>시작</div>
+                    <div style={{ color: "var(--ct-text)", fontWeight: 700 }}>{formatKst(deployStartedAt(item))}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>종료</div>
+                    <div style={{ color: "var(--ct-text)", fontWeight: 700 }}>{formatKst(deployFinishedAt(item))}</div>
                   </div>
                   <div>
                     <div style={{ color: "var(--ct-text2)", marginBottom: 2 }}>경과</div>
@@ -507,8 +533,20 @@ function DeployStatusCard({
                     {shortSha(item.release_sha)}
                   </span>
                   <span style={{ fontSize: 10, color: "var(--ct-text2)", marginLeft: "auto", whiteSpace: "nowrap" }}>
-                    {formatKst(item.phase_completed_at || item.updated_at || item.created_at)}
+                    종료 {formatKst(deployFinishedAt(item))}
                   </span>
+                </div>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))",
+                  gap: 7,
+                  marginTop: 7,
+                  fontSize: 10,
+                  color: "var(--ct-text2)",
+                }}>
+                  <span>시작 {formatKst(deployStartedAt(item))}</span>
+                  <span>종료 {formatKst(deployFinishedAt(item))}</span>
+                  <span>소요 {deployElapsed(item, nowMs)}</span>
                 </div>
                 <DeployChangeSummary item={item} />
               </div>
