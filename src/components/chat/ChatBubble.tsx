@@ -6,6 +6,7 @@ import ConfidenceBadge from "./ConfidenceBadge";
 import InlineChart from "./InlineChart";
 import { isFileDownloadHref, normalizeDocumentHref } from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
+import SectionCardContent, { detectCrfSections } from "./SectionCardContent";
 
 // ─── Scoped Styles (inject once into head) ───────────────────────────────────
 
@@ -517,6 +518,11 @@ export default function ChatBubble({
     : displayContent;
   const userAttachments = (message.attachments || []) as unknown[];
 
+  const isCrf = useMemo(
+    () => !isUser && !isStreaming && displayContent.length > 200 && detectCrfSections(displayContent),
+    [isUser, isStreaming, displayContent]
+  );
+
   // ─── User Message ─────────────────────────────────────────────────
   if (isUser) {
     const startEdit = () => {
@@ -646,7 +652,7 @@ export default function ChatBubble({
         {message.thought_summary && <ThoughtSummary summary={message.thought_summary} />}
 
         <div
-          className="px-4 py-3 rounded-2xl text-sm relative"
+          className={`${isCrf ? "overflow-hidden" : "px-4 py-3"} rounded-2xl text-sm relative`}
           style={{
             background: intentBadge ? `linear-gradient(135deg, var(--bg-card), ${intentBadge.bg})` : "var(--bg-card)",
             border: intentBadge ? `1px solid ${intentBadge.color}44` : "1px solid var(--border)",
@@ -678,6 +684,13 @@ export default function ChatBubble({
                 <span className="text-xs flex-shrink-0" style={{ color: "var(--text-secondary)" }}>▶ 펼치기</span>
               </div>
             )
+          ) : isCrf ? (
+            <SectionCardContent
+              content={displayContent}
+              MarkdownRenderer={MarkdownContent}
+              modelUsed={message.model_used}
+              createdAt={message.created_at}
+            />
           ) : (
             <>
               {displayContent.length > 300 && <ResponseMiniMap content={displayContent} />}
@@ -712,7 +725,7 @@ export default function ChatBubble({
         {sources.length > 0 && <SourceCard sources={sources} />}
         {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
-        {!isStreaming && (
+        {!isStreaming && !isCrf && (
           <div className="flex items-center flex-wrap gap-1.5 mt-1.5 ml-1">
             {message.model_used && (
               <span className="cb-pill" style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8" }}>
