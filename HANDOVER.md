@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 20:08 KST - Chat document links open in docs viewer
+
+- Request:
+  - Fix chat document paths that showed "복사됨" instead of opening the document status/viewer, then deploy to production.
+- Finding:
+  - Same-site absolute docs URLs such as `https://aads.newtalk.kr/docs?...file_path=...md` were treated as external URLs before document-link normalization.
+  - Inline file chips therefore set `hasDocsLink=false` and executed clipboard copy instead of opening `/docs`.
+- Changes:
+  - `src/lib/documentLinks.ts`: converts same-site `/docs?...` URLs to internal `/docs?...` routes before the external URL passthrough.
+  - `src/app/chat/MarkdownRenderer.tsx`: treats existing `/docs?...` file chips as openable document links.
+  - `src/lib/documentLinks.selftest.ts`: added regression cases for absolute and relative docs viewer URLs.
+- Verification before release:
+  - `npm exec -- tsx src/lib/documentLinks.selftest.ts` passed.
+  - `npm exec -- eslint src/lib/documentLinks.ts src/app/chat/MarkdownRenderer.tsx` passed with 0 errors and one existing `@next/next/no-img-element` warning.
+  - `npm run build` passed and generated the `/chat` and `/docs` routes.
+- Scope note:
+  - Existing dirty `src/middleware.ts` and untracked `public/reports/nicechip_logo_concepts_20260903.html` were not included.
+
 ## 2026-09-07 17:04 KST - Chat artifact deploy status tab
 
 - Request:

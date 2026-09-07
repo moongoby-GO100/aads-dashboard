@@ -253,7 +253,7 @@ function FilePathChip({ text, children }: { text: string; children: React.ReactN
   const [copied, setCopied] = React.useState(false);
   const isImg = _isImagePath(text);
   const docsHref = normalizeDocumentHref(text);
-  const hasDocsLink = docsHref !== text && docsHref.startsWith("/docs?");
+  const hasDocsLink = docsHref.startsWith("/docs?");
   return (
     <code
       onClick={(e) => {

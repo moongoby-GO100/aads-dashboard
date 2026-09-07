@@ -12,6 +12,18 @@ const cases: Case[] = [
       "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=reports%2F20260802_OHVIS_SYSTEM_CONSTRUCTION_PLAN.md",
   },
   {
+    input:
+      "https://aads.newtalk.kr/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=20260903_authenticated_collector_improvement_plan.md",
+    expected:
+      "/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=20260903_authenticated_collector_improvement_plan.md",
+  },
+  {
+    input:
+      "/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=20260903_authenticated_collector_improvement_plan.md",
+    expected:
+      "/docs?project=AADS&base_path=%2Fapp%2Freports&file_path=20260903_authenticated_collector_improvement_plan.md",
+  },
+  {
     input: "public/reports/monthly.xlsx",
     expected: "/reports/monthly.xlsx",
   },

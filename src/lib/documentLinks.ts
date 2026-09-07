@@ -241,6 +241,15 @@ export function normalizeDocumentHref(href: string): string {
     }
   }
 
+  // 0-1. 같은 사이트의 문서 뷰어 URL은 내부 라우트로 정규화한다.
+  //      채팅 파일칩이 https://aads.newtalk.kr/docs?... 를 외부 URL로 보아 "복사" 처리하는 것을 막는다.
+  for (const origin of SITE_ORIGINS) {
+    if (raw.startsWith(`${origin}/docs?`)) {
+      raw = raw.slice(origin.length);
+      break;
+    }
+  }
+
   // 외부 URL은 그대로 둔다
   if (/^https?:\/\//i.test(raw)) return raw;
 
