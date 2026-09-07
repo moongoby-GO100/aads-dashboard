@@ -13,8 +13,18 @@
   - `git diff --check -- src/app/chat/page.tsx` passed.
   - `npm run lint` passed with 0 errors and existing warnings only.
   - `npm run build` passed and generated the `/chat` route.
+- Commit:
+  - `995694d2911f fix(chat): expand response overview workflow chips` pushed to `origin/main`.
 - Deployment:
-  - Pending at this note. Commit, push, dashboard blue/green deployment, external `/login`/`/chat` checks, and five-minute P0/P1 monitoring are still required before operational completion.
+  - Dashboard blue/green deployment completed at 09:38 KST.
+  - Active slot switched from green to blue; active and standby containers both report `AADS_RELEASE_SHA=995694d2911f`.
+  - Both slots use the same image digest `sha256:7bda9a352033f735dfc93ea1cc9b9ab592f2eb9b737ddd9b4084fcc3f3bf13bc`.
+  - External `/login` health returned HTTP 200 and unauthenticated `/chat` returned the expected `/login?redirect=%2Fchat` redirect.
+  - Five post-cutover P0/P1 monitor rounds passed at 09:34-09:38 KST.
+- E2E note:
+  - Visual QA returned `UNKNOWN`.
+  - Browser screenshot and Credential Vault login checks could not complete because Browser Bridge/CDP did not respond within tool limits.
+  - Release was certified by build, lint, HTTP, container health, same-digest, and post-cutover log monitoring; authenticated `/chat` visual verification remains a follow-up.
 - Scope note:
   - Unrelated dirty report artifact `public/reports/nicechip_logo_concepts_20260903.html` must remain excluded from this release.
 
