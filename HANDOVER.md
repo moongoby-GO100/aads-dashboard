@@ -1,5 +1,23 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 09:23 KST - Chat response overview workflow chips
+
+- Request:
+  - Expand the chat response overview chips to the CEO workflow: goal, plan, progress, result, verification, risk, and next.
+  - Deploy the dashboard change and report the result.
+- Change:
+  - `src/app/chat/page.tsx`: added response-overview detection fields for goal, plan, progress, and result.
+  - `src/app/chat/page.tsx`: changed the overview chip row from evidence/verification/risk/next to goal/plan/progress/result/verification/risk/next.
+  - `src/app/chat/page.tsx`: expanded lead-line prioritization so answers with goal, plan, progress, result, verification, risk, or next sections surface better in the quick overview.
+- Verification before release:
+  - `git diff --check -- src/app/chat/page.tsx` passed.
+  - `npm run lint` passed with 0 errors and existing warnings only.
+  - `npm run build` passed and generated the `/chat` route.
+- Deployment:
+  - Pending at this note. Commit, push, dashboard blue/green deployment, external `/login`/`/chat` checks, and five-minute P0/P1 monitoring are still required before operational completion.
+- Scope note:
+  - Unrelated dirty report artifact `public/reports/nicechip_logo_concepts_20260903.html` must remain excluded from this release.
+
 ## 2026-09-07 08:08 KST - Chat model selector alias filtering
 
 - Request:

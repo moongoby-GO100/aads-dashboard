@@ -1827,6 +1827,10 @@ type ResponseOverview = {
   leadLines: string[];
   sections: string[];
   nextAction: string;
+  hasGoal: boolean;
+  hasPlan: boolean;
+  hasProgress: boolean;
+  hasResult: boolean;
   hasVerification: boolean;
   hasRisk: boolean;
   hasEvidence: boolean;
@@ -1852,7 +1856,7 @@ function summarizeLeadLines(content: string): string[] {
     .map(cleanOverviewLine)
     .filter((line) => line.length > 0 && !/^\|/.test(line) && !/^[-:|\s]+$/.test(line));
 
-  const preferred = lines.filter((line) => /^(✅|⚠️|❌|결론|요약|판정|현황|답변|수행 내역)/.test(line));
+  const preferred = lines.filter((line) => /^(✅|⚠️|❌|결론|요약|판정|현황|답변|목표|계획|플랜|진행|수행 내역|결과|검증|리스크|다음)/.test(line));
   const source = preferred.length > 0 ? preferred : lines;
   return source.slice(0, 2).map((line) => line.length > 150 ? `${line.slice(0, 147)}...` : line);
 }
@@ -1890,6 +1894,10 @@ function buildResponseOverview(content: string): ResponseOverview | null {
     leadLines: summarizeLeadLines(content),
     sections,
     nextAction: extractNextAction(content),
+    hasGoal: /(목표|요청|목적|완료\s*기준|성공\s*기준)/.test(content),
+    hasPlan: /(계획|플랜|작업\s*순서|수행\s*계획|조치\s*계획|진행\s*방식)/.test(content),
+    hasProgress: /(진행|수행\s*내역|조치\s*내역|작업\s*내역|적용\s*범위|반영\s*상태)/.test(content),
+    hasResult: /(결과|완료|반영|적용|성공|실패|미완료|처리됨|해소)/.test(content),
     hasVerification: /(검증|테스트|완료기준|성공 기준|health|build|lint|py_compile)/i.test(content),
     hasRisk: /(리스크|문제|문제점|이상 항목|미완료|주의|한계)/.test(content),
     hasEvidence: /(근거|출처|실측|DB|로그|코드 확인|명령)/.test(content),
@@ -1901,7 +1909,10 @@ function buildResponseOverview(content: string): ResponseOverview | null {
 
 function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverview; isMobile: boolean }) {
   const indicators = [
-    { label: "근거", ok: overview.hasEvidence || overview.sourceTagCount > 0 },
+    { label: "목표", ok: overview.hasGoal },
+    { label: "계획", ok: overview.hasPlan },
+    { label: "진행", ok: overview.hasProgress },
+    { label: "결과", ok: overview.hasResult },
     { label: "검증", ok: overview.hasVerification },
     { label: "리스크", ok: overview.hasRisk },
     { label: "다음", ok: Boolean(overview.nextAction) },
