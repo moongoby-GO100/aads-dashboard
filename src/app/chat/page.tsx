@@ -37,7 +37,9 @@ import {
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock } from "./MarkdownRenderer";
+import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
+const CrfMarkdown = ({ content }: { content: string }) => <MarkdownBlock text={content} />;
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -2790,7 +2792,7 @@ const MessageItem = memo(function MessageItem({
                 </div>
               ) : (
                 <div data-response-body="true">
-                  <MarkdownBlock text={msg.content} />
+                  {detectCrfSections(msg.content) ? (<SectionCardContent content={msg.content} MarkdownRenderer={CrfMarkdown} modelUsed={msg.model_used} createdAt={msg.created_at} />) : (<MarkdownBlock text={msg.content} />)}
                   {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
                       <button
