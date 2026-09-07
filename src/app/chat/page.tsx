@@ -1907,7 +1907,15 @@ function buildResponseOverview(content: string): ResponseOverview | null {
   };
 }
 
-function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverview; isMobile: boolean }) {
+function ResponseOverviewPanel({
+  overview,
+  isMobile,
+  onJumpTo,
+}: {
+  overview: ResponseOverview;
+  isMobile: boolean;
+  onJumpTo?: (target: string) => void;
+}) {
   const indicators = [
     { label: "목표", ok: overview.hasGoal },
     { label: "계획", ok: overview.hasPlan },
@@ -1931,12 +1939,15 @@ function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverv
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "7px" }}>
-        <div style={{ fontSize: "12px", fontWeight: 700, color: "#5eead4" }}>응답 개요</div>
+        <div style={{ fontSize: "12px", fontWeight: 700, color: "#5eead4" }}>답변 빠른 확인</div>
         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {indicators.map((item) => (
-            <span
+            <button
+              type="button"
               key={item.label}
               title={item.ok ? `${item.label} 항목 확인됨` : `${item.label} 항목이 본문에서 명확하지 않음`}
+              disabled={!item.ok}
+              onClick={() => item.ok && onJumpTo?.(item.label)}
               style={{
                 fontSize: "10px",
                 lineHeight: 1,
@@ -1945,10 +1956,12 @@ function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverv
                 color: item.ok ? "#ccfbf1" : "var(--ct-text2)",
                 background: item.ok ? "rgba(20, 184, 166, 0.18)" : "rgba(148, 163, 184, 0.10)",
                 border: `1px solid ${item.ok ? "rgba(94, 234, 212, 0.24)" : "rgba(148, 163, 184, 0.16)"}`,
+                cursor: item.ok && onJumpTo ? "pointer" : "default",
+                opacity: item.ok ? 1 : 0.72,
               }}
             >
               {item.ok ? "✓" : "!"} {item.label}
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -1966,8 +1979,10 @@ function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverv
       {overview.sections.length > 0 && (
         <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginBottom: overview.nextAction ? "8px" : "0" }}>
           {overview.sections.map((section) => (
-            <span
+            <button
+              type="button"
               key={section}
+              onClick={() => onJumpTo?.(section)}
               style={{
                 maxWidth: isMobile ? "100%" : "220px",
                 overflow: "hidden",
@@ -1979,18 +1994,35 @@ function ResponseOverviewPanel({ overview, isMobile }: { overview: ResponseOverv
                 color: "var(--ct-text)",
                 background: "rgba(15, 23, 42, 0.22)",
                 border: "1px solid rgba(148, 163, 184, 0.16)",
+                cursor: onJumpTo ? "pointer" : "default",
+                textAlign: "left",
               }}
             >
               {section}
-            </span>
+            </button>
           ))}
         </div>
       )}
 
       {overview.nextAction && (
-        <div style={{ fontSize: "11.5px", lineHeight: 1.5, color: "var(--ct-text2)" }}>
+        <button
+          type="button"
+          onClick={() => onJumpTo?.("다음")}
+          style={{
+            display: "block",
+            width: "100%",
+            fontSize: "11.5px",
+            lineHeight: 1.5,
+            color: "var(--ct-text2)",
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            textAlign: "left",
+            cursor: onJumpTo ? "pointer" : "default",
+          }}
+        >
           {overview.nextAction}
-        </div>
+        </button>
       )}
 
       {(overview.tableCount > 0 || overview.codeBlockCount > 0 || overview.sourceTagCount > 0) && (
@@ -2125,6 +2157,46 @@ const MessageItem = memo(function MessageItem({
     () => (msg.role === "assistant" && !isVisiblyStreaming ? buildResponseOverview(msg.content || "") : null),
     [isVisiblyStreaming, msg.content, msg.role],
   );
+  const bubbleContentRef = useRef<HTMLDivElement | null>(null);
+  const jumpToResponseOverviewTarget = useCallback((target: string) => {
+    if (!target) return;
+    setContentCollapseTouched(true);
+    setContentCollapsed(false);
+    const normalizedTarget = target.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+    const aliases: Record<string, string[]> = {
+      목표: ["목표", "요청", "목적", "완료기준", "성공기준"],
+      계획: ["계획", "플랜", "작업순서", "수행계획", "조치계획", "진행방식"],
+      진행: ["진행", "수행내역", "조치내역", "작업내역", "적용범위", "반영상태"],
+      결과: ["결과", "완료", "반영", "적용", "성공", "실패", "미완료", "처리됨", "해소"],
+      검증: ["검증", "테스트", "완료기준", "성공기준", "health", "build", "lint", "pycompile"],
+      리스크: ["리스크", "문제", "문제점", "이상항목", "미완료", "주의", "한계"],
+      다음: ["다음", "다음단계", "권장조치", "즉시실행", "후속조치"],
+    };
+    const candidates = [normalizedTarget, ...(aliases[target] || [])]
+      .map((value) => value.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase())
+      .filter(Boolean);
+    window.setTimeout(() => {
+      const root = bubbleContentRef.current;
+      if (!root) return;
+      const body = root.querySelector<HTMLElement>("[data-response-body='true']") || root;
+      const nodes = Array.from(
+        body.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,p,li,summary,div")
+      );
+      const targetNode = nodes.find((node) => {
+        const text = (node.textContent || "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+        return text && candidates.some((candidate) => text.includes(candidate));
+      }) || body;
+      targetNode.scrollIntoView({ behavior: "smooth", block: "center" });
+      const previousOutline = targetNode.style.outline;
+      const previousOffset = targetNode.style.scrollMarginTop;
+      targetNode.style.scrollMarginTop = "96px";
+      targetNode.style.outline = "2px solid rgba(20, 184, 166, 0.55)";
+      window.setTimeout(() => {
+        targetNode.style.outline = previousOutline;
+        targetNode.style.scrollMarginTop = previousOffset;
+      }, 1200);
+    }, 80);
+  }, []);
 
   return (
     <div
@@ -2289,6 +2361,7 @@ const MessageItem = memo(function MessageItem({
           </div>
         ) : (
         <div
+          ref={bubbleContentRef}
           style={{
             padding: isMobileMessage ? "14px 15px" : "12px 16px",
             borderRadius: isMobileMessage ? "14px" : "18px",
@@ -2629,10 +2702,16 @@ const MessageItem = memo(function MessageItem({
                   </div>
                 </details>
               )}
-              {responseOverview && <ResponseOverviewPanel overview={responseOverview} isMobile={isMobileMessage} />}
+              {responseOverview && (
+                <ResponseOverviewPanel
+                  overview={responseOverview}
+                  isMobile={isMobileMessage}
+                  onJumpTo={jumpToResponseOverviewTarget}
+                />
+              )}
               {/* P1: 인라인 아티팩트 카드 — 긴 메시지 접이식 */}
               {msg.role === "assistant" && effectiveContentCollapsed && msg.content.length > 800 ? (
-                <div>
+                <div data-response-body="true">
                   {/* 아티팩트 카드 미리보기 */}
                   <div style={{
                     background: "linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.02))",
@@ -2700,7 +2779,7 @@ const MessageItem = memo(function MessageItem({
                   </div>
                 </div>
               ) : (
-                <>
+                <div data-response-body="true">
                   <MarkdownBlock text={msg.content} />
                   {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
@@ -2719,7 +2798,7 @@ const MessageItem = memo(function MessageItem({
                       </button>
                     </div>
                   )}
-                </>
+                </div>
               )}
               {/* 3번: rate_limited 안내 — 자동 재개 중임을 사용자에게 표시 */}
               {msg.intent === "rate_limited" && (
@@ -7961,11 +8040,14 @@ export default function ChatPage() {
     });
     const stoppedAlertId = stoppedExecutionId || `stopped-${sid}`;
     showInterruptionAlertOnce(stoppedAlertId, sid, "사용자 요청으로 응답을 중지했습니다.");
-    // 백엔드 프로세스도 강제 중단
+    // 백엔드 프로세스도 강제 중단. 네트워크가 멈춰도 버튼 상태가 고착되지 않게 짧은 타임아웃을 둔다.
+    const stopAbort = new AbortController();
+    const stopTimeout = window.setTimeout(() => stopAbort.abort(), 8000);
     fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
         method: "POST",
         credentials: "include",
         headers: { ...authHdrs() },
+        signal: stopAbort.signal,
       })
         .then((res) => res.ok ? res.json() : Promise.reject(new Error(`stop failed ${res.status}`)))
         .then((result) => {
@@ -7977,6 +8059,7 @@ export default function ChatPage() {
           console.warn("[chat-stop] backend stop request failed", { sessionId: sid, error });
         })
         .finally(() => {
+          window.clearTimeout(stopTimeout);
           if (activeSessionRef.current === sid) {
             setStopRequesting(false);
             window.setTimeout(() => { userStopRequestedRef.current = false; }, 1500);
@@ -8016,11 +8099,14 @@ export default function ChatPage() {
     }
     setWaitingBgResponse(false);
     setBgPartialContent("");
+    const stopAbort = new AbortController();
+    const stopTimeout = window.setTimeout(() => stopAbort.abort(), 8000);
     fetch(`${BASE_URL}/chat/sessions/${activeSession.id}/stop`, {
       method: "POST",
       credentials: "include",
       headers: { ...authHdrs() },
-    }).catch(() => {});
+      signal: stopAbort.signal,
+    }).catch(() => {}).finally(() => window.clearTimeout(stopTimeout));
     const sid = activeSession.id;
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;

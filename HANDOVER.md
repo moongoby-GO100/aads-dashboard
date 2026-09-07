@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 09:44 KST - Chat response overview P1/P2 and stop timeout UX
+
+- Request:
+  - Implement all remaining P1/P2 response-overview recommendations and deploy them.
+  - Improve the response bubble bottom stop button because it can appear not to work.
+- Changes:
+  - `src/app/chat/page.tsx`: renamed the card from `응답 개요` to `답변 빠른 확인`.
+  - `src/app/chat/page.tsx`: made the goal/plan/progress/result/verification/risk/next chips clickable, expanding collapsed answers and scrolling to the matching section with a temporary highlight.
+  - `src/app/chat/page.tsx`: made extracted section chips and next-action text clickable for direct navigation.
+  - `src/app/chat/page.tsx`: added 8-second abort timeouts to foreground and background `/stop` requests so the stop control cannot stay stuck if the network/backend response hangs.
+- Verification before release:
+  - `git diff --check -- src/app/chat/page.tsx` passed.
+  - `npx eslint src/app/chat/page.tsx` passed with 0 errors and existing warnings only.
+  - `npm run build` passed and generated the `/chat` route.
+- Scope note:
+  - Unrelated dirty report artifact `public/reports/nicechip_logo_concepts_20260903.html` was not included.
+
 ## 2026-09-07 09:23 KST - Chat response overview workflow chips
 
 - Request:
