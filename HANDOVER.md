@@ -1,5 +1,24 @@
 # AADS Dashboard Handover
 
+## 2026-09-07 20:12 KST - Docs route bootstrap commit and deploy queue
+
+- Request:
+  - Commit and push the remaining dashboard docs-route fix, then register the deployment in the queue instead of blocking the chat response.
+- Change:
+  - `src/middleware.ts`: added `/docs` to `PUBLIC_PATHS` so the document viewer route can bootstrap directly from a deep link before the authenticated API calls resolve.
+- Verification:
+  - `git diff --check -- src/middleware.ts`: passed.
+  - `npm run lint -- src/middleware.ts`: passed.
+- Git:
+  - Commit `48bf27bea1e8742f27640730180a8d3121403be5` (`fix(docs): allow docs route bootstrap`) was pushed to `origin/main`.
+- Deploy queue:
+  - A dashboard deploy was already running for older SHA `b718b45b2a63`, so the latest dashboard deploy was registered as a background wait job.
+  - Queue wrapper PID: `204511`.
+  - Queue log: `/tmp/aads-dashboard-deploy-queue-48bf27b.log`.
+  - The wrapper waits for `/tmp/aads-dashboard-deploy.lock` to clear, fetches `origin/main`, then runs `/root/aads/aads-dashboard/deploy.sh`.
+- Scope note:
+  - Unrelated untracked report `public/reports/nicechip_logo_concepts_20260903.html` was not included.
+
 ## 2026-09-07 20:08 KST - Chat document links open in docs viewer
 
 - Request:
