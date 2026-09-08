@@ -80,9 +80,10 @@ export default function EvalsPage() {
             <div><b>Status:</b> {evalResult.status||"-"}</div>
             <div><b>Scored:</b> {summary?.examples??summary?.count??"-"}</div>
             <div><b>Avg:</b> {(summary?.mean_score??summary?.avg_score)!=null?Number(summary.mean_score??summary.avg_score).toFixed(3):"-"}</div>
-            <div><b>Pass:</b> {summary?.pass_rate!=null?(summary.pass_rate*100).toFixed(1)+"%":"-"}</div>
+            <div><b>평균 기준 통과율:</b> {summary?.pass_rate!=null?(summary.pass_rate*100).toFixed(1)+"%":"-"}</div>
             <div><b>Time:</b> {toKST(evalResult.completed_at??evalResult.started_at)}</div>
           </div>
+          {evalResult.scores?.some((score:any)=>!score.passed)&&<p style={{color:"var(--danger)",fontSize:13,marginBottom:12}}>실패한 평가 항목이 있습니다. 평균 기준 통과율은 모든 항목의 통과를 의미하지 않습니다. 아래 기준별 결과를 확인하십시오.</p>}
           {summary?.criteria&&<div style={{marginBottom:12}}>
             <b style={{fontSize:13}}>Criteria:</b>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:6}}>

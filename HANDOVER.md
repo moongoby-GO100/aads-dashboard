@@ -2474,3 +2474,4 @@
 
 - API E2E verified: synthetic AADS trace promoted twice to the same example, rule experiment 70e295d8-0549-4b19-8304-39231751f65d completed with six criterion scores. This validates plumbing, not production LLM quality.
 - Additional display correction: status API omits scores/feedback totals; show 미제공 rather than fabricating zero. A follow-up immutable dashboard release is required for this correction.
+- Browser test confirmed result restoration and recoverable missing dataset errors. Existing rule-v1 uses an average threshold, so failed individual criteria can coexist with a passing aggregate; label this accurately and display an explicit failed-criteria warning instead of implying every criterion passed.
