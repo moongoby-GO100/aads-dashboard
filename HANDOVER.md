@@ -2475,3 +2475,18 @@
 - API E2E verified: synthetic AADS trace promoted twice to the same example, rule experiment 70e295d8-0549-4b19-8304-39231751f65d completed with six criterion scores. This validates plumbing, not production LLM quality.
 - Additional display correction: status API omits scores/feedback totals; show 미제공 rather than fabricating zero. A follow-up immutable dashboard release is required for this correction.
 - Browser test confirmed result restoration and recoverable missing dataset errors. Existing rule-v1 uses an average threshold, so failed individual criteria can coexist with a passing aggregate; label this accurately and display an explicit failed-criteria warning instead of implying every criterion passed.
+
+### Final certification — 2026-09-09 07:57:17 KST
+- Runtime release: b6d7cf4b66d47be2f5853629c5379f1b32bba477, pushed to origin/main before deployment.
+- Dashboard deploy.sh exited 0. Candidate direct health, routed external health, --no-build standby and identical digest passed.
+- Both slots: sha256:64ee9272c324453a18333281a0c9dc91400e1a55d79f3dd41fe926e59771a5b7.
+- Six monitor checks from 07:51:12 to 07:56:17 KST passed (305 seconds between first/last checks); no detected new P0/P1.
+- npx tsc --noEmit --pretty false, git diff --check and production Next build passed.
+- Generic deploy visual QA API returned UNKNOWN; replaced by authenticated production Chromium Playwright checks, not treated as a pass.
+- /ops/evals and /ops/traces: single selected menu, real API promotion and rule run, summary/scores visible, latest experiment restored after reload, missing dataset error recoverable, mobile no horizontal overflow, no page errors.
+- Vault E2E credential authenticated but is a customer account: verified admin menu hidden. Existing configured internal admin login used for admin screen checks, without modifying account roles or exposing credentials.
+- Final browser experiment: 52d36e2d-96a6-4380-8bee-6bdf027da6d6. DB SELECT confirmed completed/rule, one example and six scores. Duplicate promotion preserved example 3826a800-7a47-4541-9f2e-73c7ec876f7b.
+- Fixture is explicitly synthetic AADS data in aads-llmops-e2e; no production LLM quality claim or external LLM judge call. Source traces in other projects remain untouched.
+- Evidence: /root/aads/verification/llmops-20260909/{evals-desktop.png,evals-mobile.png,traces-desktop.png,browser-result.log}; deployment log /tmp/aads-llmops-dashboard-final-release.log.
+- Remaining limits: scores/feedback totals are omitted by the existing status API and displayed as 미제공. Rule-v1 uses an average threshold; failed criteria now trigger an explicit UI warning.
+- This final documentation update is separate from the runtime release; no additional application image is needed.
