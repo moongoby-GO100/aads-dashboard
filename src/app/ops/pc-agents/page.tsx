@@ -185,10 +185,10 @@ export default function PCAgentsPage() {
   };
 
   const handleDownloadExe = () => {
-    const url = `${BASE_URL}/kakao-bot/agent/download-exe`;
+    const url = `${BASE_URL}/kakao-bot/agent/download?format=zip`;
     const a = document.createElement("a");
     a.href = url;
-    a.download = "AADS-PC-Agent-Setup.exe";
+    a.download = "kakaobot-agent.zip";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -225,7 +225,7 @@ export default function PCAgentsPage() {
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            설치파일 다운로드 (.exe)
+            설치파일 다운로드 (.zip)
           </button>
           <button
             className="flex items-center gap-2 px-3 py-2 rounded text-xs transition-opacity hover:opacity-80"

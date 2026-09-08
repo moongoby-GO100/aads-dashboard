@@ -16,6 +16,7 @@ interface VersionInfo {
   version: string;
   release_date: string;
   file_size: string;
+  exe_file_size?: string;
   changelog?: string;
 }
 
@@ -58,7 +59,8 @@ export default function AgentPage() {
       .catch(() => {});
   }, []);
 
-  const manualDownloadUrl = `${API}/kakao-bot/agent/download-exe`;
+  const manualDownloadUrl = `${API}/kakao-bot/agent/download?format=zip`;
+  const exeDownloadUrl = `${API}/kakao-bot/agent/download-exe`;
   const installTicketUrl = `${API}/kakao-bot/agent/install-ticket`;
 
   const handleAutoInstallDownload = async () => {
@@ -74,7 +76,7 @@ export default function AgentPage() {
       if (!res.ok || !data?.download_url) {
         throw new Error(data?.detail || "자동 설치 파일 준비 실패");
       }
-      setInstallMessage("자동 페어링 설치 파일을 내려받습니다.");
+      setInstallMessage("자동 페어링 ZIP 설치 파일을 내려받습니다. 압축 해제 후 install.bat을 실행하세요.");
       window.location.href = data.download_url;
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : "자동 설치 파일 준비 실패");
@@ -159,7 +161,7 @@ export default function AgentPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>EXE</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>ZIP</span>
               </div>
             </div>
             <button
@@ -170,7 +172,7 @@ export default function AgentPage() {
               style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}
             >
               <span style={{ fontSize: "16px" }}>⬇️</span>
-              {installLoading ? "자동 설치 파일 준비 중..." : "PC 에이전트 자동 설치"}
+              {installLoading ? "자동 설치 파일 준비 중..." : "PC 에이전트 자동 설치 ZIP"}
             </button>
             {installMessage && (
               <p className="mt-2 text-xs" style={{ color: "#16A34A" }}>{installMessage}</p>
@@ -240,8 +242,8 @@ export default function AgentPage() {
               {[
                 {
                   step: 1,
-                  title: "자동 설치 파일 다운로드",
-                  desc: "위 버튼을 클릭하면 계정에 연결된 1회용 설치 파일이 생성됩니다.",
+                  title: "자동 설치 ZIP 다운로드",
+                  desc: "위 버튼을 클릭하면 계정에 연결된 1회용 설치 ZIP이 생성됩니다.",
                   icon: "⬇️",
                 },
                 {
@@ -252,8 +254,8 @@ export default function AgentPage() {
                 },
                 {
                   step: 3,
-                  title: "EXE 실행",
-                  desc: "다운로드한 kakaobot-setup.exe를 더블클릭하여 실행합니다.",
+                  title: "install.bat 실행",
+                  desc: "ZIP 압축을 해제한 뒤 install.bat을 실행합니다.",
                   icon: "▶️",
                 },
                 {
@@ -300,11 +302,19 @@ export default function AgentPage() {
             <h2 className="text-sm font-semibold mb-3" style={{ color: "#1A1A1A" }}>수동 다운로드</h2>
             <a
               href={manualDownloadUrl}
-              download="kakaobot-setup.exe"
+              download="kakaobot-agent.zip"
               className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
               style={{ background: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB" }}
             >
-              일반 설치 파일 다운로드
+              백신 차단 우회 ZIP 다운로드
+            </a>
+            <a
+              href={exeDownloadUrl}
+              download="AADS-PC-Agent-Setup.exe"
+              className="mt-2 flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-xs font-medium transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ background: "#FFFFFF", color: "#6B7280", border: "1px solid #D1D5DB" }}
+            >
+              EXE 직접 다운로드
             </a>
           </div>
 
