@@ -2471,3 +2471,6 @@
 - Validation: npx tsc --noEmit --pretty false and git diff --check passed.
 - Operations pending at commit time: dashboard deploy.sh with six 60-second monitor rounds (at least 300 seconds), authenticated browser checks, production rule experiment via API. Backend image and unrelated server dirty files are preserved.
 - Rollback: revert this scoped dashboard commit and release with deploy.sh; evaluation records are additive audit records, no source trace modification.
+
+- API E2E verified: synthetic AADS trace promoted twice to the same example, rule experiment 70e295d8-0549-4b19-8304-39231751f65d completed with six criterion scores. This validates plumbing, not production LLM quality.
+- Additional display correction: status API omits scores/feedback totals; show 미제공 rather than fabricating zero. A follow-up immutable dashboard release is required for this correction.

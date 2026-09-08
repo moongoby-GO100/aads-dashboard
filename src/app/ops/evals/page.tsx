@@ -61,7 +61,7 @@ export default function EvalsPage() {
         </div>
         {db&&<div style={{...cs,display:"flex",gap:24,flexWrap:"wrap"}}>
           {[["Datasets",db.datasets],["Examples",db.examples],["Experiments",db.experiments],["Scores",db.scores],["Feedback",db.feedback]].map(([k,v])=>
-            <div key={String(k)}><span style={{fontSize:11,color:"var(--text-secondary)"}}>{k}</span><br/><b>{v??0}</b></div>)}
+            <div key={String(k)}><span style={{fontSize:11,color:"var(--text-secondary)"}}>{k}</span><br/><b>{v??"미제공"}</b></div>)}
         </div>}
         <div style={{...cs,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
           <input aria-label="평가 데이터셋" value={datasetSlug} onChange={e=>setDatasetSlug(e.target.value)} style={{padding:8,maxWidth:"100%",color:"var(--text-primary)",background:"var(--bg-primary)",border:"1px solid var(--border)"}}/>
