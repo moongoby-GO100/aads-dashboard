@@ -90,6 +90,7 @@ interface DeployQueueItem {
   duration_ms?: number | null;
   bg_sync_status?: string | null;
   stalled?: boolean;
+  effective_status?: string | null;
   release_title?: string | null;
   release_summary?: string | null;
   changed_files?: string[];
@@ -107,11 +108,13 @@ interface DeployDurationItem {
 }
 
 interface DeployProjectOverviewItem {
+  id?: number;
   project?: string;
   component?: string | null;
   deploy_type?: string | null;
   target_env?: string | null;
   status?: string;
+  effective_status?: string | null;
   phase?: string | null;
   release_sha?: string | null;
   runner_job_id?: string | null;
@@ -149,6 +152,7 @@ interface DeployObservabilityStatus {
   active_deployments?: DeployQueueItem[];
   queued_deployments?: DeployQueueItem[];
   recent_completed_deployments?: DeployQueueItem[];
+  recent_deployments?: DeployQueueItem[];
   recent_durations_per_project?: DeployDurationItem[];
   project_deployments?: DeployProjectOverviewItem[];
   component_deployments?: DeployProjectOverviewItem[];
@@ -233,13 +237,41 @@ function deployTone(status: string | undefined | null): string {
       return "#f59e0b";
     case "running":
       return "#3b82f6";
+    case "stalled":
     case "error":
     case "failed":
     case "mismatch":
     case "blocked":
+    case "cancelled":
+    case "superseded":
       return "#ef4444";
     default:
       return "var(--ct-text2)";
+  }
+}
+
+function effectiveDeployStatus(item: { status?: string | null; effective_status?: string | null; stalled?: boolean }): string {
+  if (item.stalled) return "stalled";
+  return (item.effective_status || item.status || "unknown").toLowerCase();
+}
+
+function deployStatusLabel(status: string | null | undefined): string {
+  switch ((status || "unknown").toLowerCase()) {
+    case "queued": return "대기";
+    case "awaiting_approval": return "승인 대기";
+    case "running":
+    case "verifying":
+    case "syncing_standby": return "진행 중";
+    case "stalled": return "지연·확인 필요";
+    case "completed":
+    case "success": return "완료";
+    case "failed":
+    case "error": return "실패";
+    case "blocked": return "차단";
+    case "cancelled": return "취소";
+    case "superseded": return "대체됨";
+    case "unknown": return "이력 없음";
+    default: return status || "이력 없음";
   }
 }
 
@@ -327,6 +359,36 @@ function DeployChangeSummary({ item }: { item: DeployQueueItem }) {
   );
 }
 
+function formatDeployTime(dateStr: string | null | undefined, includeDate = false): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  if (includeDate || !isToday) {
+    return `${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getDate().toString().padStart(2,"0")} ${time}`;
+  }
+  return time;
+}
+
+function formatDurationMs(ms: number | null | undefined): string {
+  if (!ms || ms <= 0) return "";
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+}
+
+function projectOverviewElapsed(startedAt: string | null | undefined, nowMs: number): string {
+  if (!startedAt) return "-";
+  const startMs = new Date(startedAt).getTime();
+  if (Number.isNaN(startMs)) return "-";
+  return formatDurationText((nowMs - startMs) / 1000);
+}
+
+const ALL_PROJECTS: readonly string[] = ["AADS", "FOOD", "GO100", "KIS", "SF", "NTV2", "NAS"];
+
 function DeployStatusCard({
   status,
   loading,
@@ -342,9 +404,16 @@ function DeployStatusCard({
 }) {
   const active = status?.active_deployments || [];
   const queued = status?.queued_deployments || [];
-  const completed = status?.recent_completed_deployments || [];
+  const history = status?.recent_deployments?.length
+    ? status.recent_deployments
+    : status?.recent_completed_deployments || [];
   const durations = status?.recent_durations_per_project || [];
   const projectDeployments = status?.project_deployments || [];
+  const projectDeploymentsByName = new Map(projectDeployments.map((item) => [item.project, item]));
+  const projectDisplayItems: DeployProjectOverviewItem[] = [
+    ...ALL_PROJECTS.map((p) => projectDeploymentsByName.get(p) || ({ project: p, status: "미등록" } as DeployProjectOverviewItem)),
+    ...projectDeployments.filter((item) => item.project && ALL_PROJECTS.indexOf(item.project) === -1),
+  ];
   const componentDeployments = status?.component_deployments || [];
   const staleSignals = status?.stale_zombie_signals || [];
   const blockers = status?.next_deploy_readiness?.blockers || [];
@@ -358,8 +427,10 @@ function DeployStatusCard({
     : currentDuration?.p50_duration_ms != null
       ? `P50 ${formatMillis(currentDuration.p50_duration_ms)}`
       : "-";
+  const currentStatus = current ? effectiveDeployStatus(current) : null;
   const cards = [
-    { label: "현재 Phase", value: current?.phase || "대기 없음", tone: deployTone(current?.status || current?.phase) },
+    { label: "현재 배포", value: current ? `${current.id != null ? `#${current.id}` : current.runner_job_id || "ID 없음"} · ${deployStatusLabel(currentStatus)}` : "대기 없음", tone: deployTone(currentStatus) },
+    { label: "현재 Phase", value: current?.phase || "-", tone: deployTone(currentStatus || current?.phase) },
     { label: "경과시간", value: current ? deployElapsed(current, nowMs) : "-", tone: "var(--ct-text)" },
     { label: "예상잔여", value: estimatedRemaining, tone: "var(--ct-text)" },
     { label: "대기건", value: `${queued.length}건`, tone: queued.length ? "#f59e0b" : "#22c55e" },
@@ -441,62 +512,84 @@ function DeployStatusCard({
       <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 9 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)" }}>프로젝트별 배포 현황</div>
-          <div style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>{projectDeployments.length || 0}개</div>
+          <div style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>{projectDeployments.length}/{projectDisplayItems.length}개</div>
         </div>
-        {projectDeployments.length === 0 ? (
-          <div style={{ fontSize: 12, color: "var(--ct-text2)", padding: "4px 0" }}>수집된 프로젝트 현황이 없습니다</div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))", gap: 7 }}>
-            {projectDeployments.map((item) => {
-              const tone = deployTone(item.status || item.phase);
-              const lastTime = item.last_deploy_at || item.completed_at || item.updated_at || item.started_at;
-              return (
-                <div
-                  key={item.project || "unknown-project"}
-                  style={{
-                    border: `1px solid ${item.is_active || item.is_queued ? tone : "var(--ct-border)"}`,
-                    borderRadius: 8,
-                    padding: "8px 9px",
-                    minWidth: 0,
-                    background: item.is_active || item.is_queued ? "rgba(59,130,246,0.08)" : "transparent",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", minWidth: 0 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {deployTargetLabel(item)}
-                    </span>
-                    <span style={{ fontSize: 10, color: tone, fontWeight: 750, whiteSpace: "nowrap" }}>
-                      {item.status || "-"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.phase || "phase 없음"}
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, whiteSpace: "nowrap" }}>
-                    최근 {formatKst(lastTime)}
-                  </div>
-                  <div style={{
-                    fontSize: 10,
-                    color: "var(--ct-text2)",
-                    marginTop: 5,
-                    fontFamily: "monospace",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}>
-                    {shortSha(item.release_sha || item.last_success_sha) !== "-" ? `sha ${shortSha(item.release_sha || item.last_success_sha)}` : item.runner_job_id || item.source || "-"}
-                  </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))", gap: 7 }}>
+          {projectDisplayItems.map((item) => {
+            const isPlaceholder = item.status === "미등록";
+            const itemStatus = effectiveDeployStatus(item);
+            const tone = isPlaceholder ? "var(--ct-text2)" : deployTone(itemStatus || item.phase);
+            const lastTime = item.last_deploy_at || item.completed_at || item.updated_at || item.started_at;
+            const inProgress = !isPlaceholder && (item.is_active || item.is_queued);
+            return (
+              <div
+                key={item.project || "unknown-project"}
+                style={{
+                  border: `1px solid ${inProgress ? tone : "var(--ct-border)"}`,
+                  borderRadius: 8,
+                  padding: "8px 9px",
+                  minWidth: 0,
+                  background: inProgress ? "rgba(59,130,246,0.08)" : "transparent",
+                  opacity: isPlaceholder ? 0.55 : 1,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {deployTargetLabel(item)}
+                  </span>
+                  <span style={{ fontSize: 10, color: tone, fontWeight: 750, whiteSpace: "nowrap" }}>
+                      {deployStatusLabel(itemStatus)}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {isPlaceholder ? (
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5 }}>배포 이력 없음</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.phase || "phase 없음"}
+                    </div>
+                    {item.started_at && (
+                      <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, whiteSpace: "nowrap" }}>
+                        시작 {formatDeployTime(item.started_at)}
+                      </div>
+                    )}
+                    {item.completed_at ? (
+                      <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 3, whiteSpace: "nowrap" }}>
+                        완료 {formatDeployTime(item.completed_at)}
+                      </div>
+                    ) : inProgress && item.started_at ? (
+                      <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3, whiteSpace: "nowrap" }}>
+                        ⏱ {projectOverviewElapsed(item.started_at, nowMs)}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 3, whiteSpace: "nowrap" }}>
+                        최근 {formatKst(lastTime)}
+                      </div>
+                    )}
+                    <div style={{
+                      fontSize: 10,
+                      color: "var(--ct-text2)",
+                      marginTop: 5,
+                      fontFamily: "monospace",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {item.id != null ? `배포 #${item.id}` : shortSha(item.release_sha || item.last_success_sha) !== "-" ? `sha ${shortSha(item.release_sha || item.last_success_sha)}` : item.runner_job_id || item.source || "-"}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {[...active, ...queued].length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[...active, ...queued].slice(0, 8).map((item, index) => {
-            const tone = deployTone(item.status || item.phase);
+            const itemStatus = effectiveDeployStatus(item);
+            const tone = deployTone(itemStatus || item.phase);
             return (
               <div key={`${item.id || item.runner_job_id || index}-${index}`} style={{
                 background: "var(--ct-card)",
@@ -505,7 +598,12 @@ function DeployStatusCard({
                 padding: "10px 11px",
                 minWidth: 0,
               }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7, minWidth: 0 }}>
+                {item.release_title && (
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 5, overflowWrap: "anywhere" }}>
+                    {item.release_title}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7, minWidth: 0, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", whiteSpace: "nowrap" }}>
                     {deployTargetLabel(item)}
                   </span>
@@ -517,11 +615,28 @@ function DeployStatusCard({
                     padding: "1px 7px",
                     whiteSpace: "nowrap",
                   }}>
-                    {item.status || "-"}
+                    {deployStatusLabel(itemStatus)}
                   </span>
+                  {item.id != null && (
+                    <span style={{ fontSize: 10, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>
+                      배포 #{item.id}
+                    </span>
+                  )}
                   {item.queue_position != null && (
                     <span style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
                       #{item.queue_position}
+                    </span>
+                  )}
+                  {(item.changed_file_count || 0) > 0 && (
+                    <span style={{
+                      fontSize: 10,
+                      color: "var(--ct-text2)",
+                      border: "1px solid var(--ct-border)",
+                      borderRadius: 999,
+                      padding: "1px 7px",
+                      whiteSpace: "nowrap",
+                    }}>
+                      파일 {item.changed_file_count}개
                     </span>
                   )}
                 </div>
@@ -659,37 +774,49 @@ function DeployStatusCard({
         </div>
       )}
 
-      {completed.length > 0 && (
+      {history.length > 0 && (
         <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 반영 내역</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 배포 이력</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {completed.slice(0, 5).map((item, index) => (
-              <div key={`${item.id || item.release_sha || index}-completed`} style={{ borderTop: index === 0 ? "none" : "1px solid var(--ct-border)", paddingTop: index === 0 ? 0 : 8, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-                  <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</span>
-                  <span style={{ fontSize: 10, color: "#22c55e", whiteSpace: "nowrap" }}>{item.status || "success"}</span>
-                  <span style={{ fontSize: 10, color: "var(--ct-text2)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {shortSha(item.release_sha)}
-                  </span>
-                  <span style={{ fontSize: 10, color: "var(--ct-text2)", marginLeft: "auto", whiteSpace: "nowrap" }}>
-                    종료 {formatKst(deployFinishedAt(item))}
-                  </span>
+            {history.slice(0, 8).map((item, index) => {
+              const durationLabel = formatDurationMs(item.duration_ms) || deployElapsed(item, nowMs);
+              const itemStatus = effectiveDeployStatus(item);
+              const tone = deployTone(itemStatus);
+              return (
+                <div key={`${item.id || item.release_sha || index}-completed`} style={{ borderTop: index === 0 ? "none" : "1px solid var(--ct-border)", paddingTop: index === 0 ? 0 : 8, minWidth: 0 }}>
+                  {item.release_title && (
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 4, overflowWrap: "anywhere" }}>
+                      {item.release_title}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</span>
+                    {item.id != null && <span style={{ fontSize: 10, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>배포 #{item.id}</span>}
+                    <span style={{ fontSize: 10, color: tone, whiteSpace: "nowrap" }}>{deployStatusLabel(itemStatus)}</span>
+                    <span style={{ fontSize: 10, color: "var(--ct-text2)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {shortSha(item.release_sha)}
+                    </span>
+                    {(item.changed_file_count || 0) > 0 && (
+                      <span style={{
+                        fontSize: 10,
+                        color: "var(--ct-text2)",
+                        border: "1px solid var(--ct-border)",
+                        borderRadius: 999,
+                        padding: "1px 7px",
+                        whiteSpace: "nowrap",
+                      }}>
+                        파일 {item.changed_file_count}개
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 6, overflowWrap: "anywhere" }}>
+                    시작 {formatDeployTime(deployStartedAt(item))} → 완료 {formatDeployTime(deployFinishedAt(item))}
+                    {durationLabel && ` (총 ${durationLabel})`}
+                  </div>
+                  <DeployChangeSummary item={item} />
                 </div>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))",
-                  gap: 7,
-                  marginTop: 7,
-                  fontSize: 10,
-                  color: "var(--ct-text2)",
-                }}>
-                  <span>시작 {formatKst(deployStartedAt(item))}</span>
-                  <span>종료 {formatKst(deployFinishedAt(item))}</span>
-                  <span>소요 {deployElapsed(item, nowMs)}</span>
-                </div>
-                <DeployChangeSummary item={item} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
