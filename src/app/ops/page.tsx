@@ -84,6 +84,9 @@ interface DesignReviewItem {
 interface DeployQueueItem {
   id?: number;
   project?: string;
+  component?: string | null;
+  deploy_type?: string | null;
+  target_env?: string | null;
   release_sha?: string | null;
   runner_job_id?: string | null;
   status?: string;
@@ -94,6 +97,18 @@ interface DeployQueueItem {
   estimated_remaining_ms?: number | null;
   duration_ms?: number | null;
   bg_sync_status?: string;
+}
+
+interface DeployComponentItem extends DeployQueueItem {
+  component_id?: number;
+  started_at?: string | null;
+  completed_at?: string | null;
+  updated_at?: string | null;
+  last_deploy_at?: string | null;
+  last_success_sha?: string | null;
+  source?: string;
+  is_active?: boolean;
+  is_queued?: boolean;
 }
 
 interface DeployDurationItem {
@@ -122,6 +137,8 @@ interface DeployObservabilityStatus {
   degraded_reasons?: string[];
   active_deployments?: DeployQueueItem[];
   queued_deployments?: DeployQueueItem[];
+  project_deployments?: DeployComponentItem[];
+  component_deployments?: DeployComponentItem[];
   recent_durations_per_project?: DeployDurationItem[];
   phase_timeline?: DeployQueueItem[];
   stale_zombie_signals?: DeploySignalItem[];
@@ -169,6 +186,13 @@ function formatMillis(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return "-";
   const seconds = Math.max(0, Math.round(ms / 1000));
   return formatDuration(seconds);
+}
+
+function deployTargetLabel(item: { project?: string; component?: string | null; target_env?: string | null }): string {
+  const project = item.project || "-";
+  const component = item.component && item.component !== "api" ? `/${item.component}` : "";
+  const env = item.target_env && item.target_env !== "production" ? ` · ${item.target_env}` : "";
+  return `${project}${component}${env}`;
 }
 
 function infraStatusText(v: unknown): string {
@@ -502,6 +526,7 @@ export default function OpsPage() {
   const queuedDeployments = deployStatus?.queued_deployments || [];
   const staleSignals = deployStatus?.stale_zombie_signals || [];
   const recentDurations = deployStatus?.recent_durations_per_project || [];
+  const componentDeployments = deployStatus?.component_deployments || [];
   const deployReady = Boolean(deployStatus?.next_deploy_readiness?.ready);
   const deployReadinessLabel = deployStatus
     ? deployReady ? "진행 가능" : "대기 필요"
@@ -682,7 +707,7 @@ export default function OpsPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                    {["프로젝트", "상태", "Phase", "SHA", "Runner", "대기순서", "예상잔여"].map((h) => (
+                    {["대상", "상태", "Phase", "SHA", "Runner", "대기순서", "예상잔여"].map((h) => (
                       <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -690,7 +715,7 @@ export default function OpsPage() {
                 <tbody>
                   {[...activeDeployments, ...queuedDeployments].slice(0, 10).map((item, i) => (
                     <tr key={`${item.runner_job_id || item.id || i}-${i}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{item.project || "-"}</td>
+                      <td style={{ padding: "6px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</td>
                       <td style={{ padding: "6px 8px", color: deployTone(item.status), whiteSpace: "nowrap" }}>{item.status || "-"}</td>
                       <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{item.phase || "-"}</td>
                       <td style={{ padding: "6px 8px", fontFamily: "monospace", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.release_sha || "-"}</td>
@@ -703,6 +728,24 @@ export default function OpsPage() {
               </table>
             </div>
           )}
+          {componentDeployments.length > 0 && (
+            <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0, marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>컴포넌트별 최신 배포</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                {componentDeployments.slice(0, 12).map((item, index) => (
+                  <div key={`${item.project || "unknown"}-${item.component || index}`} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, minWidth: 0 }}>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", minWidth: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</span>
+                      <span style={{ fontSize: 11, color: deployTone(item.status), fontWeight: 700, whiteSpace: "nowrap" }}>{item.status || "-"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.phase || item.deploy_type || "phase 없음"}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 5, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.release_sha || item.last_success_sha || item.runner_job_id || item.source || "-"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
             <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>프로젝트별 배포시간</div>

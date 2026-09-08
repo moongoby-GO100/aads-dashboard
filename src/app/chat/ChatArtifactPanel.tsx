@@ -71,6 +71,9 @@ interface RunnerJob {
 interface DeployQueueItem {
   id?: number;
   project?: string;
+  component?: string | null;
+  deploy_type?: string | null;
+  target_env?: string | null;
   release_sha?: string | null;
   runner_job_id?: string | null;
   status?: string;
@@ -103,6 +106,32 @@ interface DeployDurationItem {
   source?: string;
 }
 
+interface DeployProjectOverviewItem {
+  project?: string;
+  component?: string | null;
+  deploy_type?: string | null;
+  target_env?: string | null;
+  status?: string;
+  phase?: string | null;
+  release_sha?: string | null;
+  runner_job_id?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  updated_at?: string | null;
+  last_deploy_at?: string | null;
+  last_success_sha?: string | null;
+  source?: string;
+  has_deploy_run?: boolean;
+  has_pipeline_job?: boolean;
+  is_active?: boolean;
+  is_queued?: boolean;
+  duration_ms?: number | null;
+  release_title?: string | null;
+  release_summary?: string | null;
+  changed_files?: string[];
+  changed_file_count?: number | null;
+}
+
 interface DeploySignalItem {
   runner_job_id?: string;
   project?: string;
@@ -121,6 +150,8 @@ interface DeployObservabilityStatus {
   queued_deployments?: DeployQueueItem[];
   recent_completed_deployments?: DeployQueueItem[];
   recent_durations_per_project?: DeployDurationItem[];
+  project_deployments?: DeployProjectOverviewItem[];
+  component_deployments?: DeployProjectOverviewItem[];
   phase_timeline?: DeployQueueItem[];
   stale_zombie_signals?: DeploySignalItem[];
   bg_digest_sync?: DeployQueueItem[];
@@ -216,6 +247,13 @@ function shortSha(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "-";
 }
 
+function deployTargetLabel(item: { project?: string; component?: string | null; target_env?: string | null }): string {
+  const project = item.project || "-";
+  const component = item.component && item.component !== "api" ? `/${item.component}` : "";
+  const env = item.target_env && item.target_env !== "production" ? ` · ${item.target_env}` : "";
+  return `${project}${component}${env}`;
+}
+
 function isTerminalDeployStatus(status: string | null | undefined): boolean {
   return ["completed", "success", "failed", "error", "blocked", "superseded", "cancelled"].includes((status || "").toLowerCase());
 }
@@ -306,6 +344,8 @@ function DeployStatusCard({
   const queued = status?.queued_deployments || [];
   const completed = status?.recent_completed_deployments || [];
   const durations = status?.recent_durations_per_project || [];
+  const projectDeployments = status?.project_deployments || [];
+  const componentDeployments = status?.component_deployments || [];
   const staleSignals = status?.stale_zombie_signals || [];
   const blockers = status?.next_deploy_readiness?.blockers || [];
   const current = active[0] || queued[0] || null;
@@ -398,6 +438,61 @@ function DeployStatusCard({
         </div>
       )}
 
+      <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 9 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)" }}>프로젝트별 배포 현황</div>
+          <div style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>{projectDeployments.length || 0}개</div>
+        </div>
+        {projectDeployments.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--ct-text2)", padding: "4px 0" }}>수집된 프로젝트 현황이 없습니다</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))", gap: 7 }}>
+            {projectDeployments.map((item) => {
+              const tone = deployTone(item.status || item.phase);
+              const lastTime = item.last_deploy_at || item.completed_at || item.updated_at || item.started_at;
+              return (
+                <div
+                  key={item.project || "unknown-project"}
+                  style={{
+                    border: `1px solid ${item.is_active || item.is_queued ? tone : "var(--ct-border)"}`,
+                    borderRadius: 8,
+                    padding: "8px 9px",
+                    minWidth: 0,
+                    background: item.is_active || item.is_queued ? "rgba(59,130,246,0.08)" : "transparent",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", minWidth: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {deployTargetLabel(item)}
+                    </span>
+                    <span style={{ fontSize: 10, color: tone, fontWeight: 750, whiteSpace: "nowrap" }}>
+                      {item.status || "-"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.phase || "phase 없음"}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 5, whiteSpace: "nowrap" }}>
+                    최근 {formatKst(lastTime)}
+                  </div>
+                  <div style={{
+                    fontSize: 10,
+                    color: "var(--ct-text2)",
+                    marginTop: 5,
+                    fontFamily: "monospace",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}>
+                    {shortSha(item.release_sha || item.last_success_sha) !== "-" ? `sha ${shortSha(item.release_sha || item.last_success_sha)}` : item.runner_job_id || item.source || "-"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {[...active, ...queued].length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[...active, ...queued].slice(0, 8).map((item, index) => {
@@ -412,7 +507,7 @@ function DeployStatusCard({
               }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7, minWidth: 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", whiteSpace: "nowrap" }}>
-                    {item.project || "-"}
+                    {deployTargetLabel(item)}
                   </span>
                   <span style={{
                     fontSize: 10,
@@ -520,6 +615,50 @@ function DeployStatusCard({
         </div>
       ))}
 
+      {componentDeployments.length > 0 && (
+        <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 7 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)" }}>컴포넌트별 배포</div>
+            <div style={{ fontSize: 10, color: "var(--ct-text2)", whiteSpace: "nowrap" }}>{componentDeployments.length}개</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {componentDeployments.slice(0, 8).map((item, index) => {
+              const tone = deployTone(item.status || item.phase);
+              const lastTime = item.last_deploy_at || item.completed_at || item.updated_at || item.started_at;
+              return (
+                <div
+                  key={`${item.project || "unknown"}-${item.component || index}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(95px, 1fr) auto",
+                    gap: 8,
+                    alignItems: "center",
+                    borderTop: index === 0 ? "none" : "1px solid var(--ct-border)",
+                    paddingTop: index === 0 ? 0 : 7,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {deployTargetLabel(item)}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.phase || item.deploy_type || "phase 없음"} · {formatKst(lastTime)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: tone, fontWeight: 800, whiteSpace: "nowrap" }}>{item.status || "-"}</div>
+                    <div style={{ fontSize: 10, color: "var(--ct-text2)", fontFamily: "monospace", marginTop: 3, maxWidth: 92, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {shortSha(item.release_sha || item.last_success_sha)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {completed.length > 0 && (
         <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 반영 내역</div>
@@ -527,7 +666,7 @@ function DeployStatusCard({
             {completed.slice(0, 5).map((item, index) => (
               <div key={`${item.id || item.release_sha || index}-completed`} style={{ borderTop: index === 0 ? "none" : "1px solid var(--ct-border)", paddingTop: index === 0 ? 0 : 8, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-                  <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>{item.project || "-"}</span>
+                  <span style={{ fontSize: 11, color: "var(--ct-text)", fontWeight: 800, whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</span>
                   <span style={{ fontSize: 10, color: "#22c55e", whiteSpace: "nowrap" }}>{item.status || "success"}</span>
                   <span style={{ fontSize: 10, color: "var(--ct-text2)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {shortSha(item.release_sha)}
