@@ -62,11 +62,16 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {APP_NAV_ITEMS.filter((item) => isInternalAdmin || !item.adminOnly).map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+            const matchesPath = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+            const isActive = matchesPath(item.href) && !APP_NAV_ITEMS.some(other =>
+              (isInternalAdmin || !other.adminOnly) && !other.external &&
+              other.href.length > item.href.length && matchesPath(other.href)
+            );
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 target={"external" in item && item.external ? "_blank" : undefined}
                 rel={"external" in item && item.external ? "noopener noreferrer" : undefined}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"

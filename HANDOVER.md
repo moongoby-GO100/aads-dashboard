@@ -2462,3 +2462,12 @@
   - `/reports/nicechip_logo_concepts_20260903.html`: HTTP 200 after deploy.
 - Remaining:
   - Browser-authenticated click validation in the live chat session still needs a logged-in browser session; API/HTTP/container checks passed.
+
+
+## LLMOps follow-up: navigation and rule evaluation
+- Resume interrupted Sidebar change: remove duplicate declaration and select only the longest visible matching route; expose aria-current.
+- Fix evaluations calling nonexistent postLlmopsRunEval; use canonical postLlmopsEvalRun and summary.examples/mean_score/pass_rate/criteria.
+- Add editable dataset, duplicate-submit guard, status refresh and last experiment recovery. Legacy summary.count/avg_score remains readable.
+- Validation: npx tsc --noEmit --pretty false and git diff --check passed.
+- Operations pending at commit time: dashboard deploy.sh with six 60-second monitor rounds (at least 300 seconds), authenticated browser checks, production rule experiment via API. Backend image and unrelated server dirty files are preserved.
+- Rollback: revert this scoped dashboard commit and release with deploy.sh; evaluation records are additive audit records, no source trace modification.

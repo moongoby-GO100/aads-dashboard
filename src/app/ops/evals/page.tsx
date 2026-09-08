@@ -15,29 +15,42 @@ export default function EvalsPage() {
   const [msg,setMsg]=useState("");
   const [evalResult,setEvalResult]=useState<any>(null);
   const [expId,setExpId]=useState("");
+  const [datasetSlug,setDatasetSlug]=useState("aads-failed-traces");
+  const [running,setRunning]=useState(false);
   const load=useCallback(async()=>{
     setLoading(true);
-    try{setSt(await api.getLlmopsStatus());}catch{}
-    try{const r=await api.getLlmopsCandidates({hours:48,limit:20});setCandidates(r?.candidates||[]);}catch{setCandidates([]);}
+    try{setSt(await api.getLlmopsStatus("AADS"));}catch{setMsg("상태 조회 실패: 새로고침 후 다시 시도하십시오.");}
+    try{const r=await api.getLlmopsCandidates({project:"AADS",hours:48});setCandidates(r?.candidates||[]);}catch{setCandidates([]);setMsg("승격 후보 조회 실패: 새로고침 후 다시 시도하십시오.");}
     setLoading(false);
   },[]);
   useEffect(()=>{load();},[load]);
   const promote=async(id:string)=>{
-    try{const r=await api.postLlmopsPromote(id);setMsg(r?.promoted?"Promoted":"Failed: "+(r?.reason||""));setTimeout(()=>setMsg(""),4000);}catch{setMsg("error");}
+    try{const r=await api.postLlmopsPromote(id,datasetSlug);setMsg(r?.promoted?"Promoted":"Failed: "+(r?.reason||""));await load();}catch{setMsg("error");}
   };
+  useEffect(()=>{
+    const saved=localStorage.getItem("aads_llmops_last_experiment");
+    if(saved){setExpId(saved);api.getLlmopsEvalResult(saved).then(setEvalResult).catch(()=>setMsg("최근 평가 조회 실패: 실험 ID로 다시 조회하십시오."));}
+  },[]);
   const runEval=async()=>{
-    setMsg("Running...");
+    if(running||!datasetSlug.trim())return;
+    setRunning(true);setMsg("평가 실행 중...");
     try{
-      const r=await api.postLlmopsRunEval("aads-failed-traces");
-      if(r?.experiment_id){setMsg("Done: "+r.experiment_id.slice(0,12));setExpId(r.experiment_id);try{setEvalResult(await api.getLlmopsEvalResult(r.experiment_id));}catch{}}
-      else{setMsg(r?.reason||JSON.stringify(r));}
-    }catch{setMsg("eval failed");}
+      const r=await api.postLlmopsEvalRun(datasetSlug.trim());
+      if(r?.experiment_id){
+        setExpId(r.experiment_id);
+        localStorage.setItem("aads_llmops_last_experiment",r.experiment_id);
+        setEvalResult(await api.getLlmopsEvalResult(r.experiment_id));
+        await load();setMsg(r.summary?.examples ? "평가 완료" : "평가 대상이 없습니다. Trace를 데이터셋에 먼저 승격하십시오.");
+      }else{setMsg(r?.reason||"평가 실행 실패");}
+    }catch(e){setMsg(e instanceof Error ? e.message : "평가 실패: 데이터셋 이름과 승격 여부를 확인한 후 재시도하십시오.");}
+    finally{setRunning(false);}
   };
   const viewExp=async()=>{if(!expId)return;try{setEvalResult(await api.getLlmopsEvalResult(expId));setMsg("");}catch{setMsg("not found");}};
   const cs={background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:10,padding:16,marginBottom:16} as const;
   const th_={padding:"8px 10px",textAlign:"left" as const,fontSize:12,color:"var(--text-secondary)",borderBottom:"1px solid var(--border)"};
   const td_={padding:"8px 10px",fontSize:13,borderBottom:"1px solid var(--border)"};
   const db=st?.db;
+  const summary=evalResult?.summary;
   return (
     <div style={{minHeight:"100vh",background:"var(--bg-primary)"}}>
       <Header title="LLMOps Evaluations" />
@@ -51,7 +64,8 @@ export default function EvalsPage() {
             <div key={String(k)}><span style={{fontSize:11,color:"var(--text-secondary)"}}>{k}</span><br/><b>{v??0}</b></div>)}
         </div>}
         <div style={{...cs,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-          <button onClick={runEval} style={{padding:"8px 16px",borderRadius:6,border:"none",background:"var(--accent)",color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>Run Evaluation</button>
+          <input aria-label="평가 데이터셋" value={datasetSlug} onChange={e=>setDatasetSlug(e.target.value)} style={{padding:8,maxWidth:"100%",color:"var(--text-primary)",background:"var(--bg-primary)",border:"1px solid var(--border)"}}/>
+          <button disabled={running||!datasetSlug.trim()} onClick={runEval} style={{padding:"8px 16px",borderRadius:6,border:"none",background:"var(--accent)",color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600}}>Run Evaluation</button>
           <input value={expId} onChange={e=>setExpId(e.target.value)} placeholder="Experiment ID" style={{padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg-primary)",color:"var(--text-primary)",fontSize:13,width:260}}/>
           <button onClick={viewExp} style={{padding:"8px 12px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--text-primary)",fontSize:13,cursor:"pointer"}}>View</button>
           <button onClick={load} style={{padding:"8px 12px",borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"var(--text-primary)",fontSize:13,cursor:"pointer"}}>Refresh</button>
@@ -64,17 +78,17 @@ export default function EvalsPage() {
             <div><b>Name:</b> {evalResult.name||"-"}</div>
             <div><b>Dataset:</b> {evalResult.dataset_slug||"-"}</div>
             <div><b>Status:</b> {evalResult.status||"-"}</div>
-            <div><b>Scored:</b> {evalResult.scored_count??evalResult.example_count??"-"}</div>
-            <div><b>Avg:</b> {evalResult.avg_score!=null?evalResult.avg_score.toFixed(3):"-"}</div>
-            <div><b>Pass:</b> {evalResult.pass_rate!=null?(evalResult.pass_rate*100).toFixed(1)+"%":"-"}</div>
-            <div><b>Time:</b> {toKST(evalResult.created_at)}</div>
+            <div><b>Scored:</b> {summary?.examples??summary?.count??"-"}</div>
+            <div><b>Avg:</b> {(summary?.mean_score??summary?.avg_score)!=null?Number(summary.mean_score??summary.avg_score).toFixed(3):"-"}</div>
+            <div><b>Pass:</b> {summary?.pass_rate!=null?(summary.pass_rate*100).toFixed(1)+"%":"-"}</div>
+            <div><b>Time:</b> {toKST(evalResult.completed_at??evalResult.started_at)}</div>
           </div>
-          {evalResult.criteria_summary&&<div style={{marginBottom:12}}>
+          {summary?.criteria&&<div style={{marginBottom:12}}>
             <b style={{fontSize:13}}>Criteria:</b>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:6}}>
-              {Object.entries(evalResult.criteria_summary).map(([k,v]:any)=>
-                <div key={k} style={{padding:"4px 10px",borderRadius:6,background:v?.avg_score>=0.6?"rgba(34,197,94,0.15)":"rgba(239,68,68,0.15)",fontSize:12}}>
-                  <span style={{fontWeight:600}}>{k}</span>: {v?.avg_score?.toFixed(2)||"-"} ({v?.pass_count||0}/{v?.total||0})
+              {Object.entries(summary?.criteria).map(([k,v]:any)=>
+                <div key={k} style={{padding:"4px 10px",borderRadius:6,background:Number(v)>=0.6?"rgba(34,197,94,0.15)":"rgba(239,68,68,0.15)",fontSize:12}}>
+                  <span style={{fontWeight:600}}>{k}</span>: {Number(v).toFixed(2)}
                 </div>)}
             </div>
           </div>}
@@ -84,7 +98,7 @@ export default function EvalsPage() {
               <tbody>{evalResult.scores.slice(0,50).map((s:any,i:number)=><tr key={i}>
                 <td style={{...td_,fontSize:11}}>{s.example_id?.slice(0,8)||"-"}</td>
                 <td style={td_}>{s.criterion||"-"}</td>
-                <td style={td_}>{s.score?.toFixed(3)??"-"}</td>
+                <td style={td_}>{s.score!=null?Number(s.score).toFixed(3):"-"}</td>
                 <td style={td_}>{s.passed?"Y":"N"}</td>
                 <td style={{...td_,fontSize:11,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis"}}>{s.comment?.slice(0,100)||"-"}</td>
               </tr>)}</tbody>
