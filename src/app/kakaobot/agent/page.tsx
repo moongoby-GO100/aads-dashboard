@@ -76,7 +76,7 @@ export default function AgentPage() {
       if (!res.ok || !data?.download_url) {
         throw new Error(data?.detail || "자동 설치 파일 준비 실패");
       }
-      setInstallMessage("자동 페어링 ZIP 설치 파일을 내려받습니다. 압축 해제 후 install.bat을 실행하세요.");
+      setInstallMessage("토큰 입력 없이 연결되는 Windows EXE 설치 파일을 내려받습니다.");
       window.location.href = data.download_url;
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : "자동 설치 파일 준비 실패");
@@ -161,7 +161,7 @@ export default function AgentPage() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>ZIP</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "#DCFCE7", color: "#16A34A" }}>EXE</span>
               </div>
             </div>
             <button
@@ -172,7 +172,7 @@ export default function AgentPage() {
               style={{ background: "#FFE812", color: "#3C1E1E", border: "2px solid #F5DC00" }}
             >
               <span style={{ fontSize: "16px" }}>⬇️</span>
-              {installLoading ? "자동 설치 파일 준비 중..." : "PC 에이전트 자동 설치 ZIP"}
+              {installLoading ? "자동 설치 파일 준비 중..." : "PC 에이전트 자동 설치 EXE"}
             </button>
             {installMessage && (
               <p className="mt-2 text-xs" style={{ color: "#16A34A" }}>{installMessage}</p>
@@ -242,8 +242,8 @@ export default function AgentPage() {
               {[
                 {
                   step: 1,
-                  title: "자동 설치 ZIP 다운로드",
-                  desc: "위 버튼을 클릭하면 계정에 연결된 1회용 설치 ZIP이 생성됩니다.",
+                  title: "자동 설치 EXE 다운로드",
+                  desc: "위 버튼을 클릭하면 계정에 자동 연결되는 1회용 설치 EXE가 생성됩니다.",
                   icon: "⬇️",
                 },
                 {
@@ -254,8 +254,8 @@ export default function AgentPage() {
                 },
                 {
                   step: 3,
-                  title: "install.bat 실행",
-                  desc: "ZIP 압축을 해제한 뒤 install.bat을 실행합니다.",
+                  title: "EXE 실행",
+                  desc: "다운로드한 AADS-PC-Agent-Setup.exe를 더블클릭합니다.",
                   icon: "▶️",
                 },
                 {
