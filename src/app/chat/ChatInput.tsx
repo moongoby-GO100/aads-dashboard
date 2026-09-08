@@ -396,7 +396,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
     }, []);
 
     return (
-      <div style={{ display: "flex", flex: 1, alignItems: "flex-end", gap: "4px" }}>
+      <div style={{ display: "flex", flex: 1, alignItems: "flex-end", gap: "4px", minWidth: 0, width: "100%" }}>
         {/* 화면 공유 버튼 + 인디케이터 (onScreenShare 있을 때만) */}
         {onScreenShare && (
           <div style={{ display: screenSize === "mobile" ? "none" : "contents" }}>
@@ -410,7 +410,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
         )}
 
         {/* 텍스트 입력 영역 (슬래시/멘션 메뉴 absolute 기준점) */}
-        <div style={{ position: "relative", flex: 1 }}>
+        <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
           {/* 슬래시 명령어 메뉴 */}
           {showSlash && (
             <SlashCommandMenu
@@ -504,6 +504,7 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 lineHeight: screenSize === "mobile" ? "1.6" : "1.5",
                 minHeight: screenSize === "mobile" ? "54px" : "44px",
                 maxHeight: screenSize === "mobile" ? "220px" : "160px",
+                boxSizing: "border-box",
               }}
               inputMode="text"
               enterKeyHint="send"

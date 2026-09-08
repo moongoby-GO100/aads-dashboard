@@ -251,31 +251,8 @@ const _IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|ico|bmp)$/i;
 function _isFilePath(t: string) { const s = t.trim(); return _FILE_EXT_RE.test(s) || _FILE_PATH_RE.test(s); }
 function _isImagePath(t: string) { return _IMAGE_EXT_RE.test(t.trim()); }
 
-const FILE_CHIP_DOC_MAPPINGS = [
-  { prefix: "public/reports/", basePath: "/root/aads/aads-dashboard/public/reports" },
-  { prefix: "public/exports/", basePath: "/root/aads/aads-dashboard/public/exports" },
-  { prefix: "/root/aads/aads-dashboard/public/reports/", basePath: "/root/aads/aads-dashboard/public/reports" },
-  { prefix: "/root/aads/aads-dashboard/public/exports/", basePath: "/root/aads/aads-dashboard/public/exports" },
-];
-
-function buildFileChipDocsHref(basePath: string, filePath: string): string {
-  const q = new URLSearchParams();
-  q.set("project", "AADS");
-  q.set("base_path", basePath);
-  q.set("file_path", filePath.replace(/^\/+/, ""));
-  return `/docs?${q.toString()}`;
-}
-
 function normalizeFileChipHref(text: string): string {
   const raw = text.trim();
-  for (const mapping of FILE_CHIP_DOC_MAPPINGS) {
-    if (raw.startsWith(mapping.prefix)) {
-      const filePath = raw.slice(mapping.prefix.length);
-      if (filePath && !filePath.includes("..")) {
-        return buildFileChipDocsHref(mapping.basePath, filePath);
-      }
-    }
-  }
   return normalizeDocumentHref(raw);
 }
 

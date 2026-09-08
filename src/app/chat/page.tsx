@@ -3261,6 +3261,7 @@ export default function ChatPage() {
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("agenda");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
+  const [composerWidthPx, setComposerWidthPx] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const isInternalAdmin = Boolean(currentUser?.is_internal_admin);
 
@@ -3581,6 +3582,7 @@ export default function ChatPage() {
   // ── Refs ──
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const composerContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
   const isNearBottomRef = useRef(true);
   const userScrollPauseUntilRef = useRef(0);
@@ -5142,6 +5144,29 @@ export default function ChatPage() {
     check();
     window.addEventListener("resize", debouncedCheck);
     return () => { window.removeEventListener("resize", debouncedCheck); if (debounceTimer) clearTimeout(debounceTimer); };
+  }, []);
+
+  useEffect(() => {
+    const el = composerContainerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const width = Math.round(el.getBoundingClientRect().width || 0);
+      setComposerWidthPx((prev) => (Math.abs(prev - width) >= 4 ? width : prev));
+    };
+
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width || 0);
+      setComposerWidthPx((prev) => (Math.abs(prev - width) >= 4 ? width : prev));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   // ── Load workspaces (restore last active from localStorage) ──
@@ -9083,6 +9108,7 @@ export default function ChatPage() {
     return labels;
   }, [branchPoint, pendingPreviewFiles.length, replyToMessage, streaming, toolTurnInfo, uploading, yellowWarning]);
   const hasMobileComposerContext = screenSize === "mobile" && mobileComposerContextLabels.length > 0;
+  const isComposerCompact = screenSize === "tablet" || (screenSize === "desktop" && composerWidthPx > 0 && composerWidthPx < 760);
 
   useEffect(() => {
     if (!hasMobileComposerContext) setShowMobileComposerContext(false);
@@ -10784,7 +10810,11 @@ export default function ChatPage() {
 
         {/* Input Area */}
         <div
-          className={screenSize === "mobile" ? "ct-mobile-composer" : undefined}
+          ref={composerContainerRef}
+          className={[
+            screenSize === "mobile" ? "ct-mobile-composer" : "",
+            isComposerCompact ? "ct-compact-composer" : "",
+          ].filter(Boolean).join(" ") || undefined}
           style={{
             padding: screenSize === "mobile" ? "8px 8px" : "12px 14px",
             paddingBottom: screenSize === "mobile" ? "calc(10px + env(safe-area-inset-bottom, 0px))" : "12px",
@@ -11585,8 +11615,8 @@ export default function ChatPage() {
           <div style={{
             display: "flex",
             gap: screenSize === "mobile" ? "7px" : "8px",
-            alignItems: screenSize === "tablet" ? "stretch" : "flex-end",
-            flexDirection: screenSize === "tablet" ? "column" : "row",
+            alignItems: isComposerCompact ? "stretch" : "flex-end",
+            flexDirection: isComposerCompact ? "column" : "row",
             flexWrap: "wrap",
           }}>
             {/* Mobile "+" toggle button */}
@@ -11632,12 +11662,12 @@ export default function ChatPage() {
             )}
             {/* Textarea wrapper with integrated send */}
             <div style={{
-              flex: screenSize === "tablet" ? "1 1 100%" : 1,
-              width: screenSize === "tablet" ? "100%" : undefined,
+              flex: isComposerCompact ? "1 1 100%" : 1,
+              width: isComposerCompact ? "100%" : undefined,
               position: "relative",
               display: "flex",
               alignItems: "flex-end",
-              minWidth: screenSize === "mobile" ? 0 : (screenSize === "tablet" ? "100%" : "320px"),
+              minWidth: screenSize === "mobile" ? 0 : (isComposerCompact ? "100%" : "320px"),
             }}>
               <ChatInput
                 ref={chatInputRef}
@@ -11697,11 +11727,11 @@ export default function ChatPage() {
             <div style={{
               display: "flex",
               gap: "6px",
-              flex: screenSize === "tablet" ? "1 1 100%" : "0 0 auto",
-              width: screenSize === "tablet" ? "100%" : undefined,
+              flex: isComposerCompact ? "1 1 100%" : "0 0 auto",
+              width: isComposerCompact ? "100%" : undefined,
               alignItems: "center",
               flexWrap: "wrap",
-              justifyContent: screenSize === "tablet" ? "space-between" : "flex-end",
+              justifyContent: isComposerCompact ? "space-between" : "flex-end",
             }}>
               {/* API 키 상태 표시 */}
               {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
@@ -11874,7 +11904,7 @@ export default function ChatPage() {
                   cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
                   opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.5 : 1,
                   transition: "background 0.2s", whiteSpace: "nowrap",
-                  marginLeft: screenSize === "tablet" ? "auto" : undefined,
+                  marginLeft: isComposerCompact ? "auto" : undefined,
                 }}
               >
                 {uploading ? "업로드중..." : streaming ? (hasInput ? "대기 전송" : "⏹ 중단") : "전송"}

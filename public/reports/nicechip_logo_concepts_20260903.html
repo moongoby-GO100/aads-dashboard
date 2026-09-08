@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>나이스칩 로고 시안 25종</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f2520;
+      --muted: #657061;
+      --line: #dde4d8;
+      --paper: #fbfaf4;
+      --rice: #f2d176;
+      --toast: #ba6c2f;
+      --leaf: #34785a;
+      --red: #c9472d;
+      --navy: #273a4d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #f5f2e9;
+      color: var(--ink);
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 34px 0 56px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      border-bottom: 2px solid #d7ccb7;
+      padding-bottom: 20px;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 56px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 12px 0 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .meta {
+      min-width: 220px;
+      padding: 14px 16px;
+      border: 1px solid #d7ccb7;
+      background: rgba(255,255,255,.5);
+      font-size: 13px;
+      color: #4d554c;
+    }
+
+    .meta strong {
+      display: block;
+      color: var(--ink);
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .concept {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 520px;
+      display: grid;
+      grid-template-rows: minmax(310px, auto) 1fr;
+    }
+
+    .stage {
+      min-height: 310px;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .detail {
+      padding: 20px;
+    }
+
+    .detail h2 {
+      margin: 0 0 8px;
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+
+    .detail p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .tag {
+      border: 1px solid #cfd8ca;
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: #4c5949;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .recommend {
+      grid-column: 1 / -1;
+      background: #fffdf7;
+      border: 1px solid #d7ccb7;
+      border-radius: 8px;
+      padding: 22px;
+      margin-top: 4px;
+    }
+
+    .recommend h2 {
+      margin: 0 0 12px;
+      font-size: 22px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background: white;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    th, td {
+      text-align: left;
+      border-bottom: 1px solid #e8e2d5;
+      padding: 11px 12px;
+      vertical-align: top;
+    }
+
+    th {
+      color: #334036;
+      background: #f4efe3;
+      font-weight: 800;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .logo-svg {
+      width: min(100%, 520px);
+      height: auto;
+      display: block;
+    }
+
+    .stage-a { background: radial-gradient(circle at 50% 48%, #fff7d8 0 30%, #f0d57b 31% 44%, #f8f1df 45% 100%); }
+    .stage-b { background: linear-gradient(135deg, #fff8df, #edf7e6); }
+    .stage-c { background: #f7ead5; }
+    .stage-d { background: linear-gradient(135deg, #f8f7ef, #e6efe5); }
+    .stage-e { background: #fdf6e7; }
+    .stage-f { background: linear-gradient(135deg, #fff4d7, #d8eef1); }
+    .stage-g { background: #182235; }
+    .stage-h { background: linear-gradient(135deg, #f8f2e4, #eef5e8); }
+    .stage-i { background: #fff8ef; }
+    .stage-j { background: linear-gradient(135deg, #fef7df, #f8d4a7); }
+    .stage-k { background: linear-gradient(135deg, #fff3f1, #f7f0ff 48%, #eef8f3); }
+    .stage-l { background: #f8efe7; }
+    .stage-m { background: linear-gradient(135deg, #fbf7ec, #dbe8ff); }
+    .stage-n { background: #fff7f9; }
+    .stage-o { background: linear-gradient(135deg, #eaf7f1, #fff1d6 52%, #f6e8ff); }
+    .stage-p { background: linear-gradient(135deg, #fff2a8, #ff7f50 48%, #57c4b8); }
+    .stage-q { background: #fff4d6; }
+    .stage-r { background: linear-gradient(135deg, #e7f8ff, #fff1a8 55%, #ffe4ed); }
+    .stage-s { background: #fff8e8; }
+    .stage-t { background: linear-gradient(135deg, #f7f0dc, #d7f4ea 52%, #ffe7b2); }
+    .stage-u { background: #171a22; }
+    .stage-v { background: linear-gradient(135deg, #fffdf8, #efe8d7); }
+    .stage-w { background: #f4eee4; }
+    .stage-x { background: linear-gradient(135deg, #f9f2ea, #eef7f2); }
+    .stage-y { background: linear-gradient(135deg, #fff1f7, #ecf8ff 48%, #fff4c5); }
+
+    .swatches {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+
+    @media (max-width: 840px) {
+      header { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      .concept { min-height: 0; }
+      .recommend { grid-column: auto; }
+    }
+
+    @media print {
+      body { background: white; }
+      .page { width: 100%; padding: 0; }
+      .concept { break-inside: avoid; margin-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <h1>나이스칩 로고 시안 25종</h1>
+        <p class="subtitle">누룽지 형태의 라이스칩 상품을 기준으로, 상표 등록 대응력과 매대 인지성을 함께 고려한 로고 방향입니다. 16~20번은 밝은 K-라이스 스낵 포지션, 21~25번은 프리미엄·인스타 감성 채널까지 확장한 추가 권장안입니다.</p>
+      </div>
+      <div class="meta">
+        <strong>NICECHIP / 나이스칩</strong>
+        상품: 누룽지형 라이스칩<br>
+        방향: 기분 좋은 과자, 건강한 과자<br>
+        작성: 2026-09-03 KST<br>
+        업데이트: 2026-09-03 19:12 KST
+      </div>
+    </header>
+
+    <section class="recommend" aria-label="외부 벤치마킹 요약">
+      <h2>외부 벤치마킹 반영점</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>벤치마크</th>
+            <th>관찰 포인트</th>
+            <th>나이스칩 반영</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dang Thai Rice Chips</td>
+            <td>태국식 라이스칩 원물·전통 레시피를 전면에 세우고, 식물성·글루텐프리·무첨가 메시지를 함께 노출합니다.</td>
+            <td>6번은 쌀알과 바삭한 결을 살린 원물형, 8번은 전통 간식의 신뢰감을 강화했습니다.</td>
+          </tr>
+          <tr>
+            <td>Popchips</td>
+            <td>진한 배경, 큰 제품 이미지, 장난스러운 타이포그래피로 건강 스낵도 지루하지 않게 보이게 합니다.</td>
+            <td>7번은 어두운 프리미엄 배경과 네온 컬러, 10번은 진열대용 팝 컬러로 확장했습니다.</td>
+          </tr>
+          <tr>
+            <td>Hippeas</td>
+            <td>식물성 단백질, 유쾌한 문구, 고채도 색상으로 건강함과 재미를 동시에 전달합니다.</td>
+            <td>9번은 웃는 마스코트와 휴대 간식 이미지를 강화했습니다.</td>
+          </tr>
+          <tr>
+            <td>Siete Chips</td>
+            <td>전통성, 가족성, 원료 차별점을 조합해 건강 스낵을 생활 식탁 브랜드로 확장합니다.</td>
+            <td>8번은 전통 문장형, 6번은 원료 중심 클린 라벨 톤으로 정리했습니다.</td>
+          </tr>
+          <tr>
+            <td>감성 식품 인스타 피드</td>
+            <td>파스텔 배경, 손글씨 느낌, 작은 소품 아이콘, 카페 메뉴판 같은 구성이 저장·공유하기 쉬운 이미지를 만듭니다.</td>
+            <td>11~15번은 피드 썸네일, 릴스 커버, 스토리 스티커까지 확장 가능한 감성형으로 추가했습니다.</td>
+          </tr>
+          <tr>
+            <td>K-스낵 이미지 검색 벤치마크</td>
+            <td>한글 제품명이 크고, 밝은 원색 대비와 캐릭터·칩 실루엣이 작은 썸네일에서도 먼저 보입니다.</td>
+            <td>16~20번은 1번의 해피 배지 계열을 발전시켜 라이스칩임을 즉시 읽히는 대중 스낵형으로 확장했습니다.</td>
+          </tr>
+          <tr>
+            <td>프리미엄 그로서리·선물 간식</td>
+            <td>검정·금색·여백·씰 구조를 쓰되, 너무 건강식품처럼 딱딱해 보이지 않도록 식감 포인트를 작게 넣습니다.</td>
+            <td>21~25번은 고급 선물, 카페 납품, 온라인몰 썸네일, 인스타 쇼핑 태그용으로 분리했습니다.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="grid" aria-label="나이스칩 로고 시안">
+      <article class="concept">
+        <div class="stage stage-a">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 1 해피 라이스 배지">
+            <defs>
+              <filter id="shadowA" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#8a541f" flood-opacity=".2"/>
+              </filter>
+            </defs>
+            <circle cx="310" cy="160" r="116" fill="#f4cd62" stroke="#8c5625" stroke-width="10" filter="url(#shadowA)"/>
+            <circle cx="270" cy="130" r="10" fill="#74411f"/>
+            <circle cx="350" cy="130" r="10" fill="#74411f"/>
+            <path d="M272 168c23 25 54 25 77 0" fill="none" stroke="#74411f" stroke-width="10" stroke-linecap="round"/>
+            <path d="M214 101c-28-22-47-19-63 6 30 12 50 10 63-6Z" fill="#477f52"/>
+            <path d="M405 101c28-22 47-19 63 6-30 12-50 10-63-6Z" fill="#477f52"/>
+            <text x="310" y="278" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="56" fill="#1f2520">NICE CHIP</text>
+            <text x="310" y="320" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="31" font-weight="900" fill="#6b3f21">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>1. 해피 라이스 배지</h2>
+          <p>웃는 누룽지 얼굴을 중심으로 “기분 좋은 과자” 의미를 가장 직관적으로 전달합니다. 아동·가족 간식 매대에서 빠르게 인지되는 방향입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#f4cd62"></span>
+            <span class="swatch" style="background:#74411f"></span>
+            <span class="swatch" style="background:#477f52"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">친근함</span>
+            <span class="tag">가족 간식</span>
+            <span class="tag">패키지 전면 적합</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-b">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 2 건강한 잎사귀 워드마크">
+            <path d="M114 174c54-88 151-113 260-73 63 23 104 62 132 111-94 45-198 48-293 11-37-14-70-30-99-49Z" fill="#f2cf73" stroke="#356e50" stroke-width="8"/>
+            <path d="M151 169c100 13 199 19 314 44" fill="none" stroke="#356e50" stroke-width="8" stroke-linecap="round"/>
+            <path d="M424 74c42-34 79-34 111 0-44 19-80 19-111 0Z" fill="#4f966b"/>
+            <text x="310" y="178" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="66" fill="#263b2d">NICE</text>
+            <text x="310" y="235" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="58" fill="#b85c2a">CHIP</text>
+            <text x="310" y="292" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="30" font-weight="900" fill="#263b2d">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>2. 건강한 잎사귀 워드마크</h2>
+          <p>쌀알·잎·칩 형태를 결합해 건강한 원물 간식 이미지를 강화합니다. “나이스”의 좋은 느낌보다 “건강한 과자” 포지션에 적합합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#f2cf73"></span>
+            <span class="swatch" style="background:#356e50"></span>
+            <span class="swatch" style="background:#b85c2a"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">건강 지향</span>
+            <span class="tag">원물감</span>
+            <span class="tag">온라인 상세페이지 적합</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-c">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 3 바삭한 누룽지 스탬프">
+            <rect x="98" y="68" width="424" height="220" rx="18" fill="#fff8e4" stroke="#28394c" stroke-width="10"/>
+            <path d="M129 100h362M129 256h362" stroke="#c9472d" stroke-width="10" stroke-linecap="round"/>
+            <text x="310" y="162" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="74" font-weight="900" fill="#28394c">나이스칩</text>
+            <text x="310" y="217" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="38" fill="#c9472d">CRISPY RICE</text>
+            <circle cx="151" cy="180" r="18" fill="#f1c55f"/>
+            <circle cx="469" cy="180" r="18" fill="#f1c55f"/>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>3. 바삭한 누룽지 스탬프</h2>
+          <p>한글 상표명을 강하게 키운 시안입니다. 국내 판매와 상표 인지에는 가장 안정적이며, 스탬프 구조라 봉투·박스·스티커 적용이 쉽습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fff8e4"></span>
+            <span class="swatch" style="background:#28394c"></span>
+            <span class="swatch" style="background:#c9472d"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">한글 인지 강함</span>
+            <span class="tag">전통 간식</span>
+            <span class="tag">상표 노출 우수</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-d">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 4 프리미엄 라이스 씰">
+            <circle cx="310" cy="176" r="128" fill="#fffdf6" stroke="#253d35" stroke-width="8"/>
+            <circle cx="310" cy="176" r="104" fill="none" stroke="#d3a43f" stroke-width="5" stroke-dasharray="10 10"/>
+            <path d="M241 170c22-52 116-52 138 0 15 36-7 72-69 98-62-26-84-62-69-98Z" fill="#f0c866" stroke="#253d35" stroke-width="7"/>
+            <path d="M278 154c-17-36-6-65 32-86 38 21 49 50 32 86" fill="none" stroke="#4d8a61" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="800" fill="#253d35">PREMIUM RICE SNACK</text>
+            <text x="310" y="179" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="49" font-weight="800" fill="#253d35">NICE</text>
+            <text x="310" y="222" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="43" font-weight="800" fill="#253d35">CHIP</text>
+            <text x="310" y="326" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="27" font-weight="900" fill="#253d35">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>4. 프리미엄 라이스 씰</h2>
+          <p>선물세트·로컬푸드·건강식품 채널까지 확장 가능한 고급형 방향입니다. 영어 워드마크 비중이 높아 수출형 패키지에도 쓰기 쉽습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffdf6"></span>
+            <span class="swatch" style="background:#253d35"></span>
+            <span class="swatch" style="background:#d3a43f"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">프리미엄</span>
+            <span class="tag">수출 확장</span>
+            <span class="tag">선물세트 적합</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-e">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 5 팝 스낵 패키지형">
+            <path d="M129 109c48-59 303-59 363 0 28 28 28 119 0 147-60 59-315 59-363 0-28-35-28-112 0-147Z" fill="#c9472d"/>
+            <path d="M157 125c44-39 270-39 308 0 20 21 20 91 0 112-38 39-264 39-308 0-20-25-20-87 0-112Z" fill="#fff3cc"/>
+            <path d="M104 142c-33 8-53 25-60 52 32 6 58-3 78-26" fill="#f0c866" stroke="#7a4923" stroke-width="7" stroke-linejoin="round"/>
+            <path d="M516 142c33 8 53 25 60 52-32 6-58-3-78-26" fill="#f0c866" stroke="#7a4923" stroke-width="7" stroke-linejoin="round"/>
+            <text x="310" y="194" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="66" fill="#26344a">NICE CHIP</text>
+            <text x="310" y="241" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="34" font-weight="900" fill="#7a4923">나이스칩</text>
+            <text x="310" y="285" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="22" font-weight="800" fill="#26344a">바삭한 누룽지 라이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>5. 팝 스낵 패키지형</h2>
+          <p>편의점·스낵 매대에서 강하게 보이는 방향입니다. 붉은 외곽과 큰 영문이 눈에 띄며, “바삭한 누룽지 라이스칩” 설명 문구와 함께 쓰기 좋습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#c9472d"></span>
+            <span class="swatch" style="background:#fff3cc"></span>
+            <span class="swatch" style="background:#26344a"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">매대 주목도</span>
+            <span class="tag">스낵 브랜드</span>
+            <span class="tag">소매 패키지 적합</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-f">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 6 클린 라이스 라벨">
+            <rect x="78" y="74" width="464" height="220" rx="34" fill="#fffdf4" stroke="#2d6f73" stroke-width="9"/>
+            <path d="M142 206c76-68 210-83 336-28" fill="none" stroke="#e0a937" stroke-width="18" stroke-linecap="round"/>
+            <path d="M144 170c86-58 196-68 328-22" fill="none" stroke="#f3d27b" stroke-width="13" stroke-linecap="round"/>
+            <ellipse cx="192" cy="133" rx="36" ry="17" fill="#f0c15a" stroke="#8b5b21" stroke-width="5" transform="rotate(-19 192 133)"/>
+            <ellipse cx="430" cy="242" rx="39" ry="18" fill="#f0c15a" stroke="#8b5b21" stroke-width="5" transform="rotate(17 430 242)"/>
+            <text x="310" y="169" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="58" fill="#183c42">NICECHIP</text>
+            <text x="310" y="218" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="30" font-weight="900" fill="#2d6f73">나이스칩</text>
+            <text x="310" y="255" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="18" font-weight="800" fill="#8b5b21">WHOLE RICE · LIGHT CRUNCH</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>6. 클린 라이스 라벨</h2>
+          <p>Dang·Siete 계열의 원료 중심 표현을 참고한 클린 라벨형입니다. 건강식품·온라인몰·선물세트에서 과장 없이 믿음을 주는 방향입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffdf4"></span>
+            <span class="swatch" style="background:#2d6f73"></span>
+            <span class="swatch" style="background:#e0a937"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">원료 중심</span>
+            <span class="tag">클린 라벨</span>
+            <span class="tag">건강 스낵</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-g">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 7 네온 크런치 팝">
+            <rect x="95" y="82" width="430" height="210" rx="30" fill="#1f2a3d" stroke="#f8d84e" stroke-width="8"/>
+            <path d="M176 126l38 34-48 22 51 29-40 32" fill="none" stroke="#ff6b4a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M444 124l-37 35 49 23-51 29 39 31" fill="none" stroke="#52d0c4" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="310" cy="188" r="74" fill="#f2cb55" stroke="#fff4bf" stroke-width="8"/>
+            <path d="M278 177h64M292 209c14 12 24 12 38 0" stroke="#1f2a3d" stroke-width="9" stroke-linecap="round"/>
+            <text x="310" y="72" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="31" fill="#52d0c4">CRUNCH POP</text>
+            <text x="310" y="323" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="52" fill="#fff4bf">NICE CHIP</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>7. 네온 크런치 팝</h2>
+          <p>Popchips식 고대비·장난스러운 에너지를 반영했습니다. 젊은 편의점 스낵, 매운맛·치즈맛 같은 확장 플레이버 라인에 적합합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#1f2a3d"></span>
+            <span class="swatch" style="background:#f8d84e"></span>
+            <span class="swatch" style="background:#52d0c4"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">젊은 스낵</span>
+            <span class="tag">고대비</span>
+            <span class="tag">편의점 진열</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-h">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 8 장인 누룽지 문장">
+            <path d="M310 50c92 0 158 52 158 122 0 92-92 129-158 154-66-25-158-62-158-154 0-70 66-122 158-122Z" fill="#fffaf0" stroke="#34402f" stroke-width="8"/>
+            <path d="M226 139c52-30 116-30 168 0M226 178c52 28 116 28 168 0" fill="none" stroke="#c5903d" stroke-width="11" stroke-linecap="round"/>
+            <path d="M260 111c-7-31 10-54 50-69 40 15 57 38 50 69" fill="none" stroke="#5f8f56" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="172" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="52" font-weight="900" fill="#34402f">나이스칩</text>
+            <text x="310" y="216" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="29" font-weight="800" fill="#8c5f28">NICE CHIP</text>
+            <text x="310" y="262" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="20" font-weight="800" fill="#5f6a50">구운 쌀의 바삭함</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>8. 장인 누룽지 문장</h2>
+          <p>전통 누룽지와 고급 식품 이미지를 결합한 문장형입니다. 로컬푸드, 백화점 식품관, 답례품 패키지처럼 신뢰가 중요한 채널에 맞습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffaf0"></span>
+            <span class="swatch" style="background:#34402f"></span>
+            <span class="swatch" style="background:#c5903d"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">전통감</span>
+            <span class="tag">프리미엄</span>
+            <span class="tag">답례품</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-i">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 9 데일리 스마일 캐릭터">
+            <circle cx="310" cy="155" r="96" fill="#f5c863" stroke="#7c4a23" stroke-width="8"/>
+            <path d="M249 127c21-14 42-14 63 0M308 127c21-14 42-14 63 0" fill="none" stroke="#7c4a23" stroke-width="8" stroke-linecap="round"/>
+            <path d="M263 169c27 35 69 35 96 0" fill="none" stroke="#7c4a23" stroke-width="10" stroke-linecap="round"/>
+            <path d="M232 211c-34 25-48 53-42 83 34-7 58-25 72-55" fill="#7bb36b" stroke="#3b6d45" stroke-width="6"/>
+            <path d="M388 211c34 25 48 53 42 83-34-7-58-25-72-55" fill="#7bb36b" stroke="#3b6d45" stroke-width="6"/>
+            <text x="310" y="294" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="58" fill="#e85a38">NICECHIP</text>
+            <text x="310" y="331" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="25" font-weight="900" fill="#3b6d45">좋은 하루 한입</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>9. 데일리 스마일 캐릭터</h2>
+          <p>Hippeas식 유쾌한 캐릭터 톤을 나이스칩에 맞춘 방향입니다. 어린이 간식, 학교·가족 채널, SNS 스티커 확장에 강합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#f5c863"></span>
+            <span class="swatch" style="background:#e85a38"></span>
+            <span class="swatch" style="background:#7bb36b"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">캐릭터형</span>
+            <span class="tag">가족 간식</span>
+            <span class="tag">SNS 확장</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-j">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 10 선라이즈 마켓 팩">
+            <path d="M103 234c45-91 119-136 207-136s162 45 207 136H103Z" fill="#ffe184" stroke="#7c4a23" stroke-width="8"/>
+            <path d="M154 234c36-53 87-80 156-80s120 27 156 80" fill="none" stroke="#ef6f3e" stroke-width="13" stroke-linecap="round"/>
+            <path d="M111 256h398" stroke="#263a4b" stroke-width="14" stroke-linecap="round"/>
+            <text x="310" y="198" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="60" fill="#263a4b">NICE</text>
+            <text x="310" y="248" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="52" fill="#263a4b">CHIP</text>
+            <text x="310" y="305" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="30" font-weight="900" fill="#7c4a23">나이스칩</text>
+            <circle cx="189" cy="116" r="17" fill="#ef6f3e"/>
+            <circle cx="433" cy="116" r="17" fill="#ef6f3e"/>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>10. 선라이즈 마켓 팩</h2>
+          <p>매대에서 멀리서도 읽히는 큰 영문과 누룽지색 반원을 결합했습니다. 대형마트·행사 진열·묶음팩용으로 가장 시원하게 보이는 방향입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#ffe184"></span>
+            <span class="swatch" style="background:#ef6f3e"></span>
+            <span class="swatch" style="background:#263a4b"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">마트 진열</span>
+            <span class="tag">대형 로고</span>
+            <span class="tag">묶음팩</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-k">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 11 파스텔 피크닉 라벨">
+            <rect x="92" y="62" width="436" height="236" rx="36" fill="#fffdfa" stroke="#d88f98" stroke-width="7"/>
+            <circle cx="180" cy="112" r="28" fill="#f5cf75"/>
+            <circle cx="455" cy="250" r="24" fill="#9ed0bc"/>
+            <path d="M128 244c74-52 151-57 230-15 48 25 91 28 129 8" fill="none" stroke="#d88f98" stroke-width="10" stroke-linecap="round"/>
+            <path d="M247 132c45-33 84-33 126 0-15 35-111 35-126 0Z" fill="#f3c564" stroke="#73513a" stroke-width="6"/>
+            <path d="M279 120c-4-19 7-35 31-48 24 13 35 29 31 48" fill="none" stroke="#79a981" stroke-width="7" stroke-linecap="round"/>
+            <text x="310" y="190" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-weight="800" fill="#583c45">Nice Chip</text>
+            <text x="310" y="234" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="28" font-weight="900" fill="#73513a">나이스칩</text>
+            <text x="310" y="270" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="18" font-weight="800" fill="#8a7174">picnic rice snack</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>11. 파스텔 피크닉 라벨</h2>
+          <p>피크닉 매트 위에 놓인 건강 간식처럼 보이는 감성형입니다. 인스타 피드, 선물 박스, 답례품 카드에 부드럽게 어울립니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fff3f1"></span>
+            <span class="swatch" style="background:#d88f98"></span>
+            <span class="swatch" style="background:#9ed0bc"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">인스타 감성</span>
+            <span class="tag">피크닉</span>
+            <span class="tag">선물 패키지</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-l">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 12 카페 드로잉 워드마크">
+            <rect x="116" y="64" width="388" height="238" rx="8" fill="#fffaf1" stroke="#6d5141" stroke-width="7"/>
+            <path d="M150 104h320M150 263h320" stroke="#c7a17a" stroke-width="5" stroke-linecap="round"/>
+            <path d="M210 164c44-39 112-39 156 0 17 15 17 43 0 58-44 39-112 39-156 0-17-15-17-43 0-58Z" fill="#efc76f" stroke="#6d5141" stroke-width="6"/>
+            <path d="M384 158c32-18 61-11 82 21-29 16-58 9-82-21Z" fill="#a5bf8c" stroke="#6d5141" stroke-width="5"/>
+            <path d="M233 189c31-13 64-13 98 0" fill="none" stroke="#fff7d6" stroke-width="7" stroke-linecap="round"/>
+            <text x="310" y="138" text-anchor="middle" font-family="'Trebuchet MS', Arial, sans-serif" font-size="34" font-weight="800" fill="#6d5141">daily nice</text>
+            <text x="310" y="255" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="43" font-weight="900" fill="#6d5141">나이스칩</text>
+            <text x="310" y="291" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" font-weight="800" fill="#b16a5f">rice cafe crunch</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>12. 카페 드로잉 워드마크</h2>
+          <p>카페 메뉴판과 수제 쿠키 라벨의 느낌을 섞었습니다. 소규모 편집숍, 카페 납품, 감성 리뷰 콘텐츠에 잘 맞는 방향입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffaf1"></span>
+            <span class="swatch" style="background:#6d5141"></span>
+            <span class="swatch" style="background:#b16a5f"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">카페 감성</span>
+            <span class="tag">수제 느낌</span>
+            <span class="tag">편집숍</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-m">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 13 필름 무드 스낵컷">
+            <rect x="104" y="58" width="412" height="246" rx="20" fill="#2f3b4f"/>
+            <rect x="134" y="88" width="352" height="170" rx="10" fill="#fff2d8"/>
+            <circle cx="174" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="214" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="254" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="294" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="334" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="374" cy="281" r="10" fill="#fff2d8"/>
+            <circle cx="414" cy="281" r="10" fill="#fff2d8"/>
+            <path d="M207 160c40-54 149-54 190 0 29 38-4 76-95 86-91-10-124-48-95-86Z" fill="#efbd5b" stroke="#714c2f" stroke-width="6"/>
+            <path d="M240 151c39-13 82-13 124 0M250 189c33 10 70 10 112 0" fill="none" stroke="#fff6c9" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="127" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="40" fill="#2f3b4f">NICECHIP</text>
+            <text x="310" y="335" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="29" font-weight="900" fill="#2f3b4f">오늘의 바삭한 컷</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>13. 필름 무드 스낵컷</h2>
+          <p>필름 프레임 안에 누룽지칩을 담은 시안입니다. 릴스 커버, 후기 이미지, “오늘의 간식” 콘텐츠에서 사진처럼 쓰기 좋습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#2f3b4f"></span>
+            <span class="swatch" style="background:#fff2d8"></span>
+            <span class="swatch" style="background:#efbd5b"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">릴스 커버</span>
+            <span class="tag">후기 콘텐츠</span>
+            <span class="tag">감성 사진</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-n">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 14 리본 기프트 칩">
+            <path d="M132 117h356v163H132Z" fill="#fffdf8" stroke="#b96d85" stroke-width="7"/>
+            <path d="M132 161h356" stroke="#e8b7c4" stroke-width="18"/>
+            <path d="M286 84c-48-21-81-11-98 31 42 14 75 4 98-31Z" fill="#e8b7c4" stroke="#b96d85" stroke-width="6"/>
+            <path d="M334 84c48-21 81-11 98 31-42 14-75 4-98-31Z" fill="#e8b7c4" stroke="#b96d85" stroke-width="6"/>
+            <path d="M306 80h28v200h-28Z" fill="#e8b7c4"/>
+            <circle cx="310" cy="190" r="62" fill="#f3c262" stroke="#7d5132" stroke-width="6"/>
+            <path d="M281 178c21 19 38 19 59 0" fill="none" stroke="#7d5132" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="324" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="800" fill="#7d4257">Nice Chip</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>14. 리본 기프트 칩</h2>
+          <p>가볍게 선물하기 좋은 과자 이미지를 전면화했습니다. 답례품, 시즌 한정 패키지, 공동구매 썸네일에서 감성적인 반응을 노릴 수 있습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fff7f9"></span>
+            <span class="swatch" style="background:#b96d85"></span>
+            <span class="swatch" style="background:#f3c262"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">선물감</span>
+            <span class="tag">시즌 패키지</span>
+            <span class="tag">공동구매</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-o">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 15 소프트 스토어 스티커">
+            <path d="M164 83h292c31 0 56 25 56 56v83c0 31-25 56-56 56H164c-31 0-56-25-56-56v-83c0-31 25-56 56-56Z" fill="#fffef8" stroke="#4f7f70" stroke-width="7"/>
+            <path d="M195 123c-23 21-27 47-12 78 29-11 44-32 45-64" fill="#b9dfd2" stroke="#4f7f70" stroke-width="5"/>
+            <path d="M425 123c23 21 27 47 12 78-29-11-44-32-45-64" fill="#f2cf78" stroke="#8c6331" stroke-width="5"/>
+            <circle cx="310" cy="178" r="77" fill="#f5cc6d" stroke="#765339" stroke-width="7"/>
+            <path d="M276 162h1M343 162h1" stroke="#765339" stroke-width="13" stroke-linecap="round"/>
+            <path d="M278 191c20 17 44 17 64 0" fill="none" stroke="#765339" stroke-width="9" stroke-linecap="round"/>
+            <text x="310" y="57" text-anchor="middle" font-family="'Trebuchet MS', Arial, sans-serif" font-size="26" font-weight="800" fill="#4f7f70">soft crunch store</text>
+            <text x="310" y="299" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="49" fill="#4f3a63">NICE CHIP</text>
+            <text x="310" y="334" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="22" font-weight="900" fill="#4f7f70">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>15. 소프트 스토어 스티커</h2>
+          <p>동네 감성 스토어의 스티커처럼 귀엽고 저장하기 쉬운 방향입니다. 온라인몰 프로필 이미지, 택배 동봉 스티커, 스토리 하이라이트에 적합합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#b9dfd2"></span>
+            <span class="swatch" style="background:#f2cf78"></span>
+            <span class="swatch" style="background:#4f3a63"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">스토어 감성</span>
+            <span class="tag">스티커 확장</span>
+            <span class="tag">온라인몰</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-p">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 16 K 라이스 팝 배지">
+            <circle cx="310" cy="174" r="126" fill="#ffe56f" stroke="#1f5c69" stroke-width="10"/>
+            <path d="M188 111c35-34 72-44 111-30-22 42-59 57-111 30Z" fill="#62b974" stroke="#1f5c69" stroke-width="6"/>
+            <path d="M432 111c-35-34-72-44-111-30 22 42 59 57 111 30Z" fill="#ff8b5d" stroke="#1f5c69" stroke-width="6"/>
+            <path d="M247 156c18-16 38-16 56 0M318 156c18-16 38-16 56 0" fill="none" stroke="#6d3e26" stroke-width="9" stroke-linecap="round"/>
+            <path d="M257 198c34 31 72 31 106 0" fill="none" stroke="#6d3e26" stroke-width="11" stroke-linecap="round"/>
+            <text x="310" y="286" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="54" fill="#1f5c69">K-RICE POP</text>
+            <text x="310" y="326" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="29" font-weight="900" fill="#6d3e26">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>16. K-라이스 팝 배지</h2>
+          <p>1번의 웃는 누룽지 배지를 K-스낵처럼 더 밝고 크게 확장했습니다. 이미지 검색 썸네일과 인스타 피드에서 가장 빠르게 “쌀 과자”로 읽히는 방향입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#ffe56f"></span>
+            <span class="swatch" style="background:#ff8b5d"></span>
+            <span class="swatch" style="background:#1f5c69"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">K-라이스</span>
+            <span class="tag">밝은 스낵</span>
+            <span class="tag">썸네일 강함</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-q">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 17 해피 누룽 볼드팩">
+            <rect x="94" y="78" width="432" height="218" rx="32" fill="#ffffff" stroke="#e94f32" stroke-width="9"/>
+            <path d="M129 121h362" stroke="#ffc83d" stroke-width="20" stroke-linecap="round"/>
+            <path d="M144 251h332" stroke="#4eb3a8" stroke-width="14" stroke-linecap="round"/>
+            <ellipse cx="177" cy="185" rx="44" ry="29" fill="#e8b64a" stroke="#7b4b27" stroke-width="6" transform="rotate(-16 177 185)"/>
+            <ellipse cx="443" cy="185" rx="44" ry="29" fill="#e8b64a" stroke="#7b4b27" stroke-width="6" transform="rotate(16 443 185)"/>
+            <text x="310" y="179" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="72" font-weight="900" fill="#25344f">나이스칩</text>
+            <text x="310" y="224" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="31" fill="#e94f32">HAPPY RICE CRUNCH</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>17. 해피 누룽 볼드팩</h2>
+          <p>국내 과자 로고처럼 한글을 전면에 둔 대중형입니다. 봉투 전면, 1+1 행사, 온라인 썸네일에서 가장 안정적으로 읽힙니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#e94f32"></span>
+            <span class="swatch" style="background:#ffc83d"></span>
+            <span class="swatch" style="background:#25344f"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">한글 대형</span>
+            <span class="tag">행사 진열</span>
+            <span class="tag">대중형</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-r">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 18 좋은하루 라이스 캐릭터">
+            <path d="M164 102c45-39 247-39 292 0 35 30 35 128 0 158-45 39-247 39-292 0-35-30-35-128 0-158Z" fill="#fffdf7" stroke="#396b9f" stroke-width="8"/>
+            <circle cx="310" cy="173" r="80" fill="#f5cf62" stroke="#7c4e28" stroke-width="7"/>
+            <circle cx="280" cy="153" r="9" fill="#7c4e28"/>
+            <circle cx="340" cy="153" r="9" fill="#7c4e28"/>
+            <path d="M277 187c21 22 45 22 66 0" fill="none" stroke="#7c4e28" stroke-width="9" stroke-linecap="round"/>
+            <path d="M209 114l-36-28M411 114l36-28M210 247l-36 30M410 247l36 30" stroke="#ef6e89" stroke-width="10" stroke-linecap="round"/>
+            <text x="310" y="67" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="31" font-weight="900" fill="#396b9f">좋은 하루 한입</text>
+            <text x="310" y="316" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="48" fill="#ef6e89">NICE CHIP</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>18. 좋은하루 라이스 캐릭터</h2>
+          <p>가족 간식과 SNS 스티커 확장을 동시에 노린 캐릭터형입니다. “나이스”의 기분 좋은 의미가 가장 직접적으로 보입니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#f5cf62"></span>
+            <span class="swatch" style="background:#396b9f"></span>
+            <span class="swatch" style="background:#ef6e89"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">기분 좋은 과자</span>
+            <span class="tag">캐릭터</span>
+            <span class="tag">가족 간식</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-s">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 19 컬러 플레이버 리본">
+            <path d="M116 116h388v132H116Z" fill="#ffffff" stroke="#313d55" stroke-width="8"/>
+            <path d="M116 116h388v42H116Z" fill="#f05a3c"/>
+            <path d="M116 248h388v-38H116Z" fill="#62b96e"/>
+            <circle cx="166" cy="182" r="33" fill="#f3c74f" stroke="#7a4d28" stroke-width="6"/>
+            <circle cx="454" cy="182" r="33" fill="#f3c74f" stroke="#7a4d28" stroke-width="6"/>
+            <text x="310" y="194" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="58" fill="#313d55">NICECHIP</text>
+            <text x="310" y="290" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="30" font-weight="900" fill="#313d55">맛별 라인업 확장형</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>19. 컬러 플레이버 리본</h2>
+          <p>맛별 컬러 확장을 전제로 만든 리본형입니다. 오리지널, 달콤, 매콤, 치즈 등 향후 SKU가 늘 때 같은 구조로 운영하기 좋습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#f05a3c"></span>
+            <span class="swatch" style="background:#62b96e"></span>
+            <span class="swatch" style="background:#313d55"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">맛별 확장</span>
+            <span class="tag">리본 구조</span>
+            <span class="tag">소매 패키지</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-t">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 20 서울 스낵 마켓">
+            <path d="M103 237c36-79 105-119 207-119s171 40 207 119H103Z" fill="#ffd765" stroke="#35524a" stroke-width="8"/>
+            <path d="M151 237c22-34 51-57 87-68M469 237c-22-34-51-57-87-68" fill="none" stroke="#ee744d" stroke-width="12" stroke-linecap="round"/>
+            <rect x="174" y="82" width="272" height="64" rx="32" fill="#fffdf4" stroke="#35524a" stroke-width="7"/>
+            <text x="310" y="126" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="31" font-weight="900" fill="#35524a">서울 라이스 스낵</text>
+            <text x="310" y="222" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="57" fill="#35524a">NICE CHIP</text>
+            <text x="310" y="284" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="39" font-weight="900" fill="#ee744d">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>20. 서울 스낵 마켓</h2>
+          <p>K-푸드 느낌을 살린 밝은 마켓형입니다. 외국인 관광객, 온라인 선물세트, 로컬 편집숍에서도 “한국 쌀 스낵” 신호가 분명합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#ffd765"></span>
+            <span class="swatch" style="background:#35524a"></span>
+            <span class="swatch" style="background:#ee744d"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">K-푸드</span>
+            <span class="tag">관광 선물</span>
+            <span class="tag">마켓형</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-u">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 21 고메 블랙 라이스 씰">
+            <circle cx="310" cy="180" r="128" fill="#20242f" stroke="#d8ad55" stroke-width="8"/>
+            <circle cx="310" cy="180" r="101" fill="none" stroke="#f3ddb0" stroke-width="4"/>
+            <path d="M245 174c28-55 102-55 130 0 18 36-4 72-65 94-61-22-83-58-65-94Z" fill="#d8ad55" stroke="#f3ddb0" stroke-width="6"/>
+            <path d="M279 154c-9-34 2-57 31-69 29 12 40 35 31 69" fill="none" stroke="#8fbf8a" stroke-width="7" stroke-linecap="round"/>
+            <text x="310" y="58" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="24" font-weight="800" fill="#f3ddb0">GOURMET RICE CRUNCH</text>
+            <text x="310" y="190" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="50" font-weight="800" fill="#f3ddb0">Nice Chip</text>
+            <text x="310" y="319" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="27" font-weight="900" fill="#d8ad55">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>21. 고메 블랙 라이스 씰</h2>
+          <p>프리미엄 선물세트와 백화점 식품관용입니다. 검정과 금색을 쓰되 쌀알 오브제를 중앙에 둬 건강식품보다 고급 과자처럼 보이게 했습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#20242f"></span>
+            <span class="swatch" style="background:#d8ad55"></span>
+            <span class="swatch" style="background:#f3ddb0"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">프리미엄</span>
+            <span class="tag">백화점</span>
+            <span class="tag">선물세트</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-v">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 22 미니멀 골드 워드마크">
+            <rect x="123" y="87" width="374" height="186" rx="12" fill="#fffdf7" stroke="#2b342f" stroke-width="6"/>
+            <path d="M194 132h232M194 232h232" stroke="#c89c45" stroke-width="5" stroke-linecap="round"/>
+            <ellipse cx="310" cy="182" rx="94" ry="43" fill="#e8bd5c" stroke="#2b342f" stroke-width="6"/>
+            <path d="M248 179c40-13 82-13 124 0" fill="none" stroke="#fff5c9" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="76" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="23" font-weight="800" fill="#2b342f">NICE CHIP</text>
+            <text x="310" y="318" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="34" font-weight="900" fill="#2b342f">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>22. 미니멀 골드 워드마크</h2>
+          <p>여백과 단정한 선으로 고급 온라인몰에 맞춘 방향입니다. 작은 로고, 띠지, 감사카드, 상세페이지 상단에 부담 없이 쓰기 좋습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffdf7"></span>
+            <span class="swatch" style="background:#c89c45"></span>
+            <span class="swatch" style="background:#2b342f"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">미니멀</span>
+            <span class="tag">고급몰</span>
+            <span class="tag">띠지 적용</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-w">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 23 라이스 오브제 포스터">
+            <rect x="142" y="52" width="336" height="256" rx="8" fill="#fff9ed" stroke="#6f4f3a" stroke-width="7"/>
+            <path d="M210 113c71-37 129-37 200 0 26 14 26 49 0 63-71 37-129 37-200 0-26-14-26-49 0-63Z" fill="#eac15f" stroke="#6f4f3a" stroke-width="6"/>
+            <path d="M234 139c45-16 94-16 148 0M242 169c36 10 79 10 129 0" fill="none" stroke="#fff1bc" stroke-width="8" stroke-linecap="round"/>
+            <text x="310" y="238" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="800" fill="#6f4f3a">Nice Chip</text>
+            <text x="310" y="275" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="22" font-weight="900" fill="#a26654">rice object snack</text>
+            <circle cx="169" cy="78" r="11" fill="#a26654"/>
+            <circle cx="451" cy="284" r="11" fill="#8fa56f"/>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>23. 라이스 오브제 포스터</h2>
+          <p>제품 실사를 넣기 전에도 감성 포스터처럼 보이는 시안입니다. 인스타그램 피드 첫 이미지, 팝업 스토어 포스터, 메뉴판에 적합합니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fff9ed"></span>
+            <span class="swatch" style="background:#6f4f3a"></span>
+            <span class="swatch" style="background:#a26654"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">인스타 포스터</span>
+            <span class="tag">오브제</span>
+            <span class="tag">팝업 스토어</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-x">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 24 감성 공방 라벨">
+            <path d="M127 83h366v218H127Z" fill="#fffdf8" stroke="#4d6d5d" stroke-width="7"/>
+            <path d="M161 118h298M161 266h298" stroke="#d8a95a" stroke-width="6" stroke-linecap="round"/>
+            <path d="M236 158c42-32 106-32 148 0 23 18 23 48 0 66-42 32-106 32-148 0-23-18-23-48 0-66Z" fill="#edc66b" stroke="#6b513d" stroke-width="6"/>
+            <path d="M276 148c-6-21 5-39 34-54 29 15 40 33 34 54" fill="none" stroke="#78a46d" stroke-width="7" stroke-linecap="round"/>
+            <text x="310" y="137" text-anchor="middle" font-family="'Trebuchet MS', Arial, sans-serif" font-size="28" font-weight="800" fill="#4d6d5d">small batch</text>
+            <text x="310" y="255" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="43" font-weight="900" fill="#6b513d">나이스칩</text>
+            <text x="310" y="333" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" font-weight="800" fill="#4d6d5d">handmade rice crunch</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>24. 감성 공방 라벨</h2>
+          <p>수제 공방과 카페 납품에 맞춘 차분한 감성형입니다. 원료 신뢰와 손맛을 함께 보여줘 프리미엄 소량 생산 이미지에 좋습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fffdf8"></span>
+            <span class="swatch" style="background:#4d6d5d"></span>
+            <span class="swatch" style="background:#d8a95a"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">수제 감성</span>
+            <span class="tag">카페 납품</span>
+            <span class="tag">소량 생산</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="concept">
+        <div class="stage stage-y">
+          <svg class="logo-svg" viewBox="0 0 620 360" role="img" aria-label="시안 25 인스타 쇼핑 스티커">
+            <rect x="106" y="73" width="408" height="228" rx="45" fill="#fffefa" stroke="#d36f90" stroke-width="8"/>
+            <path d="M152 130c41-35 83-39 126-13-28 36-70 51-126 13Z" fill="#ffcf6b" stroke="#7a4f2f" stroke-width="6"/>
+            <path d="M468 130c-41-35-83-39-126-13 28 36 70 51 126 13Z" fill="#97d6cf" stroke="#386c66" stroke-width="6"/>
+            <circle cx="310" cy="184" r="72" fill="#f2c25b" stroke="#7a4f2f" stroke-width="7"/>
+            <path d="M278 169h1M342 169h1" stroke="#7a4f2f" stroke-width="12" stroke-linecap="round"/>
+            <path d="M279 198c20 18 42 18 62 0" fill="none" stroke="#7a4f2f" stroke-width="9" stroke-linecap="round"/>
+            <text x="310" y="56" text-anchor="middle" font-family="'Trebuchet MS', Arial, sans-serif" font-size="27" font-weight="800" fill="#d36f90">save this snack</text>
+            <text x="310" y="289" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="48" fill="#483a62">NICE CHIP</text>
+            <text x="310" y="328" text-anchor="middle" font-family="Noto Sans KR, sans-serif" font-size="25" font-weight="900" fill="#d36f90">나이스칩</text>
+          </svg>
+        </div>
+        <div class="detail">
+          <h2>25. 인스타 쇼핑 스티커</h2>
+          <p>스토리 링크, 공동구매 썸네일, 택배 동봉 스티커에 맞춘 저장형 이미지입니다. 귀엽지만 제품명이 크게 보여 구매 전환용으로 쓰기 쉽습니다.</p>
+          <div class="swatches" aria-label="색상 팔레트">
+            <span class="swatch" style="background:#fff1f7"></span>
+            <span class="swatch" style="background:#d36f90"></span>
+            <span class="swatch" style="background:#97d6cf"></span>
+          </div>
+          <div class="tags">
+            <span class="tag">인스타 쇼핑</span>
+            <span class="tag">공동구매</span>
+            <span class="tag">스티커</span>
+          </div>
+        </div>
+      </article>
+
+      <section class="recommend">
+        <h2>업데이트 권장안</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>우선순위</th>
+              <th>시안</th>
+              <th>권장 이유</th>
+              <th>다음 보완</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>상표·초기 패키지 1순위</td>
+              <td>17. 해피 누룽 볼드팩</td>
+              <td>한글 상표명이 가장 크고, 과자 매대·검색 썸네일에서 즉시 읽힙니다. “나이스칩” 문자상표 운영과 첫 패키지에 유리합니다.</td>
+              <td>글자 획을 더 독자적으로 다듬고, 봉투 전면 가독성 테스트</td>
+            </tr>
+            <tr>
+              <td>K-라이스 스낵 1순위</td>
+              <td>16. K-라이스 팝 배지 / 20. 서울 스낵 마켓</td>
+              <td>밝은 색상, 웃는 누룽지, K-푸드 신호가 강해 “기분 좋은 쌀 과자” 포지션을 가장 선명하게 만듭니다.</td>
+              <td>관광 선물·편의점·온라인몰 썸네일 3종 목업으로 비교</td>
+            </tr>
+            <tr>
+              <td>건강·원료 신뢰 1순위</td>
+              <td>6. 클린 라이스 라벨</td>
+              <td>라이스칩 원료성과 건강 스낵 메시지가 명확해 상세페이지, 원재료 강조, 선물세트 설명에 안정적입니다.</td>
+              <td>쌀알 아이콘을 독자화해 문자+도형 결합 상표로 발전</td>
+            </tr>
+            <tr>
+              <td>프리미엄 1순위</td>
+              <td>21. 고메 블랙 라이스 씰 / 22. 미니멀 골드 워드마크</td>
+              <td>고급 선물, 백화점 식품관, 온라인 고급몰에 맞습니다. 건강식품처럼 딱딱하지 않고 과자 식감도 남깁니다.</td>
+              <td>금박 라벨, 띠지, 선물 박스 목업으로 적용성 확인</td>
+            </tr>
+            <tr>
+              <td>SNS·공동구매 1순위</td>
+              <td>23. 라이스 오브제 포스터 / 25. 인스타 쇼핑 스티커</td>
+              <td>저장하고 공유하기 쉬운 피드 이미지입니다. 인스타 쇼핑, 릴스 커버, 공동구매 상세 첫 컷에 적합합니다.</td>
+              <td>제품 실사와 합성해 모바일 화면에서 로고 대비 점검</td>
+            </tr>
+            <tr>
+              <td>카페·편집숍 1순위</td>
+              <td>12. 카페 드로잉 워드마크 / 24. 감성 공방 라벨</td>
+              <td>수제감, 원료 신뢰, 차분한 감성이 있어 카페 납품과 편집숍 진열에 자연스럽습니다.</td>
+              <td>소형 스티커, 메뉴판, 택배 동봉 카드용 단색 버전 제작</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
