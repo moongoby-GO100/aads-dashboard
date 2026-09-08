@@ -39,6 +39,7 @@ import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
+import { allowReplyReplacement, shouldQueueAdditionalInstruction } from "@/lib/chatReplacementGuard";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -2571,6 +2572,12 @@ const MessageItem = memo(function MessageItem({
             ) : msg.intent === "system_trigger" ? <MarkdownBlock text={msg.content} onDocumentLinkClick={onDocumentLinkClick} /> : processInline(msg.content, { linkColor: "#fff", onDocumentLinkClick })
           ) : (isActiveStreaming || Boolean(streamingContent)) ? (
             <>
+              {isActiveStreaming && (
+                <div role="status" style={{ fontSize: "12px", color: "var(--ct-text2)", marginBottom: "8px" }}>
+                  응답 생성 중 · 확인된 도구 실행 {Math.max(Number(msg.tool_count || 0), streamToolLogs?.length || 0)}회
+                  <span style={{ display: "block" }}>입력창으로 추가 지시를 보내면 현재 응답을 이어서 처리합니다.</span>
+                </div>
+              )}
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
                 <div style={{
                   fontSize: "12px", borderRadius: "8px",
@@ -6741,7 +6748,7 @@ export default function ChatPage() {
     }
 
     // streaming 중이면 백엔드 인터럽트 큐에 push (CEO 인터럽트)
-    if ((streamingRef.current || waitingBgRef.current) && !queuedContent) {
+    if (shouldQueueAdditionalInstruction(streamingRef.current || waitingBgRef.current, Boolean(_existingMsgId || _existingIdempotencyKey || retryCount))) {
       const interruptContent = content || "(파일 첨부)";
       const interruptLocalId = `interrupt-${Date.now()}`;
       localQuestionEchoIdsRef.current.add(interruptLocalId);
@@ -8269,10 +8276,57 @@ export default function ChatPage() {
     }, 1200);
   }
 
+  const replacementPendingRef = useRef(false);
+  const prepareReplyReplacement = useCallback(async (sessionId: string) => {
+    try {
+      const allowed = await allowReplyReplacement({
+        isCurrentSession: () => activeSessionRef.current === sessionId,
+        isLocallyActive: () => streamingRef.current || waitingBgRef.current,
+        readActive: async () => {
+          const status = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sessionId));
+          if (typeof status.is_streaming !== "boolean") throw new Error("Invalid streaming status");
+          return status.is_streaming;
+        },
+        confirm: () => window.confirm("기존 응답이 아직 진행 중입니다. 현재 응답을 중단하고 다시 전송할까요? 취소하면 응답이 유지됩니다. 내용만 추가하려면 입력창에서 추가 지시를 보내세요."),
+        stop: async () => { await chatApi(`/chat/sessions/${sessionId}/stop`, { method: "POST" }); },
+      });
+      if (!allowed) return false;
+      if (streamingRef.current || waitingBgRef.current) {
+        const partial = streamBufRef.current || bgPartialContentRef.current;
+        if (partial) setMessagesPreservingViewport(prev => prev.map(m =>
+          m.session_id === sessionId && m.intent === "streaming_placeholder"
+            ? { ...m, content: m.content.length > partial.length ? m.content : partial }
+            : m
+        ));
+        userStopRequestedRef.current = true;
+        abortCtrl.current?.abort();
+        // Let the cancelled reader settle before a replacement takes ownership.
+        await new Promise(resolve => window.setTimeout(resolve, 150));
+        userStopRequestedRef.current = false;
+        if (activeSessionRef.current !== sessionId) return false;
+        streamingRef.current = false;
+        waitingBgRef.current = false;
+        streamingSessionRef.current = null;
+        userStopRequestedRef.current = false;
+        setStreaming(false);
+        setWaitingBgResponse(false);
+        setStreamBuf("");
+        setToolStatus(null);
+      }
+      return true;
+    } catch {
+      setYellowWarning("진행 중인 응답 상태를 확인하지 못해 재전송하지 않았습니다. 기존 응답과 입력 내용은 유지됩니다.");
+      return false;
+    }
+  }, [setMessagesPreservingViewport, streamingStatusPathFor]);
+
   // ── 방식A: 수정 후 재전송 ──
   const handleEditResend = useCallback(async (msgId: string, newContent: string) => {
-    if (!activeSessionObjRef.current) return;
+    const sessionId = activeSessionObjRef.current?.id;
+    if (!sessionId || replacementPendingRef.current) return;
+    replacementPendingRef.current = true;
     try {
+      if (!(await prepareReplyReplacement(sessionId))) return;
       // 1) 기존 메시지 + AI 응답 삭제
       const res = await fetch(`${BASE_URL}/chat/messages/${msgId}`, {
         method: "DELETE",
@@ -8293,13 +8347,17 @@ export default function ChatPage() {
           return prev.filter((m) => !idsToRemove.has(m.id));
         });
       }
+      if (!res.ok) throw new Error(`메시지 수정 실패 (${res.status})`);
       // 2) 수정된 내용으로 재전송
       await sendMessage(newContent);
-    } catch (e) {
+      setEditingMsgId(null);
+      setEditText("");
+    } catch {
+      setYellowWarning("메시지 수정에 실패해 재전송하지 않았습니다. 입력 내용을 확인해 주세요.");
+    } finally {
+      replacementPendingRef.current = false;
     }
-    setEditingMsgId(null);
-    setEditText("");
-  }, [sendMessage, setMessagesPreservingViewport]);
+  }, [prepareReplyReplacement, sendMessage, setMessagesPreservingViewport]);
 
   // ── 메시지 삭제 (user: 메시지+AI응답 삭제, assistant: 해당 응답만 삭제) ──
   const handleDeleteMessage = useCallback(async (msgId: string, role: string) => {
@@ -8331,18 +8389,13 @@ export default function ChatPage() {
   // ── AI 응답 재생성 (Regenerate) ──
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const handleRegenerate = useCallback(async (msgId: string, mode: "regenerate" | "continue" = "regenerate") => {
-    if (!activeSessionObjRef.current) return;
-    if (streaming) {
-      abortCtrl.current?.abort();
-      streamingSessionRef.current = null;
-      streamingRef.current = false;
-      setStreaming(false);
-      setStreamBuf("");
-      setWaitingBgResponse(false);
-      setToolStatus(null);
-      await new Promise(r => setTimeout(r, 150));
+    const sessionId = activeSessionObjRef.current?.id;
+    if (!sessionId || replacementPendingRef.current) return;
+    replacementPendingRef.current = true;
+    if (!(await prepareReplyReplacement(sessionId))) {
+      replacementPendingRef.current = false;
+      return;
     }
-    const sessionId = activeSessionObjRef.current.id;
     const regenPlaceholderId = `ai-streaming-regen-${msgId}`;
 
     setRegeneratingId(msgId);
@@ -8537,8 +8590,9 @@ export default function ChatPage() {
         setToolStatus(null);
       }
       setRegeneratingId(null);
+      replacementPendingRef.current = false;
     }
-  }, [attachExecutionReplay, mergeLatestAssistantFromServer, requestResumeOnce, setMessagesPreservingViewport, streaming]);
+  }, [attachExecutionReplay, mergeLatestAssistantFromServer, prepareReplyReplacement, requestResumeOnce, setMessagesPreservingViewport]);
 
   // ── 방식B: 입력창에 복사 (재지시) ──
   const handleCopyToInput = useCallback((content: string) => {

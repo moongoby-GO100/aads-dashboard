@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-08 - Active reply replacement guard
+
+- Problem: supplied-text send actions bypassed the active response interrupt queue; edit/resend deleted messages without checking the current reply; regeneration aborted the live reader without confirmation.
+- Change: all new instructions, including supplied text, use the additional-instruction queue while active. Idempotent transport retries retain their original route. Edit/resend and regeneration check server activity, confirm only active replacement, request stop and verify inactivity before destructive operations; cancelled/unavailable checks preserve the draft. Concurrent replacement clicks are guarded. Streaming bubbles keep a generating label and observed tool-execution count visible.
+- Files: `src/app/chat/page.tsx`, `src/lib/chatReplacementGuard.ts`, `src/lib/chatReplacementGuard.selftest.ts`.
+- Checks: 10 guard/routing cases passed via TypeScript compile and Node; scoped ESLint passed (0 errors, 19 pre-existing warnings); git diff whitespace check passed.
+- Release: dashboard-only blue/green deployment follows the source commit. Build, runtime health, screenshot and five-minute monitoring results will be appended after actual verification. API deployment is managed separately.
+- Preserved unrelated dirty file: `src/app/chat/ChatArtifactPanel.tsx`.
+
 ## 2026-09-08 13:35 KST - PC Agent EXE/ZIP download buttons corrected
 
 - Request:
