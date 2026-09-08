@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-09-08 - Blue/Green slot panel runtime truth source
+
+- Fixed the operations panel after production verification showed the API active slot (`8102`, green) being presented as the Dashboard active slot even though nginx routed Dashboard traffic to `3100` (blue).
+- Added `GET /runtime/dashboard-slot`, served by the routed Next.js container, to report the actual Dashboard runtime slot, port, and immutable release SHA without relying on API deploy history.
+- The panel now reports `Dashboard Active` and `API Active` independently and treats the legacy blue container names (`aads-server`, `aads-dashboard`) as valid fallbacks when the `-blue` aliases are absent.
+- Verification contract: both dashboard slots must be healthy on the same image digest, `/runtime/dashboard-slot` must match nginx routing, authenticated `/ops` must render the split active-slot labels, and five minutes of P0/P1 monitoring must pass before release certification.
+
 ## 2026-09-08 - Active reply replacement guard
 
 - Problem: supplied-text send actions bypassed the active response interrupt queue; edit/resend deleted messages without checking the current reply; regeneration aborted the live reader without confirmation.

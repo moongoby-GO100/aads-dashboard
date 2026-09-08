@@ -18,8 +18,10 @@ interface HealthData {
 }
 
 interface InfraData extends Record<string, unknown> {
+  "aads-server"?: unknown;
   "aads-server-blue"?: unknown;
   "aads-server-green"?: unknown;
+  "aads-dashboard"?: unknown;
   "aads-dashboard-blue"?: unknown;
   "aads-dashboard-green"?: unknown;
   disk_pct?: unknown;
@@ -28,6 +30,14 @@ interface InfraData extends Record<string, unknown> {
 }
 
 type DeploymentSlot = "blue" | "green";
+
+interface DashboardRuntimeSlot {
+  component?: string;
+  slot?: DeploymentSlot | null;
+  port?: string | null;
+  release_sha?: string | null;
+  observed_at?: string;
+}
 
 interface CheckResult {
   ok: boolean;
@@ -211,13 +221,17 @@ function infraStatusText(v: unknown): "running" | "unknown" {
   return typeof v === "string" && v.toLowerCase() === "running" ? "running" : "unknown";
 }
 
+function resolveInfraStatus(...values: unknown[]): "running" | "unknown" {
+  return values.some((value) => infraStatusText(value) === "running") ? "running" : "unknown";
+}
+
 function containerStatusColor(status: "running" | "unknown"): string {
   return status === "running" ? "var(--success)" : "var(--warning)";
 }
 
-function deriveActiveSlot(
+function deriveApiActiveSlot(
   infra: InfraData | undefined,
-  slotStatuses: Record<DeploymentSlot, { server: "running" | "unknown"; dashboard: "running" | "unknown" }>,
+  slotStatuses: Record<DeploymentSlot, { server: "running" | "unknown" }>,
 ): DeploymentSlot | null {
   const explicit = [infra?.active_slot, infra?.active_upstream, infra?.nginx_upstream, infra?.active_backend, infra?.active_port]
     .find((value) => value != null);
@@ -225,11 +239,17 @@ function deriveActiveSlot(
   if (explicitText.includes("green") || explicitText.includes("8102")) return "green";
   if (explicitText.includes("blue") || explicitText.includes("8100")) return "blue";
 
-  const isRunning = (slot: DeploymentSlot) => (
-    slotStatuses[slot].server === "running" && slotStatuses[slot].dashboard === "running"
-  );
+  const isRunning = (slot: DeploymentSlot) => slotStatuses[slot].server === "running";
   if (isRunning("blue") && !isRunning("green")) return "blue";
   if (isRunning("green") && !isRunning("blue")) return "green";
+  return null;
+}
+
+function deriveSingleRunningSlot(
+  slotStatuses: Record<DeploymentSlot, "running" | "unknown">,
+): DeploymentSlot | null {
+  if (slotStatuses.blue === "running" && slotStatuses.green !== "running") return "blue";
+  if (slotStatuses.green === "running" && slotStatuses.blue !== "running") return "green";
   return null;
 }
 
@@ -448,6 +468,7 @@ export default function OpsPage() {
   const [qaResults, setQaResults] = useState<QaResultItem[]>([]);
   const [designReviews, setDesignReviews] = useState<DesignReviewItem[]>([]);
   const [deployStatus, setDeployStatus] = useState<DeployObservabilityStatus | null>(null);
+  const [dashboardRuntime, setDashboardRuntime] = useState<DashboardRuntimeSlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("-");
@@ -475,7 +496,7 @@ export default function OpsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [healthData, lifecycleData, costData, envData, bridgeData, qaData, designData, deployData] = await Promise.allSettled([
+      const [healthData, lifecycleData, costData, envData, bridgeData, qaData, designData, deployData, dashboardRuntimeData] = await Promise.allSettled([
         api.getOpsHealthCheck(),
         api.getOpsDirectiveLifecycle(20),
         api.getOpsCostSummary(),
@@ -484,6 +505,10 @@ export default function OpsPage() {
         api.getOpsQaResults(20),
         api.getOpsDesignReviews(10),
         api.getOpsCommonDeployStatus(),
+        fetch("/runtime/dashboard-slot", { cache: "no-store", credentials: "same-origin" }).then((response) => {
+          if (!response.ok) throw new Error(`dashboard runtime slot HTTP ${response.status}`);
+          return response.json() as Promise<DashboardRuntimeSlot>;
+        }),
       ]);
 
       if (healthData.status === "fulfilled") setHealth(healthData.value);
@@ -506,6 +531,7 @@ export default function OpsPage() {
         setDesignReviews(Array.isArray(items) ? items : []);
       }
       if (deployData.status === "fulfilled") setDeployStatus(deployData.value);
+      if (dashboardRuntimeData.status === "fulfilled") setDashboardRuntime(dashboardRuntimeData.value);
 
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
       setError(null);
@@ -541,16 +567,20 @@ export default function OpsPage() {
   const infra = health?.infra;
   const slotStatuses = {
     blue: {
-      server: infraStatusText(infra?.["aads-server-blue"] ?? infra?.["aads-server"]),
-      dashboard: infraStatusText(infra?.["aads-dashboard-blue"] ?? infra?.["aads-dashboard"]),
+      server: resolveInfraStatus(infra?.["aads-server-blue"], infra?.["aads-server"]),
+      dashboard: resolveInfraStatus(infra?.["aads-dashboard-blue"], infra?.["aads-dashboard"]),
     },
     green: {
       server: infraStatusText(infra?.["aads-server-green"]),
       dashboard: infraStatusText(infra?.["aads-dashboard-green"]),
     },
   } satisfies Record<DeploymentSlot, { server: "running" | "unknown"; dashboard: "running" | "unknown" }>;
-  const activeSlot = deriveActiveSlot(infra, slotStatuses);
-  const candidateSlot: DeploymentSlot | null = activeSlot === "blue" ? "green" : activeSlot === "green" ? "blue" : null;
+  const apiActiveSlot = deriveApiActiveSlot(infra, slotStatuses);
+  const dashboardActiveSlot = dashboardRuntime?.slot || deriveSingleRunningSlot({
+    blue: slotStatuses.blue.dashboard,
+    green: slotStatuses.green.dashboard,
+  });
+  const dashboardCandidateSlot: DeploymentSlot | null = dashboardActiveSlot === "blue" ? "green" : dashboardActiveSlot === "green" ? "blue" : null;
   const activeDeployments = deployStatus?.active_deployments || [];
   const queuedDeployments = deployStatus?.queued_deployments || [];
   const staleSignals = deployStatus?.stale_zombie_signals || [];
@@ -650,8 +680,9 @@ export default function OpsPage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Blue/Green 배포 슬롯</h3>
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              Active: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{loading ? "-" : activeSlot ?? "unknown"}</span>
-              {candidateSlot && <> · Candidate: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{candidateSlot}</span></>}
+              Dashboard Active: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{loading ? "-" : dashboardActiveSlot ?? "unknown"}</span>
+              {dashboardCandidateSlot && <> · Candidate: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{dashboardCandidateSlot}</span></>}
+              {apiActiveSlot && <> · API Active: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{apiActiveSlot}</span></>}
             </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -659,13 +690,16 @@ export default function OpsPage() {
               const statuses = slotStatuses[slot];
               const status = statuses.server === "running" && statuses.dashboard === "running" ? "running" : "unknown";
               const color = containerStatusColor(status);
-              const role = activeSlot === slot ? "Active" : candidateSlot === slot ? "Candidate" : "Slot";
+              const roles = [
+                dashboardActiveSlot === slot ? "Dashboard Active" : dashboardCandidateSlot === slot ? "Dashboard Candidate" : null,
+                apiActiveSlot === slot ? "API Active" : apiActiveSlot ? "API Standby" : null,
+              ].filter(Boolean).join(" · ") || "Slot";
               return (
                 <div
                   key={slot}
                   style={{
                     background: "var(--bg-hover)",
-                    border: `1px solid ${activeSlot === slot ? color : "var(--border)"}`,
+                    border: `1px solid ${dashboardActiveSlot === slot ? color : "var(--border)"}`,
                     borderRadius: 8,
                     padding: 14,
                     minWidth: 0,
@@ -674,7 +708,7 @@ export default function OpsPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 8 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", textTransform: "capitalize" }}>{slot}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{role}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{roles}</div>
                     </div>
                     <span
                       style={{
