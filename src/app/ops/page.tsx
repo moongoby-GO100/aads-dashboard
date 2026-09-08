@@ -153,6 +153,23 @@ interface DeploySignalItem {
   requires_ceo_approval?: boolean;
 }
 
+interface ActivePortIntegrity {
+  status: "ok" | "anomaly" | "missing" | "skip" | "error";
+  file?: string;
+  value?: string;
+  port_valid?: boolean;
+  mtime_utc?: string;
+  mtime_age_seconds?: number;
+  owner_uid?: number;
+  last_authorized_actor?: string;
+  last_authorized_at?: string;
+  authorized_port?: string;
+  anomaly_reason?: string;
+  recent_audit_anomalies?: unknown[];
+  reason?: string;
+  error?: string;
+}
+
 interface DeployObservabilityStatus {
   generated_at?: string;
   degraded?: boolean;
@@ -171,6 +188,7 @@ interface DeployObservabilityStatus {
     blockers?: string[];
     next_queued_runner_job_id?: string | null;
   };
+  active_port_integrity?: ActivePortIntegrity;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -255,6 +273,24 @@ function deriveSingleRunningSlot(
 
 function formatInfraMetric(value: unknown, suffix = ""): string {
   return typeof value === "number" && Number.isFinite(value) ? `${value}${suffix}` : "unknown";
+}
+
+function activePortIntegrityStatusColor(status: ActivePortIntegrity["status"]): string {
+  switch (status) {
+    case "ok": return "var(--success)";
+    case "anomaly": return "var(--danger)";
+    case "missing": return "var(--warning)";
+    default: return "var(--text-secondary)";
+  }
+}
+
+function activePortIntegrityStatusLabel(status: ActivePortIntegrity["status"]): string {
+  switch (status) {
+    case "ok": return "정상";
+    case "anomaly": return "이상";
+    case "missing": return "파일없음";
+    default: return "확인불가";
+  }
 }
 
 // ─── Status Color Helpers ─────────────────────────────────────────────────────
@@ -586,6 +622,7 @@ export default function OpsPage() {
   const staleSignals = deployStatus?.stale_zombie_signals || [];
   const recentDurations = deployStatus?.recent_durations_per_project || [];
   const componentDeployments = deployStatus?.component_deployments || [];
+  const activePortIntegrity = deployStatus?.active_port_integrity;
   const deployReady = Boolean(deployStatus?.next_deploy_readiness?.ready);
   const deployReadinessLabel = deployStatus
     ? deployReady ? "진행 가능" : "대기 필요"
@@ -857,6 +894,42 @@ export default function OpsPage() {
                   {signal.project || "-"} · {signal.signal || "-"} · {signal.runner_job_id || "-"}
                 </div>
               ))}
+            </div>
+            <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>활성 슬롯 무결성</div>
+              {!activePortIntegrity ? (
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>데이터 없음</div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: activePortIntegrityStatusColor(activePortIntegrity.status), border: `1px solid ${activePortIntegrityStatusColor(activePortIntegrity.status)}`, borderRadius: 999, padding: "3px 8px" }}>
+                      {activePortIntegrityStatusLabel(activePortIntegrity.status)}
+                    </span>
+                    {(activePortIntegrity.recent_audit_anomalies || []).length > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--warning)", border: "1px solid var(--warning)", borderRadius: 999, padding: "3px 8px" }}>
+                        감사 이상 {(activePortIntegrity.recent_audit_anomalies || []).length}건
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-primary)", marginTop: 8, overflowWrap: "anywhere" }}>
+                    활성 포트: {activePortIntegrity.value || "-"}
+                    {activePortIntegrity.authorized_port && activePortIntegrity.value !== activePortIntegrity.authorized_port && (
+                      <span style={{ color: "var(--danger)", fontWeight: 700 }}> (인가 불일치, 인가값 {activePortIntegrity.authorized_port})</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, overflowWrap: "anywhere" }}>
+                    마지막 변경: {formatDuration(activePortIntegrity.mtime_age_seconds)} 전
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4, overflowWrap: "anywhere" }}>
+                    인가 주체: {activePortIntegrity.last_authorized_actor || "-"}
+                  </div>
+                  {activePortIntegrity.anomaly_reason && (
+                    <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 6, overflowWrap: "anywhere" }}>
+                      {activePortIntegrity.anomaly_reason}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </section>
