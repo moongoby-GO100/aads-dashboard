@@ -13,9 +13,21 @@ interface HealthData {
   stalled_count: number;
   error_count: number;
   checks: Record<string, CheckResult>;
-  infra?: Record<string, unknown>;
+  infra?: InfraData;
   checked_at?: string;
 }
+
+interface InfraData extends Record<string, unknown> {
+  "aads-server-blue"?: unknown;
+  "aads-server-green"?: unknown;
+  "aads-dashboard-blue"?: unknown;
+  "aads-dashboard-green"?: unknown;
+  disk_pct?: unknown;
+  memory_pct?: unknown;
+  load_1m?: unknown;
+}
+
+type DeploymentSlot = "blue" | "green";
 
 interface CheckResult {
   ok: boolean;
@@ -195,25 +207,34 @@ function deployTargetLabel(item: { project?: string; component?: string | null; 
   return `${project}${component}${env}`;
 }
 
-function infraStatusText(v: unknown): string {
-  return typeof v === "string" && v.trim() ? v : "unknown";
+function infraStatusText(v: unknown): "running" | "unknown" {
+  return typeof v === "string" && v.toLowerCase() === "running" ? "running" : "unknown";
 }
 
-function containerStatusColor(status: string, role: "blue" | "green"): string {
-  if (role === "blue") {
-    return status === "running" || status === "healthy" ? "var(--success)" : "var(--danger)";
-  }
+function containerStatusColor(status: "running" | "unknown"): string {
   return status === "running" ? "var(--success)" : "var(--warning)";
 }
 
-function deriveActiveSlot(infra: Record<string, unknown> | undefined, blueStatus: string, greenStatus: string): string {
-  const explicit = infraStatusText(
-    infra?.nginx_upstream || infra?.active_upstream || infra?.active_slot || infra?.active_port || infra?.active_backend
+function deriveActiveSlot(
+  infra: InfraData | undefined,
+  slotStatuses: Record<DeploymentSlot, { server: "running" | "unknown"; dashboard: "running" | "unknown" }>,
+): DeploymentSlot | null {
+  const explicit = [infra?.active_slot, infra?.active_upstream, infra?.nginx_upstream, infra?.active_backend, infra?.active_port]
+    .find((value) => value != null);
+  const explicitText = String(explicit ?? "").toLowerCase();
+  if (explicitText.includes("green") || explicitText.includes("8102")) return "green";
+  if (explicitText.includes("blue") || explicitText.includes("8100")) return "blue";
+
+  const isRunning = (slot: DeploymentSlot) => (
+    slotStatuses[slot].server === "running" && slotStatuses[slot].dashboard === "running"
   );
-  if (explicit !== "unknown") return explicit;
-  if (greenStatus === "running" && blueStatus !== "running") return "8102";
-  if (blueStatus === "running") return "8100";
-  return "unknown";
+  if (isRunning("blue") && !isRunning("green")) return "blue";
+  if (isRunning("green") && !isRunning("blue")) return "green";
+  return null;
+}
+
+function formatInfraMetric(value: unknown, suffix = ""): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value}${suffix}` : "unknown";
 }
 
 // ─── Status Color Helpers ─────────────────────────────────────────────────────
@@ -518,10 +539,18 @@ export default function OpsPage() {
   const snapshots = envHistory?.snapshots || [];
   const latestServices = envHistory?.latest_services || (snapshots.length > 0 ? snapshots[snapshots.length - 1].services : {});
   const infra = health?.infra;
-  const blueStatus = infraStatusText(infra?.["aads-server"] || infra?.["aads-server-blue"]);
-  const greenStatus = infraStatusText(infra?.["aads-server-green"]);
-  const activeSlot = deriveActiveSlot(infra, blueStatus, greenStatus);
-  const greenRollbackBlocked = greenStatus !== "running";
+  const slotStatuses = {
+    blue: {
+      server: infraStatusText(infra?.["aads-server-blue"] ?? infra?.["aads-server"]),
+      dashboard: infraStatusText(infra?.["aads-dashboard-blue"] ?? infra?.["aads-dashboard"]),
+    },
+    green: {
+      server: infraStatusText(infra?.["aads-server-green"]),
+      dashboard: infraStatusText(infra?.["aads-dashboard-green"]),
+    },
+  } satisfies Record<DeploymentSlot, { server: "running" | "unknown"; dashboard: "running" | "unknown" }>;
+  const activeSlot = deriveActiveSlot(infra, slotStatuses);
+  const candidateSlot: DeploymentSlot | null = activeSlot === "blue" ? "green" : activeSlot === "green" ? "blue" : null;
   const activeDeployments = deployStatus?.active_deployments || [];
   const queuedDeployments = deployStatus?.queued_deployments || [];
   const staleSignals = deployStatus?.stale_zombie_signals || [];
@@ -616,27 +645,27 @@ export default function OpsPage() {
           </div>
         </section>
 
-        {/* ─── 섹션 1-1: Blue-Green 컨테이너 상태 ─── */}
+        {/* ─── 섹션 1-1: Blue/Green 배포 슬롯 상태 ─── */}
         <section style={{ ...cardStyle, marginBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Blue-Green 컨테이너</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Blue/Green 배포 슬롯</h3>
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              nginx upstream: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{loading ? "-" : activeSlot}</span>
+              Active: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{loading ? "-" : activeSlot ?? "unknown"}</span>
+              {candidateSlot && <> · Candidate: <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{candidateSlot}</span></>}
             </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            {[
-              { label: "Blue", port: ":8100", status: blueStatus, role: "blue" as const },
-              { label: "Green", port: ":8102", status: greenStatus, role: "green" as const },
-            ].map((slot) => {
-              const color = containerStatusColor(slot.status, slot.role);
-              const isGreenWarning = slot.role === "green" && greenRollbackBlocked && !loading;
+            {(["blue", "green"] as const).map((slot) => {
+              const statuses = slotStatuses[slot];
+              const status = statuses.server === "running" && statuses.dashboard === "running" ? "running" : "unknown";
+              const color = containerStatusColor(status);
+              const role = activeSlot === slot ? "Active" : candidateSlot === slot ? "Candidate" : "Slot";
               return (
                 <div
-                  key={slot.label}
+                  key={slot}
                   style={{
                     background: "var(--bg-hover)",
-                    border: `1px solid ${isGreenWarning ? "var(--warning)" : "var(--border)"}`,
+                    border: `1px solid ${activeSlot === slot ? color : "var(--border)"}`,
                     borderRadius: 8,
                     padding: 14,
                     minWidth: 0,
@@ -644,8 +673,8 @@ export default function OpsPage() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 8 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{slot.label}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>{slot.port}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", textTransform: "capitalize" }}>{slot}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{role}</div>
                     </div>
                     <span
                       style={{
@@ -661,17 +690,34 @@ export default function OpsPage() {
                         overflowWrap: "anywhere",
                       }}
                     >
-                      {loading ? "loading" : slot.status}
+                      {loading ? "loading" : status}
                     </span>
                   </div>
-                  {isGreenWarning && (
-                    <div style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.45 }}>
-                      ⚠️ 롤백 불가
-                    </div>
-                  )}
+                  <div style={{ display: "grid", gap: 5, fontSize: 12 }}>
+                    {([["API", statuses.server], ["Dashboard", statuses.dashboard]] as const).map(([label, containerStatus]) => (
+                      <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ color: "var(--text-secondary)" }}>{label}</span>
+                        <span style={{ color: containerStatusColor(containerStatus), fontWeight: 700 }}>{loading ? "-" : containerStatus}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: 12 }}>
+            {[
+              { label: "Disk", value: formatInfraMetric(infra?.disk_pct, "%") },
+              { label: "Memory", value: formatInfraMetric(infra?.memory_pct, "%") },
+              { label: "Load (1m)", value: formatInfraMetric(infra?.load_1m) },
+            ].map((metric) => (
+              <div key={metric.label} style={{ borderTop: "1px solid var(--border)", paddingTop: 10, minWidth: 0 }}>
+                <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>{metric.label}</div>
+                <div style={{ color: "var(--text-primary)", fontSize: 16, fontWeight: 700, overflowWrap: "anywhere" }}>
+                  {loading ? "-" : metric.value}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
