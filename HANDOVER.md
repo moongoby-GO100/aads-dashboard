@@ -2391,3 +2391,25 @@
   - `npm run build`: passed.
 - Release note:
   - This dashboard change depends on the paired AADS API project-docs source-path expansion for server/dashboard source files to load in the artifact panel.
+
+## 2026-09-08 10:59 KST - Chat public report chips and compact composer production fix
+
+- Request:
+  - Fix chat file chips that show `복사됨` instead of opening in the right artifact panel.
+  - Apply the chat input box width improvement and deploy it to production.
+- Findings:
+  - `public/reports/...` file chips were converted to `/docs?...` before reaching the document link handler. Public dashboard reports should be fetched from `/reports/...` so the right artifact panel can preview them directly.
+  - `public/reports/nicechip_logo_concepts_20260903.html` existed in the worktree but was not committed, so the production dashboard image returned 404 for that report.
+  - Half-window desktop layouts were still classified as `desktop`; the composer needed a container-width breakpoint, not only a viewport breakpoint.
+- Changes:
+  - `src/app/chat/MarkdownRenderer.tsx`: file chips now use the shared `normalizeDocumentHref()` path so public reports stay on `/reports/...` and open in the artifact panel.
+  - `src/app/chat/ChatInput.tsx`: added `minWidth: 0`, `width: 100%`, and textarea `boxSizing` to prevent flex squeezing.
+  - `src/app/chat/page.tsx`: added `ResizeObserver`-based composer width tracking and compact composer layout below 760px.
+  - `public/reports/nicechip_logo_concepts_20260903.html`: committed the missing public report so it is included in production images.
+- Verification:
+  - `npm run lint`: passed with 0 errors and existing warnings.
+  - `npm run build`: passed.
+  - Dashboard blue/green deploy: passed with five post-cutover monitor rounds.
+  - `/reports/nicechip_logo_concepts_20260903.html`: HTTP 200 after deploy.
+- Remaining:
+  - Browser-authenticated click validation in the live chat session still needs a logged-in browser session; API/HTTP/container checks passed.
