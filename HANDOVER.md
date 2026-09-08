@@ -1,5 +1,22 @@
 # AADS Dashboard Handover
 
+## 2026-09-08 13:35 KST - PC Agent EXE/ZIP download buttons corrected
+
+- Request:
+  - Make the primary blue PC Agent download button deliver the EXE installer and keep ZIP available from the adjacent secondary button.
+- Finding:
+  - The two handlers were reversed: the primary button requested `format=zip`, while the ZIP button requested the default EXE endpoint.
+- Change:
+  - `src/app/ops/pc-agents/page.tsx`: primary button now requests the default download endpoint and labels the file as `kakaobot-setup.exe`.
+  - The adjacent ZIP button now requests `?format=zip` and keeps `kakaobot-agent.zip` as its download filename.
+- Verification before release:
+  - `npx eslint src/app/ops/pc-agents/page.tsx`: passed with 0 errors and four pre-existing warnings.
+  - `git diff --check`: passed.
+  - `npm run build`: passed and generated `/ops/pc-agents`.
+  - Production API default endpoint returned HTTP 200 with `kakaobot-setup-1.0.73.exe`; ZIP endpoint returned HTTP 200 with `kakaobot-agent-1.0.73.zip`.
+- Scope note:
+  - Existing dirty `src/app/chat/ChatArtifactPanel.tsx` was not modified or included.
+
 ## 2026-09-07 20:12 KST - Docs route bootstrap commit and deploy queue
 
 - Request:
