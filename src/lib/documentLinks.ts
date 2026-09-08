@@ -78,6 +78,9 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
   { prefix: "scripts/", project: "AADS", basePath: "/app", stripPrefix: "" },
   { prefix: "tests/", project: "AADS", basePath: "/app", stripPrefix: "" },
+  { prefix: "app/", project: "AADS", basePath: "/app", stripPrefix: "" },
+  { prefix: "src/", project: "AADS", basePath: "/root/aads/aads-dashboard", stripPrefix: "" },
+  { prefix: "components/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "" },
 ];
 
 const PROJECT_HINT_MAPPINGS: ProjectHintMapping[] = [

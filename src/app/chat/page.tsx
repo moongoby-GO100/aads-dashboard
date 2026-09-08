@@ -11582,7 +11582,7 @@ export default function ChatPage() {
             <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
           </div>}
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
-          <div style={{ display: "flex", gap: screenSize === "mobile" ? "7px" : "8px", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", gap: screenSize === "mobile" ? "7px" : "8px", alignItems: "flex-end", flexWrap: "wrap" }}>
             {/* Mobile "+" toggle button */}
             {screenSize === "mobile" && (
               <button
@@ -11625,7 +11625,7 @@ export default function ChatPage() {
               </button>
             )}
             {/* Textarea wrapper with integrated send */}
-            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end" }}>
+            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end", minWidth: "200px" }}>
               <ChatInput
                 ref={chatInputRef}
                 screenSize={screenSize}
@@ -11681,7 +11681,7 @@ export default function ChatPage() {
             </div>
             {/* Desktop: separate button group */}
             {screenSize !== "mobile" && (
-            <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
               {/* API 키 상태 표시 */}
               {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
               <button
