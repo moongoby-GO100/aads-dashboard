@@ -40,6 +40,8 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/authenticated-collector", label: "로그인 수집 허브", icon: "🔐", adminOnly: true },
   { href: "/agent-vault", label: "Agent Vault", icon: "🔐", adminOnly: true },
   { href: "/ops/mobile-agent", label: "Mobile Agent", icon: "📱", adminOnly: true },
+  { href: "/ops/traces", label: "LLM Traces", icon: "🔍", adminOnly: true },
+  { href: "/ops/evals", label: "LLM 평가", icon: "📐", adminOnly: true },
   { href: "/lessons", label: "교훈", icon: "💡", adminOnly: true },
   { href: "/flow", label: "FLOW", icon: "🔄", adminOnly: true },
   { href: "/reports", label: "Reports", icon: "📊", adminOnly: true },
