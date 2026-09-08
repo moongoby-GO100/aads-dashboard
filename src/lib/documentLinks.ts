@@ -78,9 +78,16 @@ const RELATIVE_DOC_MAPPINGS: RelativeMapping[] = [
   { prefix: "reports/", project: "AADS", basePath: "/app/reports", stripPrefix: "reports/" },
   { prefix: "scripts/", project: "AADS", basePath: "/app", stripPrefix: "" },
   { prefix: "tests/", project: "AADS", basePath: "/app", stripPrefix: "" },
-  { prefix: "app/", project: "AADS", basePath: "/app", stripPrefix: "" },
-  { prefix: "src/", project: "AADS", basePath: "/root/aads/aads-dashboard", stripPrefix: "" },
+  { prefix: "migrations/", project: "AADS", basePath: "/app", stripPrefix: "" },
+  { prefix: "app/", project: "AADS", basePath: "/app/app", stripPrefix: "app/" },
+  { prefix: "api/", project: "AADS", basePath: "/app/app", stripPrefix: "" },
+  { prefix: "routers/", project: "AADS", basePath: "/app/app", stripPrefix: "" },
+  { prefix: "services/", project: "AADS", basePath: "/app/app", stripPrefix: "" },
+  { prefix: "src/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "src/" },
   { prefix: "components/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "" },
+  { prefix: "hooks/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "" },
+  { prefix: "lib/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "" },
+  { prefix: "styles/", project: "AADS", basePath: "/root/aads/aads-dashboard/src", stripPrefix: "" },
 ];
 
 const PROJECT_HINT_MAPPINGS: ProjectHintMapping[] = [
@@ -225,6 +232,10 @@ export function isUnsafeLink(href: string): boolean {
 export function normalizeDocumentHref(href: string): string {
   let raw = href.trim();
   if (!raw || isUnsafeLink(raw)) return "";
+  raw = raw.replace(/\\/g, "/");
+  raw = raw.replace(/^\.\//, "");
+  if (raw.startsWith("../aads-dashboard/")) raw = raw.replace(/^\.\.\/aads-dashboard\//, "");
+  if (raw.startsWith("../aads-server/")) raw = raw.replace(/^\.\.\/aads-server\//, "");
 
   // 0. 사이트 URL로 잘못 감싸인 파일시스템 경로 복원
   //    예: https://aads.newtalk.kr/root/aads/aads-server/보고서.xlsx → /root/aads/aads-server/보고서.xlsx

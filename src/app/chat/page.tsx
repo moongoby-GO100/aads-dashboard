@@ -11582,7 +11582,13 @@ export default function ChatPage() {
             <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
           </div>}
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
-          <div style={{ display: "flex", gap: screenSize === "mobile" ? "7px" : "8px", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{
+            display: "flex",
+            gap: screenSize === "mobile" ? "7px" : "8px",
+            alignItems: screenSize === "tablet" ? "stretch" : "flex-end",
+            flexDirection: screenSize === "tablet" ? "column" : "row",
+            flexWrap: "wrap",
+          }}>
             {/* Mobile "+" toggle button */}
             {screenSize === "mobile" && (
               <button
@@ -11625,7 +11631,14 @@ export default function ChatPage() {
               </button>
             )}
             {/* Textarea wrapper with integrated send */}
-            <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end", minWidth: "200px" }}>
+            <div style={{
+              flex: screenSize === "tablet" ? "1 1 100%" : 1,
+              width: screenSize === "tablet" ? "100%" : undefined,
+              position: "relative",
+              display: "flex",
+              alignItems: "flex-end",
+              minWidth: screenSize === "mobile" ? 0 : (screenSize === "tablet" ? "100%" : "320px"),
+            }}>
               <ChatInput
                 ref={chatInputRef}
                 screenSize={screenSize}
@@ -11681,7 +11694,15 @@ export default function ChatPage() {
             </div>
             {/* Desktop: separate button group */}
             {screenSize !== "mobile" && (
-            <div style={{ display: "flex", gap: "6px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <div style={{
+              display: "flex",
+              gap: "6px",
+              flex: screenSize === "tablet" ? "1 1 100%" : "0 0 auto",
+              width: screenSize === "tablet" ? "100%" : undefined,
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: screenSize === "tablet" ? "space-between" : "flex-end",
+            }}>
               {/* API 키 상태 표시 */}
               {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
               <button
@@ -11853,6 +11874,7 @@ export default function ChatPage() {
                   cursor: uploading ? "wait" : (streaming || hasInput || pendingPreviewFiles.length > 0 ? "pointer" : "not-allowed"),
                   opacity: uploading || (!streaming && !hasInput && pendingPreviewFiles.length === 0) ? 0.5 : 1,
                   transition: "background 0.2s", whiteSpace: "nowrap",
+                  marginLeft: screenSize === "tablet" ? "auto" : undefined,
                 }}
               >
                 {uploading ? "업로드중..." : streaming ? (hasInput ? "대기 전송" : "⏹ 중단") : "전송"}

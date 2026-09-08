@@ -2376,3 +2376,18 @@
   - `npm run typecheck`: not available in this repository.
 - Remaining before completion:
   - Commit/push this HANDOVER entry and `src/app/chat/page.tsx`, then run the dashboard blue/green deploy and verify `/chat`.
+
+## 2026-09-08 09:43 KST - Chat file chips and compact composer release
+
+- Request:
+  - Fix chat file chips that copied paths instead of opening in the right artifact panel.
+  - Apply the approved chat input box improvements and deploy to production.
+- Change prepared:
+  - `src/lib/documentLinks.ts`: normalizes `./...`, `../aads-dashboard/...`, and `../aads-server/...` paths before routing.
+  - `src/lib/documentLinks.ts`: maps AADS source paths including `app/`, `src/`, `components/`, `hooks/`, `lib/`, `styles/`, `services/`, `routers/`, and `migrations/` to document preview URLs.
+  - `src/app/chat/page.tsx`: tablet/half-window composer now stacks the input row above the control row so the textarea keeps full width instead of being squeezed by status buttons.
+- Verification before release:
+  - `git diff --check -- src/lib/documentLinks.ts src/app/chat/page.tsx`: passed.
+  - `npm run build`: passed.
+- Release note:
+  - This dashboard change depends on the paired AADS API project-docs source-path expansion for server/dashboard source files to load in the artifact panel.
