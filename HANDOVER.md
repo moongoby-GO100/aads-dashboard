@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-08 20:06 KST - PC Agent production button verification
+
+- Verified deployed dashboard release `4c9f0b1f00fa` on `/ops/pc-agents` with server Playwright Chromium and the configured internal E2E administrator through the real login form. The Vault E2E account was present but its ordinary-user role redirected the operations page to chat; no account permissions were changed.
+- Actual primary-button click downloaded `kakaobot-setup.exe`: 21,649,436 bytes, `MZ`/PE32+ Windows x86-64 executable, SHA-256 `0c4770691fb9815eac6c2cff8049d66c439fa12f1b804c368e9a0a3a194e74ef`. Adjacent ZIP click downloaded `kakaobot-agent-1.0.73.zip`: 114,669 bytes, `PK` signature. Both browser downloads completed without errors.
+- Screenshot captured at `/tmp/pc-download-buttons-verified.png`; verification script at `/tmp/pc_download_browser_verify.py`. The generic MCP browser selected an offline PC session, so the successful verification explicitly ran server Chromium.
+- Dashboard slots are healthy with the same image ID `sha256:a3b78e820fbb3d9653e85c655bb0c1ed9099fad21614c4a1d91f03bca35fba9c`; the canonical deploy log `deploy-logs/dashboard-deploy-20260908-194322.log` records successful five-minute P0/P1 monitoring. Its automatic QA was UNKNOWN; the actual authenticated button-download verification above supplies the missing task-specific manual QA.
+- Remaining backend compatibility fix is **not yet deployed**: production `/api/v1/kakao-bot/agent/download` still returns ZIP without a format parameter. Committed/pushed server fix `a63f0f1e` removes that implicit fallback; its six download regression tests passed. Previous queued releases were superseded by an older release request; a fresh canonical clean-worktree `deploy.sh bluegreen` invocation registered run `205`.
+- Run `205` waits for run `202` and old-slot active responses, including this verification conversation. Do not report backend release certification until same-digest synchronization and five-minute monitoring finish. Windows installer execution/Defender scanning were not repeated in this verification.
+
 ## 2026-09-08 19:24 KST - PC Agent primary download pinned to EXE endpoint
 
 - Fixed the blue `설치파일 다운로드 (.exe)` button on `/ops/pc-agents` to call the EXE-only `/api/v1/kakao-bot/agent/download-exe` route.
