@@ -185,7 +185,7 @@ export default function PCAgentsPage() {
   };
 
   const handleDownloadExe = () => {
-    const url = `${BASE_URL}/kakao-bot/agent/download`;
+    const url = `${BASE_URL}/kakao-bot/agent/download-exe`;
     const a = document.createElement("a");
     a.href = url;
     a.download = "kakaobot-setup.exe";

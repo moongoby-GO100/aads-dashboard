@@ -1,5 +1,12 @@
 # AADS Dashboard Handover
 
+## 2026-09-08 19:24 KST - PC Agent primary download pinned to EXE endpoint
+
+- Fixed the blue `설치파일 다운로드 (.exe)` button on `/ops/pc-agents` to call the EXE-only `/api/v1/kakao-bot/agent/download-exe` route.
+- Kept the adjacent `ZIP` button on `/api/v1/kakao-bot/agent/download?format=zip`.
+- Root cause: the primary button called the generic `/agent/download` route, which legitimately falls back to ZIP when the running API image does not contain a current local EXE.
+- Release validation: dashboard build, production HTTP file signature/content disposition for both buttons, Blue/Green same-image synchronization, and five-minute P0/P1 monitoring.
+
 ## 2026-09-08 - Blue/Green slot panel runtime truth source
 
 - Fixed the operations panel after production verification showed the API active slot (`8102`, green) being presented as the Dashboard active slot even though nginx routed Dashboard traffic to `3100` (blue).
