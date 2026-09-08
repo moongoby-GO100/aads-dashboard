@@ -821,4 +821,31 @@ export const api = {
     request<any>(`/admin/prompt-assets/${encodeURIComponent(slug)}`, { method: "DELETE" }),
   previewPromptCompile: (data: { workspace: string; intent: string; model: string; role: string }) =>
     request<any>("/admin/prompt-assets/preview", { method: "POST", body: JSON.stringify({ workspace_key: data.workspace, intent: data.intent, base_system_prompt: "" }) }),
+
+  // LLMOps traces & evals
+  getLlmopsStatus: (project?: string) => request<any>(`/ohvis/llmops/status${project ? `?project=${project}` : ""}`),
+  getLlmopsTraces: (params?: { project?: string; status?: string; hours?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.project) sp.set("project", params.project);
+    if (params?.status) sp.set("status", params.status);
+    if (params?.hours) sp.set("hours", String(params.hours));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    const qs = sp.toString();
+    return request<any>(`/ohvis/llmops/traces${qs ? `?${qs}` : ""}`);
+  },
+  getLlmopsTraceDetail: (traceId: string) => request<any>(`/ohvis/llmops/traces/${traceId}`),
+  getLlmopsCandidates: (params?: { project?: string; hours?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.project) sp.set("project", params.project);
+    if (params?.hours) sp.set("hours", String(params.hours));
+    const qs = sp.toString();
+    return request<any>(`/ohvis/llmops/candidates${qs ? `?${qs}` : ""}`);
+  },
+  postLlmopsPromote: (traceId: string, datasetSlug?: string) =>
+    request<any>("/ohvis/llmops/datasets/from-trace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trace_id: traceId, dataset_slug: datasetSlug || "aads-failed-traces" }) }),
+  postLlmopsEvalRun: (datasetSlug: string) =>
+    request<any>("/ohvis/llmops/evals/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataset_slug: datasetSlug }) }),
+  getLlmopsEvalResult: (experimentId: string) => request<any>(`/ohvis/llmops/evals/${experimentId}`),
+  postLlmopsFeedback: (traceId: string, rating: number, comment?: string) =>
+    request<any>("/ohvis/llmops/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trace_id: traceId, rating, comment: comment || "" }) }),
 };

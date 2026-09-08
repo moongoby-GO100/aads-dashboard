@@ -709,6 +709,34 @@ export default function OpsPage() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>Mobile Agent</div>
               <div style={{ fontSize: 13, color: "var(--accent)" }}>설치 / 페어링</div>
             </Link>
+            <Link
+              href="/ops/traces"
+              style={{
+                ...cardStyle,
+                textAlign: "center",
+                textDecoration: "none",
+                color: "var(--text-primary)",
+                display: "block",
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 6 }}>🔍</div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>LLMOps Traces</div>
+              <div style={{ fontSize: 13, color: "var(--accent)" }}>추적 / 분석</div>
+            </Link>
+            <Link
+              href="/ops/evals"
+              style={{
+                ...cardStyle,
+                textAlign: "center",
+                textDecoration: "none",
+                color: "var(--text-primary)",
+                display: "block",
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 6 }}>📋</div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>Evaluations</div>
+              <div style={{ fontSize: 13, color: "var(--accent)" }}>평가 / 데이터셋</div>
+            </Link>
           </div>
         </section>
 
