@@ -3872,6 +3872,7 @@ export default function ChatPage() {
   }, [setMessagesPreservingViewport]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const companyIntelligencePrefillAppliedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, unknown>>>([]);
   const [pendingPreviewFiles, setPendingPreviewFiles] = useState<File[]>([]);
@@ -3886,6 +3887,39 @@ export default function ChatPage() {
   useEffect(() => {
     return () => { pendingPreviewUrls.forEach((u) => u && URL.revokeObjectURL(u)); };
   }, [pendingPreviewUrls]);
+  // Public Company Intelligence reports may hand an arbitrary follow-up topic to
+  // authenticated chat as a draft. Never submit it automatically: the user must
+  // review and send the draft. Keep a session-scoped copy so a login redirect or
+  // reload does not discard it after the sensitive query value is removed.
+  useEffect(() => {
+    if (companyIntelligencePrefillAppliedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("source") !== "company-intelligence") return;
+
+    const company = (params.get("company") || "general").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 32) || "general";
+    const storageKey = `aads.company-intelligence.prefill.${company}`;
+    const queryPrefill = (params.get("prefill") || "").trim().slice(0, 4000);
+    let savedPrefill = "";
+    try {
+      savedPrefill = (window.sessionStorage.getItem(storageKey) || "").trim().slice(0, 4000);
+      if (queryPrefill) window.sessionStorage.setItem(storageKey, queryPrefill);
+    } catch {
+      // Storage can be unavailable in privacy-restricted browsers; the URL draft
+      // still works for the current page load.
+    }
+    const prefill = queryPrefill || savedPrefill;
+    if (!prefill) return;
+
+    companyIntelligencePrefillAppliedRef.current = true;
+    setInput(prefill);
+    setHasInput(true);
+    chatInputRef.current?.setValue(prefill);
+    if (queryPrefill) {
+      params.delete("prefill");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
+  }, []);
   // P2-2: 분기 모드 활성화 시 입력창 포커스
   useEffect(() => { if (branchPoint) textareaRef.current?.focus(); }, [branchPoint]);
   const abortCtrl = useRef<AbortController | null>(null);
