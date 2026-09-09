@@ -4,6 +4,36 @@ export interface DirectivesResponse { status: string; total: number; running: nu
 export interface CollectorOverview { projects: Array<{ project_key: string; site_count: number; active_account_count: number }>; totals: { connected_sites: number; active_accounts: number; running_jobs: number; action_required_jobs: number; failed_jobs: number }; job_statuses: Record<string, number>; demo: boolean; challenge_contract?: { auto_bypass_allowed: boolean; user_approved_automation_allowed?: boolean; responsibility_acceptance_required?: boolean; challenge_values_persisted: boolean; supported_challenge_kinds: string[]; allowed_resume_resolutions: string[]; resume_strategy: string; physical_input_challenge_kinds?: string[] }; }
 export interface CollectorSite { id: string; project_key: string; site_key: string; display_name: string; runtime: string; data_categories: string[]; account_count: number; connected_account_count: number; last_collected_at?: string; enabled: boolean; }
 export interface CollectorJob { id: string; status: string; site_key: string; work_key: string; runtime: string; error_code?: string; message?: string; updated_at: string; payload: { project_key?: string; recipe_id?: string }; challenge?: { kind?: string; page_url?: string; evidence?: string[]; resume_token?: string; auto_bypass_allowed?: boolean; user_approved_automation_allowed?: boolean; responsibility_acceptance_required?: boolean; requires_user_approval?: boolean; requires_user_physical_input?: boolean; challenge_values_persisted?: boolean; requires_user_intervention?: boolean; allowed_resolutions?: string[]; resume_strategy?: string; resolved_by_user?: boolean; approved_automation_requested?: boolean; responsibility_accepted?: boolean; physical_input_completed?: boolean }; }
+export interface GoalSummary {
+  id?: string;
+  goal_id?: string;
+  title: string;
+  project: string;
+  priority: string;
+  status: string;
+  progress?: number;
+}
+export interface GoalTask {
+  task_type: string;
+  task_id: string;
+  status: string;
+}
+export interface GoalMilestone {
+  id: string;
+  title: string;
+  sequence: number;
+  status: string;
+  auto_advance: boolean;
+  completion_criteria?: string | null;
+  tasks?: GoalTask[];
+}
+export interface GoalDetail extends GoalSummary {
+  goal_id: string;
+  success_criteria?: string | null;
+  milestones_total: number;
+  milestones_completed: number;
+  milestones: GoalMilestone[];
+}
 export interface ChatWorkspaceRoleOption {
   value: string;
   role?: string;
@@ -809,6 +839,12 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ preferences }),
     }),
+
+  // Goal Control — goal -> milestone -> task execution timeline
+  getGoals: (project?: string) =>
+    request<GoalSummary[]>(`/goals${project ? `?project=${encodeURIComponent(project)}` : ""}`),
+  getGoalStatus: (goalId: string) =>
+    request<GoalDetail>(`/goals/${encodeURIComponent(goalId)}/status`),
 
   // Prompt Assets (5-Layer System)
   getPromptAssets: (layer?: number) =>

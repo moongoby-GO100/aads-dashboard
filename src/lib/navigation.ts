@@ -28,6 +28,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/marketing/ably", label: "에이블리 광고분석", icon: "📈", adminOnly: true },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯", adminOnly: true },
   { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true },
+  { href: "/goals", label: "Goal Control", icon: "🎯", adminOnly: true },
   { href: "/docs", label: "문서 통합", icon: "📄", adminOnly: true },
   { href: "/design/modifications", label: "Design Studio", icon: "🎨", adminOnly: true },
   { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true },

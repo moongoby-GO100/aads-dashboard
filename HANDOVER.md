@@ -2490,3 +2490,20 @@
 - Evidence: /root/aads/verification/llmops-20260909/{evals-desktop.png,evals-mobile.png,traces-desktop.png,browser-result.log}; deployment log /tmp/aads-llmops-dashboard-final-release.log.
 - Remaining limits: scores/feedback totals are omitted by the existing status API and displayed as 미제공. Rule-v1 uses an average threshold; failed criteria now trigger an explicit UI warning.
 - This final documentation update is separate from the runtime release; no additional application image is needed.
+
+## 2026-09-09 09:16 KST - Goal Control supervision screen
+
+- Request:
+  - Continue the AADS remediation in priority order and make goal execution state directly observable without replacing the existing `/flow` or `/ops/traces` screens.
+- Changes prepared:
+  - `src/app/goals/page.tsx`: adds an admin Goal Control screen with project filtering, goal progress summaries, goal/milestone/task graph, 15-second refresh, explicit loading/empty/error states, and an in-context retry action.
+  - `src/lib/api.ts`: adds typed clients for the canonical `GET /api/v1/goals` and `GET /api/v1/goals/{goal_id}/status` contracts.
+  - `src/lib/navigation.ts`: adds the admin-only `Goal Control` route while preserving existing operations views.
+- Verification before release:
+  - `npx tsc --noEmit`: passed.
+  - Focused ESLint: 0 errors; repository-wide pre-existing `no-explicit-any` warnings in `src/lib/api.ts` remain outside this change.
+  - `git diff --check`: passed.
+  - Deployed API OpenAPI exposes both Goal Control read endpoints; unauthenticated direct access returns HTTP 401 as expected.
+- Release and rollback:
+  - Commit, push, immutable dashboard blue/green deployment, authenticated browser validation, and five-minute P0/P1 monitoring are still required.
+  - Roll back by reverting the scoped dashboard commit and redeploying; no DB writes or API behavior changes are made by this dashboard patch.
