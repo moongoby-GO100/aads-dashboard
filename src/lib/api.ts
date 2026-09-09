@@ -34,6 +34,36 @@ export interface GoalDetail extends GoalSummary {
   milestones_completed: number;
   milestones: GoalMilestone[];
 }
+export interface HandoverEntry {
+  id: string;
+  project_key: string;
+  entry_key: string;
+  entry_type: "status" | "decision" | "task" | "risk" | "verification" | "note";
+  title: string;
+  summary?: string | null;
+  body: string;
+  status: "active" | "resolved" | "superseded" | "archived";
+  priority: "P0" | "P1" | "P2" | "P3";
+  source_kind: string;
+  source_session_id?: string | null;
+  source_path?: string | null;
+  revision: number;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+export interface HandoverEvent {
+  id: number;
+  entry_id: string;
+  project_key: string;
+  event_type: string;
+  revision: number;
+  change_summary?: string | null;
+  changed_by?: string | null;
+  created_at: string;
+}
+export interface HandoverSearchResponse { items: HandoverEntry[]; total: number; limit: number; offset: number; }
+export interface HandoverEventsResponse { items: HandoverEvent[]; total: number; }
 export interface ChatWorkspaceRoleOption {
   value: string;
   role?: string;
@@ -633,6 +663,20 @@ export const api = {
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
   getProjectDocContent: (project: string, basePath: string, filePath: string) =>
     request<any>(`/project-docs/content?project=${encodeURIComponent(project)}&base_path=${encodeURIComponent(basePath)}&file_path=${encodeURIComponent(filePath)}`),
+
+  // Global handover ledger: tenant/project canonical state and immutable revisions
+  searchHandovers: (params?: { project?: string; status?: string; entryType?: string; query?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.project && params.project !== "ALL") q.set("project_key", params.project);
+    if (params?.status && params.status !== "all") q.set("status", params.status);
+    if (params?.entryType && params.entryType !== "all") q.set("entry_type", params.entryType);
+    if (params?.query) q.set("q", params.query);
+    q.set("limit", String(params?.limit || 200));
+    q.set("offset", String(params?.offset || 0));
+    return request<HandoverSearchResponse>(`/handovers?${q.toString()}`);
+  },
+  getHandover: (id: string) => request<HandoverEntry>(`/handovers/${encodeURIComponent(id)}`),
+  getHandoverEvents: (id: string) => request<HandoverEventsResponse>(`/handovers/${encodeURIComponent(id)}/events`),
 
   // Admin: Prompt Management
   getPromptSections: () => request<any>("/admin/prompts/sections"),

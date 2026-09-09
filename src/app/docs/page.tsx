@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
+import Link from "next/link";
 
 interface DocFile {
   name: string;
@@ -801,7 +802,16 @@ export default function DocsPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="📄 프로젝트별 문서 통합" />
+      <div className="flex items-center gap-2 pr-3" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="flex-1"><Header title="📄 프로젝트별 문서 통합" /></div>
+        <Link
+          href="/handovers"
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
+          style={{ background: "var(--accent)", color: "#fff" }}
+        >
+          DB 핸드오버
+        </Link>
+      </div>
 
       <div ref={layoutRef} className="flex-1 flex overflow-hidden">
         <div

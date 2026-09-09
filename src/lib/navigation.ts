@@ -30,6 +30,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true },
   { href: "/goals", label: "Goal Control", icon: "🎯", adminOnly: true },
   { href: "/docs", label: "문서 통합", icon: "📄", adminOnly: true },
+  { href: "/handovers", label: "핸드오버", icon: "🧾", adminOnly: true },
   { href: "/design/modifications", label: "Design Studio", icon: "🎨", adminOnly: true },
   { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true },
   { href: "/ops", label: "운영 현황", icon: "📊", adminOnly: true },
