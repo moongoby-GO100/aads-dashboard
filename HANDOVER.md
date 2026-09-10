@@ -2605,3 +2605,11 @@
 - Release and rollback:
   - Commit, push, dashboard blue/green deployment, authenticated desktop/mobile visual verification, and five-minute P0/P1 monitoring are required before operational certification.
   - Roll back by reverting this scoped commit and redeploying; no API or DB change is involved.
+
+### Operational certification — 2026-09-11 04:14 KST
+
+- Runtime release `a80b19be5596` was pushed and deployed with `deploy.sh` from a clean committed SHA.
+- The release image was built once; blue candidate direct health, short-lock cutover, external health, and `--no-build` green standby synchronization passed.
+- Both dashboard slots are healthy on identical image digest `sha256:7b0cccbd2a153efa7cfc58ea408d47751ef5f7c8651c36e34de752f4fb80730e`; five P0/P1 monitor rounds passed through 04:11:21 KST.
+- External `/login` and API health return HTTP 200; unauthenticated `/chat` correctly redirects to `/login` with HTTP 307.
+- Authenticated visual E2E remains uncertified: the Vault login failed after one reconnect retry, local Playwright lacked its Chromium executable, and Browser Bridge navigation timed out at 120 seconds. Runtime/API/container validation passed, but desktop/mobile screenshots must be retried after browser infrastructure recovery.
