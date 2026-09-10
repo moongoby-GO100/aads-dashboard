@@ -1,4 +1,5 @@
 // AADS Chat API helpers — extracted from page.tsx (Phase 1)
+import type { Artifact } from "./types";
 
 export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
@@ -66,8 +67,8 @@ export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
 export async function updateArtifact(
   artifactId: string,
   data: { title?: string; content?: string }
-): Promise<void> {
-  await chatApi(`/chat/artifacts/${artifactId}`, {
+): Promise<Artifact> {
+  return chatApi<Artifact>(`/chat/artifacts/${artifactId}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });

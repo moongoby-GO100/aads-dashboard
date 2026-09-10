@@ -183,7 +183,7 @@ export interface ChatArtifactPanelProps {
   setSelectedArtifactIdx: (v: number) => void;
   activeSession: ChatSession | null;
   copyArtifact: (content: string) => void;
-  toDirective: (a: Artifact) => void;
+  toDirective: (a: Artifact) => void | Promise<void>;
   systemMessages?: ChatMessage[];
   unreadLogCount?: number;
   sessionId?: string;
@@ -1064,7 +1064,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [showHtmlCode, setShowHtmlCode] = useState(false);
-  const [localEdits, setLocalEdits] = useState<Record<string, { title: string; content: string }>>({});
+  const [localEdits, setLocalEdits] = useState<Record<string, {
+    title: string;
+    content: string;
+    metadata?: Record<string, unknown>;
+  }>>({});
 
   const startEdit = useCallback((artifact: Artifact) => {
     const saved = localEdits[artifact.id];
@@ -1084,8 +1088,15 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     setEditSaving(true);
     setEditError(null);
     try {
-      await updateArtifact(editingArtifactId, { title: editTitle, content: editContent });
-      setLocalEdits(prev => ({ ...prev, [editingArtifactId]: { title: editTitle, content: editContent } }));
+      const savedArtifact = await updateArtifact(editingArtifactId, { title: editTitle, content: editContent });
+      setLocalEdits(prev => ({
+        ...prev,
+        [editingArtifactId]: {
+          title: savedArtifact.title,
+          content: savedArtifact.content,
+          metadata: savedArtifact.metadata,
+        },
+      }));
       setEditingArtifactId(null);
     } catch (e) {
       setEditError((e as Error).message || "저장 실패");
@@ -2290,7 +2301,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               ) : activeArtifact ? (() => {
                 const edited = localEdits[activeArtifact.id];
                 const displayArtifact = edited
-                  ? { ...activeArtifact, title: edited.title, content: edited.content }
+                  ? { ...activeArtifact, title: edited.title, content: edited.content, metadata: edited.metadata ?? activeArtifact.metadata }
                   : activeArtifact;
                 const isEditing = editingArtifactId === activeArtifact.id;
 
@@ -2550,12 +2561,21 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 }}
               >
 	                {[
-	                  { icon: "📋", label: "복사", fn: () => copyArtifact(activeArtifact.content) },
+	                  { icon: "📋", label: "복사", fn: () => copyArtifact(localEdits[activeArtifact.id]?.content ?? activeArtifact.content) },
 	                  ...(activeArtifact.artifact_type === "chart"
 	                    ? [{ icon: "🔗", label: "새 탭", fn: () => openArtifactInNewTab(activeArtifact) }]
 	                    : []),
 	                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
-	                  { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
+	                  {
+	                    icon: activeArtifact.metadata?.subtype === "directive_draft" ? "📝" : "📋",
+	                    label: activeArtifact.metadata?.subtype === "directive_draft" ? "입력창에 넣기" : "지시서",
+	                    fn: () => toDirective({
+	                      ...activeArtifact,
+	                      title: localEdits[activeArtifact.id]?.title ?? activeArtifact.title,
+	                      content: localEdits[activeArtifact.id]?.content ?? activeArtifact.content,
+	                      metadata: localEdits[activeArtifact.id]?.metadata ?? activeArtifact.metadata,
+	                    }),
+	                  },
 	                ].map((btn) => (
                   <button
                     key={btn.label}

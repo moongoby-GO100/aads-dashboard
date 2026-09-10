@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-10 17:28 KST - OHVIS 지시 코파일럿 확인형 MVP (코드 완료 / 미배포)
+
+- CEO 지시(`PRD 작성 저장하고 즉시 구현 진행`)에 따라 백엔드 PRD·API 커밋 `9c9444c0`과 연결되는 확인형 대시보드 흐름을 구현했다.
+- 채팅 입력 액션의 `지시 초안` 버튼이 현재 세션 최근 문답 기반 초안을 생성하고 보고서 아티팩트를 즉시 연다. 생성 중 중복 클릭을 막고, 세션 미선택·API 실패를 같은 입력 영역에서 복구 가능한 오류로 표시한다.
+- 지시 초안 아티팩트는 저장 후 최신 revision metadata를 유지하며 `입력창에 넣기`로 이동한다. 기존 입력이 있으면 교체 확인을 받고 자동 전송하지 않는다. 입력·수정 후 실제 전송이 수락되면 `inserted`/`sent` 감사 이벤트와 최종 revision을 기록한다.
+- 변경 파일: `src/app/chat/page.tsx`, `src/app/chat/ChatArtifactPanel.tsx`, `src/app/chat/api.ts`. `page.tsx`의 별도 `interrupted_partial` 표시 변경은 이번 커밋에서 제외해 기존 dirty 변경으로 보존한다.
+- 검증: scoped ESLint 0 errors(기존 warning 22건), `npx tsc --noEmit --pretty false` 통과, `npm run build` 성공(76 routes). 백엔드 `.venv/bin/pytest -q tests/unit/test_directive_draft_service.py tests/unit/test_tenant_rbac_policy.py`는 지시 코파일럿 포함 28 passed이며 기존 memory-context tenant 검사 1건이 실패했다.
+- 미실행: 운영 DB migration, push, blue/green 배포, 로그인 브라우저 E2E·화면 캡처, 5분 P0/P1 모니터링. 운영 반영 완료로 보고하지 않는다.
+
 ## 2026-09-10 KST - 채팅 파일 링크 아티팩트 열람 2차 보강 + 실제 브라우저 화면 검증 (코드 완료 / 미배포)
 
 - **선행 작업과의 관계**: 같은 작업지시로 먼저 실행·배포된 러너 커밋 `5da0741`(아래 항목) 위에 **덧붙인 2차 보강**이다.

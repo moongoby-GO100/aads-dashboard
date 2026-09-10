@@ -87,6 +87,18 @@ type ProjectDocContentResponse = {
   is_binary?: boolean;
 };
 
+type DirectiveDraftCreateResponse = {
+  id: string;
+  project_key: string;
+  risk_level: "low" | "medium" | "high";
+  current_revision: number;
+  classification?: {
+    generation_mode?: "generated" | "fallback";
+    requires_human_review?: boolean;
+  };
+  artifact: Artifact;
+};
+
 function titleFromHref(href: string, fallback: string): string {
   const cleanFallback = fallback.trim();
   try {
@@ -3502,6 +3514,15 @@ export default function ChatPage() {
   const [showNewTemplate, setShowNewTemplate] = useState(false);
   const [newTplTitle, setNewTplTitle] = useState("");
   const [newTplCategory, setNewTplCategory] = useState("일반");
+  const [directiveDrafting, setDirectiveDrafting] = useState(false);
+  const [directiveDraftError, setDirectiveDraftError] = useState<string | null>(null);
+  const pendingDirectiveDraftRef = useRef<{
+    draftId: string;
+    artifactId: string;
+    sessionId: string;
+    revision: number;
+    insertedContent: string;
+  } | null>(null);
 
   // ── Proactive Briefing ──
   const [briefing, setBriefing] = useState<{ message: string; collapsed: boolean; scope?: string } | null>(null);
@@ -4892,6 +4913,51 @@ export default function ChatPage() {
   }, [screenSize]);
   useEffect(() => { uploadingRef.current = uploading; }, [uploading]);
   useEffect(() => { queueCountRef.current = queueCount; }, [queueCount]);
+
+  const recordPendingDirectiveSent = useCallback(async (content: string, sessionId: string) => {
+    const pending = pendingDirectiveDraftRef.current;
+    if (!pending || pending.sessionId !== sessionId) return;
+    const finalContent = content.trim();
+    if (!finalContent.includes(">>>DIRECTIVE_START") || !finalContent.includes(">>>DIRECTIVE_END")) {
+      pendingDirectiveDraftRef.current = null;
+      return;
+    }
+
+    // The message was accepted by the send endpoint. Clear first so retries cannot duplicate the audit event.
+    pendingDirectiveDraftRef.current = null;
+    try {
+      let revision = pending.revision;
+      const contentChanged = finalContent !== pending.insertedContent.trim();
+      if (contentChanged) {
+        const updated = await chatApi<{ current_revision: number }>(
+          `/chat/directive-drafts/${encodeURIComponent(pending.draftId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              content: finalContent,
+              expected_revision: pending.revision,
+            }),
+          },
+        );
+        revision = updated.current_revision;
+      }
+      await chatApi(`/chat/directive-drafts/${encodeURIComponent(pending.draftId)}/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "sent",
+          metadata: {
+            artifact_id: pending.artifactId,
+            session_id: sessionId,
+            revision,
+            content_changed_after_insert: contentChanged,
+          },
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "전송 이력 저장 실패";
+      setDirectiveDraftError(`메시지는 전송됐지만 지시 초안 전송 이력을 저장하지 못했습니다: ${message}`);
+    }
+  }, []);
 
   const cacheWorkspaceSessions = useCallback((workspaceId: string, nextSessions: ChatSession[]) => {
     setSidebarSessionsByWorkspace((prev) => ({
@@ -6912,6 +6978,7 @@ export default function ChatPage() {
             }, 0);
             return;
           }
+          void recordPendingDirectiveSent(interruptContent, activeSessionObjRef.current?.id || "");
           void chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
             `/chat/messages?session_id=${activeSessionObjRef.current?.id}&limit=10&include_streaming=true`
           )
@@ -7163,6 +7230,8 @@ export default function ChatPage() {
         }
         throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
       }
+
+      void recordPendingDirectiveSent(content, sessionId!);
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
@@ -8235,6 +8304,7 @@ export default function ChatPage() {
     setMessagesPreservingViewport,
     showCompletionToastOnce,
     streamingStatusPathFor,
+    recordPendingDirectiveSent,
   ]);
 
   function stopStreaming() {
@@ -8927,6 +8997,40 @@ export default function ChatPage() {
     try { await chatApi(`/chat/templates/${id}`, { method: "DELETE" }); fetchTemplates(); } catch { /* ignore */ }
   }
 
+  async function handleCreateDirectiveDraft() {
+    const sessionId = activeSessionObjRef.current?.id;
+    if (!sessionId || directiveDrafting) {
+      if (!sessionId) setDirectiveDraftError("지시 초안을 만들 채팅 세션을 먼저 선택해주세요.");
+      return;
+    }
+    setDirectiveDrafting(true);
+    setDirectiveDraftError(null);
+    try {
+      const draft = await chatApi<DirectiveDraftCreateResponse>(
+        `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts`,
+        { method: "POST", body: JSON.stringify({ context_window: 8 }) },
+      );
+      const artifact = draft.artifact;
+      setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifactTab("report");
+      setSelectedArtifactIdx(0);
+      setArtifactMode("full");
+      if (screenSize !== "desktop") setMobileOverlay("artifact");
+      if (screenSize === "mobile") setShowMobileActions(false);
+      showCompletionToast(
+        draft.classification?.generation_mode === "fallback"
+          ? "LLM 생성을 사용할 수 없어 안전 폴백 지시 초안을 만들었습니다."
+          : "최근 문답으로 지시 초안을 만들었습니다. 확인 후 입력창에 넣어주세요.",
+        sessionId,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "지시 초안 생성에 실패했습니다.";
+      setDirectiveDraftError(message);
+    } finally {
+      setDirectiveDrafting(false);
+    }
+  }
+
   // ── Keyboard (useCallback으로 안정화 → ChatInput memo 유효화, IME 깨짐 방지) ──
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 한글 IME 조합 중이면 키 이벤트 무시 (깨짐 방지)
@@ -8957,9 +9061,41 @@ export default function ChatPage() {
     navigator.clipboard?.writeText(content).catch(() => {});
   }
   async function toDirective(artifact: Artifact) {
-    const text = `TITLE: ${artifact.title}\nDESCRIPTION: |\n  ${artifact.content.split("\n").join("\n  ")}`;
-    await navigator.clipboard?.writeText(text).catch(() => {});
-    showCompletionToast("지시서 형식이 클립보드에 복사되었습니다");
+    const isDraft = artifact.metadata?.subtype === "directive_draft" && artifact.metadata?.draft_id;
+    if (!isDraft) {
+      const text = `TITLE: ${artifact.title}\nDESCRIPTION: |\n  ${artifact.content.split("\n").join("\n  ")}`;
+      await navigator.clipboard?.writeText(text).catch(() => {});
+      showCompletionToast("지시서 형식이 클립보드에 복사되었습니다");
+      return;
+    }
+
+    const existing = chatInputRef.current?.getValue()?.trim() || "";
+    if (existing && existing !== artifact.content.trim()) {
+      const replace = window.confirm("현재 입력 내용을 저장된 지시 초안으로 교체할까요? 자동 전송되지 않습니다.");
+      if (!replace) return;
+    }
+    chatInputRef.current?.setValue(artifact.content);
+    setInput(artifact.content);
+    setHasInput(true);
+    pendingDirectiveDraftRef.current = {
+      draftId: String(artifact.metadata?.draft_id),
+      artifactId: artifact.id,
+      sessionId: activeSessionObjRef.current?.id || "",
+      revision: Number(artifact.metadata?.revision || 1),
+      insertedContent: artifact.content,
+    };
+    chatInputRef.current?.focus();
+    setDirectiveDraftError(null);
+    try {
+      await chatApi(`/chat/directive-drafts/${encodeURIComponent(String(artifact.metadata?.draft_id))}/events`, {
+        method: "POST",
+        body: JSON.stringify({ action: "inserted", metadata: { artifact_id: artifact.id } }),
+      });
+      showCompletionToast("지시 초안을 입력창에 넣었습니다. 검토 후 전송해주세요.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "이벤트 기록 실패";
+      setDirectiveDraftError(`입력창에는 반영했지만 사용 이력을 저장하지 못했습니다: ${message}`);
+    }
   }
 
   // ── Derived ──
@@ -11593,9 +11729,11 @@ export default function ChatPage() {
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
                 { icon: "📋", label: "템플릿", action: "template" as const },
+                { icon: "📝", label: directiveDrafting ? "초안 생성 중" : "지시 초안", action: "directive" as const },
               ].map((chip) => (
                 <button
                   key={chip.label}
+                  disabled={"action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)}
                   onClick={() => {
                     if ("action" in chip && chip.action === "file") {
                       fileInputRef.current?.click();
@@ -11618,6 +11756,10 @@ export default function ChatPage() {
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
+                    if ("action" in chip && chip.action === "directive") {
+                      void handleCreateDirectiveDraft();
+                      return;
+                    }
                     if ("prefix" in chip) {
                       applyChip(chip.prefix);
                       if (screenSize === "mobile") setShowMobileActions(false);
@@ -11629,7 +11771,8 @@ export default function ChatPage() {
                     background: "var(--ct-hover)",
                     border: "1px solid var(--ct-border)",
                     borderRadius: screenSize === "mobile" ? "12px" : "16px",
-                    cursor: "pointer",
+                    cursor: ("action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)) ? "not-allowed" : "pointer",
+                    opacity: ("action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)) ? 0.55 : 1,
                     color: "var(--ct-text)",
                     display: "flex",
                     alignItems: "center",
@@ -11640,6 +11783,18 @@ export default function ChatPage() {
                   {chip.icon} {chip.label}
                 </button>
               ))}
+            </div>
+          )}
+          {directiveDraftError && (
+            <div
+              role="alert"
+              style={{
+                marginBottom: "8px", padding: "7px 10px", borderRadius: "8px",
+                border: "1px solid #ef444466", background: "#ef444414",
+                color: "#ef4444", fontSize: "11px", lineHeight: 1.5,
+              }}
+            >
+              지시 초안 오류: {directiveDraftError} 다시 시도해주세요.
             </div>
           )}
 
