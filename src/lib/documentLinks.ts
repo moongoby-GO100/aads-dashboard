@@ -136,6 +136,11 @@ const SITE_ORIGINS = [
   "http://localhost:3001",
 ];
 
+function siteOrigins(): string[] {
+  if (typeof window === "undefined") return SITE_ORIGINS;
+  return Array.from(new Set([...SITE_ORIGINS, window.location.origin]));
+}
+
 // 서버 파일시스템 경로로 간주할 루트
 const FS_ROOT_PREFIXES = ["/root/", "/app/", "/data/", "/srv/", "/tmp/", "/var/", "/opt/", "/mnt/", "/home/"];
 
@@ -233,13 +238,24 @@ export function normalizeDocumentHref(href: string): string {
   let raw = href.trim();
   if (!raw || isUnsafeLink(raw)) return "";
   raw = raw.replace(/\\/g, "/");
+  // Old messages sometimes contain a fully URL-encoded filesystem path rather
+  // than an encoded path segment. Decode it only when it becomes a known local
+  // path; arbitrary encoded URLs must retain their original meaning.
+  if (/^%2f/i.test(raw)) {
+    try {
+      const decoded = decodeURIComponent(raw);
+      if (isFilesystemPath(decoded)) raw = decoded;
+    } catch {
+      /* malformed legacy links fall through to the conservative behavior */
+    }
+  }
   raw = raw.replace(/^\.\//, "");
   if (raw.startsWith("../aads-dashboard/")) raw = raw.replace(/^\.\.\/aads-dashboard\//, "");
   if (raw.startsWith("../aads-server/")) raw = raw.replace(/^\.\.\/aads-server\//, "");
 
   // 0. 사이트 URL로 잘못 감싸인 파일시스템 경로 복원
   //    예: https://aads.newtalk.kr/root/aads/aads-server/보고서.xlsx → /root/aads/aads-server/보고서.xlsx
-  for (const origin of SITE_ORIGINS) {
+  for (const origin of siteOrigins()) {
     if (raw.startsWith(`${origin}/`)) {
       const rest = raw.slice(origin.length);
       let decoded = rest;
@@ -257,7 +273,7 @@ export function normalizeDocumentHref(href: string): string {
 
   // 0-1. 같은 사이트의 문서 뷰어 URL은 내부 라우트로 정규화한다.
   //      채팅 파일칩이 https://aads.newtalk.kr/docs?... 를 외부 URL로 보아 "복사" 처리하는 것을 막는다.
-  for (const origin of SITE_ORIGINS) {
+  for (const origin of siteOrigins()) {
     if (raw.startsWith(`${origin}/docs?`)) {
       raw = raw.slice(origin.length);
       break;

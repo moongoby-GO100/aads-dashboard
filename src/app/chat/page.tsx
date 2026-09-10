@@ -4328,6 +4328,8 @@ export default function ChatPage() {
   const artifactToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const artifactFetchingRef = useRef(false); // 중복 re-fetch 방지
   const artifactFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const documentPreviewAbortRef = useRef<AbortController | null>(null);
+  const documentPreviewRequestRef = useRef(0);
   const toolHydrationRequestedRef = useRef<Set<string>>(new Set());
 
   const needsToolHydration = useCallback((msg: ChatMessage): boolean => {
@@ -5388,6 +5390,9 @@ export default function ChatPage() {
       setQueueCount(0);
     }
     if (isSessionIdChange) {
+      documentPreviewRequestRef.current += 1;
+      documentPreviewAbortRef.current?.abort();
+      documentPreviewAbortRef.current = null;
       // Every session opens with the compact 420px artifact view. Do not carry
       // an expanded or collapsed panel over from the previously viewed session.
       setArtifactMode("full");
@@ -8933,10 +8938,23 @@ export default function ChatPage() {
     setArtifactTab("report");
   }, []);
   const handleDocumentLinkClickStable = useCallback<DocumentLinkHandler>(async (href, label) => {
+    const requestSessionId = activeSessionRef.current;
+    const requestWorkspaceId = activeWs;
+    const requestId = documentPreviewRequestRef.current + 1;
+    documentPreviewRequestRef.current = requestId;
+    documentPreviewAbortRef.current?.abort();
+    const controller = new AbortController();
+    documentPreviewAbortRef.current = controller;
+    const isStale = () => (
+      controller.signal.aborted ||
+      documentPreviewRequestRef.current !== requestId ||
+      activeSessionRef.current !== requestSessionId
+    );
     const title = titleFromHref(href, label);
     const id = documentArtifactIdFromHref(href);
     const now = new Date().toISOString();
     const showArtifact = (artifact: Artifact) => {
+      if (isStale()) return;
       const nextTab: ArtifactTab =
         artifact.artifact_type === "html_preview"
           ? "html_preview"
@@ -8952,11 +8970,11 @@ export default function ChatPage() {
 
     showArtifact({
       id,
-      session_id: activeSession?.id ?? "",
-      workspace_id: activeWs ?? undefined,
+      session_id: requestSessionId ?? "",
+      workspace_id: requestWorkspaceId ?? undefined,
       artifact_type: "report",
       title,
-      content: `문서를 불러오는 중입니다.\n\n원본: ${href}`,
+      content: "문서를 불러오는 중입니다.",
       metadata: { source_url: href, transient: true, loading: true },
       created_at: now,
     });
@@ -8964,16 +8982,33 @@ export default function ChatPage() {
     try {
       const docsParams = parseDocsPreviewHref(href);
       if (docsParams) {
-        const doc = await chatApi<ProjectDocContentResponse>(buildProjectDocContentPath(docsParams));
+        let doc: ProjectDocContentResponse | null = null;
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            doc = await chatApi<ProjectDocContentResponse>(buildProjectDocContentPath(docsParams), {
+              signal: controller.signal,
+            });
+            break;
+          } catch (error) {
+            lastError = error;
+            const message = error instanceof Error ? error.message : "";
+            if (controller.signal.aborted || message.startsWith("401:") || attempt === 1) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 400));
+          }
+        }
+        if (!doc) throw lastError instanceof Error ? lastError : new Error("문서 응답이 없습니다.");
+        if (isStale()) return;
         const docTitle = titleFromHref(doc.full_path || doc.file_path || href, title);
         const artifactType = doc.is_binary ? "file" : artifactTypeForDocument(docTitle, doc.mime_type, doc.format);
         const content = doc.is_binary && doc.content
           ? `data:${doc.mime_type || "application/octet-stream"};base64,${doc.content}`
           : (doc.content || "");
+        if (!content) throw new Error("파일 API가 빈 내용을 반환했습니다.");
         showArtifact({
           id,
-          session_id: activeSession?.id ?? "",
-          workspace_id: activeWs ?? undefined,
+          session_id: requestSessionId ?? "",
+          workspace_id: requestWorkspaceId ?? undefined,
           artifact_type: artifactType,
           title: docTitle,
           content,
@@ -8994,15 +9029,26 @@ export default function ChatPage() {
       }
 
       const url = new URL(href, window.location.origin);
-      const response = await fetch(url.toString(), { credentials: "include", headers: authHdrs() });
-      if (!response.ok) throw new Error(`${response.status}`);
+      if (url.origin !== window.location.origin) throw new Error("허용되지 않은 문서 호스트입니다.");
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        response = await fetch(url.toString(), {
+          credentials: "include",
+          headers: authHdrs(),
+          signal: controller.signal,
+        });
+        if (response.ok || response.status === 401 || response.status === 403 || response.status === 404) break;
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      if (!response?.ok) throw new Error(response?.status === 401 ? "로그인이 만료되었습니다." : `HTTP ${response?.status || "오류"}`);
+      if (isStale()) return;
       const contentType = response.headers.get("content-type") || "";
       const artifactType = artifactTypeForDocument(title, contentType);
       if (contentType.startsWith("image/") || contentType.includes("pdf")) {
         showArtifact({
           id,
-          session_id: activeSession?.id ?? "",
-          workspace_id: activeWs ?? undefined,
+          session_id: requestSessionId ?? "",
+          workspace_id: requestWorkspaceId ?? undefined,
           artifact_type: "file",
           title,
           content: url.toString(),
@@ -9012,10 +9058,12 @@ export default function ChatPage() {
         return;
       }
       const content = await response.text();
+      if (isStale()) return;
+      if (!content) throw new Error("파일 API가 빈 내용을 반환했습니다.");
       showArtifact({
         id,
-        session_id: activeSession?.id ?? "",
-        workspace_id: activeWs ?? undefined,
+        session_id: requestSessionId ?? "",
+        workspace_id: requestWorkspaceId ?? undefined,
         artifact_type: artifactType,
         title,
         content,
@@ -9028,19 +9076,20 @@ export default function ChatPage() {
         created_at: now,
       });
     } catch (error) {
+      if (isStale()) return;
       const reason = error instanceof Error ? error.message : "알 수 없는 오류";
       showArtifact({
         id,
-        session_id: activeSession?.id ?? "",
-        workspace_id: activeWs ?? undefined,
+        session_id: requestSessionId ?? "",
+        workspace_id: requestWorkspaceId ?? undefined,
         artifact_type: "report",
         title,
-        content: `⚠️ 문서를 우측 패널에서 열지 못했습니다.\n\n- 원본: ${href}\n- 오류: ${reason}\n\n원본 링크를 새 탭에서 다시 열어 확인하십시오.`,
+        content: `⚠️ 문서를 불러오지 못했습니다.\n\n${reason}\n\n채팅의 파일 링크를 다시 클릭해 재시도해 주세요.`,
         metadata: { source_url: href, transient: true, error: reason },
         created_at: now,
       });
     }
-  }, [activeSession?.id, activeWs, screenSize, setMobileOverlay]);
+  }, [activeWs, screenSize, setMobileOverlay]);
 
   useEffect(() => {
     if (!activeWs || activeSession) return;

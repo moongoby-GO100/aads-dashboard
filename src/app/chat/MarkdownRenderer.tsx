@@ -312,6 +312,7 @@ function isArtifactPreviewHref(href: string): boolean {
     const base = typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr";
     const url = new URL(href, base);
     const sameOrigin = typeof window !== "undefined" ? url.origin === window.location.origin : url.origin === "https://aads.newtalk.kr";
+    if (sameOrigin && url.pathname === "/docs" && url.searchParams.has("file_path")) return true;
     if (sameOrigin && (url.pathname.startsWith("/reports/") || url.pathname.startsWith("/exports/"))) return true;
     if (
       sameOrigin &&

@@ -2507,3 +2507,22 @@
 - Release and rollback:
   - Commit, push, immutable dashboard blue/green deployment, authenticated browser validation, and five-minute P0/P1 monitoring are still required.
   - Roll back by reverting the scoped dashboard commit and redeploying; no DB writes or API behavior changes are made by this dashboard patch.
+
+## 2026-09-10 - Historical chat document links open in artifact panel
+
+- Scoped UI changes:
+  - `src/lib/documentLinks.ts`: recognize fully URL-encoded filesystem paths and same-site candidate/standby origins while retaining the existing allowlisted path mapping.
+  - `src/app/chat/MarkdownRenderer.tsx`: route same-origin `/docs?...file_path=...` links through the shared artifact click handler.
+  - `src/app/chat/page.tsx`: cancel superseded document loads, reject stale cross-session responses, restrict static fetches to the current origin, retry a transient failure once, and reject empty content.
+- Preserved:
+  - Existing `ChatArtifactPanel` rendering/mobile overlay and file API contracts; no API, DB, auth-token, or unrelated file changes.
+  - Error/loading UI no longer exposes the internal source path or suggests an arbitrary new-tab fallback.
+- Verification:
+  - TypeScript `--noEmit`: passed.
+  - Focused ESLint: 0 errors, 23 pre-existing warnings.
+  - `git diff --check`: passed.
+- Not executed:
+  - Build, commit, push, and deploy are prohibited by the request.
+  - Authenticated route/login/tool/capture checks for session `474e1681-c108-49e9-89c4-2f2389d12114`, another session, and mobile were unavailable in this isolated workspace and are explicitly not certified.
+- Integration dependency:
+  - The independent file_api batch must authorize and return the historical `aads-chat-continuity-directive-review.md` content for the active tenant. Final acceptance remains `click -> panel opens -> displayed content equals API source`, including after a session switch.
