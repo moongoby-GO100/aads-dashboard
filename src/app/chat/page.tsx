@@ -537,11 +537,11 @@ function isRunnerChatMessage(message: ChatMessage): boolean {
 }
 
 function isHiddenSystemChatMessage(message: ChatMessage): boolean {
+  if (message.role === "assistant" && (message.content?.length || 0) > 200) return false;
   return (
     message.intent === "auto_reaction" ||
     message.intent === "pipeline_c" ||
     message.intent === "runner_response" ||
-    message.intent === "interrupted_partial" ||
     message.intent === "_archived_partial" ||
     message.intent === "auto_report" ||
     isRunnerChatMessage(message) ||
@@ -549,6 +549,38 @@ function isHiddenSystemChatMessage(message: ChatMessage): boolean {
     (message.role === "user" && message.content?.startsWith("[시스템]"))
   );
 }
+
+class ChatErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ChatErrorBoundary]", error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "2rem", textAlign: "center" }}>
+          <p style={{ color: "#ef4444", fontWeight: 600 }}>채팅 렌더링 오류가 발생했습니다</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ marginTop: "1rem", padding: "0.5rem 1.5rem", borderRadius: "0.5rem",
+                     border: "1px solid #d1d5db", cursor: "pointer", background: "#f9fafb" }}
+          >다시 시도</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 function classifyDesignRequest(text: string): string {
   const value = text.toLowerCase();
@@ -10959,6 +10991,7 @@ export default function ChatPage() {
               최근 150건만 표시 중 (전체 {displayData.totalCount}건)
             </div>
           )}
+          <ChatErrorBoundary>
           {(() => {
             const { display, lastAssistantId } = displayData;
             return display.map(({ msg, idx, hiddenMsgs }) => {
@@ -10966,10 +10999,7 @@ export default function ChatPage() {
               const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
               const hasLiveStatusHint = msg.intent === "streaming_placeholder" && isLiveStreamStatusHint(toolStatus);
               const keepStreamingBubbleLive = hasActiveReplyState || hasLiveStatusHint;
-              // 시스템 메시지: 접이식 한 줄 표시
-              // 시스템 메시지는 로그 탭으로 이동 — 채팅에서 숨김
-              const isSystemMsg = isHiddenSystemChatMessage(msg);
-              if (isSystemMsg) return null;
+              // P0-SINGLE-SOURCE: displayData에서 이미 필터링 — 이중 필터 제거
               return (
                 <React.Fragment key={msg.render_id || msg.id || idx}>
                   <MessageItem
@@ -11086,6 +11116,7 @@ export default function ChatPage() {
               );
             });
           })()}
+          </ChatErrorBoundary>
 
           {/* Invisible Recovery: streaming flag만 남고 placeholder가 없을 때도 대기 버블 표시 */}
           {ENABLE_STANDALONE_RECOVERY_BUBBLE && waitingBgResponse && (!streaming || !messages.some((message) => isStreamingPlaceholderMessage(message))) && (
