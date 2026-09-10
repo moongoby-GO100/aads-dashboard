@@ -13,6 +13,7 @@ import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
+import RunnerStatusBadge, { type RunnerBadgeCounts } from "@/components/chat/RunnerStatusBadge";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import UsageBar from "@/components/chat/UsageBar";
 import DiscussionPanel from "@/components/chat/DiscussionPanel";
@@ -3332,6 +3333,11 @@ export default function ChatPage() {
   const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("agenda");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
+  const [runnerCounts, setRunnerCounts] = useState<RunnerBadgeCounts>({ active: 0, awaiting: 0, failed: 0, total: 0 });
+  // 러너 배지 카운트 -> 로그 탭 뱃지 동기화 (P1-XS)
+  const handleRunnerCountsChange = useCallback((c: RunnerBadgeCounts) => {
+    setRunnerCounts(c);
+  }, []);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
   const [composerWidthPx, setComposerWidthPx] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -4976,21 +4982,19 @@ export default function ChatPage() {
   }, [modelAliasMap, patchCachedSession, sidebarSessionsByWorkspace]);
 
   // Runner 응답 판별 — intent 또는 컨텐츠 패턴으로 소급 적용
-  const isRunnerMsg = isRunnerChatMessage;
 
   // 시스템 메시지 목록 (로그 탭용)
-  const systemMessages = messages.filter(
-    (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
-  );
+  // P1-S: 채팅 버블에서 숨겨진 모든 시스템/러너 메시지를 로그 탭에서 복구할 수 있게
+  // isHiddenSystemChatMessage 와 동일 기준으로 통일 (기존 필터는 runner_response /
+  // interrupted_partial / auto_report 를 누락해 알림이 화면에서 완전히 사라졌다)
+  const systemMessages = messages.filter((m) => isHiddenSystemChatMessage(m));
   // ── 로그 탭 unread 카운트 ──
   const prevSystemMsgCountRef = useRef(0);
   useEffect(() => {
     if (artifactTab === "log") setUnreadLogCount(0);
   }, [artifactTab]);
   useEffect(() => {
-    const current = messages.filter(
-      (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
-    ).length;
+    const current = messages.filter((m) => isHiddenSystemChatMessage(m)).length;
     if (current > prevSystemMsgCountRef.current && artifactTab !== "log") {
       setUnreadLogCount(n => n + (current - prevSystemMsgCountRef.current));
     }
@@ -10240,6 +10244,24 @@ export default function ChatPage() {
             </div>
           </div>
 
+          {/* 러너 진행상황 배지 (P1-XS) — P0 SSE hidden 필터로 숨겨진 러너 알림의 화면 가시성 대체 */}
+          <RunnerStatusBadge
+            sessionId={activeSession?.id || null}
+            baseUrl={BASE_URL}
+            authHeaders={authHdrs}
+            screenSize={screenSize}
+            onCountsChange={handleRunnerCountsChange}
+            onOpenLog={() => {
+              setArtifactTab("log");
+              setSelectedArtifactIdx(0);
+              if (screenSize !== "desktop") {
+                setMobileOverlay("artifact");
+              } else {
+                setArtifactMode("full");
+              }
+            }}
+          />
+
           {screenSize === "mobile" && (
             <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
               <button
@@ -12187,6 +12209,7 @@ export default function ChatPage() {
         artifacts={artifacts} artifactTab={artifactTab} setArtifactTab={setArtifactTab}
         artifactCounts={artifactCounts}
         systemMessages={systemMessages}
+        runnerCounts={runnerCounts}
         unreadLogCount={unreadLogCount}
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}

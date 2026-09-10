@@ -186,6 +186,8 @@ export interface ChatArtifactPanelProps {
   toDirective: (a: Artifact) => void;
   systemMessages?: ChatMessage[];
   unreadLogCount?: number;
+  /** 헤더 러너 배지와 공유하는 세션 러너 카운트 (P1-S) */
+  runnerCounts?: { active: number; awaiting: number; failed: number; total: number };
   sessionId?: string;
 }
 
@@ -915,7 +917,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     screenSize, showArtifactPanel, artifactMode, setArtifactMode,
     mobileOverlay, setMobileOverlay,
     artifacts, artifactTab, setArtifactTab, artifactCounts,
-    systemMessages, unreadLogCount,
+    systemMessages, unreadLogCount, runnerCounts,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective, sessionId,
   } = props;
@@ -2076,6 +2078,26 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 </div>
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
+                  {/* 러너 요약 스트립 (P1-S) — 헤더 배지와 동일 기준 */}
+                  <div style={{
+                    display: "flex", gap: "6px", flexWrap: "wrap",
+                    padding: "6px 8px", borderBottom: "1px solid var(--ct-border)",
+                    position: "sticky", top: 0, background: "var(--ct-sb)", zIndex: 2,
+                  }}>
+                    {[
+                      { k: "진행중", v: runnerCounts?.active ?? 0, c: "#3b82f6" },
+                      { k: "승인대기", v: runnerCounts?.awaiting ?? 0, c: "#f59e0b" },
+                      { k: "실패(30분)", v: runnerCounts?.failed ?? 0, c: "#ef4444" },
+                      { k: "전체", v: runnerJobs.length, c: "#9ca3af" },
+                    ].map((chip) => (
+                      <span key={chip.k} style={{
+                        fontSize: "10px", fontWeight: 700, padding: "2px 7px", borderRadius: "999px",
+                        border: "1px solid " + chip.c + "55", background: chip.c + "1f", color: chip.c,
+                      }}>
+                        {chip.k} {chip.v}
+                      </span>
+                    ))}
+                  </div>
                   {jobsLoading && runnerJobs.length === 0 ? (
                     <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
                       로딩 중...
@@ -2180,6 +2202,76 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 
                     return roots.map(job => renderJob(job));
                   })()}
+
+                  {/* 숨김 시스템 알림 타임라인 (P1-S) — 채팅 버블에서 숨겨진 러너/자동 알림 복구 */}
+                  <div style={{ marginTop: "12px", borderTop: "1px solid var(--ct-border)", paddingTop: "8px" }}>
+                    <div style={{
+                      fontSize: "11px", fontWeight: 700, color: "var(--ct-text2)",
+                      padding: "0 8px 6px", display: "flex", alignItems: "center", gap: "6px",
+                    }}>
+                      <span>시스템 알림</span>
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, borderRadius: "999px", padding: "1px 6px",
+                        background: "rgba(156,163,175,0.18)", color: "#9ca3af",
+                      }}>{(systemMessages ?? []).length}</span>
+                      <span style={{ fontSize: "9px", fontWeight: 400, opacity: 0.55 }}>채팅에서 숨겨진 알림</span>
+                    </div>
+                    {(systemMessages ?? []).length === 0 ? (
+                      <div style={{ color: "var(--ct-text2)", fontSize: "11px", padding: "8px", opacity: 0.7 }}>
+                        숨겨진 시스템 알림이 없습니다
+                      </div>
+                    ) : (
+                      (systemMessages ?? []).slice(-100).reverse().map((m) => {
+                        const kind = String(m.intent || (m.role === "user" ? "system_trigger" : "runner_response"));
+                        const kindLabel: Record<string, string> = {
+                          system_trigger: "러너 트리거",
+                          auto_reaction: "자동 반응",
+                          runner_response: "러너 응답",
+                          pipeline_c: "파이프라인",
+                          interrupted_partial: "중단 보존",
+                          _archived_partial: "보관 파편",
+                          auto_report: "자동 보고",
+                        };
+                        const tone = (kind === "interrupted_partial" || kind === "_archived_partial")
+                          ? "#f59e0b"
+                          : kind === "system_trigger"
+                            ? "#818cf8"
+                            : "#34d399";
+                        const preview = String(m.content || "").replace(/\s+/g, " ").slice(0, 90);
+                        return (
+                          <details key={m.id} style={{ borderBottom: "1px solid var(--ct-border)" }}>
+                            <summary style={{
+                              listStyle: "none", cursor: "pointer", padding: "6px 8px",
+                              fontSize: "11px", display: "flex", gap: "6px", alignItems: "center",
+                            }}>
+                              <span style={{
+                                fontSize: "9px", fontWeight: 700, color: tone, whiteSpace: "nowrap",
+                                border: "1px solid " + tone + "55", background: tone + "1f",
+                                borderRadius: "3px", padding: "1px 4px",
+                              }}>
+                                {kindLabel[kind] || kind}
+                              </span>
+                              <span style={{ flex: 1, minWidth: 0, opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {preview}
+                              </span>
+                              {m.created_at && (
+                                <span style={{ fontSize: "9px", opacity: 0.45, whiteSpace: "nowrap" }}>
+                                  {new Date(m.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              )}
+                            </summary>
+                            <div style={{
+                              padding: "6px 12px 8px 14px", fontSize: "10px", fontFamily: "monospace",
+                              whiteSpace: "pre-wrap", color: "var(--ct-text2)", lineHeight: 1.55,
+                              maxHeight: "260px", overflowY: "auto", background: "rgba(255,255,255,0.02)",
+                            }}>
+                              {m.content}
+                            </div>
+                          </details>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               ) : artifactTab === "html_preview" ? (
                 activeArtifact ? (
