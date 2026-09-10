@@ -13,7 +13,6 @@ import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
-import RunnerStatusBadge, { type RunnerBadgeCounts } from "@/components/chat/RunnerStatusBadge";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import UsageBar from "@/components/chat/UsageBar";
 import DiscussionPanel from "@/components/chat/DiscussionPanel";
@@ -530,7 +529,9 @@ function isHiddenSystemChatMessage(message: ChatMessage): boolean {
     message.intent === "auto_reaction" ||
     message.intent === "pipeline_c" ||
     message.intent === "runner_response" ||
-    message.intent === "stale_empty_placeholder" ||
+    message.intent === "interrupted_partial" ||
+    message.intent === "_archived_partial" ||
+    message.intent === "auto_report" ||
     isRunnerChatMessage(message) ||
     (message.role === "user" && message.intent === "system_trigger") ||
     (message.role === "user" && message.content?.startsWith("[시스템]"))
@@ -3331,11 +3332,6 @@ export default function ChatPage() {
   const [artifactMode, setArtifactMode] = useState<ArtifactMode>("full");
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("agenda");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
-  const [runnerCounts, setRunnerCounts] = useState<RunnerBadgeCounts>({ active: 0, awaiting: 0, failed: 0, total: 0 });
-  // 러너 배지 카운트 -> 로그 탭 뱃지 동기화 (P1-XS)
-  const handleRunnerCountsChange = useCallback((c: RunnerBadgeCounts) => {
-    setRunnerCounts(c);
-  }, []);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
   const [composerWidthPx, setComposerWidthPx] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -3448,8 +3444,6 @@ export default function ChatPage() {
   const [designSubmitting, setDesignSubmitting] = useState(false);
   const [designError, setDesignError] = useState("");
   const [lastDesignRequest, setLastDesignRequest] = useState<{ id: string; contextUrl: string; workbenchUrl: string } | null>(null);
-  const [directiveDraftLoading, setDirectiveDraftLoading] = useState(false);
-  const [directiveDraftError, setDirectiveDraftError] = useState("");
   // 메시지 수정/재지시
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -3943,7 +3937,6 @@ export default function ChatPage() {
   }, [setMessagesPreservingViewport]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
-  const composerDirectiveDraftIdRef = useRef<string | null>(null);
   const companyIntelligencePrefillAppliedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachments = useRef<Array<Record<string, unknown>>>([]);
@@ -4983,19 +4976,21 @@ export default function ChatPage() {
   }, [modelAliasMap, patchCachedSession, sidebarSessionsByWorkspace]);
 
   // Runner 응답 판별 — intent 또는 컨텐츠 패턴으로 소급 적용
+  const isRunnerMsg = isRunnerChatMessage;
 
   // 시스템 메시지 목록 (로그 탭용)
-  // P1-S: 채팅 버블에서 숨겨진 모든 시스템/러너 메시지를 로그 탭에서 복구할 수 있게
-  // isHiddenSystemChatMessage 와 동일 기준으로 통일 (기존 필터는 runner_response /
-  // interrupted_partial / auto_report 를 누락해 알림이 화면에서 완전히 사라졌다)
-  const systemMessages = messages.filter((m) => isHiddenSystemChatMessage(m));
+  const systemMessages = messages.filter(
+    (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+  );
   // ── 로그 탭 unread 카운트 ──
   const prevSystemMsgCountRef = useRef(0);
   useEffect(() => {
     if (artifactTab === "log") setUnreadLogCount(0);
   }, [artifactTab]);
   useEffect(() => {
-    const current = messages.filter((m) => isHiddenSystemChatMessage(m)).length;
+    const current = messages.filter(
+      (m) => m.intent === "auto_reaction" || m.intent === "pipeline_c" || isRunnerMsg(m) || (m.role === "user" && m.intent === "system_trigger")
+    ).length;
     if (current > prevSystemMsgCountRef.current && artifactTab !== "log") {
       setUnreadLogCount(n => n + (current - prevSystemMsgCountRef.current));
     }
@@ -6917,14 +6912,6 @@ export default function ChatPage() {
             }, 0);
             return;
           }
-          if (composerDirectiveDraftIdRef.current && interruptContent.includes(">>>DIRECTIVE_START")) {
-            const sentDraftId = composerDirectiveDraftIdRef.current;
-            composerDirectiveDraftIdRef.current = null;
-            void chatApi(`/chat/directive-drafts/${sentDraftId}/events`, {
-              method: "POST",
-              body: JSON.stringify({ action: "sent", metadata: { source: "interrupt_queue" } }),
-            }).catch(() => {});
-          }
           void chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
             `/chat/messages?session_id=${activeSessionObjRef.current?.id}&limit=10&include_streaming=true`
           )
@@ -7175,15 +7162,6 @@ export default function ChatPage() {
           setMessagesPreservingViewport((prev) => prev.filter((m) => m.id !== userMsg.id));
         }
         throw new Error((_errMap[statusCode] || `서버 오류 (${statusCode})`) + " 메시지가 입력창에 복원되었습니다.");
-      }
-
-      if (composerDirectiveDraftIdRef.current && content.includes(">>>DIRECTIVE_START")) {
-        const sentDraftId = composerDirectiveDraftIdRef.current;
-        composerDirectiveDraftIdRef.current = null;
-        void chatApi(`/chat/directive-drafts/${sentDraftId}/events`, {
-          method: "POST",
-          body: JSON.stringify({ action: "sent", metadata: { source: "chat_send" } }),
-        }).catch(() => {});
       }
 
       const reader = res.body?.getReader();
@@ -8979,52 +8957,9 @@ export default function ChatPage() {
     navigator.clipboard?.writeText(content).catch(() => {});
   }
   async function toDirective(artifact: Artifact) {
-    const isDraft = artifact.metadata?.subtype === "directive_draft";
-    const projectKey = activeWsObj?.project_key || "CUSTOM";
-    const text = isDraft
-      ? artifact.content
-      : `>>>DIRECTIVE_START\nTASK_ID: ${projectKey}-DRAFT\nTITLE: ${artifact.title}\nPRIORITY: P2-MEDIUM\nSIZE: M\nMODEL: AUTO\nDESCRIPTION: |\n  ${artifact.content.split("\n").join("\n  ")}\n>>>DIRECTIVE_END`;
-    const current = chatInputRef.current?.getValue()?.trim() || "";
-    if (current && current !== text.trim()) {
-      const replace = window.confirm("입력창에 작성 중인 내용이 있습니다. 지시 초안으로 교체하시겠습니까?");
-      if (!replace) return;
-    }
-    chatInputRef.current?.setValue(text);
-    setInput(text);
-    setHasInput(true);
-    chatInputRef.current?.focus();
-    const draftId = typeof artifact.metadata?.draft_id === "string" ? artifact.metadata.draft_id : null;
-    if (draftId) {
-      composerDirectiveDraftIdRef.current = draftId;
-      void chatApi(`/chat/directive-drafts/${draftId}/events`, {
-        method: "POST",
-        body: JSON.stringify({ action: "inserted", metadata: { source: "artifact_panel" } }),
-      }).catch(() => {});
-    }
-    showCompletionToast("지시 초안을 입력창에 넣었습니다. 확인 후 전송해 주세요.");
-  }
-
-  async function handleCreateDirectiveDraft() {
-    if (!activeSession?.id || directiveDraftLoading) return;
-    setDirectiveDraftLoading(true);
-    setDirectiveDraftError("");
-    try {
-      const result = await chatApi<{ artifact: Artifact }>(
-        `/chat/sessions/${activeSession.id}/directive-drafts`,
-        { method: "POST", body: JSON.stringify({ context_window: 8 }) },
-      );
-      const artifact = result.artifact;
-      setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
-      setArtifactTab("report");
-      setSelectedArtifactIdx(0);
-      setArtifactMode("full");
-      if (screenSize !== "desktop") setMobileOverlay("artifact");
-      showCompletionToast("최근 문답을 검토한 지시 초안을 아티팩트에 저장했습니다.");
-    } catch (error) {
-      setDirectiveDraftError(error instanceof Error ? error.message : "지시 초안 생성에 실패했습니다.");
-    } finally {
-      setDirectiveDraftLoading(false);
-    }
+    const text = `TITLE: ${artifact.title}\nDESCRIPTION: |\n  ${artifact.content.split("\n").join("\n  ")}`;
+    await navigator.clipboard?.writeText(text).catch(() => {});
+    showCompletionToast("지시서 형식이 클립보드에 복사되었습니다");
   }
 
   // ── Derived ──
@@ -9407,10 +9342,9 @@ export default function ChatPage() {
   const displayData = useMemo(() => {
     const sortedAll = [...messages]
       .filter(m => {
-        if (m.role === "user" && m.intent !== "system_trigger" && !m.content?.startsWith("[시스템]")) return true;
         if (isHiddenSystemChatMessage(m)) return false;
         if (m.intent === "ai_review_warning") return false;
-        if (m.intent === "recovered_interrupt" && m.role !== "user") return false;
+        if (m.intent === "recovered_interrupt") return false;
         if (isShortInterruptionPlaceholder(m)) return false;
         if (isInterruptedLikeMessage(m)) {
           return hasMeaningfulDisplayContent(m);
@@ -10305,24 +10239,6 @@ export default function ChatPage() {
                 : "세션 없음"}
             </div>
           </div>
-
-          {/* 러너 진행상황 배지 (P1-XS) — P0 SSE hidden 필터로 숨겨진 러너 알림의 화면 가시성 대체 */}
-          <RunnerStatusBadge
-            sessionId={activeSession?.id || null}
-            baseUrl={BASE_URL}
-            authHeaders={authHdrs}
-            screenSize={screenSize}
-            onCountsChange={handleRunnerCountsChange}
-            onOpenLog={() => {
-              setArtifactTab("log");
-              setSelectedArtifactIdx(0);
-              if (screenSize !== "desktop") {
-                setMobileOverlay("artifact");
-              } else {
-                setArtifactMode("full");
-              }
-            }}
-          />
 
           {screenSize === "mobile" && (
             <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
@@ -11677,11 +11593,9 @@ export default function ChatPage() {
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
                 { icon: "📋", label: "템플릿", action: "template" as const },
-                { icon: "📝", label: directiveDraftLoading ? "검토중" : "지시초안", action: "directive" as const },
               ].map((chip) => (
                 <button
                   key={chip.label}
-                  disabled={"action" in chip && chip.action === "directive" && (directiveDraftLoading || !activeSession?.id)}
                   onClick={() => {
                     if ("action" in chip && chip.action === "file") {
                       fileInputRef.current?.click();
@@ -11704,11 +11618,6 @@ export default function ChatPage() {
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
-                    if ("action" in chip && chip.action === "directive") {
-                      void handleCreateDirectiveDraft();
-                      if (screenSize === "mobile") setShowMobileActions(false);
-                      return;
-                    }
                     if ("prefix" in chip) {
                       applyChip(chip.prefix);
                       if (screenSize === "mobile") setShowMobileActions(false);
@@ -11720,8 +11629,7 @@ export default function ChatPage() {
                     background: "var(--ct-hover)",
                     border: "1px solid var(--ct-border)",
                     borderRadius: screenSize === "mobile" ? "12px" : "16px",
-                    cursor: ("action" in chip && chip.action === "directive" && (directiveDraftLoading || !activeSession?.id)) ? "wait" : "pointer",
-                    opacity: ("action" in chip && chip.action === "directive" && (directiveDraftLoading || !activeSession?.id)) ? 0.55 : 1,
+                    cursor: "pointer",
                     color: "var(--ct-text)",
                     display: "flex",
                     alignItems: "center",
@@ -11732,22 +11640,6 @@ export default function ChatPage() {
                   {chip.icon} {chip.label}
                 </button>
               ))}
-            </div>
-          )}
-
-          {directiveDraftError && (
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px",
-              marginBottom: "8px", padding: "8px 10px", borderRadius: "8px",
-              background: "#ef444418", border: "1px solid #ef444455", color: "#ef4444", fontSize: "12px",
-            }}>
-              <span>지시 초안 생성 실패: {directiveDraftError}</span>
-              <button
-                type="button"
-                onClick={() => void handleCreateDirectiveDraft()}
-                disabled={directiveDraftLoading}
-                style={{ border: "none", borderRadius: "6px", padding: "4px 8px", cursor: "pointer" }}
-              >재시도</button>
             </div>
           )}
 
@@ -12295,7 +12187,6 @@ export default function ChatPage() {
         artifacts={artifacts} artifactTab={artifactTab} setArtifactTab={setArtifactTab}
         artifactCounts={artifactCounts}
         systemMessages={systemMessages}
-        runnerCounts={runnerCounts}
         unreadLogCount={unreadLogCount}
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
