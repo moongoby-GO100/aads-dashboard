@@ -537,13 +537,10 @@ function isRunnerChatMessage(message: ChatMessage): boolean {
 }
 
 function isHiddenSystemChatMessage(message: ChatMessage): boolean {
-  if (message.role === "assistant" && (message.content?.length || 0) > 200) return false;
+  if (message.role === "assistant" && (message.content?.length || 0) > 50) return false;
   return (
     message.intent === "auto_reaction" ||
-    message.intent === "pipeline_c" ||
-    message.intent === "runner_response" ||
     message.intent === "_archived_partial" ||
-    message.intent === "auto_report" ||
     isRunnerChatMessage(message) ||
     (message.role === "user" && message.intent === "system_trigger") ||
     (message.role === "user" && message.content?.startsWith("[시스템]"))
