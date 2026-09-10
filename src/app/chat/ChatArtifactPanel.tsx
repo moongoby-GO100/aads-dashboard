@@ -2647,7 +2647,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 	                    ? [{ icon: "🔗", label: "새 탭", fn: () => openArtifactInNewTab(activeArtifact) }]
 	                    : []),
 	                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
-	                  { icon: "📋", label: "지시서", fn: () => toDirective(activeArtifact) },
+	                  {
+	                    icon: "📝",
+	                    label: activeArtifact.metadata?.subtype === "directive_draft" ? "입력창에 넣기" : "지시서로 사용",
+	                    fn: () => toDirective({ ...activeArtifact, ...(localEdits[activeArtifact.id] || {}) }),
+	                  },
 	                ].map((btn) => (
                   <button
                     key={btn.label}

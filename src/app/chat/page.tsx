@@ -530,8 +530,6 @@ function isHiddenSystemChatMessage(message: ChatMessage): boolean {
     message.intent === "auto_reaction" ||
     message.intent === "pipeline_c" ||
     message.intent === "runner_response" ||
-    message.intent === "interrupted_partial" ||
-    message.intent === "_archived_partial" ||
     message.intent === "auto_report" ||
     message.intent === "interruption_notice" ||
     message.intent === "stale_empty_placeholder" ||

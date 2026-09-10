@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-09-10 15:30 KST - OHVIS 지시 코파일럿 확인형 MVP (코드 완료 / 미배포)
+
+- `src/app/chat/page.tsx`: 데스크톱·모바일 입력 액션에 `지시초안`을 추가했다. 현재 세션 최근 문답 검토 API가 반환한 초안을 보고서 아티팩트에 즉시 표시하고, 실패 시 같은 위치에서 원인과 재시도를 제공한다.
+- 기존 아티팩트 `지시서` 클립보드 복사를 `지시서로 사용`/`입력창에 넣기`로 전환했다. 입력값이 있으면 교체 확인을 받고, 자동 전송하지 않으며, directive draft는 inserted 피드백 이벤트를 남긴다.
+- `src/app/chat/ChatArtifactPanel.tsx`: 저장형 편집 결과를 입력창에 반영하고 directive draft subtype에는 사용자 중심 라벨을 표시한다.
+- 검증: 대상 ESLint 0 errors(기존 warning 21건), `npx tsc --noEmit` 통과, `npm run build` 성공(76 routes).
+- 보존: 무관 파일 `public/reports/20260909_cogcom_recolumn_company_analysis.html`은 변경하지 않았다. push·dashboard 배포·로그인 E2E·화면 캡처는 미수행이다.
+
 ## 2026-09-10 KST - 채팅 파일 링크 아티팩트 열람 2차 보강 + 실제 브라우저 화면 검증 (코드 완료 / 미배포)
 
 - **선행 작업과의 관계**: 같은 작업지시로 먼저 실행·배포된 러너 커밋 `5da0741`(아래 항목) 위에 **덧붙인 2차 보강**이다.
