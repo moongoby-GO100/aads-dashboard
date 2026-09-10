@@ -43,10 +43,13 @@ interface ChatInputProps {
   screenHiddenMode?: boolean;
   allowInternalMentions?: boolean;
   mobileFontPx?: number;
+  onCreateDirectiveDraft?: () => void;
+  directiveDrafting?: boolean;
+  directiveDraftDisabled?: boolean;
 }
 
 const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode, allowInternalMentions = false, mobileFontPx = 20 }, ref) {
+  function ChatInput({ screenSize, onKeyDown, onHasInput, onLocalMessage, placeholder, onScreenShare, onHiddenScreenCapture, screenHiddenMode, allowInternalMentions = false, mobileFontPx = 20, onCreateDirectiveDraft, directiveDrafting = false, directiveDraftDisabled = false }, ref) {
     const [localInput, setLocalInput] = useState("");
     const [voiceState, setVoiceState] = useState<"idle" | "recording" | "transcribing">("idle");
     const taRef = useRef<HTMLTextAreaElement>(null);
@@ -492,6 +495,9 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 padding: allowInternalMentions
                   ? (screenSize === "mobile" ? "13px 108px 13px 15px" : "10px 46px 10px 14px")
                   : (screenSize === "mobile" ? "13px 64px 13px 15px" : "10px 14px"),
+                paddingLeft: onCreateDirectiveDraft
+                  ? (screenSize === "mobile" ? "58px" : "50px")
+                  : undefined,
                 fontSize: screenSize === "mobile" ? `${mobileFontPx}px` : "14px",
                 resize: "none",
                 overflow: "hidden",
@@ -519,6 +525,35 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
                 setTimeout(() => { setShowSlash(false); setShowMention(false); }, 200);
               }}
             />
+            {onCreateDirectiveDraft && (
+              <button
+                type="button"
+                onClick={onCreateDirectiveDraft}
+                disabled={directiveDraftDisabled || directiveDrafting}
+                title={directiveDrafting ? "지시 초안 생성 중" : "최근 문답으로 지시 초안 만들기"}
+                aria-label={directiveDrafting ? "지시 초안 생성 중" : "지시 초안 만들기"}
+                style={{
+                  position: "absolute",
+                  left: screenSize === "mobile" ? "8px" : "7px",
+                  bottom: screenSize === "mobile" ? "7px" : "6px",
+                  width: screenSize === "mobile" ? "40px" : "32px",
+                  height: screenSize === "mobile" ? "40px" : "32px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "50%",
+                  border: "1px solid var(--ct-border)",
+                  background: "var(--ct-hover)",
+                  color: "var(--ct-text2)",
+                  cursor: directiveDraftDisabled || directiveDrafting ? "not-allowed" : "pointer",
+                  fontSize: screenSize === "mobile" ? "17px" : "15px",
+                  opacity: directiveDraftDisabled || directiveDrafting ? 0.55 : 1,
+                  zIndex: 2,
+                }}
+              >
+                {directiveDrafting ? "…" : "📝"}
+              </button>
+            )}
             {allowInternalMentions && (
               <button
                 type="button"

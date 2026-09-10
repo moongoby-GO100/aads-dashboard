@@ -11757,11 +11757,9 @@ export default function ChatPage() {
                 { icon: "📹", label: "동영상", prefix: "[동영상]" },
                 { icon: "🎤", label: "음성", prefix: "[음성]" },
                 { icon: "📋", label: "템플릿", action: "template" as const },
-                { icon: "📝", label: directiveDrafting ? "초안 생성 중" : "지시 초안", action: "directive" as const },
               ].map((chip) => (
                 <button
                   key={chip.label}
-                  disabled={"action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)}
                   onClick={() => {
                     if ("action" in chip && chip.action === "file") {
                       fileInputRef.current?.click();
@@ -11784,10 +11782,6 @@ export default function ChatPage() {
                       if (screenSize === "mobile") setShowMobileActions(false);
                       return;
                     }
-                    if ("action" in chip && chip.action === "directive") {
-                      void handleCreateDirectiveDraft();
-                      return;
-                    }
                     if ("prefix" in chip) {
                       applyChip(chip.prefix);
                       if (screenSize === "mobile") setShowMobileActions(false);
@@ -11799,8 +11793,8 @@ export default function ChatPage() {
                     background: "var(--ct-hover)",
                     border: "1px solid var(--ct-border)",
                     borderRadius: screenSize === "mobile" ? "12px" : "16px",
-                    cursor: ("action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)) ? "not-allowed" : "pointer",
-                    opacity: ("action" in chip && chip.action === "directive" && (directiveDrafting || !activeSession)) ? 0.55 : 1,
+                    cursor: "pointer",
+                    opacity: 1,
                     color: "var(--ct-text)",
                     display: "flex",
                     alignItems: "center",
@@ -12107,6 +12101,9 @@ export default function ChatPage() {
                 screenHiddenMode={screenHiddenMode}
                 allowInternalMentions={isInternalAdmin}
                 mobileFontPx={mobileChatFontPx + 1}
+                onCreateDirectiveDraft={() => void handleCreateDirectiveDraft()}
+                directiveDrafting={directiveDrafting}
+                directiveDraftDisabled={!activeSession}
               />
               {/* Mobile: send button inside textarea area */}
               {screenSize === "mobile" && (

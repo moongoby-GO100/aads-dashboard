@@ -2576,3 +2576,18 @@
   - Authenticated route/login/tool/capture checks for session `474e1681-c108-49e9-89c4-2f2389d12114`, another session, and mobile were unavailable in this isolated workspace and are explicitly not certified.
 - Integration dependency:
   - The independent file_api batch must authorize and return the historical `aads-chat-continuity-directive-review.md` content for the active tenant. Final acceptance remains `click -> panel opens -> displayed content equals API source`, including after a session switch.
+
+## 2026-09-11 03:42 KST - Directive draft action moved into the composer
+
+- Request:
+  - Replace the separate `지시 초안` action chip with an icon button inside the left side of the chat input.
+- Changes:
+  - `src/app/chat/ChatInput.tsx`: added an optional directive-draft icon action inside the textarea frame, with separate mobile/desktop touch sizes, reserved text padding, accessible labels, tooltip, disabled state when no session is selected, and an in-progress indicator.
+  - `src/app/chat/page.tsx`: connected the existing `handleCreateDirectiveDraft()` behavior to the new input action and removed the duplicate action chip. Draft generation, artifact review, and manual-send behavior are otherwise unchanged.
+- Verification before release:
+  - `npx tsc --noEmit`: passed.
+  - Focused ESLint for the two changed source files: passed with 0 errors and 19 existing warnings in `page.tsx`.
+  - `npm run build`: passed; all 76 static pages generated.
+- Release and rollback:
+  - Commit, push, dashboard blue/green deployment, authenticated `/chat` desktop/mobile visual verification, and five-minute P0/P1 monitoring are required before this is considered operationally reflected.
+  - Roll back by reverting the scoped dashboard commit and redeploying; no API or DB data changes are made by this UI patch.
