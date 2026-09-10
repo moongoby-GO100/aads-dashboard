@@ -533,6 +533,8 @@ function isHiddenSystemChatMessage(message: ChatMessage): boolean {
     message.intent === "interrupted_partial" ||
     message.intent === "_archived_partial" ||
     message.intent === "auto_report" ||
+    message.intent === "interruption_notice" ||
+    message.intent === "stale_empty_placeholder" ||
     isRunnerChatMessage(message) ||
     (message.role === "user" && message.intent === "system_trigger") ||
     (message.role === "user" && message.content?.startsWith("[시스템]"))
