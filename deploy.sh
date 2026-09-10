@@ -116,11 +116,15 @@ cleanup_deploy() {
 build_release_image() {
     cleanup_release_context
     RELEASE_CONTEXT_DIR="$(mktemp -d /tmp/aads-dashboard-release.XXXXXX)"
-    git -C "$STATE_DIR" archive --format=tar HEAD | tar -xf - -C "$RELEASE_CONTEXT_DIR"
+    if ! git -C "$STATE_DIR" rev-parse --verify "${AADS_RELEASE_SHA}^{commit}" >/dev/null 2>&1; then
+        log "FAIL: release SHA를 로컬 저장소에서 확인할 수 없습니다 (${AADS_RELEASE_SHA})"
+        return 1
+    fi
+    git -C "$STATE_DIR" archive --format=tar "$AADS_RELEASE_SHA" | tar -xf - -C "$RELEASE_CONTEXT_DIR"
     if [ -f "${STATE_DIR}/.env.local" ]; then
         install -m 600 "${STATE_DIR}/.env.local" "${RELEASE_CONTEXT_DIR}/.env.local"
     fi
-    log "clean release context: ${RELEASE_CONTEXT_DIR} (HEAD=${AADS_RELEASE_SHA})"
+    log "clean release context: ${RELEASE_CONTEXT_DIR} (release=${AADS_RELEASE_SHA})"
     docker build --tag "aads-dashboard:${AADS_RELEASE_SHA}" "$RELEASE_CONTEXT_DIR"
     cleanup_release_context
 }

@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-10 13:20 KST - Historical artifact links production closeout and release-SHA guard
+
+- Artifact-link release `5da0741368ba` was deployed blue/green. Active blue and standby green both reported Docker image `sha256:90c9e25ccadcf43ebddf2ad7660d704c5bcc711e3287582315d26a63e4c6c2e8`, `AADS_RELEASE_SHA=5da0741368ba`, and healthy status.
+- The original runner deployment was falsely terminalized after its Docker context was canceled while building stale shared-worktree release `7f916b20ef88`. A recovery deployment built the intended release, cut over at 13:03:23 KST, and preserved service availability.
+- Five independent post-cutover samples from 13:10:26 through 13:14:31 KST returned HTTP 200 for external, blue, and green health with zero matched P0/P1 log lines. The deployed server bundle contains the new document-load failure string in both slots.
+- Browser Bridge navigation, work-session recovery, and Agent Vault screenshot each timed out after 120 seconds. Authenticated click-to-panel content matching remains unverified; HTTP/API/container fallback was completed and must not be reported as browser E2E.
+- `deploy.sh` now verifies `AADS_RELEASE_SHA` resolves to a local commit and archives that exact commit instead of implicit shared-worktree `HEAD`. This prevents an approved runner SHA from being labeled onto an older source tree.
+- Rollback: revert the scoped `deploy.sh` guard commit. The live artifact behavior rolls back by reverting dashboard commit `5da0741368ba` and running the same blue/green release contract.
+
 ## 2026-09-08 20:06 KST - PC Agent production button verification
 
 - Verified deployed dashboard release `4c9f0b1f00fa` on `/ops/pc-agents` with server Playwright Chromium and the configured internal E2E administrator through the real login form. The Vault E2E account was present but its ordinary-user role redirected the operations page to chat; no account permissions were changed.
