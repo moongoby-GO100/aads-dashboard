@@ -2591,3 +2591,17 @@
 - Release and rollback:
   - Commit, push, dashboard blue/green deployment, authenticated `/chat` desktop/mobile visual verification, and five-minute P0/P1 monitoring are required before this is considered operationally reflected.
   - Roll back by reverting the scoped dashboard commit and redeploying; no API or DB data changes are made by this UI patch.
+
+## 2026-09-11 04:02 KST - Directive draft icon text-overlap correction
+
+- Request:
+  - Prevent the directive-draft icon inside the chat composer from covering the first characters of typed messages.
+- Change:
+  - `src/app/chat/ChatInput.tsx`: replaced the competing `padding` and `paddingLeft` declarations with one complete padding value per viewport and control layout. Text now begins 16px beyond the mobile icon and 17px beyond the desktop icon.
+- Verification before release:
+  - Focused ESLint: passed with 0 errors.
+  - `npx tsc --noEmit`: passed.
+  - `npm run build`: passed; all 76 static pages generated.
+- Release and rollback:
+  - Commit, push, dashboard blue/green deployment, authenticated desktop/mobile visual verification, and five-minute P0/P1 monitoring are required before operational certification.
+  - Roll back by reverting this scoped commit and redeploying; no API or DB change is involved.

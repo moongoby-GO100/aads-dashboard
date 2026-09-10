@@ -492,12 +492,9 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
               rows={1}
               style={{
                 width: "100%",
-                padding: allowInternalMentions
-                  ? (screenSize === "mobile" ? "13px 108px 13px 15px" : "10px 46px 10px 14px")
-                  : (screenSize === "mobile" ? "13px 64px 13px 15px" : "10px 14px"),
-                paddingLeft: onCreateDirectiveDraft
-                  ? (screenSize === "mobile" ? "58px" : "50px")
-                  : undefined,
+                padding: screenSize === "mobile"
+                  ? `13px ${allowInternalMentions ? "108px" : "64px"} 13px ${onCreateDirectiveDraft ? "64px" : "15px"}`
+                  : `10px ${allowInternalMentions ? "46px" : "14px"} 10px ${onCreateDirectiveDraft ? "56px" : "14px"}`,
                 fontSize: screenSize === "mobile" ? `${mobileFontPx}px` : "14px",
                 resize: "none",
                 overflow: "hidden",
