@@ -1,4 +1,9 @@
-import { normalizeDocumentHref, normalizeDocumentRouteParams } from "./documentLinks";
+import {
+  isArtifactPreviewHref,
+  isPreviewableTextFile,
+  normalizeDocumentHref,
+  normalizeDocumentRouteParams,
+} from "./documentLinks";
 
 type Case = {
   input: string;
@@ -71,6 +76,47 @@ const cases: Case[] = [
     input: "docs/../.env",
     expected: "docs/../.env",
   },
+  // ── AADS-CHATFILE(2026-09-10) 채팅 파일 링크 회귀 케이스 ──
+  // 대표 회귀자료: 세션 474e1681 의 `/tmp/aads-chat-continuity-directive-review.md`
+  {
+    input: "/tmp/aads-chat-continuity-directive-review.md",
+    expected: "/api/v1/files/download?path=%2Ftmp%2Faads-chat-continuity-directive-review.md&inline=1",
+  },
+  // URL 인코딩된 tmp 경로 (모델이 경로 전체를 인코딩해 주는 경우)
+  {
+    input: "%2Ftmp%2Faads-chat-continuity-directive-review.md",
+    expected: "/api/v1/files/download?path=%2Ftmp%2Faads-chat-continuity-directive-review.md&inline=1",
+  },
+  // 이중 인코딩까지 복구한다
+  {
+    input: "%252Ftmp%252Freview.md",
+    expected: "/api/v1/files/download?path=%2Ftmp%2Freview.md&inline=1",
+  },
+  // 공백만 인코딩된 절대 경로 → 이중 인코딩되지 않아야 한다
+  {
+    input: "/tmp/aads%20report.md",
+    expected: "/api/v1/files/download?path=%2Ftmp%2Faads+report.md&inline=1",
+  },
+  // 컨테이너 경로 표기
+  {
+    input: "/app/app/static/docs/PRD-ARTIFACT-DOC-LINK.md",
+    expected: "/docs?project=AADS&base_path=%2Fapp%2Fapp%2Fstatic%2Fdocs&file_path=PRD-ARTIFACT-DOC-LINK.md",
+  },
+  // 호스트 경로 표기 (같은 문서)
+  {
+    input: "/root/aads/aads-server/app/static/docs/PRD-ARTIFACT-DOC-LINK.md",
+    expected: "/docs?project=AADS&base_path=%2Fapp%2Fapp%2Fstatic%2Fdocs&file_path=PRD-ARTIFACT-DOC-LINK.md",
+  },
+  // 정상 인코딩된 /docs 쿼리는 건드리지 않는다 (디코딩 오작동 방지)
+  {
+    input: "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=reports%2Fplan.md",
+    expected: "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=reports%2Fplan.md",
+  },
+  // 인코딩을 풀어도 상위 경로 탐색은 허용하지 않는다
+  {
+    input: "%2Ftmp%2F..%2Fetc%2Fpasswd",
+    expected: "%2Ftmp%2F..%2Fetc%2Fpasswd",
+  },
 ];
 
 for (const item of cases) {
@@ -131,3 +177,42 @@ for (const item of routeCases) {
     );
   }
 }
+
+// ── 아티팩트 패널 미리보기 판정 ──
+const previewCases: Array<{ input: string; expected: boolean }> = [
+  { input: "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=a.md", expected: true },
+  { input: "/api/v1/files/download?path=%2Ftmp%2Freview.md&inline=1", expected: true },
+  // 텍스트 문서는 inline 플래그가 없어도 패널에서 연다 (예전엔 곧바로 다운로드로 빠졌다)
+  { input: "/api/v1/files/download?path=%2Fapp%2Fapp%2Fpage.tsx", expected: true },
+  { input: "/api/v1/files/download?path=%2Fapp%2Fscripts%2Frun.py", expected: true },
+  // 패널이 그릴 수 없는 형식은 기존 다운로드 동작을 유지한다
+  { input: "/api/v1/files/download?path=%2Froot%2Faads%2Freport.xlsx", expected: false },
+  { input: "/reports/20260909_analysis.html", expected: true },
+  { input: "/reports/monthly.xlsx", expected: false },
+  { input: "https://example.com/report.md", expected: false },
+  { input: "", expected: false },
+];
+
+for (const item of previewCases) {
+  const actual = isArtifactPreviewHref(item.input);
+  if (actual !== item.expected) {
+    throw new Error(`isArtifactPreviewHref(${JSON.stringify(item.input)}) => ${actual}, expected ${item.expected}`);
+  }
+}
+
+const textFileCases: Array<{ input: string; expected: boolean }> = [
+  { input: "review.md", expected: true },
+  { input: "page.tsx", expected: true },
+  { input: "chart.png", expected: false },
+  { input: "report.xlsx", expected: false },
+  { input: "noext", expected: false },
+];
+
+for (const item of textFileCases) {
+  const actual = isPreviewableTextFile(item.input);
+  if (actual !== item.expected) {
+    throw new Error(`isPreviewableTextFile(${JSON.stringify(item.input)}) => ${actual}, expected ${item.expected}`);
+  }
+}
+
+console.log("documentLinks selftest: OK");

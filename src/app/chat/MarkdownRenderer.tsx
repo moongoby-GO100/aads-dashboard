@@ -7,7 +7,12 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import InlineChart from "@/components/chat/InlineChart";
-import { isFileDownloadHref, isUnsafeLink, normalizeDocumentHref } from "@/lib/documentLinks";
+import {
+  isArtifactPreviewHref,
+  isFileDownloadHref,
+  isUnsafeLink,
+  normalizeDocumentHref,
+} from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
 
 export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
@@ -305,32 +310,10 @@ function FilePathChip({
   );
 }
 
-function isArtifactPreviewHref(href: string): boolean {
-  if (href.startsWith("/docs?")) return true;
-  if (href.startsWith("/reports/") || href.startsWith("/exports/")) return true;
-  try {
-    const base = typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr";
-    const url = new URL(href, base);
-    const sameOrigin = typeof window !== "undefined" ? url.origin === window.location.origin : url.origin === "https://aads.newtalk.kr";
-    if (sameOrigin && url.pathname === "/docs" && url.searchParams.has("file_path")) return true;
-    if (sameOrigin && (url.pathname.startsWith("/reports/") || url.pathname.startsWith("/exports/"))) return true;
-    if (
-      sameOrigin &&
-      (url.pathname.startsWith("/static/reports/") || url.pathname.startsWith("/static/docs/"))
-    ) return true;
-  } catch {
-    /* keep existing conservative link behavior */
-  }
-  if (href.startsWith("/api/v1/files/download")) {
-    try {
-      const url = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr");
-      return url.searchParams.get("inline") === "1";
-    } catch {
-      return href.includes("inline=1");
-    }
-  }
-  return false;
-}
+// AADS-CHATFILE(2026-09-10): 미리보기 판정은 `@/lib/documentLinks`의 공통 처리기로 이전했다.
+// 파일칩(FilePathChip)·마크다운 링크·아티팩트 패널 로더가 같은 규칙을 쓰도록 한 곳에서만 정의한다.
+// 기존 판정(/docs?, /docs+file_path, /reports/, /exports/, /static/*, inline=1 다운로드)은
+// 그대로 유지하고 "패널이 그릴 수 있는 확장자"를 추가로 허용한다.
 
 const createMarkdownComponents = (
   linkColor?: string,

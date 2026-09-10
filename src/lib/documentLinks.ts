@@ -166,6 +166,26 @@ function isFilesystemPath(path: string): boolean {
   return FS_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+/**
+ * 퍼센트 인코딩된 파일시스템 경로를 되돌린다.
+ * `%2Ftmp%2Freview.md`(경로 전체), `/tmp/a%20b.md`(공백만), `%252F…`(이중 인코딩)를 모두 다룬다.
+ * 호출부는 결과가 파일시스템 경로일 때만 채택한다.
+ */
+function decodeFilesystemPath(value: string): string {
+  let decoded = value;
+  for (let i = 0; i < 2; i += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      return decoded;
+    }
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
+}
+
 function buildDownloadHref(filePath: string): string {
   const q = new URLSearchParams();
   q.set("path", filePath);
@@ -241,12 +261,13 @@ export function normalizeDocumentHref(href: string): string {
   // Old messages sometimes contain a fully URL-encoded filesystem path rather
   // than an encoded path segment. Decode it only when it becomes a known local
   // path; arbitrary encoded URLs must retain their original meaning.
-  if (/^%2f/i.test(raw)) {
-    try {
-      const decoded = decodeURIComponent(raw);
-      if (isFilesystemPath(decoded)) raw = decoded;
-    } catch {
-      /* malformed legacy links fall through to the conservative behavior */
+  // AADS-CHATFILE(2026-09-10): `/tmp/a%20b.md` 처럼 경로 일부만 인코딩된 링크와
+  // `%252F…` 이중 인코딩 링크까지 넓혔다. 인코딩된 채로 다운로드 API 쿼리에 넣으면
+  // 이중 인코딩되어 서버가 파일을 찾지 못한다. `..` 가 드러나면 원문을 유지한다.
+  if (raw.includes("%") && !/^https?:\/\//i.test(raw)) {
+    const decoded = decodeFilesystemPath(raw);
+    if (decoded !== raw && isFilesystemPath(decoded) && !decoded.split("/").includes("..")) {
+      raw = decoded;
     }
   }
   raw = raw.replace(/^\.\//, "");
@@ -374,4 +395,75 @@ export function normalizeDocumentRouteParams(params: DocumentRouteParams): Docum
 /** 링크가 파일 다운로드 API로 연결되는지 여부 (UI에서 다운로드 아이콘 표기용) */
 export function isFileDownloadHref(href: string): boolean {
   return href.startsWith(DOWNLOAD_API);
+}
+
+// ── 아티팩트 패널 미리보기 판정 (채팅 파일 링크 공통 처리기) ─────────────────────
+// 링크 표기가 절대/상대/호스트/컨테이너/tmp/URL 인코딩 중 무엇이든
+// normalizeDocumentHref 를 거치면 아래 내부 경로 중 하나가 된다.
+// 이 함수는 "그 경로의 내용을 우측 아티팩트 패널이 직접 그릴 수 있는가"만 판정한다.
+// 판정을 MarkdownRenderer 와 chat page 가 각각 해석하면 "링크는 패널용으로 보이는데
+// 패널은 열지 못하는" 불일치가 생기므로 여기 한 곳에서만 정의한다.
+
+/** 아티팩트 패널이 내용을 직접 렌더링할 수 있는 확장자 (텍스트 뷰어 + 브라우저 인라인) */
+const ARTIFACT_PREVIEW_EXTS = new Set<string>([...DOCS_VIEWER_EXTS, ...INLINE_EXTS]);
+
+/** 정적으로 서빙되는 문서 경로 (nginx/Next 라우트) */
+const ARTIFACT_PREVIEW_PATH_PREFIXES = [
+  "/reports/",
+  "/exports/",
+  "/static/reports/",
+  "/static/docs/",
+  "/static/preview/",
+  "/static/gallery/",
+];
+
+/**
+ * 파일명/경로만 보고 "텍스트로 읽어 그릴 수 있는 문서"인지 판정한다.
+ * Content-Type 은 신뢰할 수 없다 — 예를 들어 `.ts` 는 서버 mimetypes 가 `video/mp2t` 로 추정해
+ * 정상적인 TypeScript 문서를 이진 파일로 오인하게 만든다.
+ */
+export function isPreviewableTextFile(nameOrPath: string): boolean {
+  return DOCS_VIEWER_EXTS.has(getExt(nameOrPath.split(/[?#]/)[0]));
+}
+
+function currentSiteOrigin(): string {
+  return typeof window !== "undefined" ? window.location.origin : "https://aads.newtalk.kr";
+}
+
+/** 파일 다운로드 API 링크를 패널에서 열 수 있는지 (inline 플래그 또는 확장자 기준) */
+function isPreviewableDownloadHref(href: string): boolean {
+  try {
+    const url = new URL(href, currentSiteOrigin());
+    if (url.searchParams.get("inline") === "1") return true;
+    return ARTIFACT_PREVIEW_EXTS.has(getExt(url.searchParams.get("path") || ""));
+  } catch {
+    return href.includes("inline=1");
+  }
+}
+
+/**
+ * 링크를 클릭했을 때 우측 아티팩트 패널에서 열어야 하는지 판정한다.
+ * `false`면 호출부는 기존 동작(다운로드/복사)을 유지한다.
+ */
+export function isArtifactPreviewHref(href: string): boolean {
+  if (!href) return false;
+  if (href.startsWith("/docs?")) return true;
+  if (href.startsWith(DOWNLOAD_API)) return isPreviewableDownloadHref(href);
+  if (ARTIFACT_PREVIEW_PATH_PREFIXES.some((prefix) => href.startsWith(prefix))) {
+    return ARTIFACT_PREVIEW_EXTS.has(getExt(href.split(/[?#]/)[0]));
+  }
+  try {
+    const origin = currentSiteOrigin();
+    const url = new URL(href, origin);
+    if (url.origin !== origin) return false;
+    // 현재 배포 호스트로 절대 URL이 적힌 문서 뷰어 링크도 패널 대상으로 본다.
+    if (url.pathname === "/docs" && url.searchParams.has("file_path")) return true;
+    if (url.pathname === DOWNLOAD_API) return isPreviewableDownloadHref(url.pathname + url.search);
+    if (ARTIFACT_PREVIEW_PATH_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
+      return ARTIFACT_PREVIEW_EXTS.has(getExt(url.pathname));
+    }
+  } catch {
+    /* 파싱 불가 링크는 기존 보수적 동작을 유지한다 */
+  }
+  return false;
 }

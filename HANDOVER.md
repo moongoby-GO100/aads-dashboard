@@ -1,5 +1,37 @@
 # AADS Dashboard Handover
 
+## 2026-09-10 KST - 채팅 파일 링크 아티팩트 열람 2차 보강 + 실제 브라우저 화면 검증 (코드 완료 / 미배포)
+
+- **선행 작업과의 관계**: 같은 작업지시로 먼저 실행·배포된 러너 커밋 `5da0741`(아래 항목) 위에 **덧붙인 2차 보강**이다.
+  착수 preflight 시 `pipeline_jobs` running/queued가 0건이라 중복을 놓쳤고 브랜치 기점이 `7f916b2`(선행 커밋 이전)였다.
+  발견 즉시 브랜치를 현재 main `79fb6d4`로 reset 하고 선행 구현 위에 재작업했다.
+  선행 러너의 `AbortController` 요청 취소, `documentPreviewRequestRef`, `siteOrigins()`, 동일 출처 제한,
+  빈 응답 실패 처리, `/docs`+`file_path` 판정은 **한 줄도 제거하지 않았다.** 선행 RESULT 기록도 `RESULT.md` 부록에 보존.
+- **추가한 것** (`src/lib/documentLinks.ts`, `documentLinks.selftest.ts`, `src/app/chat/MarkdownRenderer.tsx`, `src/app/chat/page.tsx`):
+  ① 미리보기 판정을 `documentLinks.ts` 공통 처리기로 단일화하고 `inline=1` 의존을 "패널이 그릴 수 있는 확장자"로 확대 —
+  `.py/.ts/.tsx/.yaml/.sh/.sql` 등이 패널에서 열린다. `.xlsx` 등 못 그리는 형식은 기존 다운로드 동작 유지.
+  ② 인코딩 복원 범위를 `%2f` 선두에서 `%20`·`%252F`·비선두까지 넓히고 `..` 노출 시 원문 유지.
+  ③ `parseDocsPreviewHref`에 `normalizeDocumentRouteParams()` 적용 — 옛 대화가 전부 AADS `/app/docs`·`/app/reports`로
+  굳혀 놓은 GO100/KIS/SF/NTV2 문서를 되살린다.
+  ④ 재시도를 1회 → 400ms·1200ms 백오프 2회로 늘리고 재시도 가능 여부를 상태코드로 분류(401/403/404/413은 즉시 종료).
+  ⑤ 상태코드별 한국어 안내 문구, 공백만 있는 내용도 실패 처리, 미지원 형식은 명시적 안내.
+  ⑥ 이미지를 blob→data URL로 패널 안에서 직접 표시 — 기존에는 인증 필요한 원본 URL을 새 탭에 걸어 401이 났다.
+- **검증(최종 병합 빌드 기준 재실행)**: tsc 통과, ESLint 0 errors(기존 경고 20건), selftest 38건 통과, 프로덕션 빌드 성공.
+  후보 빌드를 `localhost:3001`(운영 API 사용)에 띄우고 서버 Playwright Chromium + 실제 로그인 토큰으로 12개 시나리오 확인.
+  **선행 러너가 unverified 로 남긴 authenticated click-to-panel content matching 을 이번에 실제로 통과시켰다** —
+  세션 `474e1681`의 `/tmp/aads-chat-continuity-directive-review.md` 클릭 시 패널 글자수 6,171이 파일 API 응답과 일치하고
+  서버 파일 md5 `965fedad…`와 동일, 세션 `7fb5f50a`의 상대경로 문서 17,368자 일치, 모바일(390×844) 동일 동작,
+  세션 전환 시 요청 취소·패널 미오염, 연속 클릭 시 마지막 클릭 유지, 503×2 후 재시도 성공, 401 즉시 안내, 새 탭 0건.
+  같은 세션의 아티팩트 대상 링크가 현재 배포본 1개 → 후보 3개로 늘어 `.py` 2건이 다운로드에서 패널 열람으로 바뀐 것을 확인.
+- **파일 API 의존**: 링크 대상이 `files.py`의 `ALLOWED_ROOTS` 안에서 해석되어야 내용이 나온다.
+  착수 시점 `/tmp/…review.md`는 컨테이너에 없어 404였고 UI는 "문서를 찾을 수 없습니다"를 표시했다(빈 패널 아님).
+  같은 배치 file_api 담당이 `/app/docs/chat/`에 반영한 뒤 동일 UI가 원문을 표시했다.
+- **미실행**: push·배포·운영 화면 재검증·5분 오류 관측(승인된 Pipeline 단계에서 수행),
+  `html_preview`/PDF 패널 렌더 화면 검증(대상 파일이 컨테이너에 없어 코드 경로만 확인). 타 세션 메시지 전송 0건.
+- **증적**: `/root/aads/verification/aads-chatfile-20260910/` (스크립트 12개 + 캡처 10장), 상세는 `RESULT.md`.
+- **브랜치**: `feat/chat-file-link-artifact-20260910` (worktree `/root/aads/releases/aads-dashboard-filelink-20260910`, 기점 `79fb6d4`).
+  무관 dirty 보존: 원본 worktree의 `public/reports/20260909_cogcom_recolumn_company_analysis.html` 미변경.
+
 ## 2026-09-10 13:20 KST - Historical artifact links production closeout and release-SHA guard
 
 - Artifact-link release `5da0741368ba` was deployed blue/green. Active blue and standby green both reported Docker image `sha256:90c9e25ccadcf43ebddf2ad7660d704c5bcc711e3287582315d26a63e4c6c2e8`, `AADS_RELEASE_SHA=5da0741368ba`, and healthy status.
