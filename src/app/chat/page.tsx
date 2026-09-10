@@ -636,6 +636,48 @@ function messageTime(message: ChatMessage): number {
   return Number.isFinite(time) ? time : 0;
 }
 
+const PERSISTED_MESSAGE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function directiveSourceMessageIds(
+  allMessages: ChatMessage[],
+  selectedResponse: ChatMessage,
+): [string, string] | null {
+  if (
+    selectedResponse.role !== "assistant" ||
+    !PERSISTED_MESSAGE_ID_RE.test(selectedResponse.id) ||
+    !isFinalAssistantMessage(selectedResponse)
+  ) {
+    return null;
+  }
+  const sessionMessages = allMessages
+    .filter((message) =>
+      message.session_id === selectedResponse.session_id &&
+      (message.role === "user" || message.role === "assistant") &&
+      PERSISTED_MESSAGE_ID_RE.test(message.id)
+    )
+    .sort((left, right) => {
+      const timeDifference = messageTime(left) - messageTime(right);
+      if (timeDifference !== 0) return timeDifference;
+      if (left.role === right.role) return 0;
+      return left.role === "user" ? -1 : 1;
+    });
+  const responseIndex = sessionMessages.findIndex((message) => message.id === selectedResponse.id);
+  if (responseIndex < 0) return null;
+  const directQuestion = selectedResponse.reply_to_id
+    ? sessionMessages.find((message) =>
+        message.id === selectedResponse.reply_to_id &&
+        message.role === "user" &&
+        message.intent !== "system_trigger"
+      )
+    : undefined;
+  const precedingQuestion = sessionMessages
+    .slice(0, responseIndex)
+    .reverse()
+    .find((message) => message.role === "user" && message.intent !== "system_trigger");
+  const sourceQuestion = directQuestion || precedingQuestion;
+  return sourceQuestion ? [sourceQuestion.id, selectedResponse.id] : null;
+}
+
 function normalizedMessageContent(message: ChatMessage): string {
   return (message.content || "").trim();
 }
@@ -2237,6 +2279,8 @@ interface MessageItemProps {
   handleCopyToInput: (content: string) => void;
   handleEditResend: (msgId: string, newContent: string) => void;
   onRegenerate?: (msgId: string, mode?: "regenerate" | "continue") => void;
+  onCreateDirectiveFromResponse?: (msg: ChatMessage) => void;
+  directiveDrafting?: boolean;
   onReplyTo?: (msg: ChatMessage) => void;
   onBranch?: (msg: ChatMessage) => void;
   replyTarget?: ChatMessage | null;
@@ -2262,7 +2306,7 @@ interface MessageItemProps {
 const MessageItem = memo(function MessageItem({
   msg, idx, streaming, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
-  onRegenerate, onReplyTo, onBranch, replyTarget,
+  onRegenerate, onCreateDirectiveFromResponse, directiveDrafting = false, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming, stopRequesting,
   onResumeInterrupted, selectedResumeModel,
   onViewReport, linkedArtifact, onViewArtifact, onDocumentLinkClick, onOpenLightbox, isLastAssistantMsg,
@@ -3251,6 +3295,34 @@ const MessageItem = memo(function MessageItem({
                   onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
                 >🔄</button>
               </>
+            )}
+            {onCreateDirectiveFromResponse && isFinalAssistantMessage(msg) && PERSISTED_MESSAGE_ID_RE.test(msg.id) && (
+              <button
+                type="button"
+                onClick={() => onCreateDirectiveFromResponse(msg)}
+                disabled={directiveDrafting}
+                title={directiveDrafting ? "지시 초안 생성 중" : "이 AI 응답으로 지시서 만들기"}
+                aria-label={directiveDrafting ? "지시 초안 생성 중" : "이 AI 응답으로 지시서 만들기"}
+                style={{
+                  minWidth: isMobileMessage ? "32px" : undefined, minHeight: "28px", borderRadius: "6px", padding: isMobileMessage ? "0 6px" : "0 8px",
+                  background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.28)",
+                  color: "#8b5cf6", fontSize: "11px", fontWeight: 700,
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px",
+                  cursor: directiveDrafting ? "wait" : "pointer", opacity: directiveDrafting ? 0.55 : 0.82,
+                  transition: "all 0.2s", marginLeft: "4px", whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => {
+                  if (directiveDrafting) return;
+                  e.currentTarget.style.opacity = "1";
+                  e.currentTarget.style.background = "rgba(139,92,246,0.18)";
+                  e.currentTarget.style.borderColor = "#8b5cf6";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = directiveDrafting ? "0.55" : "0.82";
+                  e.currentTarget.style.background = "rgba(139,92,246,0.10)";
+                  e.currentTarget.style.borderColor = "rgba(139,92,246,0.28)";
+                }}
+              >{directiveDrafting ? "…" : "📝"}{isMobileMessage ? null : " 지시서"}</button>
             )}
             <button
               onClick={() => handleDeleteMessage(msg.id, "assistant")}
@@ -9026,10 +9098,17 @@ export default function ChatPage() {
     try { await chatApi(`/chat/templates/${id}`, { method: "DELETE" }); fetchTemplates(); } catch { /* ignore */ }
   }
 
-  async function handleCreateDirectiveDraft() {
+  async function handleCreateDirectiveDraft(selectedResponse?: ChatMessage) {
     const sessionId = activeSessionObjRef.current?.id;
     if (!sessionId || directiveDrafting) {
       if (!sessionId) setDirectiveDraftError("지시 초안을 만들 채팅 세션을 먼저 선택해주세요.");
+      return;
+    }
+    const messageIds = selectedResponse
+      ? directiveSourceMessageIds(messages, selectedResponse)
+      : null;
+    if (selectedResponse && !messageIds) {
+      setDirectiveDraftError("선택한 AI 응답과 직전 사용자 질문을 연결할 수 없습니다. 메시지를 새로고침한 뒤 다시 시도해주세요.");
       return;
     }
     setDirectiveDrafting(true);
@@ -9037,7 +9116,10 @@ export default function ChatPage() {
     try {
       const draft = await chatApi<DirectiveDraftCreateResponse>(
         `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts`,
-        { method: "POST", body: JSON.stringify({ context_window: 8 }) },
+        {
+          method: "POST",
+          body: JSON.stringify(messageIds ? { context_window: 2, message_ids: messageIds } : { context_window: 8 }),
+        },
       );
       const artifact = draft.artifact;
       setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
@@ -9048,8 +9130,12 @@ export default function ChatPage() {
       if (screenSize === "mobile") setShowMobileActions(false);
       showCompletionToast(
         draft.classification?.generation_mode === "fallback"
-          ? "LLM 생성을 사용할 수 없어 안전 폴백 지시 초안을 만들었습니다."
-          : "최근 문답으로 지시 초안을 만들었습니다. 확인 후 입력창에 넣어주세요.",
+          ? selectedResponse
+            ? "선택한 AI 응답으로 안전 폴백 지시 초안을 만들었습니다."
+            : "LLM 생성을 사용할 수 없어 안전 폴백 지시 초안을 만들었습니다."
+          : selectedResponse
+            ? "선택한 AI 응답으로 지시 초안을 만들었습니다. 확인 후 입력창에 넣어주세요."
+            : "최근 문답으로 지시 초안을 만들었습니다. 확인 후 입력창에 넣어주세요.",
         sessionId,
       );
     } catch (error) {
@@ -11011,6 +11097,8 @@ export default function ChatPage() {
                     handleCopyToInput={handleCopyToInput}
                     handleEditResend={handleEditResend}
                     onRegenerate={handleRegenerate}
+                    onCreateDirectiveFromResponse={handleCreateDirectiveDraft}
+                    directiveDrafting={directiveDrafting}
                     onReplyTo={setReplyToMessage}
                     onBranch={setBranchPoint}
                     replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}
@@ -11077,6 +11165,8 @@ export default function ChatPage() {
                       handleCopyToInput={handleCopyToInput}
                       handleEditResend={handleEditResend}
                       onRegenerate={handleRegenerate}
+                      onCreateDirectiveFromResponse={handleCreateDirectiveDraft}
+                      directiveDrafting={directiveDrafting}
                       onReplyTo={setReplyToMessage}
                       onBranch={setBranchPoint}
                       replyTarget={msg.reply_to_id ? messageByIdMap.get(msg.reply_to_id) || null : null}

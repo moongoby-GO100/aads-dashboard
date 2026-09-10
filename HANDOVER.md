@@ -2613,3 +2613,15 @@
 - Both dashboard slots are healthy on identical image digest `sha256:7b0cccbd2a153efa7cfc58ea408d47751ef5f7c8651c36e34de752f4fb80730e`; five P0/P1 monitor rounds passed through 04:11:21 KST.
 - External `/login` and API health return HTTP 200; unauthenticated `/chat` correctly redirects to `/login` with HTTP 307.
 - Authenticated visual E2E remains uncertified: the Vault login failed after one reconnect retry, local Playwright lacked its Chromium executable, and Browser Bridge navigation timed out at 120 seconds. Runtime/API/container validation passed, but desktop/mobile screenshots must be retried after browser infrastructure recovery.
+
+## 2026-09-11 05:25 KST - Create a directive from a selected AI response
+
+- Added a compact `📝 지시서` action to persisted, completed assistant response bubbles. Streaming,
+  incomplete, rate-limited, temporary, and non-UUID messages do not expose the action.
+- The action resolves the response's explicit `reply_to_id` user message when available, otherwise the
+  nearest preceding user message in the same session, and sends only those two IDs to the existing
+  directive-draft API. The composer icon keeps its existing recent-eight-message behavior.
+- Draft creation still opens the report artifact for review and never auto-sends it. Missing source
+  linkage fails closed with a visible retry instruction instead of silently reverting to recent context.
+- `npx tsc --noEmit`, focused ESLint, production build, clean commit/push, dashboard blue/green release,
+  authenticated desktop/mobile `/chat` verification, and five-minute P0/P1 monitoring are release gates.
