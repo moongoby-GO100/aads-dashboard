@@ -633,6 +633,159 @@ function DirectiveModelConfig() {
   );
 }
 
+
+interface DirectiveModelConfigItem {
+  role: string;
+  role_label: string;
+  models: string[];
+  timeout_seconds: number;
+  max_tokens: number;
+  updated_at: string | null;
+  updated_by: string;
+}
+
+function DirectiveModelConfig() {
+  const [configs, setConfigs] = useState<DirectiveModelConfigItem[]>([]);
+  const [registryModels, setRegistryModels] = useState<RunnerRegistryModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [newModel, setNewModel] = useState<Record<string, string>>({});
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.allSettled([
+      (api as any).getDirectiveModels(),
+      (api as any).getLlmModels({ active_only: true }),
+    ])
+      .then(([configsRes, registryRes]) => {
+        if (configsRes.status === "fulfilled") setConfigs(configsRes.value.configs || []);
+        else setMsg("지시서 모델 설정 로드 실패");
+        if (registryRes.status === "fulfilled" && Array.isArray(registryRes.value.models))
+          setRegistryModels(registryRes.value.models);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const registryGroups = useMemo<RunnerAvailableModelGroup[]>(() => {
+    const groups = buildRunnerModelGroups(registryModels);
+    if (groups.length > 0) return groups;
+    return LEGACY_AVAILABLE_MODELS.map((g) => ({ group: g.group, models: g.models.map((v) => ({ value: v, label: v })) }));
+  }, [registryModels]);
+
+  const moveModel = (ci: number, mi: number, dir: -1 | 1) => {
+    const next = [...configs];
+    const arr = [...next[ci].models];
+    const target = mi + dir;
+    if (target < 0 || target >= arr.length) return;
+    [arr[mi], arr[target]] = [arr[target], arr[mi]];
+    next[ci] = { ...next[ci], models: arr };
+    setConfigs(next);
+  };
+
+  const removeModel = (ci: number, mi: number) => {
+    const next = [...configs];
+    const arr = next[ci].models.filter((_, i) => i !== mi);
+    if (arr.length === 0) return;
+    next[ci] = { ...next[ci], models: arr };
+    setConfigs(next);
+  };
+
+  const addModel = (ci: number) => {
+    const role = configs[ci].role;
+    const val = (newModel[role] || "").trim();
+    if (!val) return;
+    const next = [...configs];
+    next[ci] = { ...next[ci], models: [...next[ci].models, val] };
+    setConfigs(next);
+    setNewModel((p) => ({ ...p, [role]: "" }));
+  };
+
+  const updateParam = (ci: number, key: "timeout_seconds" | "max_tokens", val: number) => {
+    const next = [...configs];
+    next[ci] = { ...next[ci], [key]: val };
+    setConfigs(next);
+  };
+
+  const save = async () => {
+    setSaving(true); setMsg("");
+    try {
+      const payload = configs.map((c) => ({ role: c.role, models: c.models, timeout_seconds: c.timeout_seconds, max_tokens: c.max_tokens }));
+      const res: any = await (api as any).updateDirectiveModels(payload);
+      setMsg(res.message || "저장 완료");
+      load();
+    } catch { setMsg("저장 실패"); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <p className="text-sm p-4" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>;
+
+  return (
+    <div className="space-y-4">
+      {configs.map((cfg, ci) => (
+        <div key={cfg.role} className="rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold" style={{ color: "var(--accent)" }}>{cfg.role_label || cfg.role}</h3>
+            {cfg.updated_at && (
+              <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                {new Date(cfg.updated_at).toLocaleString("ko-KR")} · {cfg.updated_by}
+              </span>
+            )}
+          </div>
+          <ol className="space-y-1 mb-3">
+            {cfg.models.map((model, mi) => (
+              <li key={mi} className="flex items-center gap-2 text-xs rounded px-2 py-1" style={{ background: "var(--bg-primary)" }}>
+                <span className="w-5 text-center font-mono" style={{ color: mi === 0 ? "var(--accent)" : "var(--text-tertiary)" }}>{mi + 1}</span>
+                <span className="flex-1 font-mono" style={{ color: "var(--text-primary)" }}>{model}</span>
+                <button onClick={() => moveModel(ci, mi, -1)} disabled={mi === 0} className="px-1 opacity-50 hover:opacity-100">↑</button>
+                <button onClick={() => moveModel(ci, mi, 1)} disabled={mi === cfg.models.length - 1} className="px-1 opacity-50 hover:opacity-100">↓</button>
+                <button onClick={() => removeModel(ci, mi)} disabled={cfg.models.length <= 1} className="px-1 text-red-400 hover:text-red-300">✕</button>
+              </li>
+            ))}
+          </ol>
+          <div className="flex gap-2 mb-3">
+            <select value={newModel[cfg.role] || ""} onChange={(e) => setNewModel((p) => ({ ...p, [cfg.role]: e.target.value }))}
+              className="flex-1 text-xs rounded px-2 py-1" style={{ background: "var(--bg-primary)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+              <option value="">모델 추가...</option>
+              {registryGroups.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.models.filter((m) => !cfg.models.includes(m.value)).map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button onClick={() => addModel(ci)} className="text-xs px-3 py-1 rounded" style={{ background: "var(--accent)", color: "#fff" }}>추가</button>
+          </div>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              타임아웃(초)
+              <input type="number" min={30} max={120} value={cfg.timeout_seconds}
+                onChange={(e) => updateParam(ci, "timeout_seconds", Number(e.target.value))}
+                className="w-16 text-xs rounded px-2 py-1" style={{ background: "var(--bg-primary)", color: "var(--text-primary)", border: "1px solid var(--border)" }} />
+            </label>
+            <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              최대 토큰
+              <input type="number" min={500} max={4000} step={100} value={cfg.max_tokens}
+                onChange={(e) => updateParam(ci, "max_tokens", Number(e.target.value))}
+                className="w-20 text-xs rounded px-2 py-1" style={{ background: "var(--bg-primary)", color: "var(--text-primary)", border: "1px solid var(--border)" }} />
+            </label>
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving} className="text-xs px-4 py-2 rounded font-medium"
+          style={{ background: "var(--accent)", color: "#fff", opacity: saving ? 0.5 : 1 }}>
+          {saving ? "저장 중..." : "저장"}
+        </button>
+        {msg && <span className="text-xs" style={{ color: msg.includes("실패") ? "#ef4444" : "var(--accent)" }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
 function RunnerModelConfig() {
   const [configs, setConfigs] = useState<ModelConfig[]>([]);
   const [registryModels, setRegistryModels] = useState<RunnerRegistryModel[]>([]);
@@ -941,6 +1094,13 @@ export default function SettingsPage() {
             Size별 모델 실행 순서를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
           </p>
           <RunnerModelConfig />
+        </section>
+        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>지시서 생성 모델 설정</h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+            지시서 자동생성에 사용하는 모델 우선순위를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
+          </p>
+          <DirectiveModelConfig />
         </section>
         <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
           <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>지시서 생성 모델 설정</h2>
