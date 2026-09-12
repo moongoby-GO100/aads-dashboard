@@ -2,7 +2,17 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 
+type ClaudeSlotUsage = {
+  slot: string;
+  label?: string;
+  source?: string;
+  sampled_at?: string | null;
+  primary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
+  secondary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
+};
+
 type UsageData = {
+  claude_slots?: ClaudeSlotUsage[];
   claude_max?: {
     plan_type: string;
     source?: string;
@@ -189,7 +199,8 @@ export default function UsageBar() {
   if (!claude && !codex && !relay) return null;
 
   const cm = claude?.claude_max;
-  const cx = codex?.ok ? (codex.limits?.find((lim) => lim.limit_id === "codex") ?? codex.limits?.[0]) : null;
+  const cxAll = codex?.ok ? (codex.limits ?? []) : [];
+  const slots = claude?.claude_slots ?? [];
   const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
   const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
   const relayMetrics = relay ? Object.values(relay.acquire_metrics ?? {}) : [];
@@ -261,7 +272,41 @@ export default function UsageBar() {
           )}
         </span>
       )}
-      {cm && (
+      {slots.length > 0 ? (
+        slots.map((sl) => {
+          const name = sl.label || `slot ${sl.slot}`;
+          const dot = sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
+          const seen = sl.secondary.used_percent == null && sl.primary.used_percent == null;
+          return (
+            <React.Fragment key={`claude-slot-${sl.slot}`}>
+              <span
+                style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}
+                title={sl.sampled_at ? `\uCE21\uC815 ${new Date(sl.sampled_at).toLocaleTimeString()} (${sl.source || "-"})` : "\uC544\uC9C1 \uCE21\uC815\uAC12 \uC5C6\uC74C"}
+              >
+                {dot} {name}
+              </span>
+              {seen ? (
+                <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>\uCE21\uC815 \uB300\uAE30</span>
+              ) : (
+                <>
+                  <MiniBar
+                    pct={sl.primary.used_percent ?? 0}
+                    label="5h"
+                    detail={`${name} 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (sl.primary.used_percent ?? 0)).toFixed(0)}%`}
+                    resetIn={formatResetTime(sl.primary.resets_at ?? undefined)}
+                  />
+                  <MiniBar
+                    pct={sl.secondary.used_percent ?? 0}
+                    label="1w"
+                    detail={`${name} 1\uc8fc \uc794\ub7c9: ${(100 - (sl.secondary.used_percent ?? 0)).toFixed(0)}%`}
+                    resetIn={formatResetTime(sl.secondary.resets_at ?? undefined)}
+                  />
+                </>
+              )}
+            </React.Fragment>
+          );
+        })
+      ) : cm ? (
         <>
           <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>
             Claude{isLive ? sourceLabel : " (est)"}
@@ -279,24 +324,27 @@ export default function UsageBar() {
             resetIn={formatResetTime(cm.secondary.resets_at)}
           />
         </>
-      )}
-      {cx && (
-        <>
-          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)", marginLeft: "4px" }}>Codex</span>
-          <MiniBar
-            pct={cx.primary?.used_percent ?? 0}
-            label="5h"
-            detail={`Codex 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (cx.primary?.used_percent ?? 0)).toFixed(0)}%`}
-            resetIn={formatResetSeconds(cx.primary?.resets_in_sec)}
-          />
-          <MiniBar
-            pct={cx.secondary?.used_percent ?? 0}
-            label="1w"
-            detail={`Codex 1\uc8fc \uc794\ub7c9: ${(100 - (cx.secondary?.used_percent ?? 0)).toFixed(0)}%`}
-            resetIn={formatResetSeconds(cx.secondary?.resets_in_sec)}
-          />
-        </>
-      )}
+      ) : null}
+      {cxAll.map((cx, i) => {
+        const cname = cx.limit_id && cx.limit_id !== "codex" ? `Codex:${cx.limit_id.replace(/^codex_/, "")}` : "Codex";
+        return (
+          <React.Fragment key={`codex-${cx.limit_id || i}`}>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)", marginLeft: "4px" }}>{cname}</span>
+            <MiniBar
+              pct={cx.primary?.used_percent ?? 0}
+              label="5h"
+              detail={`${cname} 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (cx.primary?.used_percent ?? 0)).toFixed(0)}%`}
+              resetIn={formatResetSeconds(cx.primary?.resets_in_sec)}
+            />
+            <MiniBar
+              pct={cx.secondary?.used_percent ?? 0}
+              label="1w"
+              detail={`${cname} 1\uc8fc \uc794\ub7c9: ${(100 - (cx.secondary?.used_percent ?? 0)).toFixed(0)}%`}
+              resetIn={formatResetSeconds(cx.secondary?.resets_in_sec)}
+            />
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
