@@ -403,11 +403,19 @@ function DeployStatusCard({
   nowMs: number;
   onRefresh: () => void;
 }) {
-  const active = status?.active_deployments || [];
-  const queued = status?.queued_deployments || [];
-  const history = status?.recent_deployments?.length
-    ? status.recent_deployments
-    : status?.recent_completed_deployments || [];
+  // 프로젝트 카드를 누르면 그 프로젝트만 본다. 하단 이력이 전 프로젝트 공용이라
+  // 배포가 잦은 AADS 가 목록을 채워, 다른 프로젝트의 배포는 사실상 보이지 않았다.
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const byProject = <T extends { project?: string }>(rows: T[]): T[] =>
+    selectedProject ? rows.filter((r) => r.project === selectedProject) : rows;
+
+  const active = byProject(status?.active_deployments || []);
+  const queued = byProject(status?.queued_deployments || []);
+  const history = byProject(
+    status?.recent_deployments?.length
+      ? status.recent_deployments
+      : status?.recent_completed_deployments || []
+  );
   const durations = status?.recent_durations_per_project || [];
   const projectDeployments = status?.project_deployments || [];
   const projectDeploymentsByName = new Map(projectDeployments.map((item) => [item.project, item]));
@@ -525,13 +533,34 @@ function DeployStatusCard({
             return (
               <div
                 key={item.project || "unknown-project"}
+                role="button"
+                tabIndex={0}
+                title={isPlaceholder ? "배포 이력 없음" : `${item.project} 배포 이력만 보기`}
+                onClick={() => {
+                  if (isPlaceholder) return;
+                  setSelectedProject((prev) => (prev === item.project ? null : item.project || null));
+                }}
+                onKeyDown={(e) => {
+                  if (isPlaceholder) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedProject((prev) => (prev === item.project ? null : item.project || null));
+                  }
+                }}
                 style={{
-                  border: `1px solid ${inProgress ? tone : "var(--ct-border)"}`,
+                  border: `1px solid ${
+                    selectedProject === item.project
+                      ? "var(--ct-accent)"
+                      : inProgress ? tone : "var(--ct-border)"
+                  }`,
                   borderRadius: 8,
                   padding: "8px 9px",
                   minWidth: 0,
-                  background: inProgress ? "rgba(59,130,246,0.08)" : "transparent",
+                  background: selectedProject === item.project
+                    ? "rgba(108,99,255,0.10)"
+                    : inProgress ? "rgba(59,130,246,0.08)" : "transparent",
                   opacity: isPlaceholder ? 0.55 : 1,
+                  cursor: isPlaceholder ? "default" : "pointer",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", minWidth: 0 }}>
@@ -775,9 +804,31 @@ function DeployStatusCard({
         </div>
       )}
 
-      {history.length > 0 && (
+      {(history.length > 0 || selectedProject) && (
         <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 7 }}>최근 배포 이력</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)" }}>
+              {selectedProject ? `${selectedProject} 배포 이력` : "최근 배포 이력"}
+            </div>
+            {selectedProject && (
+              <button
+                type="button"
+                onClick={() => setSelectedProject(null)}
+                style={{
+                  marginLeft: "auto", fontSize: 10, padding: "2px 7px", cursor: "pointer",
+                  borderRadius: 6, border: "1px solid var(--ct-border)",
+                  background: "transparent", color: "var(--ct-text2)",
+                }}
+              >
+                전체 보기
+              </button>
+            )}
+          </div>
+          {selectedProject && history.length === 0 && (
+            <div style={{ fontSize: 11, color: "var(--ct-text2)", padding: "6px 0" }}>
+              {selectedProject} 의 최근 배포 이력이 없습니다.
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {history.slice(0, 8).map((item, index) => {
               const durationLabel = formatDurationMs(item.duration_ms) || deployElapsed(item, nowMs);
