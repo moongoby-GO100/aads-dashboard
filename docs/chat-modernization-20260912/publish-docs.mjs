@@ -103,7 +103,7 @@ const css = `
 a{color:#1457b8;text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible{outline:3px solid #d16b00;outline-offset:3px}
 header,nav,.document{background:white;border:1px solid #d9e1ec;border-radius:14px;padding:24px;margin-bottom:20px}
 h1{font-size:clamp(24px,4vw,36px);line-height:1.3;margin:0 0 14px}h2{font-size:25px}h3{font-size:21px}h4{font-size:18px}
-h2,h3,h4,h5,h6{line-height:1.5;scroll-margin-top:20px}p,li,td{overflow-wrap:anywhere}
+h1,h2,h3,h4,h5,h6{overflow-wrap:anywhere}h2,h3,h4,h5,h6{line-height:1.5;scroll-margin-top:20px}p,li,td{overflow-wrap:anywhere}
 .status{display:inline-block;background:#e7f1ff;color:#154b8b;padding:5px 12px;border-radius:8px;font-weight:650}
 .muted{color:#536379;font-size:14px}nav ol{margin:0;padding-left:24px}nav a{display:inline-block;padding:7px 0;min-height:40px}
 .document-label{font-size:14px;color:#536379;border-bottom:1px solid #d9e1ec;padding-bottom:12px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:10px}
