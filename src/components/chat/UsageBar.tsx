@@ -11,8 +11,16 @@ type ClaudeSlotUsage = {
   secondary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
 };
 
+type TokenLabel = {
+  label?: string;
+  key_name?: string;
+  priority?: number;
+  slot?: string;
+};
+
 type UsageData = {
   claude_slots?: ClaudeSlotUsage[];
+  token_labels?: TokenLabel[];
   claude_max?: {
     plan_type: string;
     source?: string;
@@ -155,6 +163,38 @@ export default function UsageBar() {
     }
   }, []);
 
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  // 계정 전환은 상단 칩에서 바로 한다. 하단에 따로 토글을 두면 사용률을 보고도
+  // 다른 곳으로 내려가 눌러야 해서, 어느 계정이 여유 있는지 모른 채 바꾸게 된다.
+  const switchPrimary = useCallback(async (keyName: string, label: string, exhausted: boolean) => {
+    if (!keyName || switching) return;
+    if (exhausted && !window.confirm(`${label} 계정도 주간 한도를 모두 썼습니다. 그래도 1순위로 바꿀까요?`)) return;
+    const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    setSwitching(keyName);
+    setSwitchError(null);
+    try {
+      const res = await fetch(`${BASE}/settings/auth-keys`, {
+        method: "POST", credentials: "include", headers,
+        body: JSON.stringify({ primary: keyName }),
+      });
+      if (!res.ok) {
+        // 옛 구현은 실패를 통째로 삼켜서 버튼이 그냥 안 먹는 것처럼 보였다.
+        const detail = await res.text().catch(() => "");
+        throw new Error(`${res.status} ${detail.slice(0, 120)}`);
+      }
+      await fetchUsage();
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : "전환 실패");
+    } finally {
+      setSwitching(null);
+    }
+  }, [switching, fetchUsage]);
+
   const fetchRelayCapacity = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -201,6 +241,11 @@ export default function UsageBar() {
   const cm = claude?.claude_max;
   const cxAll = codex?.ok ? (codex.limits ?? []) : [];
   const slots = claude?.claude_slots ?? [];
+  const tokenLabels = claude?.token_labels ?? [];
+  const slotMeta = (slot: string) => tokenLabels.find((t) => String(t.slot ?? "") === slot);
+  // priority 1 이 릴레이가 먼저 고르는 계정이다.
+  const activeSlot = tokenLabels.reduce<string | null>(
+    (best, t) => (t.priority === 1 && t.slot ? String(t.slot) : best), null);
   const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
   const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
   const relayMetrics = relay ? Object.values(relay.acquire_metrics ?? {}) : [];
@@ -277,14 +322,32 @@ export default function UsageBar() {
           const name = sl.label || `slot ${sl.slot}`;
           const dot = sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
           const seen = sl.secondary.used_percent == null && sl.primary.used_percent == null;
+          const keyName = slotMeta(sl.slot)?.key_name ?? "";
+          const isActive = activeSlot === sl.slot;
+          const exhausted = (sl.secondary.used_percent ?? 0) >= 100;
           return (
             <React.Fragment key={`claude-slot-${sl.slot}`}>
-              <span
-                style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}
-                title={sl.sampled_at ? `\uCE21\uC815 ${new Date(sl.sampled_at).toLocaleTimeString()} (${sl.source || "-"})` : "\uC544\uC9C1 \uCE21\uC815\uAC12 \uC5C6\uC74C"}
+              <button
+                type="button"
+                disabled={isActive || !keyName || switching !== null}
+                onClick={() => void switchPrimary(keyName, name, exhausted)}
+                title={[
+                  isActive ? "\uD604\uC7AC 1\uC21C\uC704 \uACC4\uC815" : keyName ? `\uD074\uB9AD\uD558\uBA74 ${name} \uC744(\uB97C) 1\uC21C\uC704\uB85C` : "",
+                  sl.sampled_at ? `\uCE21\uC815 ${new Date(sl.sampled_at).toLocaleTimeString()} (${sl.source || "-"})` : "\uC544\uC9C1 \uCE21\uC815\uAC12 \uC5C6\uC74C",
+                  exhausted ? "\uC8FC\uAC04 \uD55C\uB3C4 \uC18C\uC9C4" : "",
+                ].filter(Boolean).join("\n")}
+                style={{
+                  fontSize: "10px", fontWeight: 700, whiteSpace: "nowrap",
+                  padding: "1px 7px", borderRadius: "9px",
+                  border: `1px solid ${isActive ? "#22c55e88" : "var(--ct-border)"}`,
+                  background: isActive ? "#22c55e18" : "transparent",
+                  color: exhausted ? "var(--ct-text3, #999)" : "var(--ct-text2)",
+                  opacity: switching === keyName ? 0.5 : exhausted && !isActive ? 0.6 : 1,
+                  cursor: isActive || !keyName || switching !== null ? "default" : "pointer",
+                }}
               >
-                {dot} {name}
-              </span>
+                {dot} {name}{isActive ? " \u25CF" : ""}
+              </button>
               {seen ? (
                 <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>\uCE21\uC815 \uB300\uAE30</span>
               ) : (
@@ -325,6 +388,12 @@ export default function UsageBar() {
           />
         </>
       ) : null}
+      {switchError && (
+        <span style={{ fontSize: "10px", color: "#ef4444", whiteSpace: "nowrap" }}
+              title={switchError}>
+          \uACC4\uC815 \uC804\uD658 \uC2E4\uD328
+        </span>
+      )}
       {cxAll.map((cx, i) => {
         const cname = cx.limit_id && cx.limit_id !== "codex" ? `Codex:${cx.limit_id.replace(/^codex_/, "")}` : "Codex";
         return (

@@ -664,11 +664,6 @@ export const api = {
   updateDirectiveModels: (configs: Array<{ role: string; models: string[]; timeout_seconds: number; max_tokens: number }>) =>
     request<any>("/settings/directive-models", { method: "PUT", body: JSON.stringify({ configs }) }),
 
-  // Directive Model Config: 지시서 생성 모델 우선순위 설정
-  getDirectiveModels: () => request<any>("/settings/directive-models"),
-  updateDirectiveModels: (configs: Array<{ role: string; models: string[]; timeout_seconds: number; max_tokens: number }>) =>
-    request<any>("/settings/directive-models", { method: "PUT", body: JSON.stringify({ configs }) }),
-
   // Project Docs: 프로젝트별 문서 통합 조회
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
   getProjectDocContent: (project: string, basePath: string, filePath: string) =>

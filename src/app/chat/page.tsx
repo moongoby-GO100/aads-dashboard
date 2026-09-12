@@ -12228,38 +12228,9 @@ export default function ChatPage() {
               justifyContent: isComposerCompact ? "space-between" : "flex-end",
             }}>
               {/* API 키 상태 표시 */}
-              {/* 인증 키 토글 (클릭하여 Naver/Gmail 전환) */}
-              <button
-                onClick={async () => {
-                  try {
-                    const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
-                    const headers: Record<string, string> = { "Content-Type": "application/json", ...authHdrs() };
-                    // 현재 순서 조회
-                    const cur = await fetch(`${BASE}/settings/auth-keys`, { credentials: "include", headers }).then(r => r.json());
-                    const keys = cur?.keys || [];
-                    const currentPrimary = keys?.[0];
-                    const nextKey = keys?.find((k: AuthKeyStatus) => k?.key_name && k.key_name !== currentPrimary?.key_name) || keys?.[1];
-                    if (!nextKey?.key_name) return;
-                    // 순서 변경
-                    await fetch(`${BASE}/settings/auth-keys`, {
-                      method: "POST", credentials: "include", headers, body: JSON.stringify({ primary: nextKey.key_name }),
-                    });
-                    await fetchKeyStatus();
-                  } catch { /* ignore */ }
-                }}
-                title={`현재 1순위: ${apiKeyInfo?.label || "?"} (클릭하여 다음 계정으로 전환)`}
-                style={{
-                  fontSize: "10px", whiteSpace: "nowrap",
-                  padding: "2px 8px", borderRadius: "8px",
-                  background: apiKeyInfo?.slot === "1" ? "#3b82f618" : "#22c55e18",
-                  color: apiKeyInfo?.slot === "1" ? "#3b82f6" : "#22c55e",
-                  border: `1px solid ${apiKeyInfo?.slot === "1" ? "#3b82f640" : "#22c55e40"}`,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                {apiKeyInfo?.slot === "1" ? "🔵" : "🟢"} {apiKeyInfo?.label || "?"}{apiKeyInfo?.slot ? ` (slot ${apiKeyInfo.slot})` : ""}{apiKeyInfo?.cliLabel && apiKeyInfo.cliLabel !== apiKeyInfo.label ? ` / CLI:${apiKeyInfo.cliLabel}` : ""}
-              </button>
+              {/* 계정 전환은 상단 UsageBar 의 계정 칩으로 통합됨.
+                  사용률을 보면서 바꿔야 하는데 하단 토글은 그 정보가 없어
+                  어느 계정이 여유 있는지 모른 채 누르게 되어 제거함. */}
               <div style={{ position: "relative" }}>
                 <button
                   onClick={() => setShowAuthPanel((prev) => !prev)}
