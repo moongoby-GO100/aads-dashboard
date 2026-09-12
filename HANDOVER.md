@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-09-13 — Chat modernization WP04 typed session-view adapter
+
+- `origin/main=ba90320a3f4550ae52342c69470c6aecfeca1e46`의 clean 격리 worktree에서 WP04 대시보드 계약 어댑터를 구현했다. 기존 `/chat` 조회 경로와 v1 기본 동작은 변경하지 않았다.
+- `adaptChatSessionView`는 schema/contract v2, top-level/page session identity, revision 4종, execution/checkpoint 일치, opaque cursor와 activation flag를 검증한다. 알 수 없는 additive 필드는 허용하되 identity·revision·checkpoint 오류는 fail-closed다.
+- `ChatRuntime.applySessionView`는 서버의 `production_ready=true`일 때만 atomic view를 기존 session epoch/cursor/revision stale guard로 반영한다. message/session/execution revision을 혼용하지 않고 execution phase·owner epoch도 같은 snapshot에서 반영한다. 서버 WP04 migration·secret·교차버전 검증 전에는 기존 v1 경로를 유지한다.
+- Node 24 격리 검증에서 typecheck, chat 회귀 24건(신규 WP04 7건 포함), scoped lint(0 errors/기존 22 warnings), `git diff --check`가 통과했다. 서버 R5 계약과의 통합, 실제 API 연결, 브라우저 E2E, 배포는 후속 gate다.
+- 상세 계약·rollback은 `docs/chat-modernization-20260912/implementation/WP04-DASHBOARD.md`에 기록했다.
+
 ## 2026-09-12 — Chat modernization WP03 runtime/SSE/status (isolated)
 
 - WP02 기준 위에 execution/transport/view slice, terminal execution reducer, stable render identity 및 content version/completeness merge, capability adapter를 추가했다.

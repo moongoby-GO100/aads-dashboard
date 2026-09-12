@@ -8,13 +8,17 @@ import { reduceMessageProjection } from "../domain/messageReducer";
 import type {
   ChatRuntimeFeatureSnapshot,
   ChatRuntimeSnapshot,
-  ChatStreamEntry,
   RuntimeMessageProjection,
+  ChatStreamEntry,
   TransportState,
 } from "../domain/runtimeTypes";
 import { adaptChatEventFrame, type AdaptedChatEvent } from "../transport/legacyEventAdapter";
 import { FetchSseParser, type FetchSseFrame } from "../transport/sseParser";
-import { adaptChatSnapshot } from "../transport/snapshotAdapter";
+import {
+  adaptChatSessionView,
+  adaptChatSnapshot,
+  type ChatSnapshot,
+} from "../transport/snapshotAdapter";
 
 export type ChatFrameApplyResult =
   | { status: "applied"; event: AdaptedChatEvent }
@@ -162,25 +166,49 @@ export class ChatRuntime {
   applySnapshot(value: unknown, guard: SnapshotApplyGuard): boolean {
     const adapted = adaptChatSnapshot(value);
     if (!adapted.ok || adapted.snapshot.sessionId !== this.snapshotValue.scope.sessionId) return false;
+    return this.applyNormalizedSnapshot(adapted.snapshot, guard);
+  }
+
+  /**
+   * Applies the atomic WP04 read model only after the server advertises it as
+   * production-ready.  Until then the live route remains on the v1 adapter.
+   */
+  applySessionView(value: unknown, guard: SnapshotApplyGuard): boolean {
+    const adapted = adaptChatSessionView(value);
+    if (!adapted.ok || !adapted.view.productionReady) return false;
+    if (adapted.view.snapshot.sessionId !== this.snapshotValue.scope.sessionId) return false;
+    return this.applyNormalizedSnapshot(adapted.view.snapshot, guard);
+  }
+
+  private applyNormalizedSnapshot(
+    snapshot: ChatSnapshot,
+    guard: SnapshotApplyGuard,
+  ): boolean {
     if (
       guard.sessionEpoch !== this.snapshotValue.scope.sessionEpoch
       || guard.lastAppliedEventId !== this.snapshotValue.cursors.lastAppliedEventId
       || guard.messageRevision !== this.snapshotValue.view.messageRevision
     ) return false;
     let messages: ReadonlyMap<string, RuntimeMessageProjection> = this.snapshotValue.messages;
-    for (const message of adapted.snapshot.messages) messages = reduceMessageProjection(messages, message);
+    for (const message of snapshot.messages) messages = reduceMessageProjection(messages, message);
     this.snapshotValue = {
       ...this.snapshotValue,
       messages,
       execution: reduceExecutionState(this.snapshotValue.execution, {
-        executionId: adapted.snapshot.executionId,
-        generationId: adapted.snapshot.generationId,
+        executionId: snapshot.executionId,
+        generationId: snapshot.generationId,
+        phase: snapshot.executionPhase ?? undefined,
+        ownerEpoch: snapshot.executionOwnerEpoch,
+        revision: snapshot.executionRevision,
       }),
-      view: { ...this.snapshotValue.view, messageRevision: adapted.snapshot.sessionRevision },
+      view: {
+        ...this.snapshotValue.view,
+        messageRevision: snapshot.messageRevision ?? snapshot.sessionRevision,
+      },
       cursors: {
-        lastAppliedEventId: adapted.snapshot.coversThroughEventId,
-        snapshotCoversThroughEventId: adapted.snapshot.coversThroughEventId,
-        serverHighWatermark: adapted.snapshot.serverHighWatermark,
+        lastAppliedEventId: snapshot.coversThroughEventId,
+        snapshotCoversThroughEventId: snapshot.coversThroughEventId,
+        serverHighWatermark: snapshot.serverHighWatermark,
       },
     };
     return true;
