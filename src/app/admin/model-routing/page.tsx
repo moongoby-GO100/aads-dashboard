@@ -71,6 +71,17 @@ const ROUTE_META: Record<string, { label: string; desc: string; group: string }>
   music: { label: "음악", desc: "generate_music 기본 라우팅", group: "미디어" },
   audio: { label: "음성", desc: "TTS/audio 기본 라우팅", group: "미디어" },
   code_exec: { label: "코드 실행", desc: "Codex/CLI 기반 코드 실행", group: "도구" },
+  agent_architect: { label: "아키텍트", desc: "설계 전문 에이전트 모델", group: "에이전트" },
+  agent_developer: { label: "개발자", desc: "코드 수정 에이전트 모델", group: "에이전트" },
+  agent_devops: { label: "DevOps", desc: "배포·인프라 에이전트 모델", group: "에이전트" },
+  agent_judge: { label: "검수자", desc: "코드 리뷰·검수 에이전트 모델", group: "에이전트" },
+  agent_planner: { label: "기획자", desc: "작업 계획 에이전트 모델", group: "에이전트" },
+  agent_pm: { label: "PM", desc: "프로젝트 관리 에이전트 모델", group: "에이전트" },
+  agent_qa: { label: "QA", desc: "테스트·품질 검증 에이전트 모델", group: "에이전트" },
+  agent_researcher: { label: "리서처", desc: "조사·분석 에이전트 모델", group: "에이전트" },
+  agent_strategist_analyze: { label: "전략분석", desc: "전략 분석 에이전트 모델", group: "에이전트" },
+  agent_strategist_collect: { label: "전략수집", desc: "전략 데이터 수집 에이전트 모델", group: "에이전트" },
+  agent_supervisor: { label: "수퍼바이저", desc: "에이전트 감독 모델", group: "에이전트" },
 };
 
 const ROUTE_ORDER = Object.keys(ROUTE_META);
@@ -129,7 +140,7 @@ export default function ModelRoutingPage() {
         const preferences = Array.isArray(res.preferences) ? res.preferences : [];
         const apiRoutes = Array.isArray(res.route_keys) ? res.route_keys : [];
         const itemRoutes = Array.from(new Set(preferences.map((item) => item.route_key)));
-        const nextRoutes = Array.from(new Set([...ROUTE_ORDER, ...apiRoutes, ...itemRoutes]));
+        const nextRoutes = Array.from(new Set([...ROUTE_ORDER, ...apiRoutes, ...itemRoutes])).filter((k) => !k.startsWith("intent_"));
         setRouteKeys(nextRoutes);
         setActiveRoute((prev) => nextRoutes.includes(prev) ? prev : (nextRoutes[0] || "llm"));
       })

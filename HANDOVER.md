@@ -2625,3 +2625,30 @@
   linkage fails closed with a visible retry instruction instead of silently reverting to recent context.
 - `npx tsc --noEmit`, focused ESLint, production build, clean commit/push, dashboard blue/green release,
   authenticated desktop/mobile `/chat` verification, and five-minute P0/P1 monitoring are release gates.
+
+## 2026-09-12 20:21 KST - Model routing page recovery
+
+- Incident:
+  - The model-routing API had previously failed while reconciling route keys after `intent_*` and
+    `agent_*` preferences were added. The API-side constraint repair is already present in the deployed
+    backend lineage, and the production database now has no stale route-key CHECK constraint.
+  - The dashboard still mixed intent-policy keys into the capability-routing menu, creating unsupported
+    route cards and an unstable page contract when the API returned all preference rows.
+- Scoped dashboard correction:
+  - `src/app/admin/model-routing/page.tsx`: adds labels for the 11 supported `agent_*` capability routes
+    and excludes the 23 `intent_*` policy keys from the capability route selector. Intent policies remain
+    managed by the dedicated governance API/UI and their DB rows are not changed.
+- Verification before release:
+  - Authenticated production API diagnostic: HTTP 200, 152 preference rows, 52 route keys; 23 are
+    `intent_*` and 11 are `agent_*`.
+  - DB readback: 152 routing rows and 524 registry models; only the primary-key constraint remains.
+  - `npx tsc --noEmit`, `git diff --check`, and `npm run build`: passed; `/admin/model-routing` compiled.
+- Release and rollback:
+  - Commit, push, immutable dashboard blue/green deployment, routed health, same-digest standby sync,
+    and five-minute P0/P1 monitoring are still required.
+  - Roll back by reverting the scoped dashboard commit and redeploying. No DB write or API mutation is
+    part of this dashboard release.
+- Visual limitation:
+  - Browser Bridge navigation failed with `CDP_NOT_READY`, and independent screenshot capture timed out.
+    Authenticated visual verification must be retried after browser infrastructure recovery; API and
+    build checks are the current fallback evidence.
