@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-12 — Chat modernization WP00 executable baseline
+
+- 기준 SHA `2c02937f7990cd08e077b5b2f77779b99d974877`의 실제 chat page, input import, scroll/replacement selftest, 네 SSE reader를 읽어 제품 코드를 바꾸지 않는 결정적 회귀 하네스를 추가했다.
+- `tests/chat-modernization/`은 0/1/40/150/500/5,000개 메시지, 100KB 초과 본문, 2,000개 tool event, UTF-8 byte split과 SSE 변형, visibility·`interrupted_partial`·execution/bubble identity·scroll policy를 고정한다. 현재 legacy parser의 multi-line/no-space/incomplete-frame/invalid-cursor 동작은 알려진 기준선으로만 기록한다.
+- `package.json`과 `.github/workflows/chat-regression.yml`은 clean install 뒤 typecheck, scoped lint, 20개 Node 회귀, 기준선 측정, 문서 verifier를 fail-closed 순서로 실행한다.
+- 검증 결과는 전체 typecheck 통과, scoped lint 0 errors/기존 19 warnings, Node 20/20 통과, 문서 7개·링크 80개·ID 219개·FR mapping 44개 통과다. 격리 복제본의 `npm ci --ignore-scripts`는 registry DNS 제한으로 완료되지 않아 clean-install 실행은 미확인으로 남겼다.
+- STEP 0 분류, 기준 SHA/hash, ID 추적표, 측정값과 실제 브라우저·IME·a11y·장시간 stream 미확인 항목은 `docs/chat-modernization-20260912/implementation/WP00.md`에 기록했다.
+- 원본 dashboard worktree의 unrelated dirty `src/components/chat/ChatInput.tsx`, `src/lib/navigation.ts` 및 다른 격리 작업의 변경은 건드리지 않았다.
+
 ## 2026-09-10 17:28 KST - OHVIS 지시 코파일럿 확인형 MVP (코드 완료 / 미배포)
 
 - CEO 지시(`PRD 작성 저장하고 즉시 구현 진행`)에 따라 백엔드 PRD·API 커밋 `9c9444c0`과 연결되는 확인형 대시보드 흐름을 구현했다.

@@ -5,9 +5,28 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const base = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = process.env.AADS_WORKSPACE_ROOT;
+const declaredCrossRepoLinks = new Set([
+  '../../../AGENTS.md',
+  '../../../aads-server/.github/workflows/ci.yml',
+  '../../../aads-server/HANDOVER.md',
+  '../../../aads-server/app/routers/chat.py',
+  '../../../aads-server/app/services/chat_service.py',
+  '../../../aads-server/app/services/stream_worker.py',
+  '../../../aads-server/docs/reports/20260428_CHAT_FEATURE_FULL_AUDIT.md',
+  '../../../aads-server/docs/reports/20260506_CHAT_LIGHTWEIGHT_PLAN.md',
+  '../../../aads-server/docs/reports/20260506_CHAT_LIGHTWEIGHT_PLAN_v2.md',
+  '../../../aads-server/docs/reports/20260506_CHAT_LIGHTWEIGHT_V2.md',
+  '../../../aads-server/docs/reports/20260520_CHAT_INPUT_FREEZE_REMEDIATION.md',
+  '../../../aads-server/docs/reports/20260728_AADS_STREAM_CONTINUITY_CONTEXT_EXHAUSTION_REPORT.md',
+  '../../../aads-server/docs/reports/20260908_chat_interruption_owner_recovery_incident_v2.md',
+  '../../../aads-server/pyproject.toml',
+  '../../../aads-server/scripts/run_py311_tests.sh',
+]);
 const files = [
   'README.md', 'CURRENT-CODE-AUDIT.md', 'PRD.md',
   'TECHNICAL-DESIGN.md', 'VERIFICATION-AND-ROLLOUT.md', 'SOURCES.md',
+  'implementation/WP00.md',
 ];
 const errors = [];
 const docs = new Map();
@@ -40,6 +59,7 @@ for (const [prefix, count, found] of groups) {
   found.forEach((id) => known.add(id));
 }
 let localLinks = 0;
+let declaredExternalLinks = 0;
 const slug = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').trim().replace(/\s/g, '-');
 for (const [file, content] of docs) {
   for (const match of content.matchAll(/\b(?:NFR|FR|INV|ADR|WP|C|T|W|R)\d{2}\b/g)) {
@@ -49,9 +69,24 @@ for (const [file, content] of docs) {
     const href = match[1];
     if (/^(?:https?:|mailto:)/.test(href)) continue;
     const [relative, anchor] = href.split('#');
-    const clean = decodeURIComponent(relative || file).replace(/:\d+$/, '');
-    const target = path.resolve(base, clean);
+    const source = path.join(base, file);
+    const clean = decodeURIComponent(relative).replace(/:\d+$/, '');
+    const linkBase = file.includes('/') ? path.dirname(source) : base;
+    let target = relative ? path.resolve(linkBase, clean) : source;
+    if (
+      relative
+      && !file.includes('/')
+      && relative.startsWith('../../../')
+      && workspaceRoot
+      && !fs.existsSync(target)
+    ) {
+      target = path.resolve(workspaceRoot, relative.slice('../../../'.length));
+    }
     localLinks++;
+    if (!fs.existsSync(target) && !workspaceRoot && declaredCrossRepoLinks.has(relative)) {
+      declaredExternalLinks++;
+      continue;
+    }
     if (!fs.existsSync(target)) { errors.push(`${file}: missing link ${href}`); continue; }
     if (anchor && target.endsWith('.md')) {
       const headings = [...fs.readFileSync(target, 'utf8').matchAll(/^#{1,6} (.+)$/gm)].map((m) => slug(m[1]));
@@ -71,5 +106,5 @@ if (errors.length) {
   console.error(errors.join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`PASS: ${docs.size} documents, ${localLinks} local links, ${known.size} IDs, ${coverage.size} FR-to-test mappings`);
+  console.log(`PASS: ${docs.size} documents, ${localLinks} links (${declaredExternalLinks} declared cross-repo), ${known.size} IDs, ${coverage.size} FR-to-test mappings`);
 }
