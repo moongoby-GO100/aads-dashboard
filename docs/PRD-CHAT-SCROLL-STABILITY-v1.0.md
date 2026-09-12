@@ -1,6 +1,6 @@
 # PRD: 채팅 응답 중 스크롤 안정화 v1.0
 
-- 문서 상태: 구현 승인
+- 문서 상태: v1.0 구현·운영 검증 완료
 - 작성일: 2026-09-12
 - 대상: AADS Dashboard `/chat`
 - 우선순위: P0
@@ -237,3 +237,25 @@ followMode     = auto | manual
 - UI 변경은 대시보드 단일 커밋으로 격리한다.
 - 외부 health 또는 인증 E2E 실패 시 nginx 라우팅을 이전 dashboard slot으로 즉시 복구한다.
 - DB/API 변경이 없으므로 프런트 이미지 롤백만으로 복구 가능하다.
+
+## 15. 구현 및 운영 검증 결과
+
+- 구현 커밋: `0ed523f43a28`
+- 배포 일시: 2026-09-12 12:21 CEST
+- 활성 슬롯: green (`3101`)
+- active/standby 이미지: `sha256:8375bed0185003ca725fd730707a9be20cbcd01afea2b36e572af7eca1821f25`
+- active/standby release SHA: `0ed523f43a28`
+- 정적 검증: TypeScript 전체 검사 통과, scoped ESLint 오류 0건, 정책 selftest 12건 통과, clean Docker production build 통과
+- 운영 감시: 외부/blue/green health 5회 및 5분 P0/P1 로그 감시 통과
+- 대상 세션 브라우저 검증:
+  - 응답 생성 중 초기 `scrollTop`이 최대값과 일치
+  - 자연 폴링 구간 상향 점프 0회
+  - touchmove 20회 동안 요청 위치와 실제 위치 일치, 종료 후 위치 고정
+  - wheel 20회 동안 요청 위치와 실제 위치 일치, 종료 후 위치 고정
+  - 수동 모드에서 `최신으로` 버튼 노출 및 클릭 후 `auto` 복귀와 하단 이동 확인
+  - 상태 잠금 전환 시 공통 과거 메시지 82개의 높이 변화 없음. 변경된 1개는 본문이 갱신된 현재 활성 메시지
+  - 콘솔 오류 및 `[chat-scroll]` 복원 경고 0건
+
+자동 visual-QA API는 `UNKNOWN`을 반환해 통과로 간주하지 않았고, 위 인증 브라우저 검증으로 작업별 인수 기준을 직접 확인했다.
+
+릴리스 clean archive는 약 452MiB이며 대부분 추적 중인 `public/brands` 고해상도 이미지다. 캐시나 저장소 이력의 유입은 아니지만 빌드 전송 비용이 크므로, 후속 작업에서 고해상도 인쇄 자산을 별도 오브젝트 스토리지/CDN으로 이동하는 것이 권장된다.
