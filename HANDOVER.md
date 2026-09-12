@@ -8,6 +8,14 @@
 - Required checks: Node 24 typecheck, scoped lint, all source selftests, chat baseline, security tests, docs verifier, production build, then clean-SHA blue/green deployment and five-minute P0/P1 monitoring.
 - Rollback: revert this scoped commit and redeploy the previous immutable dashboard image. Do not restore the raw generated-HTML execution path.
 
+## 2026-09-12 — Chat modernization WP02 viewport controller (isolated / not deployed)
+
+- `release/chat-modernization-20260912`의 WP00·WP01 위에서 메시지 scroller의 모든 프로그램 DOM 쓰기를 `src/features/chat/viewport/chatViewportController.ts`의 단일 adapter로 이관했다.
+- gesture/session epoch로 늦은 force RAF와 이전 세션 intent를 폐기하고, manual mode가 시간으로 풀리지 않게 했다. prepend/hydrate/resize anchor, 삭제 anchor의 다음→이전 이웃 fallback, 최신 overlay unread count, version refresh 복원을 유지했다.
+- `setMessagesPreservingViewport`는 React updater 밖에서 next state와 viewport intent를 계산해 StrictMode 재호출 가능한 updater 내부의 RAF/ref/DOM 부작용을 제거했다.
+- 검증: typecheck 통과, chat Node 회귀 23/23 통과, route 외부 viewport writer architecture test 통과. 브라우저 T01~T04·실기기·±2px 측정은 미실행이며 push/배포하지 않았다.
+- 상세 추적과 남은 gate: `docs/chat-modernization-20260912/implementation/WP02.md`.
+
 ## 2026-09-12 — Chat modernization WP00 executable baseline
 
 - 기준 SHA `2c02937f7990cd08e077b5b2f77779b99d974877`의 실제 chat page, input import, scroll/replacement selftest, 네 SSE reader를 읽어 제품 코드를 바꾸지 않는 결정적 회귀 하네스를 추가했다.
