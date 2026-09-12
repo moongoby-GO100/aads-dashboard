@@ -61,6 +61,37 @@
       "temporary_hotfix": {
         "enabled": false
       }
+    },
+    {
+      "change_id": "AADS-CHATMOD-WP07-FOUNDATION-20260913",
+      "title": "Scoped draft, composer, upload, artifact and model provenance policies",
+      "owner": "AADS FE+BE",
+      "status": "verified",
+      "source_version": "1ab0125",
+      "trigger": "WP07 requires tenant/user/session/branch/tab isolation and stale callback rejection before production composer wiring.",
+      "requirements": ["FR16", "FR17", "FR18", "FR23", "FR24", "FR27"],
+      "invariants": ["INV05", "INV11", "INV13"],
+      "tests": ["T16", "T17", "T18", "T23", "T24", "T27"],
+      "affected_paths": [
+        "src/features/chat/composer/draftStore.ts",
+        "src/features/chat/composer/keyboardPolicy.ts",
+        "src/features/chat/composer/uploadQueue.ts",
+        "src/features/chat/domain/modelProvenance.ts",
+        "src/features/chat/queries/artifactRequestPolicy.ts",
+        "tests/chat-modernization/composer-artifact-foundation.test.mjs",
+        "docs/chat-modernization-20260912/change-impact.json",
+        "docs/chat-modernization-20260912/implementation/WP07-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "documentation": [
+        "docs/chat-modernization-20260912/implementation/WP07-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "telemetry_change": "No telemetry sink or payload is added; draft text, upload bodies and model/account identifiers remain outside telemetry.",
+      "rollback": "Revert the additive policy, test, manifest and documentation files; no runtime route, API, DB, storage key or deployed behavior changes.",
+      "temporary_hotfix": {
+        "enabled": false
+      }
     }
   ]
 }

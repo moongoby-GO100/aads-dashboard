@@ -2734,3 +2734,15 @@
 - Full WP06 remains gated on consumer wiring plus browser DOM/focus/latency/heap evidence after
   WP04/WP05 integration. The canonical scope record is
   `docs/chat-modernization-20260912/implementation/WP06-FOUNDATION.md`.
+
+## 2026-09-13 KST - Chat modernization WP07 composer/artifact foundation
+
+- Added opt-in, pure contracts for tab-scoped draft recovery, a single IME/menu/Enter precedence
+  policy, upload callback fencing and media/Blob cleanup, artifact lazy-load request fencing, and
+  requested-versus-actual model provenance.
+- The production `/chat` route, `ChatInput`, artifact panel, transport, API contracts and dependencies
+  are unchanged; this foundation cannot activate itself.
+- Node 24 validation covers T16/T17/T18/T23/T24/T27 plus the existing chat, selftest, security,
+  documentation, type and lint gates. Browser/mobile/device validation remains an activation gate.
+- The canonical scope and remaining gaps are recorded in
+  `docs/chat-modernization-20260912/implementation/WP07-FOUNDATION.md`.
