@@ -4,9 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "npm run typecheck && next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false --pretty false",
+    "lint:chat": "eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx src/app/chat/MarkdownRenderer.tsx src/app/chat/ChatArtifactPanel.tsx src/features/chat src/lib/chatScrollPolicy.ts src/lib/chatReplacementGuard.ts tests/chat-modernization --max-warnings 23",
+    "test:chat": "node --test tests/chat-modernization/*.test.mjs",
+    "test:chat:security": "vitest run src/features/chat/rendering",
+    "test:chat:baseline": "node tests/chat-modernization/measure-baseline.mjs",
+    "test:chat:docs": "node docs/chat-modernization-20260912/verify-docs.mjs",
+    "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -19,19 +26,26 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "6.0.0",
     "remark-gfm": "^4.0.1",
     "xterm": "^5.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "babel-plugin-react-compiler": "^19.0.0-beta-e993439-20250328",
+    "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "rehype-parse": "^9.0.1",
+    "rehype-stringify": "^10.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "unified": "^11.0.5",
+    "vitest": "5.0.0"
   },
   "overrides": {
     "dompurify": "3.4.14"

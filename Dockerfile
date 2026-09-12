@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24.21.0-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -10,7 +10,7 @@ RUN test -s /app/public/e2e-auth.html
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:24.21.0-alpine AS runner
 RUN apk add --no-cache tzdata && cp /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo 'Asia/Seoul' > /etc/timezone
 WORKDIR /app
 ENV NODE_ENV=production

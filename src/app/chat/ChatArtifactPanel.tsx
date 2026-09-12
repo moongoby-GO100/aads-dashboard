@@ -6,6 +6,11 @@ import RunnerHostStatus from "./RunnerHostStatus";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
+import {
+  openIsolatedHtmlPreview,
+  openStaticTextPreview,
+  staticArtifactHtml,
+} from "@/features/chat/rendering/htmlPolicy";
 
 const ARTIFACT_PANEL_MIN_WIDTH = 420;
 const ARTIFACT_PANEL_DEFAULT_WIDTH = 600;
@@ -1072,42 +1077,17 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const openArtifactInNewTab = useCallback((artifact: Artifact) => {
     const title = artifact.title || "AADS Artifact";
     const content = artifact.content || "";
-    const escapeHtml = (value: string) =>
-      value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    const windowRef = window.open("", "_blank", "noopener,noreferrer");
-    if (!windowRef) return;
-
     if (artifact.artifact_type === "image" || artifact.artifact_type === "file") {
-      windowRef.location.href = content;
+      try {
+        const target = new URL(content, window.location.origin);
+        if (!["https:", "http:", "blob:", "data:"].includes(target.protocol)) return;
+        window.open(target.href, "_blank", "noopener,noreferrer");
+      } catch {
+        return;
+      }
       return;
     }
-
-    windowRef.document.write(`<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e5e7eb; }
-    header { position: sticky; top: 0; padding: 14px 18px; background: rgba(15, 23, 42, 0.94); border-bottom: 1px solid rgba(148, 163, 184, 0.24); backdrop-filter: blur(10px); }
-    h1 { margin: 0; font-size: 15px; line-height: 1.35; }
-    main { padding: 18px; }
-    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #020617; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 8px; padding: 16px; }
-  </style>
-</head>
-<body>
-  <header><h1>${escapeHtml(title)}</h1></header>
-  <main><pre>${escapeHtml(content)}</pre></main>
-</body>
-</html>`);
-    windowRef.document.close();
+    openStaticTextPreview(title, content);
   }, []);
 
   const elapsedStr = (start: string | null, end: string | null): string => {
@@ -2422,8 +2402,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       </button>
                       <button
                         onClick={() => {
-                          const w = window.open("", "_blank");
-                          if (w) { w.document.write(activeArtifact.content); w.document.close(); }
+                          openIsolatedHtmlPreview(activeArtifact.title || "HTML 미리보기", activeArtifact.content);
                         }}
                         style={{
                           padding: "4px 10px", fontSize: "11px", borderRadius: "6px",
@@ -2446,8 +2425,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       </pre>
                     ) : (
                       <iframe
-                        srcDoc={activeArtifact.content}
-                        sandbox="allow-scripts"
+                        srcDoc={staticArtifactHtml(activeArtifact.content)}
+                        sandbox=""
                         style={{
                           flex: 1, width: "100%", border: "none",
                           borderRadius: "0 0 8px 8px", background: "#ffffff",

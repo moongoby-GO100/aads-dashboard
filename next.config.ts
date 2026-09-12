@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  typescript: { ignoreBuildErrors: true },
+  typescript: { ignoreBuildErrors: false },
   reactCompiler: process.env.NEXT_DISABLE_REACT_COMPILER !== "1",
   experimental: {
     webpackBuildWorker: false,

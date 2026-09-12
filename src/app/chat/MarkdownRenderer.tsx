@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import InlineChart from "@/components/chat/InlineChart";
@@ -14,6 +15,7 @@ import {
   normalizeDocumentHref,
 } from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
+import { markdownSanitizeSchema } from "@/features/chat/rendering/markdownPolicy";
 
 export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
 
@@ -44,6 +46,7 @@ const markdownPlugins: PluggableList = [remarkGfm];
 const markdownRehypePlugins: PluggableList = [
   rehypeRaw,
   [rehypeHighlight, { detect: true, ignoreMissing: true }],
+  [rehypeSanitize, markdownSanitizeSchema],
 ];
 
 const markdownDisallowedElements = ["script", "style", "iframe", "object", "embed", "link", "meta"];
