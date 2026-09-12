@@ -876,8 +876,15 @@ function streamingPlaceholderStatus(
   }
   const details = qualityDetailsObject(message);
   const reason = String(details.interruption_reason || details.interrupt_reason || "");
-  const content = normalizedMessageContent(message);
-  const hasContent = content.length > 0 && !isPlaceholderOnlyContent(content);
+  const body = normalizedMessageContent(message);
+  const hasContent = body.length > 0 && !isPlaceholderOnlyContent(body);
+  // 파이프라인 상태를 응답 본문 단어로 추정하면 안 된다. "확인"·"복구"·"중단" 은
+  // 평범한 한국어 응답에 늘 나오는 단어라, 도구를 203회 돌리며 정상 진행 중인
+  // 턴이 "최종저장중" 으로 표시되고 멈춘 것처럼 보였다(2026-09-12 세션 5090a247).
+  // 서버가 붙이는 진행 마커(⏳ _..._)만 상태 근거로 삼고, 사용자에게 보이는
+  // 본문은 판단에서 제외한다.
+  const marker = (body.match(/⏳\s*_([^_]*)_\s*$/) || [])[1] || "";
+  const content = marker;
   if (reason === "orphan_placeholder_no_execution") {
     return {
       label: hasContent ? "이어쓰기필요" : "생성중",
@@ -915,13 +922,34 @@ function streamingPlaceholderStatus(
       recoverable: hasContent,
     };
   }
-  if (/최종|저장|확인/.test(content)) {
+  if (/최종저장|저장 중/.test(content)) {
     return {
       label: "최종저장중",
       color: "#3b82f6",
       bg: "rgba(59,130,246,0.08)",
       border: "rgba(59,130,246,0.20)",
       recoverable: hasContent,
+    };
+  }
+  // 진행 마커가 살아 있으면 아직 작성 중이다. 도구 횟수를 같이 보여주지 않으면
+  // 긴 작업(백테스트 등 수십 분)이 멈춘 것과 구분되지 않는다.
+  const toolHit = content.match(/도구\s*(\d+)\s*회/);
+  if (toolHit) {
+    return {
+      label: `도구실행중 (${toolHit[1]}회)`,
+      color: "#3b82f6",
+      bg: "rgba(59,130,246,0.08)",
+      border: "rgba(59,130,246,0.20)",
+      recoverable: false,
+    };
+  }
+  if (/생성 중/.test(content)) {
+    return {
+      label: "생성중",
+      color: "#3b82f6",
+      bg: "rgba(59,130,246,0.08)",
+      border: "rgba(59,130,246,0.20)",
+      recoverable: false,
     };
   }
   return {
@@ -5761,7 +5789,7 @@ export default function ChatPage() {
         if (!isCompletionStatusReadyForUi(status)) {
           streamingSessionRef.current = fetchSid;
           setStreaming(true);
-          setToolStatus(normalizedStreamStatusLabel(status, "최종저장중"));
+          setToolStatus(normalizedStreamStatusLabel(status, "생성중"));
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(fetchSid);
           setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
@@ -6297,7 +6325,7 @@ export default function ChatPage() {
           if (!isCompletionStatusReadyForUi(activeStatus)) {
             streamingSessionRef.current = sid;
             setStreaming(true);
-            setToolStatus(normalizedStreamStatusLabel(activeStatus, "최종저장중"));
+            setToolStatus(normalizedStreamStatusLabel(activeStatus, "생성중"));
             setWaitingBgResponse(true);
             pendingResponseSessions.current.add(sid);
             setMessagesPreservingViewport((prev) => reconcileMessagesForActiveStreaming(prev, {
@@ -6354,7 +6382,7 @@ export default function ChatPage() {
           pendingResponseSessions.current.add(sid);
           setWaitingBgResponse(true);
           setStreaming(true);
-          setToolStatus(normalizedStreamStatusLabel(ss, "최종저장중"));
+          setToolStatus(normalizedStreamStatusLabel(ss, "생성중"));
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
             .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
           if (cancelled) return;
