@@ -2337,6 +2337,7 @@ interface MessageItemProps {
   onDocumentLinkClick?: DocumentLinkHandler;
   onOpenLightbox?: (srcs: string[], idx: number) => void;
   isLastAssistantMsg?: boolean;
+  onRequestToolHydration?: (msg: ChatMessage) => void;
   screenSize: ScreenSize;
   mobileFontPx: number;
 }
@@ -2348,6 +2349,7 @@ const MessageItem = memo(function MessageItem({
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming, stopRequesting,
   onResumeInterrupted, selectedResumeModel,
   onViewReport, linkedArtifact, onViewArtifact, onDocumentLinkClick, onOpenLightbox, isLastAssistantMsg,
+  onRequestToolHydration,
   screenSize, mobileFontPx,
 }: MessageItemProps) {
   const isMobileMessage = screenSize === "mobile";
@@ -2885,7 +2887,12 @@ const MessageItem = memo(function MessageItem({
                 const hydrateFailed = normalizedToolEvents.length === 0 && toolHydrationStatus === "error";
                 const needsHydrate = normalizedToolEvents.length === 0 && !toolHydrationStatus && Boolean(msg.has_tools);
                 return (
-                  <details open={effectiveToolsOpen} onToggle={(e) => setToolsOpen((e.target as HTMLDetailsElement).open)} style={{marginBottom: '8px'}}>
+                  <details open={effectiveToolsOpen} onToggle={(e) => {
+                    const opened = (e.target as HTMLDetailsElement).open;
+                    setToolsOpen(opened);
+                    // AADS-RENDER-HYDRATION-P0: 펼칠 때만 도구 원본을 1건 받아온다.
+                    if (opened && needsHydrate) onRequestToolHydration?.(msg);
+                  }} style={{marginBottom: '8px'}}>
                     <summary style={{
                       cursor: 'pointer', fontSize: '12px', padding: '6px 10px',
                       borderRadius: '8px', background: 'rgba(108,99,255,0.06)',
@@ -4637,10 +4644,27 @@ export default function ChatPage() {
     }
   }, [setMessagesPreservingViewport]);
 
+  // AADS-RENDER-HYDRATION-P0 (2026-09-12)
+  // fields=render 는 tools_called 를 항상 빈 배열로 내려준다. 기존 구현은 도구를 쓴
+  // 모든 메시지를 자동 하이드레이션 대상으로 잡았고, setMessages 가 이 effect 를 다시
+  // 깨우며 3건씩 연쇄 호출했다. 그 결과 GET /chat/messages/{id} 가 20분간 1,389회
+  // (distinct 315건, 분당 피크 118회) 발생해 화면이 멈췄다.
+  // 기본 펼침 상태인 마지막 assistant 메시지만 자동으로 받고, 나머지는 사용자가
+  // 도구 박스를 펼칠 때 requestToolHydration 으로 1건씩 받는다.
+  const requestToolHydration = useCallback((msg: ChatMessage) => {
+    if (!needsToolHydration(msg)) return;
+    void hydrateMessageTools(msg);
+  }, [needsToolHydration, hydrateMessageTools]);
+
   useEffect(() => {
     if (!activeSession?.id) return;
-    const targets = messages.filter(needsToolHydration).slice(0, 3);
-    targets.forEach((msg) => { void hydrateMessageTools(msg); });
+    let lastAssistant: ChatMessage | undefined;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") { lastAssistant = messages[i]; break; }
+    }
+    if (lastAssistant && needsToolHydration(lastAssistant)) {
+      void hydrateMessageTools(lastAssistant);
+    }
   }, [activeSession?.id, messages, needsToolHydration, hydrateMessageTools]);
 
   // PERF: 이전 메시지 로드 — cursor 기반 페이지네이션
@@ -11269,6 +11293,7 @@ export default function ChatPage() {
                     onDocumentLinkClick={handleDocumentLinkClickStable}
                     onOpenLightbox={handleOpenLightboxStable}
                     isLastAssistantMsg={msg.id === lastAssistantId}
+                    onRequestToolHydration={requestToolHydration}
                     screenSize={screenSize}
                     mobileFontPx={mobileChatFontPx}
                   />
@@ -11316,6 +11341,7 @@ export default function ChatPage() {
                       onDocumentLinkClick={handleDocumentLinkClickStable}
                       onOpenLightbox={handleOpenLightboxStable}
                       isLastAssistantMsg={false}
+                      onRequestToolHydration={requestToolHydration}
                       screenSize={screenSize}
                       mobileFontPx={mobileChatFontPx}
                     />
