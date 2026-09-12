@@ -17,6 +17,7 @@ import {
 import { openManagedFile } from "@/lib/fileDownload";
 import { markdownSanitizeSchema } from "@/features/chat/rendering/markdownPolicy";
 import { staticArtifactHtml } from "@/features/chat/rendering/htmlPolicy";
+import { planMarkdownRender } from "@/features/chat/rendering/contentPerformancePolicy";
 
 export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
 
@@ -47,6 +48,10 @@ const markdownPlugins: PluggableList = [remarkGfm];
 const markdownRehypePlugins: PluggableList = [
   rehypeRaw,
   [rehypeHighlight, { detect: true, ignoreMissing: true }],
+  [rehypeSanitize, markdownSanitizeSchema],
+];
+const streamingMarkdownRehypePlugins: PluggableList = [
+  rehypeRaw,
   [rehypeSanitize, markdownSanitizeSchema],
 ];
 
@@ -574,27 +579,35 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   text,
   linkColor,
   onDocumentLinkClick,
+  streaming = false,
 }: {
   text: string;
   linkColor?: string;
   onDocumentLinkClick?: DocumentLinkHandler;
+  streaming?: boolean;
 }) {
+  const renderPlan = useMemo(() => planMarkdownRender(text, streaming), [streaming, text]);
   const components = useMemo(
     () => createMarkdownComponents(linkColor, false, onDocumentLinkClick),
     [linkColor, onDocumentLinkClick],
   );
 
   return (
-    <div className="aads-markdown" style={{ lineHeight: 1.65 }}>
+    <div
+      className="aads-markdown"
+      data-markdown-stability={renderPlan.stability}
+      aria-busy={streaming || undefined}
+      style={{ lineHeight: 1.65 }}
+    >
       <MarkdownStyles />
       <ReactMarkdown
         remarkPlugins={markdownPlugins}
-        rehypePlugins={markdownRehypePlugins}
+        rehypePlugins={streaming ? streamingMarkdownRehypePlugins : markdownRehypePlugins}
         disallowedElements={markdownDisallowedElements}
         urlTransform={safeUrlTransform}
         components={components}
       >
-        {text}
+        {renderPlan.source}
       </ReactMarkdown>
     </div>
   );

@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-09-13 — Chat modernization WP06 streaming renderer integration (isolated / not deployed)
+
+- Clean `origin/main=c9ceb2d` worktree에서 기존 `planMarkdownRender` 정책을 운영 `MarkdownBlock`과 라이브 assistant bubble에 연결했다.
+- 라이브 스트림은 원문을 수정하지 않고 같은 sanitize 경계를 유지하되 token update마다 실행되던 syntax highlighting을 완료 렌더까지 지연한다. 완료·과거 메시지, 링크, HTML sandbox, chart, copy 동작은 기존 pipeline을 유지한다.
+- Node 24 검증에서 typecheck, rendering security 23건, chat regression 29건, scoped lint(0 errors/기존 22 warnings), `git diff --check`가 통과했다. production build와 전체 CI gate 결과는 이 항목의 후속 검증 기록을 따른다.
+- 브라우저 성능/접근성, virtualization, INP/heap 목표, 운영 canary는 아직 미검증이며 이 작은 increment만으로 WP06 완료를 주장하지 않는다.
+- 상세 범위와 rollback은 `docs/chat-modernization-20260912/implementation/WP06-STREAMING-RENDER.md`에 기록했다.
+
 ## 2026-09-13 04:00 KST — Chat modernization WP09 operations foundation (isolated / not deployed)
 
 - Clean isolated worktree baseline `db4e0ca`에 WP09의 독립 선행 기반만 추가했다. `/chat`, runtime/transport/viewport/composer, API·DB, `deploy.sh`, production은 변경하지 않았다.

@@ -84,6 +84,16 @@ describe("T14 — streaming Markdown preservation", () => {
     expect(plan.copyText).toBe(source);
     expect(planMarkdownRender(source, false).stability).toBe("final");
   });
+
+  it("classifies complete streaming syntax without rewriting the source", () => {
+    const source = "```ts\nconst value = 1;\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |";
+    expect(planMarkdownRender(source, true)).toEqual({
+      source,
+      copyText: source,
+      stability: "stable-stream",
+      incompleteConstructs: [],
+    });
+  });
 });
 
 describe("T15 — tool log ordering and failure isolation", () => {

@@ -2,6 +2,35 @@
   "schema_version": 1,
   "entries": [
     {
+      "change_id": "AADS-CHATMOD-WP06-STREAMING-RENDER-20260913",
+      "title": "Defer syntax highlighting while the assistant response is streaming",
+      "owner": "AADS Frontend",
+      "status": "verified",
+      "source_version": "c9ceb2d",
+      "trigger": "WP06 foundation policies existed but the live assistant bubble still ran the final syntax-highlighting pipeline on every token update.",
+      "requirements": ["FR13", "FR14"],
+      "invariants": ["INV03", "INV12"],
+      "tests": ["T13", "T14"],
+      "affected_paths": [
+        "src/app/chat/MarkdownRenderer.tsx",
+        "src/app/chat/page.tsx",
+        "src/features/chat/rendering/renderPerformancePolicy.test.ts",
+        "tests/chat-modernization/measure-baseline.mjs",
+        "docs/chat-modernization-20260912/change-impact.json",
+        "docs/chat-modernization-20260912/implementation/WP06-STREAMING-RENDER.md",
+        "HANDOVER.md"
+      ],
+      "documentation": [
+        "docs/chat-modernization-20260912/implementation/WP06-STREAMING-RENDER.md",
+        "HANDOVER.md"
+      ],
+      "telemetry_change": "No telemetry fields, labels, sinks, or retention behavior changed.",
+      "rollback": "Revert the streaming prop and renderer plugin selection; completed-message rendering and stored content are unaffected.",
+      "temporary_hotfix": {
+        "enabled": false
+      }
+    },
+    {
       "change_id": "AADS-CHATMOD-WP09-FOUNDATION-20260913",
       "title": "Privacy-safe telemetry and change-impact drift gate",
       "owner": "AADS SRE+QA",

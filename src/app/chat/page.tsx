@@ -2828,7 +2828,11 @@ const MessageItem = memo(function MessageItem({
               ) : null}
               {displayedStreamingContent ? (
                 <>
-                  <MarkdownBlock text={displayedStreamingContent} onDocumentLinkClick={onDocumentLinkClick} />
+                  <MarkdownBlock
+                    text={displayedStreamingContent}
+                    streaming
+                    onDocumentLinkClick={onDocumentLinkClick}
+                  />
                   <StreamingCaret />
                 </>
               ) : !streamToolStatus && (!streamToolLogs || streamToolLogs.length === 0) ? (
