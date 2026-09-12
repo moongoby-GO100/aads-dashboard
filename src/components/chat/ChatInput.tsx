@@ -78,6 +78,7 @@ export default function ChatInput({
   const [isListening, setIsListening] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [primaryKey, setPrimaryKey] = useState<string>("Naver");
+  const [claudeAccount, setClaudeAccount] = useState<number>(1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -88,6 +89,14 @@ export default function ChatInput({
     authKeyApi.getKeyOrder().then((res) => {
       if (res.keys?.length > 0) setPrimaryKey(res.keys[0].label);
     }).catch(() => {});
+  }, []);
+
+  // Claude 계정 상태 로드
+  useEffect(() => {
+    fetch("/api/v1/ops/claude-accounts")
+      .then((r) => r.json())
+      .then((d) => { if (d.current_account) setClaudeAccount(d.current_account); })
+      .catch(() => {});
   }, []);
 
   const toggleAuthKey = async () => {
@@ -307,6 +316,31 @@ export default function ChatInput({
           title={`현재: ${primaryKey} 우선 (클릭하여 전환)`}
         >
           {primaryKey === "Naver" ? "🟢" : "🔵"} {primaryKey}
+        </button>
+        <button
+          onClick={async () => {
+            const next = claudeAccount === 1 ? 2 : 1;
+            try {
+              const res = await fetch("/api/v1/ops/claude-account/switch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ account: next }),
+              });
+              const d = await res.json();
+              if (d.ok) setClaudeAccount(d.current_account);
+            } catch { /* ignore */ }
+          }}
+          className="text-xs px-2 py-1 rounded-lg transition-all"
+          style={{
+            background: claudeAccount === 1 ? "rgba(99,102,241,0.12)" : "rgba(236,72,153,0.12)",
+            color: claudeAccount === 1 ? "#6366f1" : "#ec4899",
+            border: `1px solid ${claudeAccount === 1 ? "rgba(99,102,241,0.3)" : "rgba(236,72,153,0.3)"}`,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+          title={`Claude 계정: ${claudeAccount === 1 ? "서버 Max" : "CEO PC"} (클릭하여 전환)`}
+        >
+          {claudeAccount === 1 ? "🟣 Max" : "🩷 CEO"}
         </button>
         {isDeepResearch && (
           <p className="text-xs mt-1" style={{ color: "#a78bfa" }}>
