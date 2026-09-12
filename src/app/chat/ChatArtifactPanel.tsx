@@ -30,6 +30,8 @@ interface AgendaItem {
   tags?: string[];
   created_at: string;
   source_session_id?: string | null;
+  // 소프트 삭제 시각. 값이 있으면 목록에서 '복구' 버튼을 보여준다.
+  deleted_at?: string | null;
 }
 
 const AGENDA_STATUS_COLORS: Record<string, string> = {
@@ -1172,6 +1174,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [agendaSaving, setAgendaSaving] = useState(false);
   const [agendaError, setAgendaError] = useState<string | null>(null);
   const [agendaFilter, setAgendaFilter] = useState<string>("전체");
+  // 메모가 쌓이면 필터(P0~P3)만으로는 찾기 어렵다. 제목·내용을 훑는다.
+  const [agendaQuery, setAgendaQuery] = useState("");
+  // 삭제는 되돌릴 수 없어 보이지만 서버는 소프트 삭제다. 복구 경로를 연다.
+  const [agendaShowDeleted, setAgendaShowDeleted] = useState(false);
   const [expandedAgendaId, setExpandedAgendaId] = useState<string | null>(null);
   const [agendaDraftTitle, setAgendaDraftTitle] = useState("");
   const [agendaDraftSummary, setAgendaDraftSummary] = useState("");
@@ -1189,7 +1195,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     }
     setAgendaLoading(true);
     setAgendaError(null);
-    const qs = `?source_session_id=${encodeURIComponent(sessionId)}&limit=50`;
+    const qs = `?source_session_id=${encodeURIComponent(sessionId)}&limit=100${agendaShowDeleted ? "&include_deleted=true" : ""}`;
     try {
       const res = await fetch(`${BASE_URL}/agenda/${qs}`, { headers: authHdrs(), credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
@@ -1201,7 +1207,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     } finally {
       setAgendaLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, agendaShowDeleted]);
 
   useEffect(() => {
     if (artifactTab !== "agenda") return;
@@ -1300,6 +1306,25 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       setAgendaSaving(false);
     }
   }, [agendaEditPriority, agendaEditStatus, agendaEditSummary, agendaEditTitle, agendaSaving, loadAgendaItems]);
+
+  const restoreAgendaMemo = useCallback(async (agendaId: string | number) => {
+    if (agendaSaving) return;
+    setAgendaSaving(true);
+    setAgendaError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/agenda/${agendaId}/restore`, {
+        method: "POST",
+        credentials: "include",
+        headers: authHdrs(),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      await loadAgendaItems();
+    } catch (e) {
+      setAgendaError((e as Error).message || "아이디어 메모 복구 실패");
+    } finally {
+      setAgendaSaving(false);
+    }
+  }, [agendaSaving, loadAgendaItems]);
 
   const deleteAgendaMemo = useCallback(async (agendaId: string | number, title?: string) => {
     if (agendaSaving) return;
@@ -1920,8 +1945,40 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     )}
                   </div>
                   {/* 상태 필터 칩 */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "8px" }}>
+                    <input
+                      value={agendaQuery}
+                      onChange={(e) => setAgendaQuery(e.target.value)}
+                      placeholder="제목·내용 검색"
+                      style={{
+                        flex: 1, minWidth: 0, padding: "5px 8px", fontSize: "12px",
+                        borderRadius: "6px", border: "1px solid var(--ct-border)",
+                        background: "var(--ct-bg)", color: "var(--ct-text)",
+                      }}
+                    />
+                    {agendaQuery && (
+                      <button
+                        onClick={() => setAgendaQuery("")}
+                        style={{
+                          padding: "5px 8px", fontSize: "11px", borderRadius: "6px",
+                          border: "1px solid var(--ct-border)", background: "transparent",
+                          color: "var(--ct-text2)", cursor: "pointer",
+                        }}
+                      >지우기</button>
+                    )}
+                    <button
+                      onClick={() => setAgendaShowDeleted((v) => !v)}
+                      title="삭제한 메모를 함께 보고 복구합니다"
+                      style={{
+                        padding: "5px 8px", fontSize: "11px", borderRadius: "6px", whiteSpace: "nowrap",
+                        border: `1px solid ${agendaShowDeleted ? "var(--ct-accent)" : "var(--ct-border)"}`,
+                        background: agendaShowDeleted ? "rgba(108,99,255,0.10)" : "transparent",
+                        color: agendaShowDeleted ? "var(--ct-accent)" : "var(--ct-text2)", cursor: "pointer",
+                      }}
+                    >삭제됨</button>
+                  </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
-                    {["전체", "논의중", "진행중", "보류", "결정", "완료"].map((s) => (
+                    {["전체", "논의중", "진행중", "보류", "결정", "완료", "폐기"].map((s) => (
                       <button
                         key={s}
                         onClick={() => setAgendaFilter(s)}
@@ -1945,9 +2002,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       불러오는 중...
                     </div>
                   ) : (() => {
-                    const filtered = agendaItems.filter((item) =>
-                      agendaFilter === "전체" || item.status === agendaFilter
-                    );
+                    const q = agendaQuery.trim().toLowerCase();
+                    const filtered = agendaItems.filter((item) => {
+                      if (!(agendaFilter === "전체" || item.status === agendaFilter)) return false;
+                      if (!q) return true;
+                      return `${item.title || ""} ${item.summary || ""}`.toLowerCase().includes(q);
+                    });
                     if (filtered.length === 0) {
                       return (
                         <div style={{ color: "var(--ct-text2)", fontSize: "12px", textAlign: "center", paddingTop: "20px" }}>
@@ -2146,23 +2206,25 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   수정
                                 </button>
                                 <button
-                                  onClick={() => void deleteAgendaMemo(item.id, item.title)}
+                                  onClick={() => item.deleted_at
+                                    ? void restoreAgendaMemo(item.id)
+                                    : void deleteAgendaMemo(item.id, item.title)}
                                   disabled={agendaSaving}
-                                  title="이 메모 삭제"
+                                  title={item.deleted_at ? "이 메모 복구" : "이 메모 삭제"}
                                   style={{
                                     padding: "4px 8px",
                                     borderRadius: "6px",
-                                    border: "1px solid rgba(239,68,68,0.35)",
+                                    border: `1px solid ${item.deleted_at ? "rgba(34,197,94,0.40)" : "rgba(239,68,68,0.35)"}`,
                                     background: "transparent",
-                                    color: "#ef4444",
+                                    color: item.deleted_at ? "#22c55e" : "#ef4444",
                                     fontSize: "11px",
                                     cursor: agendaSaving ? "default" : "pointer",
                                     opacity: agendaSaving ? 0.5 : 1,
                                   }}
                                 >
-                                  삭제
+                                  {item.deleted_at ? "복구" : "삭제"}
                                 </button>
-                                {["논의중", "진행중", "보류", "완료"].filter((s) => s !== item.status).map((s) => (
+                                {["논의중", "진행중", "보류", "완료", "폐기"].filter((s) => s !== item.status).map((s) => (
                                   <button
                                     key={s}
                                     onClick={() => void updateAgendaMemo(item.id, { status: s })}
