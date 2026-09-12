@@ -8,6 +8,8 @@
 
 ## 문서 읽기 순서
 
+웹 문서함에서는 [채팅 구조·기능 개선 통합 보고서](20260912_채팅_구조개선_기능개선_PRD_설계_유지보수_재발방지_통합보고서.html)를 연다. `/docs`에서 `채팅` 또는 `20260912`로 검색하면 찾을 수 있다. 통합본은 아래 원문 6개를 생략 없이 포함하며, 목차·문서 간 이동·공식 출처 링크를 제공한다. Markdown 원문은 그대로 유지한다.
+
 | 파일 | 내용 | 주요 추적 ID |
 |---|---|---|
 | [현재 코드 감사](CURRENT-CODE-AUDIT.md) | 실제 경로·현재 버전·32개 확인 사항·기존 보고서 정정·미측정 영역 | C01~C32 |
@@ -46,3 +48,7 @@ node docs/chat-modernization-20260912/verify-docs.mjs
 구현 PR에는 `C → FR/INV → ADR → T → WP → release SHA`를 연결한다. 실제 테스트 실패를 단순 timer 추가로 덮지 않고, 실패 sequence·owner·재발 방지·임시 코드 제거 조건을 남긴다. 이 검증기는 링크 존재와 식별자 정합성을 검사하며 웹 출처의 지속 유효성·설계의 정확성·실제 제품 테스트를 대신하지 않는다.
 
 외부 자료의 W-ID와 실행 작업의 WP-ID를 구분한다. 새 코드로 행 번호가 바뀌면 symbol·commit·hash로 근거를 갱신한다. 기존 사용자 수정 파일과 운영 runtime 파일은 이번 문서 commit 대상에 포함하지 않는다.
+
+### 웹 열람본 갱신
+
+`publish-docs.mjs`는 설치된 React·react-markdown·remark-gfm으로 script-free HTML을 만들며 추가 패키지를 설치하지 않는다. 원문 변경 후 `node docs/chat-modernization-20260912/publish-docs.mjs`가 출력하는 패치를 적용한다. 이후 `node docs/chat-modernization-20260912/publish-docs.mjs --check`로 원문과 생성본이 일치하는지 확인한다. HTML을 직접 고치지 않는다. 기존 `/docs` 인증과 문서 스캔 허용 경로를 그대로 사용하며, 재스캔으로 목록을 갱신한다.
