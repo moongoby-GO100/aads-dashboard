@@ -856,6 +856,9 @@ function shouldEmitCompletionAlertForMessage(message?: ChatMessage | null): bool
   return true;
 }
 
+// 한 버블에서 한 번에 그릴 도구 칩 수. 나머지는 버튼으로 늘린다.
+const TOOL_CHIP_PAGE = 20;
+
 function streamingPlaceholderStatus(
   message: ChatMessage,
   isActive: boolean,
@@ -2393,6 +2396,10 @@ const MessageItem = memo(function MessageItem({
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
   const [toolsOpen, setToolsOpen] = useState(() => Boolean(isLastAssistantMsg));
+  // 도구 칩은 한 버블에 수백 개가 들어올 수 있다. 세션 5090a247 의 한 메시지는
+  // 본문이 245자인데 도구 기록이 676개(279KB)였고, 이런 버블이 여러 개면
+  // DOM 이 폭발해 페이지가 멈춘다. 처음 일부만 그리고 나머지는 요청 시 늘린다.
+  const [toolChipLimit, setToolChipLimit] = useState(TOOL_CHIP_PAGE);
   const forceToolsOpen = Boolean(isLastAssistantMsg && !isVisiblyStreaming);
   const effectiveToolsOpen = forceToolsOpen || toolsOpen;
   // P1: 긴 보고서 접이식 상태
@@ -2913,7 +2920,21 @@ const MessageItem = memo(function MessageItem({
                           도구 상세 기록을 불러오지 못했습니다.
                         </div>
                       )}
-                      {toolEventsForRender.map((ev, i: number) => (
+                      {toolEventsForRender.length > toolChipLimit && (
+                        <button
+                          type="button"
+                          onClick={() => setToolChipLimit((n) => n + TOOL_CHIP_PAGE)}
+                          style={{
+                            marginBottom: '6px', fontSize: '11px', cursor: 'pointer',
+                            color: 'var(--ct-accent)', background: 'transparent',
+                            border: '1px solid rgba(108,99,255,0.3)', borderRadius: '6px',
+                            padding: '3px 8px',
+                          }}
+                        >
+                          나머지 {toolEventsForRender.length - toolChipLimit}개 더 보기
+                        </button>
+                      )}
+                      {toolEventsForRender.slice(0, toolChipLimit).map((ev, i: number) => (
                         <div key={i} style={{marginBottom: '4px'}}>
                           {ev.type === 'tool_use' && (
                             <>
@@ -4537,7 +4558,7 @@ export default function ChatPage() {
         }
       } catch {}
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${sid}&limit=120&include_streaming=true`
+        `/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`
       ).then((result) => {
         if (activeSessionRef.current !== sid) return;
         const shouldKeepPlaceholder = streamingRef.current || waitingBgRef.current || Boolean(bgPartialContentRef.current);
@@ -4626,7 +4647,7 @@ export default function ChatPage() {
   const loadOlderMessages = useCallback(async () => {
     if (!activeSession?.id || messages.length === 0 || !nextCursor) return;
     const result = await chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-      `/chat/messages?session_id=${activeSession.id}&limit=120&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true`
+      `/chat/messages?session_id=${activeSession.id}&limit=120&cursor=${encodeURIComponent(nextCursor)}&include_streaming=true&fields=render`
     ).catch(() => null);
     if (result && result.messages.length > 0) {
       setHasMoreMessages(result.has_more);
@@ -5743,7 +5764,7 @@ export default function ChatPage() {
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
       chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=120&include_streaming=true`
+        `/chat/messages?session_id=${fetchSid}&limit=120&include_streaming=true&fields=render`
       )
         .then((result) => {
           const msgs = result.messages;
@@ -5998,7 +6019,7 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
@@ -8637,7 +8658,7 @@ export default function ChatPage() {
     });
     setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true`)
+      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`)
         .then((result) => result.messages)
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
