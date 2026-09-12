@@ -926,6 +926,15 @@ function ArtifactContentArea({ artifactTab, filteredArtifacts, selectedArtifactI
   }, [goNext, goPrev]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // 입력 중인 곳에서 누른 방향키까지 가로채면 커서가 움직이지 않는다.
+    // 이 핸들러는 컨테이너에 걸려 있어 내부 input/textarea 의 키 이벤트가
+    // 버블링으로 올라온다. 아이디어 메모를 수정할 때 방향키로 커서 이동이
+    // 안 되고 아티팩트만 넘어가던 원인이다.
+    const t = e.target as HTMLElement | null;
+    if (t) {
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t.isContentEditable) return;
+    }
     if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); goNext(); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); goPrev(); }
   }, [goNext, goPrev]);
@@ -1291,6 +1300,30 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       setAgendaSaving(false);
     }
   }, [agendaEditPriority, agendaEditStatus, agendaEditSummary, agendaEditTitle, agendaSaving, loadAgendaItems]);
+
+  const deleteAgendaMemo = useCallback(async (agendaId: string | number, title?: string) => {
+    if (agendaSaving) return;
+    // 메모는 되돌리기 UI 가 없으므로 지우기 전에 한 번 묻는다.
+    // 서버는 소프트 삭제라 DB 에서 복구할 수 있지만 화면에서는 되돌릴 수 없다.
+    const label = (title || "").trim();
+    if (!window.confirm(`이 아이디어 메모를 삭제할까요?${label ? `\n\n${label}` : ""}`)) return;
+    setAgendaSaving(true);
+    setAgendaError(null);
+    try {
+      const res = await fetch(`${BASE_URL}/agenda/${agendaId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: authHdrs(),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      setEditingAgendaId(null);
+      await loadAgendaItems();
+    } catch (e) {
+      setAgendaError((e as Error).message || "아이디어 메모 삭제 실패");
+    } finally {
+      setAgendaSaving(false);
+    }
+  }, [agendaSaving, loadAgendaItems]);
 
   useEffect(() => {
     if (screenSize !== "desktop") return;
@@ -2111,6 +2144,23 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   }}
                                 >
                                   수정
+                                </button>
+                                <button
+                                  onClick={() => void deleteAgendaMemo(item.id, item.title)}
+                                  disabled={agendaSaving}
+                                  title="이 메모 삭제"
+                                  style={{
+                                    padding: "4px 8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid rgba(239,68,68,0.35)",
+                                    background: "transparent",
+                                    color: "#ef4444",
+                                    fontSize: "11px",
+                                    cursor: agendaSaving ? "default" : "pointer",
+                                    opacity: agendaSaving ? 0.5 : 1,
+                                  }}
+                                >
+                                  삭제
                                 </button>
                                 {["논의중", "진행중", "보류", "완료"].filter((s) => s !== item.status).map((s) => (
                                   <button
