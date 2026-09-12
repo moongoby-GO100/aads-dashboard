@@ -2669,3 +2669,12 @@
   - Browser Bridge navigation failed with `CDP_NOT_READY`, and independent screenshot capture timed out.
     Authenticated visual verification must be retried after browser infrastructure recovery; API and
     build checks are the current fallback evidence.
+
+## 2026-09-13 KST - Chat modernization WP00/WP01
+
+- PRD 기준선과 회귀 하네스(WP00), 실행 환경/type gate 및 생성 HTML 안전 경계(WP01)를 반영했다.
+- Dashboard 생성 HTML과 Markdown code fence는 공통 wrapper가 소유한 CSP 및 opaque sandbox iframe을 사용하며 `allow-scripts`를 허용하지 않는다. Artifact 새 창 미리보기도 원문 Blob을 직접 실행하지 않는다.
+- Server interrupt receipt는 INSERT와 counter UPDATE가 모두 commit된 뒤에만 메모리 queue로 전달하며, 불완전 영속화는 HTTP 503 `interrupt_receipt_failed`로 실패 폐쇄한다.
+- 검증: Dashboard typecheck, lint 오류 0, 기준선 20/20, 보안 15/15, Node 24 production build 및 npm audit 0; Server focused pytest 15건과 신규 Ruff/py_compile 통과.
+- 상세 구현 기록은 `docs/chat-modernization-20260912/implementation/WP01.md`를 정본으로 사용한다.
+- WP02~WP09와 운영 브라우저 E2E는 미완료이며, 단계별 feature flag·legacy fallback·검수 게이트를 통과한 뒤 배포한다.
