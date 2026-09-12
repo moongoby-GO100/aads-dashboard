@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "change_id": "AADS-CHATMOD-WP09-FOUNDATION-20260913",
+      "title": "Privacy-safe telemetry and change-impact drift gate",
+      "owner": "AADS SRE+QA",
+      "status": "verified",
+      "source_version": "db4e0ca",
+      "trigger": "WP09 requires correlated operations evidence without chat content leakage and requires documentation drift to fail CI.",
+      "requirements": ["FR37", "FR38", "FR41"],
+      "invariants": ["INV15"],
+      "tests": ["T37", "T38", "T41"],
+      "affected_paths": [
+        ".github/pull_request_template.md",
+        ".github/workflows/chat-regression.yml",
+        "package.json",
+        "src/features/chat/observability/chatTelemetry.ts",
+        "tests/chat-modernization/wp09-operations.test.mjs",
+        "docs/chat-modernization-20260912/change-impact.json",
+        "docs/chat-modernization-20260912/verify-change-impact.mjs",
+        "docs/chat-modernization-20260912/verify-docs.mjs",
+        "docs/chat-modernization-20260912/implementation/WP09-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "documentation": [
+        "docs/chat-modernization-20260912/implementation/WP09-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "telemetry_change": "Adds a local record validator only; no sink, network export, user content, token text, attachment content, session ID or user ID is collected.",
+      "rollback": "Revert the additive telemetry, checker, tests, workflow/template wiring, manifest entry and records; no API, DB, runtime route or production flag changes.",
+      "temporary_hotfix": {
+        "enabled": false
+      }
+    }
+  ]
+}

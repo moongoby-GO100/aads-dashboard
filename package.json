@@ -14,7 +14,8 @@
     "test:chat:security": "vitest run src/features/chat/rendering",
     "test:chat:baseline": "node tests/chat-modernization/measure-baseline.mjs",
     "test:chat:docs": "node docs/chat-modernization-20260912/verify-docs.mjs",
-    "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run selftest && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs"
+    "test:chat:change-impact": "node docs/chat-modernization-20260912/verify-change-impact.mjs",
+    "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run selftest && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs && npm run test:chat:change-impact"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

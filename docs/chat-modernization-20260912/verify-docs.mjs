@@ -26,7 +26,10 @@ const declaredCrossRepoLinks = new Set([
 const files = [
   'README.md', 'CURRENT-CODE-AUDIT.md', 'PRD.md',
   'TECHNICAL-DESIGN.md', 'VERIFICATION-AND-ROLLOUT.md', 'SOURCES.md',
-  'implementation/WP00.md',
+  ...fs.readdirSync(path.join(base, 'implementation'))
+    .filter((file) => file.endsWith('.md'))
+    .sort()
+    .map((file) => `implementation/${file}`),
 ];
 const errors = [];
 const docs = new Map();

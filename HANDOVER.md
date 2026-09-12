@@ -1,5 +1,15 @@
 # AADS Dashboard Handover
 
+## 2026-09-13 04:00 KST — Chat modernization WP09 operations foundation (isolated / not deployed)
+
+- Clean isolated worktree baseline `db4e0ca`에 WP09의 독립 선행 기반만 추가했다. `/chat`, runtime/transport/viewport/composer, API·DB, `deploy.sh`, production은 변경하지 않았다.
+- `src/features/chat/observability/chatTelemetry.ts`는 7개 chat event와 이벤트별 유한 label vocabulary만 허용한다. 알 수 없는 top-level/label/measurement/correlation field와 secret 형태 값은 fail-closed이며, 동적 release/report ID는 metric label 밖 correlation에만 둔다. sink/network export는 추가하지 않았다.
+- `change-impact.json`과 checker는 change owner/source SHA/FR·INV·T/영향 경로/문서/telemetry/rollback을 검증하고, 임시 hotfix에 owner·ISO 만료일·제거 조건을 강제한다. PR에서 chat/CI 파일이 바뀌면 manifest 갱신과 affected path coverage가 없을 때 실패한다. PR template과 CI full-history base를 함께 추가했다.
+- `verify-docs.mjs`는 WP00 한 파일만 보던 기존 고정 목록을 제거하고 모든 `implementation/*.md`를 정렬 탐색해 ID·link drift를 검사한다.
+- Node `v24.21.0` clean `npm ci --ignore-scripts` 후 typecheck 통과, focused T37/T38/T41 5/5, 전체 Node chat 29/29, rendering security 15/15, selftest 6/6, docs 12개·83 links·219 IDs·44 mappings, change-impact 1 entry, scoped lint 0 errors/기존 22 warnings, baseline source/fixture hash가 통과했다. `git diff --check`도 통과했다.
+- 미실행: production build, browser E2E, telemetry sink/retention·sample 정책 승인, release/canary/rollback, 5분·24시간·7일 관측. WP05~WP08과 full WP09 인수 전에는 운영 완료로 보고하지 않는다. commit/push/deploy는 수행하지 않았다.
+- 상세 범위·rollback: `docs/chat-modernization-20260912/implementation/WP09-FOUNDATION.md`.
+
 ## 2026-09-13 — Chat modernization WP04 typed session-view adapter
 
 - `origin/main=ba90320a3f4550ae52342c69470c6aecfeca1e46`의 clean 격리 worktree에서 WP04 대시보드 계약 어댑터를 구현했다. 기존 `/chat` 조회 경로와 v1 기본 동작은 변경하지 않았다.

@@ -12,9 +12,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run test:chat:ci
+        env:
+          CHAT_CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
