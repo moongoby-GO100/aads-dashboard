@@ -45,6 +45,7 @@ import {
   removeOptimisticInterruptMessage,
 } from "@/lib/chatInterruptReceipt";
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
+import { artifactMatchesTab, artifactTabForArtifact, isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { type ChatFollowMode } from "@/lib/chatScrollPolicy";
 import {
   ChatViewportController,
@@ -9106,7 +9107,7 @@ export default function ChatPage() {
       );
       const artifact = draft.artifact;
       setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
-      setArtifactTab("report");
+      setArtifactTab("directive");
       setSelectedArtifactIdx(0);
       setArtifactMode("full");
       if (screenSize !== "desktop") setMobileOverlay("artifact");
@@ -9196,6 +9197,87 @@ export default function ChatPage() {
     }
   }
 
+  async function sendDirectiveNow(artifact: Artifact) {
+    const draftId = String(artifact.metadata?.draft_id || "");
+    const sessionId = activeSessionObjRef.current?.id || "";
+    if (!draftId || !sessionId || !isDirectiveDraftArtifact(artifact)) {
+      throw new Error("전송할 지시 초안 정보를 찾을 수 없습니다.");
+    }
+    if (!window.confirm("이 지시서를 현재 채팅에 바로 전송할까요?")) return;
+    pendingDirectiveDraftRef.current = {
+      draftId,
+      artifactId: artifact.id,
+      sessionId,
+      revision: Number(artifact.metadata?.revision || 1),
+      insertedContent: artifact.content,
+    };
+    setDirectiveDraftError(null);
+    await sendMessage(artifact.content);
+  }
+
+  async function regenerateDirective(artifact: Artifact) {
+    const draftId = String(artifact.metadata?.draft_id || "");
+    const sessionId = activeSessionObjRef.current?.id || "";
+    if (!draftId || !sessionId || !isDirectiveDraftArtifact(artifact)) {
+      throw new Error("다시 생성할 지시 초안 정보를 찾을 수 없습니다.");
+    }
+    setDirectiveDrafting(true);
+    setDirectiveDraftError(null);
+    try {
+      const response = await chatApi<{ items: Array<{ id: string; source_message_ids?: string[] }> }>(
+        `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts?limit=100`,
+      );
+      const source = response.items.find((item) => item.id === draftId);
+      if (!source?.source_message_ids?.length) {
+        throw new Error("원본 문답을 찾을 수 없어 지시서를 다시 생성할 수 없습니다.");
+      }
+      const sourceMessageIds = source.source_message_ids.slice(0, 16);
+      const draft = await chatApi<DirectiveDraftCreateResponse>(
+        `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            context_window: Math.max(2, sourceMessageIds.length),
+            message_ids: sourceMessageIds,
+          }),
+        },
+      );
+      setArtifacts((prev) => [draft.artifact, ...prev.filter((item) => item.id !== draft.artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifactTab("directive");
+      setSelectedArtifactIdx(0);
+      showCompletionToast("같은 원본 문답으로 지시서를 다시 생성했습니다. 이전 초안도 보존됩니다.", sessionId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "지시서 다시 생성에 실패했습니다.";
+      setDirectiveDraftError(message);
+      throw error;
+    } finally {
+      setDirectiveDrafting(false);
+    }
+  }
+
+  async function deleteDirective(artifact: Artifact) {
+    const draftId = String(artifact.metadata?.draft_id || "");
+    if (!isDirectiveDraftArtifact(artifact)) throw new Error("삭제할 지시 초안이 아닙니다.");
+    if (!window.confirm("이 지시 초안을 삭제할까요? 감사 이력은 보존됩니다.")) return;
+    setDirectiveDraftError(null);
+    try {
+      if (draftId) {
+        await chatApi(`/chat/directive-drafts/${encodeURIComponent(draftId)}/events`, {
+          method: "POST",
+          body: JSON.stringify({ action: "archived", metadata: { artifact_id: artifact.id, source: "artifact_panel_delete" } }),
+        });
+      }
+      await chatApi(`/chat/artifacts/${encodeURIComponent(artifact.id)}`, { method: "DELETE" });
+      setArtifacts((prev) => prev.filter((item) => item.id !== artifact.id));
+      setSelectedArtifactIdx(0);
+      showCompletionToast("지시 초안을 삭제했습니다. 감사 이력은 보존됩니다.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "지시서 삭제에 실패했습니다.";
+      setDirectiveDraftError(message);
+      throw error;
+    }
+  }
+
   // ── Derived ──
   const vars = theme === "dark" ? DARK : LIGHT;
   const filteredSessions = sessions.filter(
@@ -9207,27 +9289,24 @@ export default function ChatPage() {
   );
   // 전체 세션에서 사용 중인 태그 목록 수집
   const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
-  const filteredArtifacts = useMemo(() => artifacts.filter((a) => {
-    if (artifactTab === "report") return a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table" || a.artifact_type === "task_card";
-    if (artifactTab === "dialog") return a.artifact_type === "full_response";
-    if (artifactTab === "code") return a.artifact_type === "code";
-    if (artifactTab === "chart") return a.artifact_type === "chart" || a.artifact_type === "image";
-    if (artifactTab === "agenda") return false;
-    if (artifactTab === "deploy") return false;
-    if (artifactTab === "html_preview") return a.artifact_type === "html_preview";
-    return false;
-  }), [artifacts, artifactTab]);
+  const filteredArtifacts = useMemo(
+    () => artifacts.filter((artifact) => artifactMatchesTab(artifact, artifactTab)),
+    [artifacts, artifactTab],
+  );
   const activeArtifact = filteredArtifacts[selectedArtifactIdx] || filteredArtifacts[0] || null;
 
   // PERF: React.memo 안정화 — 인라인 화살표 함수 제거로 MessageItem 불필요 재렌더 방지
   const filteredArtifactsRef = useRef(filteredArtifacts);
   useEffect(() => { filteredArtifactsRef.current = filteredArtifacts; }, [filteredArtifacts]);
   const handleViewArtifactStable = useCallback((artifactId: string) => {
-    const idx = filteredArtifactsRef.current.findIndex((a: { id: string }) => a.id === artifactId);
+    const artifact = artifacts.find((item) => item.id === artifactId);
+    if (!artifact) return;
+    const tab = artifactTabForArtifact(artifact);
+    const idx = artifacts.filter((item) => artifactMatchesTab(item, tab)).findIndex((item) => item.id === artifactId);
     if (idx >= 0) setSelectedArtifactIdx(idx);
     setArtifactMode("full");
-    setArtifactTab("report");
-  }, []);
+    setArtifactTab(tab);
+  }, [artifacts]);
   const handleOpenLightboxStable = useCallback((srcs: string[], i: number) => {
     setLightboxSrcs(srcs);
     setLightboxIdx(i);
@@ -9255,13 +9334,7 @@ export default function ChatPage() {
     const showArtifact = (artifact: Artifact) => {
       if (isStale()) return;
       const nextTab: ArtifactTab =
-        artifact.artifact_type === "html_preview"
-          ? "html_preview"
-          : artifact.artifact_type === "code"
-            ? "code"
-            : artifact.artifact_type === "image"
-              ? "chart"
-              : "report";
+        artifactTabForArtifact(artifact);
       setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
       setArtifactTab(nextTab);
       setSelectedArtifactIdx(0);
@@ -9440,7 +9513,8 @@ export default function ChatPage() {
   }, [activeSession?.id]);
 
   const artifactCounts: Record<string, number> = useMemo(() => ({
-    report: artifacts.filter((a) => a.artifact_type === "report" || a.artifact_type === "text" || a.artifact_type === "file" || a.artifact_type === "table" || a.artifact_type === "task_card").length,
+    directive: artifacts.filter(isDirectiveDraftArtifact).length,
+    report: artifacts.filter((a) => artifactMatchesTab(a, "report")).length,
     dialog: artifacts.filter((a) => a.artifact_type === "full_response").length,
     code: artifacts.filter((a) => a.artifact_type === "code").length,
     chart: artifacts.filter((a) => a.artifact_type === "chart" || a.artifact_type === "image").length,
@@ -12460,6 +12534,9 @@ export default function ChatPage() {
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
         selectedArtifactIdx={selectedArtifactIdx} setSelectedArtifactIdx={setSelectedArtifactIdx}
         activeSession={activeSession} copyArtifact={copyArtifact} toDirective={toDirective}
+        sendDirectiveNow={sendDirectiveNow}
+        regenerateDirective={regenerateDirective}
+        deleteDirective={deleteDirective}
         sessionId={activeSession?.id ?? ""}
       />
 

@@ -2758,3 +2758,18 @@
   22/22, selftests 6/6, typecheck, docs/change-impact and `git diff --check`; scoped lint had zero
   errors and the existing 22-warning baseline. Canonical scope and remaining gaps are recorded in
   `docs/chat-modernization-20260912/implementation/WP08-FOUNDATION.md`.
+
+## 2026-09-13 KST - Dedicated directive artifact workflow
+
+- Added a persistent `지시서` artifact tab. Artifacts tagged with
+  `metadata.subtype=directive_draft` no longer appear in the report tab or its count.
+- Directive drafts expose four bottom actions: confirmed direct chat submission, regeneration from
+  the original source-message IDs while preserving the previous draft, revision-aware editing, and
+  deletion from the artifact panel after recording an archived audit event.
+- New drafts and linked directive artifacts open in the directive tab on desktop and mobile. The
+  direct-submit action reuses the existing sent-event audit path and never submits without a user
+  confirmation.
+- Verification before release: TypeScript passed, chat regression tests passed 42/42, scoped ESLint
+  passed with zero errors (22 existing warnings), and the production build generated all 76 routes.
+- Release gate: commit/push, immutable dashboard blue/green deployment, authenticated `/chat`
+  desktop/mobile capture, same-digest standby sync, and five-minute P0/P1 monitoring.

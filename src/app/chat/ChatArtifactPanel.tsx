@@ -6,6 +6,7 @@ import RunnerHostStatus from "./RunnerHostStatus";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
+import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import {
   openIsolatedHtmlPreview,
   openStaticTextPreview,
@@ -192,6 +193,9 @@ export interface ChatArtifactPanelProps {
   activeSession: ChatSession | null;
   copyArtifact: (content: string) => void;
   toDirective: (a: Artifact) => void | Promise<void>;
+  sendDirectiveNow: (a: Artifact) => void | Promise<void>;
+  regenerateDirective: (a: Artifact) => void | Promise<void>;
+  deleteDirective: (a: Artifact) => void | Promise<void>;
   systemMessages?: ChatMessage[];
   unreadLogCount?: number;
   sessionId?: string;
@@ -985,7 +989,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     artifacts, artifactTab, setArtifactTab, artifactCounts,
     systemMessages, unreadLogCount,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
-    activeSession, copyArtifact, toDirective, sessionId,
+    activeSession, copyArtifact, toDirective, sendDirectiveNow, regenerateDirective, deleteDirective, sessionId,
   } = props;
 
   // 아티팩트 검색/필터 상태
@@ -1106,6 +1110,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [editContent, setEditContent] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [directiveAction, setDirectiveAction] = useState<"send" | "regenerate" | "delete" | null>(null);
   const [showHtmlCode, setShowHtmlCode] = useState(false);
   const [localEdits, setLocalEdits] = useState<Record<string, {
     title: string;
@@ -1147,6 +1152,23 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
       setEditSaving(false);
     }
   }, [editingArtifactId, editTitle, editContent]);
+
+  const runDirectiveAction = useCallback(async (
+    action: "send" | "regenerate" | "delete",
+    artifact: Artifact,
+    handler: (value: Artifact) => void | Promise<void>,
+  ) => {
+    if (directiveAction) return;
+    setDirectiveAction(action);
+    setEditError(null);
+    try {
+      await handler(artifact);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "지시서 작업에 실패했습니다.");
+    } finally {
+      setDirectiveAction(null);
+    }
+  }, [directiveAction]);
 
   // 아젠다 상태
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
@@ -1568,6 +1590,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
                     { key: "deploy" as ArtifactTab, icon: "🚀", label: "배포" },
                     { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
+                    { key: "directive" as ArtifactTab, icon: "📝", label: "지시서" },
                     { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                     { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
@@ -1576,7 +1599,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
                 ).filter((tab) => {
-                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda") return true;
+                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda" || tab.key === "directive") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
                 }).map((tab) => (
                   <button
@@ -1633,7 +1656,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && (
+            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && artifactTab !== "directive" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -2702,12 +2725,32 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 style={{
                   padding: "12px",
                   borderTop: "1px solid var(--ct-border)",
-                  display: "flex",
+                  display: isDirectiveDraftArtifact(activeArtifact) ? "grid" : "flex",
+                  gridTemplateColumns: isDirectiveDraftArtifact(activeArtifact)
+                    ? (screenSize === "desktop" ? "repeat(4, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))")
+                    : undefined,
                   gap: "6px",
                   flexWrap: "wrap",
                 }}
               >
-	                {[
+	                {(isDirectiveDraftArtifact(activeArtifact) ? [
+	                  {
+	                    icon: "▶️",
+	                    label: directiveAction === "send" ? "전송 중..." : "바로 지시하기",
+	                    fn: () => runDirectiveAction("send", activeArtifact, sendDirectiveNow),
+	                  },
+	                  {
+	                    icon: "🔄",
+	                    label: directiveAction === "regenerate" ? "생성 중..." : "지시서 다시 생성",
+	                    fn: () => runDirectiveAction("regenerate", activeArtifact, regenerateDirective),
+	                  },
+	                  { icon: "✏️", label: "편집", fn: () => editingArtifactId === activeArtifact.id ? cancelEdit() : startEdit(activeArtifact) },
+	                  {
+	                    icon: "🗑️",
+	                    label: directiveAction === "delete" ? "삭제 중..." : "삭제",
+	                    fn: () => runDirectiveAction("delete", activeArtifact, deleteDirective),
+	                  },
+	                ] : [
 	                  { icon: "📋", label: "복사", fn: () => copyArtifact(localEdits[activeArtifact.id]?.content ?? activeArtifact.content) },
 	                  ...(activeArtifact.artifact_type === "chart"
 	                    ? [{ icon: "🔗", label: "새 탭", fn: () => openArtifactInNewTab(activeArtifact) }]
@@ -2723,10 +2766,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 	                      metadata: localEdits[activeArtifact.id]?.metadata ?? activeArtifact.metadata,
 	                    }),
 	                  },
-	                ].map((btn) => (
+	                ]).map((btn) => (
                   <button
                     key={btn.label}
                     onClick={btn.fn}
+                    disabled={Boolean(directiveAction)}
                     style={{
                       flex: 1,
                       padding: "7px 8px",
@@ -2734,7 +2778,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       background: "var(--ct-hover)",
                       border: "1px solid var(--ct-border)",
                       borderRadius: "6px",
-                      cursor: "pointer",
+                      cursor: directiveAction ? "wait" : "pointer",
+                      opacity: directiveAction ? 0.65 : 1,
                       color: "var(--ct-text2)",
                       display: "flex",
                       alignItems: "center",
@@ -2770,6 +2815,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "log" as ArtifactTab, icon: "🔧", label: "로그" },
                 { key: "deploy" as ArtifactTab, icon: "🚀", label: "배포" },
                 { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
+                { key: "directive" as ArtifactTab, icon: "📝", label: "지시서" },
                 { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
                 { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                 { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
