@@ -7,13 +7,14 @@
     "build": "npm run typecheck && next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "selftest": "node scripts/run-selftests.mjs",
     "typecheck": "tsc --noEmit --incremental false --pretty false",
-    "lint:chat": "eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx src/app/chat/MarkdownRenderer.tsx src/app/chat/ChatArtifactPanel.tsx src/features/chat src/lib/chatScrollPolicy.ts src/lib/chatReplacementGuard.ts tests/chat-modernization --max-warnings 23",
+    "lint:chat": "eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx src/app/chat/MarkdownRenderer.tsx src/app/chat/ChatArtifactPanel.tsx src/features/chat src/lib/chatScrollPolicy.ts src/lib/chatReplacementGuard.ts src/lib/chatInterruptReceipt.ts src/lib/chatInterruptReceipt.selftest.ts tests/chat-modernization --max-warnings 23",
     "test:chat": "node --test tests/chat-modernization/*.test.mjs",
     "test:chat:security": "vitest run src/features/chat/rendering",
     "test:chat:baseline": "node tests/chat-modernization/measure-baseline.mjs",
     "test:chat:docs": "node docs/chat-modernization-20260912/verify-docs.mjs",
-    "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs"
+    "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run selftest && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",

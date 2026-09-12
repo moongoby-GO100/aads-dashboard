@@ -8,6 +8,7 @@ import { legacyParser, loadPageFunctions, loadSource, source } from "./source-lo
 test("existing scroll policy and replacement selftests execute", () => {
   loadSource("src/lib/chatScrollPolicy.selftest.ts");
   loadSource("src/lib/chatReplacementGuard.selftest.ts");
+  loadSource("src/lib/chatInterruptReceipt.selftest.ts");
 });
 
 test("manual follow remains user-owned for thirty seconds of synthetic ticks", () => {

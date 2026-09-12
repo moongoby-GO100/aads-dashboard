@@ -1,5 +1,13 @@
 # AADS Dashboard Handover
 
+## 2026-09-12 — Chat modernization WP01 hardening follow-up
+
+- Generated HTML is now always encoded inside a trusted CSP wrapper and an opaque script-free iframe; fake/commented `head` input cannot move or disable the policy.
+- A failed additional-instruction receipt now removes only its optimistic bubble and queue entry, restores the draft and attachments, and does not leave a false queued state after the server's fail-closed `503`.
+- `measure-baseline.mjs` now fails when the committed `page.tsx` SHA-256 drifts. The earlier WP01-before-WP00 commit ordering is recorded as history; the combined release gate is the current source hash plus the full WP00/WP01 suite.
+- Required checks: Node 24 typecheck, scoped lint, all source selftests, chat baseline, security tests, docs verifier, production build, then clean-SHA blue/green deployment and five-minute P0/P1 monitoring.
+- Rollback: revert this scoped commit and redeploy the previous immutable dashboard image. Do not restore the raw generated-HTML execution path.
+
 ## 2026-09-12 — Chat modernization WP00 executable baseline
 
 - 기준 SHA `2c02937f7990cd08e077b5b2f77779b99d974877`의 실제 chat page, input import, scroll/replacement selftest, 네 SSE reader를 읽어 제품 코드를 바꾸지 않는 결정적 회귀 하네스를 추가했다.

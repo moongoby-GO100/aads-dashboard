@@ -5,6 +5,13 @@ import { loadPageFunctions, source } from "./source-loader.mjs";
 
 // C01/C11-C13/C29 / FR08/FR38 / INV03/INV09/INV15 / ADR03/ADR11 / T08/T38.
 const { mergeServerMessagesPreservingLocal } = loadPageFunctions(["mergeServerMessagesPreservingLocal"]);
+const EXPECTED_PAGE_SHA256 = "b430301e75541d98e9f3595a03b823e4d20b22176434571cb98b4e064f1825d7";
+const pageSha256 = createHash("sha256").update(source("src/app/chat/page.tsx")).digest("hex");
+if (pageSha256 !== EXPECTED_PAGE_SHA256) {
+  throw new Error(
+    `chat page baseline drift: expected ${EXPECTED_PAGE_SHA256}, received ${pageSha256}`,
+  );
+}
 const fixtures = SIZES.map((count) => {
   const payload = JSON.stringify(messages(count));
   return {
@@ -29,7 +36,7 @@ console.log(JSON.stringify({
   schema: 1,
   seed: SEED,
   node: process.version,
-  pageSha256: createHash("sha256").update(source("src/app/chat/page.tsx")).digest("hex"),
+  pageSha256,
   fixtures,
   merge,
   unknown: [

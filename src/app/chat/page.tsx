@@ -40,6 +40,10 @@ import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, type Documen
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
 import { allowReplyReplacement, shouldQueueAdditionalInstruction } from "@/lib/chatReplacementGuard";
+import {
+  removeFirstQueuedInterrupt,
+  removeOptimisticInterruptMessage,
+} from "@/lib/chatInterruptReceipt";
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import {
   decideChatFollow,
@@ -7175,6 +7179,7 @@ export default function ChatPage() {
       // 첨부파일 캡처 후 즉시 클리어
       const interruptAttachments = pendingAttachments.current.length > 0
         ? [...pendingAttachments.current] : [];
+      const interruptPreviewFiles = [...pendingPreviewFiles];
       pendingAttachments.current = [];
       setPendingPreviewFiles([]);
       msgQueueRef.current.push(interruptContent);
@@ -7240,7 +7245,25 @@ export default function ChatPage() {
           // API 접수와 실제 LLM 반영은 다르다. 큐 제거는 interrupt_applied SSE에서만 한다.
           setQueueCount(msgQueueRef.current.length);
         }).catch((e: unknown) => {
-          console.warn("interrupt push failed, keeping in queue for retry:", e);
+          console.warn("interrupt receipt failed; rolling back optimistic queue state:", e);
+          const rolledBackQueue = removeFirstQueuedInterrupt(
+            msgQueueRef.current,
+            interruptContent,
+          );
+          msgQueueRef.current = rolledBackQueue;
+          setQueueCount(rolledBackQueue.length);
+          localQuestionEchoIdsRef.current.delete(interruptLocalId);
+          setMessagesPreservingViewport((prev) =>
+            removeOptimisticInterruptMessage(prev, interruptLocalId)
+          );
+          pendingAttachments.current = [
+            ...interruptAttachments,
+            ...pendingAttachments.current,
+          ];
+          setPendingPreviewFiles((current) => [
+            ...interruptPreviewFiles,
+            ...current,
+          ]);
           setInput(interruptContent);
           chatInputRef.current?.setValue(interruptContent);
           setYellowWarning("추가 지시 저장 실패 — 입력창에 복원했습니다. 다시 전송해 주십시오.");
