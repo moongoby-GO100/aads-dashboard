@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "locale": "ko-KR",
+  "timezoneId": "Asia/Seoul",
+  "engines": ["chromium", "firefox", "webkit"],
+  "viewports": [
+    { "name": "desktop", "width": 1440, "height": 900, "hasTouch": false },
+    { "name": "mobile", "width": 390, "height": 844, "hasTouch": true }
+  ],
+  "messageCounts": [0, 1, 40, 150, 500, 5000],
+  "networkDelayMs": [0, 150, 2000],
+  "physicalAcceptance": [
+    { "name": "iOS Safari + Korean IME + VoiceOver", "status": "not-run" },
+    { "name": "Android Chrome + Korean IME", "status": "not-run" },
+    { "name": "Windows + NVDA", "status": "not-run" }
+  ]
+}
