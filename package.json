@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "selftest": "node scripts/run-selftests.mjs",
     "selftest": "node scripts/run-selftests.mjs"
   },
   "dependencies": {
