@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { byteSplits, chunks, largeAnswer, messages, SEED, sequences, SIZES, toolEvents } from "./fixtures.mjs";
-import { legacyParser, loadPageFunctions, loadSource, source } from "./source-loader.mjs";
+import { largeAnswer, messages, SEED, SIZES, toolEvents } from "./fixtures.mjs";
+import { loadPageFunctions, loadSource, source } from "./source-loader.mjs";
 
 // C03-C06 / FR01-FR04 / INV01-INV02 / ADR03 / T01-T04.
 test("existing scroll policy and replacement selftests execute", () => {
@@ -25,29 +25,9 @@ test("manual follow remains user-owned for thirty seconds of synthetic ticks", (
   assert.equal(policy.CHAT_BOTTOM_THRESHOLD_PX, 300);
 });
 
-// C10 / FR06-FR07 / INV05-INV06 / ADR06 / T06-T07.
-for (const entry of ["direct", "replay", "resume", "regenerate"]) {
-  test(`${entry} legacy reader reconstructs every UTF-8 byte split`, async () => {
-    const parse = legacyParser(entry);
-    for (const split of byteSplits(sequences.normal)) {
-      const result = await parse(split);
-      assert.equal(result.events.map((event) => event.content || "").join(""), "한글 👩🏽‍💻 두 번째");
-      assert.equal(result.cursor, "10-3");
-    }
-    assert.equal((await parse(chunks(sequences.duplicate))).events.length, 3);
-    assert.equal((await parse(chunks(sequences.crlf))).events.length, 1);
-  });
-
-  test(`${entry} records the current non-standard framing gaps`, async () => {
-    const parse = legacyParser(entry);
-    // These are WP03 targets, not desired behavior: the executable baseline
-    // makes current cursor/framing semantics explicit instead of claiming pass.
-    assert.equal((await parse(chunks(sequences.multiline))).events.length, 0);
-    assert.equal((await parse(chunks(sequences.noSpace))).events.length, 0);
-    assert.equal((await parse(chunks(sequences.incomplete))).events.length, 1);
-    assert.equal((await parse(chunks(sequences.invalid))).cursor, "10-9");
-  });
-}
+// C10 / FR06-FR07 / INV05-INV06 / ADR06 / T06-T07 moved to the
+// executable WP03 common runtime test; the four inline legacy parsers no
+// longer exist in page.tsx.
 
 // C11-C13/C22 / FR08/FR22 / INV03/INV09 / ADR03 / T08/T22.
 test("message visibility keeps user content and meaningful interrupted partials", () => {
@@ -103,6 +83,31 @@ test("finalization preserves bubble identity and preview cannot replace full con
   const full = { ...final, content: "합성 전체 본문 ".repeat(100), is_truncated: false };
   const preview = { ...full, content: "합성 미리보기", is_truncated: true };
   assert.equal(functions.mergeServerMessageWithExisting(full, preview).content, full.content);
+
+  const versionedFull = {
+    ...final,
+    content: "버전 7 전체 본문",
+    content_version: "7",
+    content_completeness: "full",
+  };
+  const versionedPreview = {
+    ...versionedFull,
+    content: "버전 7 미리보기",
+    content_completeness: "preview",
+  };
+  assert.equal(
+    functions.replaceStreamingPlaceholderWithFinal([versionedFull], versionedPreview)[0].content,
+    versionedFull.content,
+  );
+  const shorterEdit = {
+    ...versionedFull,
+    content: "짧은 편집",
+    content_version: "8",
+  };
+  assert.equal(
+    functions.replaceStreamingPlaceholderWithFinal([versionedFull], shorterEdit)[0].content,
+    shorterEdit.content,
+  );
 });
 
 test("a different execution cannot erase an interrupted partial", () => {
@@ -149,10 +154,10 @@ test("fixture boundaries include large content, tools, and exact source symbols"
     'from "./ChatInput"',
     'from "./MarkdownRenderer"',
     'from "./ChatArtifactPanel"',
-    "seenStreamEventIds",
-    "seenReplayEventIds",
-    "seenResumeEventIds",
-    "seenRegenEventIds",
+    'createEventStream("direct")',
+    'createEventStream("replay")',
+    'createEventStream("resume")',
+    'createEventStream("regenerate")',
   ]) assert.ok(page.includes(marker), `missing source marker: ${marker}`);
   assert.equal(page.includes('from "@/components/chat/ChatInput"'), false);
   assert.equal(page.includes('from "@/hooks/useChatSSE"'), false);

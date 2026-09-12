@@ -1,5 +1,14 @@
 # AADS Dashboard Handover
 
+## 2026-09-12 — Chat modernization WP03 runtime/SSE/status (isolated)
+
+- WP02 기준 위에 execution/transport/view slice, terminal execution reducer, stable render identity 및 content version/completeness merge, capability adapter를 추가했다.
+- direct/replay/resume/regenerate 네 fetch stream은 CR/LF/CRLF, multi-data, no-space `data:`, comment, split UTF-8를 처리하는 동일 WHATWG parser/dispatcher를 사용한다. invalid JSON/schema와 stale scope는 applied cursor를 이동하지 않는다.
+- `lastAppliedEventId`, status의 `serverHighWatermark`, atomic snapshot의 `snapshotCoversThroughEventId`를 분리했다. v1 API는 그대로 사용하고 v2/unknown additive event adapter와 세션 진입 시 고정되는 additive flags를 추가했다.
+- 1.5초 async interval은 AbortSignal·session epoch·revision guard가 있는 completion-scheduled single-flight status scheduler로 교체했다. stop 접수는 `stopping`으로 유지하며 transport EOF가 execution terminal을 만들지 않는다.
+- 결정 검증: `npm run test:chat:ci` exit 0. typecheck, scoped lint(0 errors/22 warnings), selftest 6/6, chat Node test 3/3, rendering security 15/15, baseline fixture/hash, docs gate가 모두 통과했다.
+- 실제 브라우저 half-open/offline, A→B→A, v1/v2 교차 서버, Redis trim/snapshot recovery, stop/done 경쟁과 실기기 인수는 미실행이다. 상세 분류·추적·롤백은 `docs/chat-modernization-20260912/implementation/WP03.md`에 기록했다.
+
 ## 2026-09-12 — Chat modernization WP01 hardening follow-up
 
 - Generated HTML is now always encoded inside a trusted CSP wrapper and an opaque script-free iframe; fake/commented `head` input cannot move or disable the policy.

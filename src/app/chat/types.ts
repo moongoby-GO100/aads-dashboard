@@ -36,6 +36,11 @@ export interface ChatMessage {
   is_truncated?: boolean;
   status?: "streaming" | "rate_limited" | "completed";
   render_id?: string;
+  render_key?: string;
+  generation_id?: string | null;
+  segment_id?: string | null;
+  content_version?: string | number | null;
+  content_completeness?: "minimal" | "preview" | "render" | "full";
   model_used?: string;
   requested_model?: string | null;   // AADS: CEO가 선택한 요청 모델
   fallback_reason?: string | null;   // AADS: 실행 모델이 바뀐 사유

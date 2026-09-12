@@ -45,16 +45,18 @@ import {
   removeOptimisticInterruptMessage,
 } from "@/lib/chatInterruptReceipt";
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
-import {
-  shouldLockHistoryActions,
-  type ChatFollowMode,
-} from "@/lib/chatScrollPolicy";
+import { type ChatFollowMode } from "@/lib/chatScrollPolicy";
 import {
   ChatViewportController,
   createDomChatViewportAdapter,
   type ChatViewportReason,
   type MessageViewportAnchor,
 } from "@/features/chat/viewport/chatViewportController";
+import { captureChatRuntimeFeatures, adaptLegacyExecutionPhase, deriveChatCapabilities } from "@/features/chat/domain/capabilities";
+import { mergeMessageProjection } from "@/features/chat/domain/messageReducer";
+import type { ExecutionPhase } from "@/features/chat/domain/runtimeTypes";
+import { createChatRuntime } from "@/features/chat/runtime/createChatRuntime";
+import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusScheduler";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -80,6 +82,10 @@ type StreamingStatusPayload = {
   partial_content?: string;
   execution_id?: string | null;
   last_event_id?: string | null;
+  server_high_watermark?: string | null;
+  covers_through_event_id?: string | null;
+  contract_version?: number | null;
+  capabilities?: string[] | null;
   placeholder_message_id?: string | null;
   placeholder_ready?: boolean;
   last_message_id?: string | null;
@@ -1397,12 +1403,6 @@ function reconcileMessagesForActiveStreaming(
   return [...messages, placeholder].sort((a, b) => messageTime(a) - messageTime(b));
 }
 
-function isTruncatedMinimalMessage(message: ChatMessage): boolean {
-  const contentLength = Number(message.content_length || 0);
-  const visibleLength = (message.content || "").length;
-  return message.is_truncated === true || (contentLength > 0 && contentLength > visibleLength);
-}
-
 function normalizeToolEventsForRender(value: unknown): ChatToolEvent[] {
   const raw = typeof value === "string"
     ? (() => { try { return JSON.parse(value); } catch { return value ? [value] : []; } })()
@@ -1464,18 +1464,13 @@ function buildSummaryToolEvents(msg: ChatMessage): ChatToolEvent[] {
 }
 
 function mergeServerMessageWithExisting(existing: ChatMessage | undefined, serverMessage: ChatMessage): ChatMessage {
-  if (!existing) return serverMessage;
-  const existingContent = existing.content || "";
-  const serverContent = serverMessage.content || "";
-  const keepExistingContent = isTruncatedMinimalMessage(serverMessage) && existingContent.length > serverContent.length;
+  if (!existing) return mergeMessageProjection(undefined, serverMessage) as ChatMessage;
+  const versioned = mergeMessageProjection(existing, serverMessage) as ChatMessage;
   const serverTools = normalizeToolEventsForRender(serverMessage.tools_called);
   const existingTools = normalizeToolEventsForRender(existing.tools_called);
   const mergedTools = serverTools.length > 0 ? serverTools : existingTools;
   return {
-    ...serverMessage,
-    content: keepExistingContent ? existingContent : serverContent,
-    content_length: keepExistingContent ? Math.max(existingContent.length, Number(serverMessage.content_length || 0)) : serverMessage.content_length,
-    render_id: existing.render_id || serverMessage.render_id,
+    ...versioned,
     tools_called: mergedTools as ChatMessage["tools_called"],
     has_tools: Boolean(serverMessage.has_tools) || Boolean(existing.has_tools) || mergedTools.length > 0,
     tool_count: serverMessage.tool_count ?? existing.tool_count ?? mergedTools.filter((ev) => ev.type === "tool_use").length,
@@ -1569,7 +1564,7 @@ function finalizeAssistantMessage(existingMessage: ChatMessage, finalMessage: Ch
     session_id: finalMessage.session_id || mergedMessage.session_id || existingMessage.session_id,
     execution_id: finalMessage.execution_id || existingMessage.execution_id,
     role: "assistant",
-    content: finalMessage.content || mergedMessage.content || existingMessage.content || "",
+    content: mergedMessage.content ?? existingMessage.content ?? "",
     intent: nextIntent,
     render_id: preserveBubbleIdentity
       ? existingRenderId
@@ -2486,7 +2481,7 @@ const MessageItem = memo(function MessageItem({
   return (
     <div
       data-message-id={msg.id}
-      data-message-render-id={msg.render_id || msg.id}
+      data-message-render-id={msg.render_key || msg.render_id || msg.id}
       data-history-actions-locked={historyActionsLocked ? "true" : "false"}
       className="ct-msg-enter group"
       style={{
@@ -3641,6 +3636,12 @@ export default function ChatPage() {
     });
   }, []);
   const [streaming, setStreaming] = useState(false);
+  const runtimeFeatureDefaultsRef = useRef(captureChatRuntimeFeatures({
+    runtimeV2: process.env.NEXT_PUBLIC_CHAT_RUNTIME_V2 === "1",
+    protocolV2: process.env.NEXT_PUBLIC_CHAT_PROTOCOL_V2 === "1",
+  }));
+  const advertisedRuntimeCapabilitiesRef = useRef<Map<string, readonly string[]>>(new Map());
+  const chatRuntimeRef = useRef(createChatRuntime({ features: runtimeFeatureDefaultsRef.current }));
   const [chatFollowMode, setChatFollowMode] = useState<ChatFollowMode>("auto");
   const [viewportUnreadCount, setViewportUnreadCount] = useState(0);
   const [streamBuf, setStreamBuf] = useState("");
@@ -4360,6 +4361,27 @@ export default function ChatPage() {
     return streamingStatusPath(sessionId, ackedToken);
   }, []);
 
+  const observeStreamingStatusRuntime = useCallback((sessionId: string, status: StreamingStatusPayload) => {
+    if (Array.isArray(status.capabilities)) {
+      advertisedRuntimeCapabilitiesRef.current.set(sessionId, status.capabilities);
+    }
+    const runtime = chatRuntimeRef.current;
+    if (runtime.snapshot.scope.sessionId !== sessionId) return;
+    let phase: ExecutionPhase | undefined;
+    if (isCompletionStatusReadyForUi(status)) phase = "completed";
+    else if (status.just_completed || status.stream_status === "finalizing") phase = "finalizing";
+    else if (status.stream_status === "recovering" || status.stream_status === "needs_continuation") phase = "recovering";
+    else if (status.is_streaming) phase = "running";
+    runtime.observeExecutionStatus({
+      executionId: status.execution_id,
+      phase,
+      revision: status.message_revision || status.placeholder_revision,
+      finalMessageReady: status.final_message_ready,
+      // v1 last_event_id is an advertised server watermark, never an applied cursor.
+      serverHighWatermark: status.server_high_watermark || status.last_event_id,
+    });
+  }, []);
+
   const markCompletionSeen = useCallback((sessionId: string, status?: StreamingStatusPayload | null) => {
     if (status?.completion_token) {
       ackedCompletionTokenBySessionRef.current.set(sessionId, status.completion_token);
@@ -4414,6 +4436,7 @@ export default function ChatPage() {
         status = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
         if (activeSessionRef.current !== sid) return;
         const currentStatus = status;
+        observeStreamingStatusRuntime(sid, currentStatus);
         const statusExecutionId = currentStatus.execution_id || currentExecutionIdRef.current;
         const alreadySettled = isExecutionSettled(sid, statusExecutionId);
         const completionReady = isCompletionStatusReadyForUi(currentStatus);
@@ -4427,7 +4450,6 @@ export default function ChatPage() {
           setWaitingBgResponse(true);
           pendingResponseSessions.current.add(sid);
           if (currentStatus.execution_id && !alreadySettled) currentExecutionIdRef.current = currentStatus.execution_id;
-          if (currentStatus.last_event_id) lastEventIdRef.current = currentStatus.last_event_id;
           if (currentStatus.partial_content) {
             setBgPartialContent(currentStatus.partial_content);
             setStreamBuf(currentStatus.partial_content);
@@ -4469,12 +4491,11 @@ export default function ChatPage() {
     };
     document.addEventListener("visibilitychange", handleTabFocusRefetch);
     return () => document.removeEventListener("visibilitychange", handleTabFocusRefetch);
-  }, [isExecutionSettled, markCompletionSeen, markExecutionSettled, setMessagesPreservingViewport, settleScrollAfterMessageMerge, streamingStatusPathFor]);
+  }, [isExecutionSettled, markCompletionSeen, markExecutionSettled, observeStreamingStatusRuntime, setMessagesPreservingViewport, settleScrollAfterMessageMerge, streamingStatusPathFor]);
   const rateLimitedPollRef = useRef(false);
   const mergeCooldownUntilRef = useRef(0);  // 2번: rate_limited 메시지 감지 시 자동 폴링 활성 추적
   const finalizingRef = useRef(false);  // finalization lock — SSE done과 polling 경합 방지
   const [expandedDupeGroups, setExpandedDupeGroups] = useState<Set<string>>(new Set());  // 4번: 중복 메시지 그룹 펼침 상태
-  const lastEventIdRef = useRef<string>("");  // Phase4: Redis Stream entry ID — SSE 재연결 시 Last-Event-ID로 사용
   const currentExecutionIdRef = useRef<string | null>(null);
   const finalizationTimeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const executionAttachAbortRef = useRef<AbortController | null>(null);
@@ -4773,10 +4794,11 @@ export default function ChatPage() {
       ];
     });
     mergeCooldownUntilRef.current = Date.now() + 5000;
+    chatRuntimeRef.current.setTransport("connecting", "replay");
 
     try {
       const existingRenderedContent = (streamBufRef.current || bgPartialContentRef.current || "").trim();
-      const knownLastEventId = (lastEventIdRef.current || "").trim();
+      const knownLastEventId = chatRuntimeRef.current.snapshot.cursors.lastAppliedEventId.trim();
       if (replayFromStart && existingRenderedContent) {
         replayFromStart = false;
       }
@@ -4792,32 +4814,16 @@ export default function ChatPage() {
       if (!resp.ok || !resp.body) throw new Error("execution attach failed");
 
       const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
       let full = streamBufRef.current || bgPartialContentRef.current || "";
-      const seenReplayEventIds = new Set<string>();
-      let currentReplayEventId = "";
-      let skipReplayEvent = false;
+      const replayEventStream = chatRuntimeRef.current.createEventStream("replay");
 
       while (true) {
         const { done, value } = await reader.read();
         if (done || activeSessionRef.current !== attachSessionId) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("id:")) {
-            currentReplayEventId = line.slice(3).trim();
-            skipReplayEvent = Boolean(currentReplayEventId && seenReplayEventIds.has(currentReplayEventId));
-            if (currentReplayEventId) seenReplayEventIds.add(currentReplayEventId);
-            lastEventIdRef.current = currentReplayEventId;
-            continue;
-          }
-          if (!line.startsWith("data: ")) continue;
-          if (skipReplayEvent) continue;
+        for (const parsedEvent of replayEventStream.push(value)) {
+          if (parsedEvent.status !== "applied") continue;
+          const ev = parsedEvent.event.legacy;
           try {
-            const ev = JSON.parse(line.slice(6).trim());
             // [PATCH-B] attachExecutionReplay full SSE 핸들러 — sendMessage와 동등
             if (ev.type === "stream_start") {
               if (ev.execution_id) {
@@ -4881,10 +4887,11 @@ export default function ChatPage() {
               setToolLogs(prev => [...prev, { icon, text: `${ev.tool_name} 실행 중`, sub }]);
               setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
             } else if (ev.type === "tool_result" && ev.tool_name) {
+              const toolName = ev.tool_name;
               const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
               setToolLogs(prev => {
                 const updated = [...prev];
-                const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(ev.tool_name));
+                const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(toolName));
                 if (lastIdx >= 0) {
                   const realIdx = updated.length - 1 - lastIdx;
                   updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
@@ -4940,6 +4947,10 @@ export default function ChatPage() {
             // ignore malformed chunks
           }
         }
+      }
+      replayEventStream.finish();
+      if (activeSessionRef.current === attachSessionId) {
+        chatRuntimeRef.current.setTransport("reconnecting", "replay");
       }
     } catch {
       // attach 실패 시 polling fallback 유지
@@ -5636,7 +5647,12 @@ export default function ChatPage() {
       setWaitingBgResponse(false); setBgPartialContent(""); bgPartialContentRef.current = "";
       setStreamBuf("");
       setToolStatus(null);
-      lastEventIdRef.current = "";
+      const advertised = advertisedRuntimeCapabilitiesRef.current.get(nextSid || "") || [];
+      chatRuntimeRef.current.openSession(nextSid, captureChatRuntimeFeatures({
+        runtimeV2: runtimeFeatureDefaultsRef.current.runtimeV2,
+        protocolV2: process.env.NEXT_PUBLIC_CHAT_PROTOCOL_V2 === "1",
+        advertised,
+      }));
       lastKnownMsgIdRef.current = null;
       lastKnownMessageRevisionRef.current = null;
       lastToastedAiIdRef.current = "";
@@ -5708,11 +5724,11 @@ export default function ChatPage() {
       streamingStatusPathFor(fetchSid)
     ).then(async (status) => {
       if (cancelled) return;
+      observeStreamingStatusRuntime(fetchSid, status);
       const initialStatusExecutionId = status.execution_id || activeSession.current_execution_id || null;
       const initialStatusSettled = isExecutionSettled(fetchSid, initialStatusExecutionId);
       if (isCompletionStatusReadyForUi(status)) markExecutionSettled(fetchSid, initialStatusExecutionId);
       currentExecutionIdRef.current = initialStatusSettled ? null : initialStatusExecutionId;
-      if (status.last_event_id) lastEventIdRef.current = status.last_event_id;
       if (status.is_streaming && !initialStatusSettled) {
         streamingSessionRef.current = fetchSid;
         setStreaming(true);
@@ -6186,7 +6202,8 @@ export default function ChatPage() {
     let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
     let lastStreamingProgressKey = ""; // 진행 변화가 없을 때만 stuck으로 본다.
     let stuckCooldownUntil = 0;
-    const iv = setInterval(async () => {
+    const statusScheduler = new SingleFlightStatusScheduler({ initialDelayMs: 1_500, delayMs: 1_500 });
+    const stopStatusScheduler = statusScheduler.start(sid, async (statusTick) => {
       if (cancelled) return;
       // FIX-3: 초기 스크롤 완료 전까지 폴링 skip (간섭 방지)
       if (isInitialLoadRef.current) return;
@@ -6201,16 +6218,20 @@ export default function ChatPage() {
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
       let ss: StreamingStatusPayload | null = null;
       try {
-        ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid));
-        if (cancelled) return;
+        ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(sid), { signal: statusTick.signal });
+        if (cancelled || !statusTick.isCurrent()) return;
+        // Revisions are decimal counters. Event IDs and phase labels are not
+        // orderable revisions and must not be folded into this guard.
+        const statusRevision = ss.message_revision || ss.placeholder_revision;
+        if (!statusTick.acceptRevision(statusRevision)) return;
         const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
         const statusAlreadySettled = isExecutionSettled(sid, statusExecutionId);
         if (isCompletionStatusReadyForUi(ss)) markExecutionSettled(sid, statusExecutionId);
         if (statusAlreadySettled && !ss.just_completed) {
           ss = { ...ss, is_streaming: false, partial_content: undefined };
         }
+        observeStreamingStatusRuntime(sid, ss);
         if (ss.execution_id && !statusAlreadySettled) currentExecutionIdRef.current = ss.execution_id;
-        if (ss.last_event_id && !statusAlreadySettled) lastEventIdRef.current = ss.last_event_id;
         if (ss.partial_content) {
           setBgPartialContent(ss.partial_content);
           // Invisible Recovery: streaming=true + waitingBg=true → partial_content를 streamBuf에 주입 (타이핑 효과)
@@ -6528,6 +6549,7 @@ export default function ChatPage() {
           streamingStuckCount = 0;
         }
       } catch { /* streaming-status 실패 시 아래 메시지 폴링으로 폴백 */ }
+      if (cancelled || !statusTick.isCurrent()) return;
       // PERF: DB 저장 상태 기준 변경 감지. placeholder_revision까지 봐야 새로고침 후 진행 버블이 누락되지 않는다.
       const _ssLastMsgId = ss?.last_message_id || null;
       const _ssRevisionParts = [
@@ -6625,8 +6647,8 @@ export default function ChatPage() {
           return mergeServerMessagesPreservingLocal(prev, latest);
         });
       } catch { /* 폴링 실패 무시 */ }
-    }, 1500);
-    return () => { cancelled = true; clearInterval(iv); };
+    });
+    return () => { cancelled = true; stopStatusScheduler(); };
   }, [
     activeSession?.id,
     attachExecutionReplay,
@@ -6636,11 +6658,13 @@ export default function ChatPage() {
     markCompletionSeen,
     markExecutionSettled,
     mergeLatestAssistantFromServer,
+    observeStreamingStatusRuntime,
     requestResumeOnce,
     requestServerFinalization,
     restoreMessageViewportAnchor,
     settleScrollAfterMessageMerge,
     setMessagesPreservingViewport,
+    showInterruptionAlertOnce,
     showCompletionToastOnce,
     streamingStatusPathFor,
   ]);
@@ -7132,8 +7156,14 @@ export default function ChatPage() {
     setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
+    const advertised = advertisedRuntimeCapabilitiesRef.current.get(sessionId) || [];
+    chatRuntimeRef.current.openSession(sessionId, captureChatRuntimeFeatures({
+      runtimeV2: runtimeFeatureDefaultsRef.current.runtimeV2,
+      protocolV2: process.env.NEXT_PUBLIC_CHAT_PROTOCOL_V2 === "1",
+      advertised,
+    }));
     currentExecutionIdRef.current = null;
-    lastEventIdRef.current = "";
+    chatRuntimeRef.current.beginExecution(null, "direct");
     // 스트리밍 placeholder ID 생성 (messages 추가는 userMsg 생성 후 단일 호출로 순서 보장)
     const streamingPlaceholderId = `ai-streaming-${sessionId}`;
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
@@ -7323,12 +7353,8 @@ export default function ChatPage() {
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
 
-      const decoder = new TextDecoder();
-      let buf = "";
       let accumulatedToolCalls: ChatToolEvent[] = [];
-      const seenStreamEventIds = new Set<string>();
-      let currentStreamEventId = "";
-      let skipStreamEvent = false;
+      const directEventStream = chatRuntimeRef.current.createEventStream("direct");
       let retryableStreamErrorHandled = false;
 
       // Phase4: 토큰 버퍼링 — SSE 끊김 시에도 표시 지속 (2초 분량 선행 버퍼)
@@ -7370,27 +7396,12 @@ export default function ChatPage() {
         if (done) break;
         // 세션이 전환되었으면 남은 스트림 무시
         if (isStale()) { reader.cancel(); break; }
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
+        for (const parsedEvent of directEventStream.push(value)) {
           if (isStale()) break;
-          // Phase4: Redis Stream entry ID 캡처 (Last-Event-ID 재연결용)
-          if (line.startsWith("id:")) {
-            currentStreamEventId = line.slice(3).trim();
-            skipStreamEvent = Boolean(currentStreamEventId && seenStreamEventIds.has(currentStreamEventId));
-            if (currentStreamEventId) seenStreamEventIds.add(currentStreamEventId);
-            lastEventIdRef.current = currentStreamEventId;
-            continue;
-          }
-          if (!line.startsWith("data: ")) continue;
-          if (skipStreamEvent) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") continue;
+          if (parsedEvent.status !== "applied") continue;
+          const ev = parsedEvent.event.legacy;
           let sseError: Error | null = null;
           try {
-            const ev = JSON.parse(raw);
             // P0-FIX: heartbeat도 timeout 리셋 — 도구 30s+ 실행 시 연결 유지 필수
             // 절대 타임아웃(300s)이 무한 연장 방지 안전망 역할
             if (ev.type === "stream_start") {
@@ -7593,7 +7604,7 @@ export default function ChatPage() {
                     intent: ev.intent || undefined,
                     input_tokens: ev.input_tokens || undefined,
                     output_tokens: ev.output_tokens || undefined,
-                    cost_usd: ev.cost ? parseFloat(ev.cost) : undefined,
+                    cost_usd: ev.cost ? parseFloat(String(ev.cost)) : undefined,
                     duration_sec: ev.duration_sec || undefined,
                     duration_ms: ev.duration_ms || undefined,
                     response_duration_sec: ev.duration_sec || undefined,
@@ -7688,6 +7699,7 @@ export default function ChatPage() {
                 setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
               }
             } else if (ev.type === "tool_result" && ev.tool_name) {
+              const toolName = ev.tool_name;
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
                 ...normalizeToolEventsForRender([{
@@ -7705,7 +7717,7 @@ export default function ChatPage() {
               if (!isStale()) {
                 setToolLogs(prev => {
                   const updated = [...prev];
-                  const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(ev.tool_name));
+                  const lastIdx = [...updated].reverse().findIndex(l => l.text.includes(toolName));
                   if (lastIdx >= 0) {
                     const realIdx = updated.length - 1 - lastIdx;
                     updated[realIdx] = { ...updated[realIdx], icon: "✅", text: `${ev.tool_name} 완료`, sub: resultPreview || undefined };
@@ -7820,6 +7832,8 @@ export default function ChatPage() {
         if (retryableStreamErrorHandled) break;
         if (streamGotFinal) break; // done 이벤트 수신 → while 루프 탈출
       }
+      directEventStream.finish();
+      if (!streamGotFinal && !isStale()) chatRuntimeRef.current.setTransport("reconnecting", "direct");
 
       if (retryableStreamErrorHandled) return;
 
@@ -7995,7 +8009,7 @@ export default function ChatPage() {
             const resumeTimeout = setTimeout(() => resumeAbort.abort(), 120000);
             let resumeResp: Response;
             try {
-              const knownLastEventId = (lastEventIdRef.current || "").trim();
+              const knownLastEventId = chatRuntimeRef.current.snapshot.cursors.lastAppliedEventId.trim();
               const resumeUrl = currentExecutionIdRef.current && knownLastEventId
                 ? `${BASE_URL}/chat/executions/${currentExecutionIdRef.current}/events?last_event_id=${encodeURIComponent(knownLastEventId)}`
                 : `${BASE_URL}/chat/sessions/${sessionId}/stream-resume?offset=${full.length}&last_event_id=${encodeURIComponent(knownLastEventId)}`;
@@ -8011,32 +8025,16 @@ export default function ChatPage() {
             if (!resumeResp.ok || !resumeResp.body) throw new Error("resume failed");
 
             const resumeReader = resumeResp.body.getReader();
-            const resumeDecoder = new TextDecoder();
-            let resumeBuf = "";
-            const seenResumeEventIds = new Set<string>();
-            let currentResumeEventId = "";
-            let skipResumeEvent = false;
+            const resumeEventStream = chatRuntimeRef.current.createEventStream("resume");
+            chatRuntimeRef.current.setTransport("connecting", "resume");
 
             while (true) {
               const { done: rDone, value: rVal } = await resumeReader.read();
               if (rDone) break;
-              resumeBuf += resumeDecoder.decode(rVal, { stream: true });
-              const rLines = resumeBuf.split("\n");
-              resumeBuf = rLines.pop() || "";
-
-              for (const rLine of rLines) {
-                // Phase4: Redis Stream entry ID 캡처 (재연결 체인용)
-                if (rLine.startsWith("id:")) {
-                  currentResumeEventId = rLine.slice(3).trim();
-                  skipResumeEvent = Boolean(currentResumeEventId && seenResumeEventIds.has(currentResumeEventId));
-                  if (currentResumeEventId) seenResumeEventIds.add(currentResumeEventId);
-                  lastEventIdRef.current = currentResumeEventId;
-                  continue;
-                }
-                if (!rLine.startsWith("data: ")) continue;
-                if (skipResumeEvent) continue;
+              for (const parsedEvent of resumeEventStream.push(rVal)) {
+                if (parsedEvent.status !== "applied") continue;
+                const rev = parsedEvent.event.legacy;
                 try {
-                  const rev = JSON.parse(rLine.slice(6).trim());
                   if (rev.type === "delta" && rev.content) {
                     if (isProviderCapacityOrLimitText(String(rev.content))) {
                       if (!isStale()) setToolStatus("응답 작성 중...");
@@ -8087,6 +8085,8 @@ export default function ChatPage() {
               }
               if (streamGotFinal) break;
             }
+            resumeEventStream.finish();
+            if (!streamGotFinal && !isStale()) chatRuntimeRef.current.setTransport("reconnecting", "resume");
             if (resumeReceivedDelta && !streamGotFinal) {
               skipToPolling = true;
             }
@@ -8303,11 +8303,11 @@ export default function ChatPage() {
             if (activeSessionRef.current !== _sid) return;
             try {
               const ss = await chatApi<StreamingStatusPayload>(streamingStatusPathFor(_sid));
+              observeStreamingStatusRuntime(_sid, ss);
               const statusExecutionId = ss.execution_id || currentExecutionIdRef.current;
               const alreadySettled = isExecutionSettled(_sid, statusExecutionId);
               if (isCompletionStatusReadyForUi(ss)) markExecutionSettled(_sid, statusExecutionId);
               if (ss.execution_id && !alreadySettled) currentExecutionIdRef.current = ss.execution_id;
-              if (ss.last_event_id && !alreadySettled) lastEventIdRef.current = ss.last_event_id;
               if (ss.just_completed) {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
@@ -8400,6 +8400,10 @@ export default function ChatPage() {
     if (!sid || stopRequesting) return;
     userStopRequestedRef.current = true;
     setStopRequesting(true);
+    chatRuntimeRef.current.observeExecutionStatus({
+      executionId: currentExecutionIdRef.current,
+      phase: "stopping",
+    });
     const buf = streamBufRef.current || streamBuf || bgPartialContentRef.current || bgPartialContent || "";
     const stoppedContent = buf.trim()
       ? `${buf}\n\n_(응답 중지됨)_`
@@ -8496,6 +8500,10 @@ export default function ChatPage() {
   function stopBackgroundStreaming() {
     if (!activeSession || stopRequesting) return;
     setStopRequesting(true);
+    chatRuntimeRef.current.observeExecutionStatus({
+      executionId: currentExecutionIdRef.current,
+      phase: "stopping",
+    });
     if (waitingBgTimeoutRef.current) {
       clearTimeout(waitingBgTimeoutRef.current);
       waitingBgTimeoutRef.current = null;
@@ -8666,6 +8674,7 @@ export default function ChatPage() {
     setThinkingBuf("");
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
+    chatRuntimeRef.current.beginExecution(null, "regenerate");
     setMessagesPreservingViewport((prev) => {
       if (prev.some((m) => m.id === regenPlaceholderId)) return prev;
       const placeholder: ChatMessage = {
@@ -8706,36 +8715,17 @@ export default function ChatPage() {
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
 
-      const decoder = new TextDecoder();
-      let buf = "";
-      const seenRegenEventIds = new Set<string>();
-      let currentRegenEventId = "";
-      let skipRegenEvent = false;
+      const regenerateEventStream = chatRuntimeRef.current.createEventStream("regenerate");
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         if (isStale()) { reader.cancel(); break; }
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
+        for (const parsedEvent of regenerateEventStream.push(value)) {
           if (isStale()) break;
-          // Phase4: Redis Stream entry ID 캡처
-          if (line.startsWith("id:")) {
-            currentRegenEventId = line.slice(3).trim();
-            skipRegenEvent = Boolean(currentRegenEventId && seenRegenEventIds.has(currentRegenEventId));
-            if (currentRegenEventId) seenRegenEventIds.add(currentRegenEventId);
-            lastEventIdRef.current = currentRegenEventId;
-            continue;
-          }
-          if (!line.startsWith("data: ")) continue;
-          if (skipRegenEvent) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") continue;
+          if (parsedEvent.status !== "applied") continue;
+          const ev = parsedEvent.event.legacy;
           try {
-            const ev = JSON.parse(raw);
             if (ev.type === "stream_start") {
               if (ev.execution_id) {
                 currentExecutionIdRef.current = ev.execution_id;
@@ -8778,7 +8768,7 @@ export default function ChatPage() {
               if (ev.session_cost) setSessionCost(ev.session_cost);
               if (ev.session_turns) setSessionTurns(ev.session_turns);
               // 기존 AI 메시지 intent를 regenerated로 표시 + 새 메시지 추가
-              const finalMsg: ChatMessage = ev.message || {
+              const finalMsg: ChatMessage = (ev.message as ChatMessage | undefined) || {
                 id: ev.message_id || `regen-${Date.now()}`,
                 session_id: sessionId,
                 role: "assistant",
@@ -8814,6 +8804,8 @@ export default function ChatPage() {
           } catch {}
         }
       }
+      regenerateEventStream.finish();
+      if (!regenGotFinal && !isStale()) chatRuntimeRef.current.setTransport("reconnecting", "regenerate");
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : "재생성 실패";
       console.error("regenerate error:", errMsg);
@@ -8854,7 +8846,7 @@ export default function ChatPage() {
       setRegeneratingId(null);
       replacementPendingRef.current = false;
     }
-  }, [attachExecutionReplay, mergeLatestAssistantFromServer, prepareReplyReplacement, requestResumeOnce, setMessagesPreservingViewport]);
+  }, [attachExecutionReplay, mergeLatestAssistantFromServer, prepareReplyReplacement, requestResumeOnce, setMessagesPreservingViewport, showInterruptionAlertOnce]);
 
   // ── 방식B: 입력창에 복사 (재지시) ──
   const handleCopyToInput = useCallback((content: string) => {
@@ -11066,7 +11058,16 @@ export default function ChatPage() {
           <ChatErrorBoundary>
           {(() => {
             const { display, lastAssistantId } = displayData;
-            const historyActionsLocked = shouldLockHistoryActions(streaming, waitingBgResponse);
+            const legacyPhase = adaptLegacyExecutionPhase({
+              streaming,
+              waitingForBackground: waitingBgResponse,
+              stopping: stopRequesting,
+            });
+            const chatCapabilities = deriveChatCapabilities({
+              execution: { ...chatRuntimeRef.current.snapshot.execution, phase: legacyPhase },
+              features: chatRuntimeRef.current.snapshot.features,
+            });
+            const historyActionsLocked = !chatCapabilities.canReplaceResponse;
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
@@ -11074,7 +11075,7 @@ export default function ChatPage() {
               const keepStreamingBubbleLive = hasActiveReplyState || hasLiveStatusHint;
               // P0-SINGLE-SOURCE: displayData에서 이미 필터링 — 이중 필터 제거
               return (
-                <React.Fragment key={msg.render_id || msg.id || idx}>
+                <React.Fragment key={msg.render_key || msg.render_id || msg.id || idx}>
                   <MessageItem
                     msg={msg}
                     idx={idx}

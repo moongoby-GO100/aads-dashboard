@@ -48,6 +48,10 @@ export function loadSource(file, globals = {}, cache = new Map()) {
     URLSearchParams,
     TextDecoder,
     TextEncoder,
+    AbortController,
+    ReadableStream,
+    setTimeout,
+    clearTimeout,
     ...globals,
   }, { filename: absolute, timeout: 5000 });
   return commonJsModule.exports;
@@ -89,54 +93,11 @@ export function loadPageFunctions(names) {
     .map((node) => node.getText(ast))
     .join("\n");
   const commonJsModule = { exports: {} };
+  const { mergeMessageProjection } = loadSource("src/features/chat/domain/messageReducer.ts");
   vm.runInNewContext(
     transpile(`${code}\nmodule.exports = {${names.join(",")}};`),
-    { module: commonJsModule, console },
+    { module: commonJsModule, console, mergeMessageProjection },
     { timeout: 5000 },
   );
-  return commonJsModule.exports;
-}
-
-// Run the framing/id/JSON prefix of each actual legacy inline reader. Dispatch
-// is replaced by a recorder, so this observes C10 without copying a parser.
-export function legacyParser(entry) {
-  const marker = {
-    direct: "seenStreamEventIds",
-    replay: "seenReplayEventIds",
-    resume: "seenResumeEventIds",
-    regenerate: "seenRegenEventIds",
-  }[entry];
-  if (!marker) throw new Error(`Unknown parser entry ${entry}`);
-  const text = source(pagePath);
-  const start = text.indexOf(`const ${marker}`);
-  const whileAt = text.indexOf("while (true)", start);
-  const json = /const (ev|rev) = JSON\.parse\([^;]+;/g;
-  json.lastIndex = whileAt;
-  const match = json.exec(text);
-  if (start < 0 || whileAt < 0 || !match || match.index - whileAt > 3000) {
-    throw new Error(`Legacy parser shape drift: ${entry}`);
-  }
-  const stateEnd = text.indexOf(";", text.indexOf("let skip", start)) + 1;
-  const state = text.slice(start, stateEnd);
-  const loop = text.slice(whileAt, match.index + match[0].length);
-  const body = `${state}\n${loop}\nevents.push(${match[1]}); } catch { invalid++; } } }`;
-  const compiled = transpile(`module.exports = async function(inputChunks) {
-    let index = 0;
-    const reader = { read: async () => index < inputChunks.length
-      ? { value: inputChunks[index++], done: false } : { done: true } };
-    const resumeReader = reader;
-    const decoder = new TextDecoder();
-    const resumeDecoder = decoder;
-    let buf = "", resumeBuf = "";
-    const events = [], lastEventIdRef = { current: "" };
-    let invalid = 0;
-    const attachSessionId = "synthetic-session-a";
-    const activeSessionRef = { current: attachSessionId };
-    const isStale = () => false;
-    ${body}
-    return { events, cursor: lastEventIdRef.current, invalid };
-  };`);
-  const commonJsModule = { exports: {} };
-  vm.runInNewContext(compiled, { module: commonJsModule, TextDecoder }, { timeout: 5000 });
   return commonJsModule.exports;
 }
