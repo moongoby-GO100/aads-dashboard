@@ -2,6 +2,7 @@
 import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
+import RunnerHostStatus from "./RunnerHostStatus";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import { BASE_URL, authHdrs, updateArtifact } from "./api";
@@ -1690,7 +1691,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               setSelectedArtifactIdx={setSelectedArtifactIdx}
             >
               {artifactTab === "tasks" ? (
-                <ArtifactTaskMonitor sessionId={activeSession?.id} />
+                <div style={{ padding: "8px 12px 0" }}>
+                  <RunnerHostStatus emphasis="running" />
+                  <ArtifactTaskMonitor sessionId={activeSession?.id} />
+                </div>
               ) : artifactTab === "deploy" ? (
                 <DeployStatusCard
                   status={deployStatus}
@@ -2087,6 +2091,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 </div>
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
+                  <RunnerHostStatus emphasis="error" />
                   {jobsLoading && runnerJobs.length === 0 ? (
                     <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
                       로딩 중...
