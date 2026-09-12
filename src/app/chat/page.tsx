@@ -41,6 +41,13 @@ import SectionCardContent, { detectCrfSections } from "@/components/chat/Section
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
 import { allowReplyReplacement, shouldQueueAdditionalInstruction } from "@/lib/chatReplacementGuard";
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
+import {
+  decideChatFollow,
+  isChatNearBottom,
+  nextChatFollowModeAfterUserScroll,
+  shouldLockHistoryActions,
+  type ChatFollowMode,
+} from "@/lib/chatScrollPolicy";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -2298,7 +2305,7 @@ function ResponseOverviewPanel({
 interface MessageItemProps {
   msg: ChatMessage;
   idx: number;
-  streaming: boolean;
+  historyActionsLocked: boolean;
   editingMsgId: string | null;
   editText: string;
   setEditingMsgId: (id: string | null) => void;
@@ -2332,7 +2339,7 @@ interface MessageItemProps {
 }
 
 const MessageItem = memo(function MessageItem({
-  msg, idx, streaming, editingMsgId, editText,
+  msg, idx, historyActionsLocked, editingMsgId, editText,
   setEditingMsgId, setEditText, handleDeleteMessage, handleCopyToInput, handleEditResend,
   onRegenerate, onCreateDirectiveFromResponse, directiveDrafting = false, onReplyTo, onBranch, replyTarget,
   isActiveStreaming, streamingContent, streamingThinking, streamToolStatus, streamToolLogs, onStopStreaming, stopRequesting,
@@ -2472,6 +2479,7 @@ const MessageItem = memo(function MessageItem({
     <div
       data-message-id={msg.id}
       data-message-render-id={msg.render_id || msg.id}
+      data-history-actions-locked={historyActionsLocked ? "true" : "false"}
       className="ct-msg-enter group"
       style={{
         display: "flex",
@@ -2500,7 +2508,7 @@ const MessageItem = memo(function MessageItem({
           }}>⚙️ 시스템 트리거</span>
         </div>
       )}
-      {/* user buttons moved to bottom */ false && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
+      {/* user buttons moved to bottom */ false && !historyActionsLocked && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && (
         <div className="flex items-center gap-1 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={() => {
@@ -3178,6 +3186,7 @@ const MessageItem = memo(function MessageItem({
         )}
         {msg.role === "assistant" && (
           <div
+            data-message-actions="assistant"
             style={{
               fontSize: "11px",
               color: "var(--ct-text2)",
@@ -3274,24 +3283,39 @@ const MessageItem = memo(function MessageItem({
                 <ConfidenceBadge label={msg.confidence_label} />
               )}
             </span>
-            {onReplyTo && !streaming && !msg.id.startsWith("tmp-") && (
+            {onReplyTo && !msg.id.startsWith("tmp-") && (
               <button
-                onClick={() => onReplyTo(msg)}
+                onClick={() => {
+                  if (!historyActionsLocked) onReplyTo(msg);
+                }}
                 title="이 응답에 답글"
+                aria-hidden={historyActionsLocked}
+                disabled={historyActionsLocked}
+                tabIndex={historyActionsLocked ? -1 : 0}
                 style={{
                   width: "28px", height: "28px", borderRadius: "6px",
                   background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
                   color: "#6366f1", fontSize: "14px", fontWeight: "bold",
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", opacity: 0.7, transition: "all 0.2s",
+                  cursor: historyActionsLocked ? "default" : "pointer", opacity: 0.7, transition: "all 0.2s",
                   marginLeft: "4px",
+                  visibility: historyActionsLocked ? "hidden" : "visible",
+                  pointerEvents: historyActionsLocked ? "none" : "auto",
                 }}
                 onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.15)"; (e.target as HTMLElement).style.borderColor = "#6366f1"; }}
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(99,102,241,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(99,102,241,0.2)"; }}
               >↩</button>
             )}
-            {onRegenerate && (!streaming || isInterruptedAssistant || isRecoverablePlaceholder) && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
-              <>
+            {onRegenerate && !msg.id.startsWith("tmp-") && (msg.intent !== "streaming_placeholder" || isRecoverablePlaceholder) && msg.intent !== "rate_limited" && (
+              <span
+                aria-hidden={historyActionsLocked && !isInterruptedAssistant && !isRecoverablePlaceholder}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  visibility: historyActionsLocked && !isInterruptedAssistant && !isRecoverablePlaceholder ? "hidden" : "visible",
+                  pointerEvents: historyActionsLocked && !isInterruptedAssistant && !isRecoverablePlaceholder ? "none" : "auto",
+                }}
+              >
                 {(isInterruptedAssistant || isRecoverablePlaceholder) && !onResumeInterrupted && (
                   <button
                     onClick={() => onRegenerate(msg.id, "continue")}
@@ -3309,8 +3333,14 @@ const MessageItem = memo(function MessageItem({
                   >▶ 이어서</button>
                 )}
                 <button
-                  onClick={() => onRegenerate(msg.id, "regenerate")}
+                  onClick={() => {
+                    if (!historyActionsLocked || isInterruptedAssistant || isRecoverablePlaceholder) {
+                      onRegenerate(msg.id, "regenerate");
+                    }
+                  }}
                   title="다시 생성"
+                  disabled={historyActionsLocked && !isInterruptedAssistant && !isRecoverablePlaceholder}
+                  tabIndex={historyActionsLocked && !isInterruptedAssistant && !isRecoverablePlaceholder ? -1 : 0}
                   style={{
                     width: "28px", height: "28px", borderRadius: "6px",
                     background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
@@ -3322,7 +3352,7 @@ const MessageItem = memo(function MessageItem({
                   onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.15)"; (e.target as HTMLElement).style.borderColor = "#22c55e"; }}
                   onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(34,197,94,0.08)"; (e.target as HTMLElement).style.borderColor = "rgba(34,197,94,0.2)"; }}
                 >🔄</button>
-              </>
+              </span>
             )}
             {onCreateDirectiveFromResponse && isFinalAssistantMessage(msg) && PERSISTED_MESSAGE_ID_RE.test(msg.id) && (
               <button
@@ -3368,14 +3398,25 @@ const MessageItem = memo(function MessageItem({
           </div>
         )}
         {/* user bottom action buttons */}
-        {msg.role === "user" && !streaming && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
-          <div style={{
+        {msg.role === "user" && !msg.id.startsWith("tmp-") && msg.intent !== "system_trigger" && editingMsgId !== msg.id && (
+          <div
+            data-message-actions="user"
+            aria-hidden={historyActionsLocked}
+            style={{
             display: "flex", justifyContent: "flex-end", gap: "4px",
             marginTop: "4px", marginRight: "4px",
+            visibility: historyActionsLocked ? "hidden" : "visible",
+            pointerEvents: historyActionsLocked ? "none" : "auto",
           }}>
             <button
-              onClick={() => { setEditingMsgId(msg.id); setEditText(msg.content); }}
+              onClick={() => {
+                if (historyActionsLocked) return;
+                setEditingMsgId(msg.id);
+                setEditText(msg.content);
+              }}
               title="수정 후 재전송"
+              disabled={historyActionsLocked}
+              tabIndex={historyActionsLocked ? -1 : 0}
               style={{
                 width: "26px", height: "26px", borderRadius: "6px",
                 background: "rgba(109,40,217,0.08)", border: "1px solid rgba(109,40,217,0.2)",
@@ -3387,8 +3428,12 @@ const MessageItem = memo(function MessageItem({
               onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.7"; (e.target as HTMLElement).style.background = "rgba(109,40,217,0.08)"; }}
             >✏️</button>
             <button
-              onClick={() => handleCopyToInput(msg.content)}
+              onClick={() => {
+                if (!historyActionsLocked) handleCopyToInput(msg.content);
+              }}
               title="입력창에 복사 (재지시)"
+              disabled={historyActionsLocked}
+              tabIndex={historyActionsLocked ? -1 : 0}
               style={{
                 width: "26px", height: "26px", borderRadius: "6px",
                 background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)",
@@ -3401,8 +3446,12 @@ const MessageItem = memo(function MessageItem({
             >🔄</button>
             {onBranch && (
               <button
-                onClick={() => onBranch?.(msg)}
+                onClick={() => {
+                  if (!historyActionsLocked) onBranch?.(msg);
+                }}
                 title="여기서 분기"
+                disabled={historyActionsLocked}
+                tabIndex={historyActionsLocked ? -1 : 0}
                 style={{
                   width: "26px", height: "26px", borderRadius: "6px",
                   background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
@@ -3415,8 +3464,12 @@ const MessageItem = memo(function MessageItem({
               >🔀</button>
             )}
             <button
-              onClick={() => handleDeleteMessage(msg.id, "user")}
+              onClick={() => {
+                if (!historyActionsLocked) handleDeleteMessage(msg.id, "user");
+              }}
               title="메시지 삭제 (AI 응답 포함)"
+              disabled={historyActionsLocked}
+              tabIndex={historyActionsLocked ? -1 : 0}
               style={{
                 width: "26px", height: "26px", borderRadius: "6px",
                 background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
@@ -3440,7 +3493,7 @@ const MessageItem = memo(function MessageItem({
   prev.screenSize === next.screenSize &&
   prev.mobileFontPx === next.mobileFontPx &&
   prev.msg.reply_to_id === next.msg.reply_to_id &&
-  prev.streaming === next.streaming &&
+  prev.historyActionsLocked === next.historyActionsLocked &&
   prev.isLastAssistantMsg === next.isLastAssistantMsg &&
   prev.editingMsgId === next.editingMsgId &&
   (prev.editingMsgId === prev.msg.id ? prev.editText === next.editText : true) &&
@@ -3550,6 +3603,7 @@ export default function ChatPage() {
     });
   }, []);
   const [streaming, setStreaming] = useState(false);
+  const [chatFollowMode, setChatFollowMode] = useState<ChatFollowMode>("auto");
   const [streamBuf, setStreamBuf] = useState("");
   const [thinkingBuf, setThinkingBuf] = useState("");
   const streamBufRef = useRef("");
@@ -3825,13 +3879,20 @@ export default function ChatPage() {
   const localQuestionEchoIdsRef = useRef<Set<string>>(new Set());
   const prevMessagesCountRef = useRef(0);
   const suppressOlderLoadUntilRef = useRef(0);
+  const chatFollowModeRef = useRef<ChatFollowMode>("auto");
+  const updateChatFollowMode = useCallback((mode: ChatFollowMode) => {
+    chatFollowModeRef.current = mode;
+    setChatFollowMode((current) => current === mode ? current : mode);
+  }, []);
   const scrollToMessagesBottom = useCallback((force = false) => {
     const scroll = () => {
       const container = messagesContainerRef.current;
       if (!container) return;
+      if (!force && chatFollowModeRef.current === "manual") return;
       if (!force && Date.now() < userScrollPauseUntilRef.current) return;
       if (!force && !isNearBottomRef.current) return;
       container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      isNearBottomRef.current = true;
       lastStableMessagesScrollTopRef.current = container.scrollTop;
     };
     requestAnimationFrame(() => {
@@ -3839,7 +3900,15 @@ export default function ChatPage() {
       requestAnimationFrame(scroll);
     });
   }, []);
+  const jumpToLatestMessage = useCallback(() => {
+    updateChatFollowMode("auto");
+    userScrollPauseUntilRef.current = 0;
+    bottomStickUntilRef.current = Date.now() + 180000;
+    isNearBottomRef.current = true;
+    scrollToMessagesBottom(true);
+  }, [scrollToMessagesBottom, updateChatFollowMode]);
   const settleScrollAfterMessageMerge = useCallback(() => {
+    if (chatFollowModeRef.current === "manual") return;
     if (Date.now() < userScrollPauseUntilRef.current) return;
     // P1-FIX: bottomStick이 active여도 사용자가 상단에 있으면 강제 스크롤 금지
     if (Date.now() < bottomStickUntilRef.current && isNearBottomRef.current) {
@@ -3860,7 +3929,7 @@ export default function ChatPage() {
       scrollTop: container.scrollTop,
       scrollHeight: container.scrollHeight,
       distanceFromBottom: Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight),
-      wasNearBottom: container.scrollTop + container.clientHeight >= container.scrollHeight - 300,
+      wasNearBottom: isChatNearBottom(container),
     };
   }, []);
   const applyMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null, options?: { force?: boolean }): boolean => {
@@ -3879,7 +3948,7 @@ export default function ChatPage() {
       return false;
     }
     if (anchor.wasNearBottom) {
-      container.scrollTop = maxScrollTop;
+      if (Math.abs(container.scrollTop - maxScrollTop) > 1) container.scrollTop = maxScrollTop;
       isNearBottomRef.current = true;
       return true;
     }
@@ -3895,30 +3964,21 @@ export default function ChatPage() {
     const desiredScrollTop = anchorEl
       ? anchorEl.offsetTop - anchor.offsetTop
       : anchor.scrollTop;
-    container.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-    isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
+    if (Math.abs(container.scrollTop - nextScrollTop) > 1) container.scrollTop = nextScrollTop;
+    isNearBottomRef.current = isChatNearBottom(container);
     return true;
   }, []);
   const restoreMessageViewportAnchor = useCallback((anchor: MessageViewportAnchor | null) => {
     if (!anchor) return;
     messageViewportRestoreCleanupRef.current?.();
-    // 이전 복원 cleanup이 같은 anchor의 pending 표시를 지웠을 수 있으므로 새 주기의
-    // layout-effect 복원 대상으로 다시 등록한다.
     pendingMessageViewportAnchorRef.current = anchor;
     isRestoringMessageViewportRef.current = true;
     const generation = ++messageViewportRestoreGenerationRef.current;
-    let framesRemaining = 8;
-    let observer: ResizeObserver | null = null;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const applyIfCurrent = () => {
-      if (generation !== messageViewportRestoreGenerationRef.current) return false;
-      return applyMessageViewportAnchor(anchor);
-    };
+    let frameId = 0;
     const cleanup = () => {
-      observer?.disconnect();
-      observer = null;
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = null;
+      if (frameId) cancelAnimationFrame(frameId);
+      frameId = 0;
       if (messageViewportRestoreCleanupRef.current === cleanup) {
         messageViewportRestoreCleanupRef.current = null;
       }
@@ -3928,43 +3988,27 @@ export default function ChatPage() {
       isRestoringMessageViewportRef.current = false;
     };
     messageViewportRestoreCleanupRef.current = cleanup;
-    const restoreFastFrames = () => {
-      requestAnimationFrame(() => {
-        if (generation !== messageViewportRestoreGenerationRef.current) {
-          cleanup();
-          return;
-        }
-        const applied = applyIfCurrent();
-        framesRemaining -= 1;
-        if (framesRemaining > 0) {
-          restoreFastFrames();
-        } else if (
-          !applied &&
-          generation === messageViewportRestoreGenerationRef.current &&
-          messageViewportRestoreCleanupRef.current === cleanup
-        ) {
-          // 본문 축소가 확정돼 가드가 계속 복원을 보류하면 상단 점프가 고착된다.
-          // 사용자가 그 사이 스크롤해 cleanup이 호출된 경우는 제외하고 1회만 근사 복원한다.
-          applyMessageViewportAnchor(anchor, { force: true });
-        }
-      });
-    };
-    // 상태 버블 교체 뒤 Markdown/도구 영역의 높이가 늦게 확정되는 경우까지 같은
-    // 메시지 기준점을 유지한다. 사용자 스크롤이 시작되면 cleanup으로 즉시 해제한다.
-    const container = messagesContainerRef.current;
-    if (container && typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(applyIfCurrent);
-      observer.observe(container);
-    }
-    timeoutId = setTimeout(cleanup, 3000);
-    restoreFastFrames();
+    // React 커밋 직후 useLayoutEffect에서 1회, 다음 paint 직전에 1회만 보정한다.
+    // 장시간 ResizeObserver 복원은 사용자 스크롤과 경쟁하므로 사용하지 않는다.
+    frameId = requestAnimationFrame(() => {
+      if (generation === messageViewportRestoreGenerationRef.current) {
+        applyMessageViewportAnchor(anchor);
+      }
+      cleanup();
+    });
   }, [applyMessageViewportAnchor]);
   const setMessagesPreservingViewport = useCallback((updater: React.SetStateAction<ChatMessage[]>) => {
     // 같은 React 배치에서 여러 폴링/병합이 실행돼도 최초 화면 기준점 하나만 사용한다.
     const anchor = pendingMessageViewportAnchorRef.current || captureMessageViewportAnchor();
-    pendingMessageViewportAnchorRef.current = anchor;
-    setMessages(updater);
-    restoreMessageViewportAnchor(anchor);
+    setMessages((previous) => {
+      const next = typeof updater === "function"
+        ? (updater as (value: ChatMessage[]) => ChatMessage[])(previous)
+        : updater;
+      // 동일 배열을 반환한 폴링/병합은 DOM 커밋과 scrollTop 복원을 만들지 않는다.
+      if (Object.is(previous, next)) return previous;
+      restoreMessageViewportAnchor(anchor);
+      return next;
+    });
   }, [captureMessageViewportAnchor, restoreMessageViewportAnchor]);
   useEffect(() => {
     try {
@@ -4003,31 +4047,28 @@ export default function ChatPage() {
   ) => {
     const generation = ++unexpectedScrollRestoreGenerationRef.current;
     isRestoringUnexpectedScrollRef.current = true;
-    const restoreDeadline = Date.now() + 4000;
-    let fastFramesRemaining = 12;
     const restore = () => {
-      const run = () => {
-        if (generation !== unexpectedScrollRestoreGenerationRef.current) return;
-        const container = messagesContainerRef.current;
-        if (!container) {
-          if (Date.now() < restoreDeadline) setTimeout(restore, 100);
-          else isRestoringUnexpectedScrollRef.current = false;
-          return;
-        }
-        if (stableAnchor) applyMessageViewportAnchor(stableAnchor);
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-        if (!stableAnchor && maxScrollTop > 0) {
-          const desiredScrollTop = Math.min(previousScrollTop, maxScrollTop);
-          container.scrollTop = desiredScrollTop;
-        }
-        if (container.scrollTop > 16) {
-          lastStableMessagesScrollTopRef.current = container.scrollTop;
-        }
-        fastFramesRemaining -= 1;
-        if (Date.now() < restoreDeadline) {
-          restore();
-          return;
-        }
+      if (generation !== unexpectedScrollRestoreGenerationRef.current || chatFollowModeRef.current === "manual") {
+        isRestoringUnexpectedScrollRef.current = false;
+        return;
+      }
+      const container = messagesContainerRef.current;
+      if (!container) {
+        isRestoringUnexpectedScrollRef.current = false;
+        return;
+      }
+      if (stableAnchor) applyMessageViewportAnchor(stableAnchor);
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      if (!stableAnchor && maxScrollTop > 0) {
+        const desiredScrollTop = Math.min(previousScrollTop, maxScrollTop);
+        if (Math.abs(container.scrollTop - desiredScrollTop) > 1) container.scrollTop = desiredScrollTop;
+      }
+      if (container.scrollTop > 16) lastStableMessagesScrollTopRef.current = container.scrollTop;
+    };
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      if (generation === unexpectedScrollRestoreGenerationRef.current) {
         isRestoringUnexpectedScrollRef.current = false;
         const restoredAnchor = captureMessageViewportAnchor();
         if (restoredAnchor && restoredAnchor.scrollTop > 16) {
@@ -4036,11 +4077,8 @@ export default function ChatPage() {
             anchor: restoredAnchor,
           };
         }
-      };
-      if (fastFramesRemaining > 0) requestAnimationFrame(run);
-      else setTimeout(run, 100);
-    };
-    restore();
+      }
+    });
   }, [applyMessageViewportAnchor, captureMessageViewportAnchor]);
   const updateInterruptBubbleStatus = useCallback((
     interruptContent: string,
@@ -5985,31 +6023,45 @@ export default function ChatPage() {
     lastStableMessagesScrollTopRef.current = 0;
     lastStableMessagesViewportRef.current = null;
     userScrollIntentUntilRef.current = Date.now() + 1000;
-  }, [activeSession?.id]);
+    updateChatFollowMode("auto");
+  }, [activeSession?.id, updateChatFollowMode]);
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const markUserScrollIntent = () => {
       userScrollIntentUntilRef.current = Date.now() + 1000;
+      updateChatFollowMode("manual");
       unexpectedScrollRestoreGenerationRef.current += 1;
       isRestoringUnexpectedScrollRef.current = false;
       messageViewportRestoreGenerationRef.current += 1;
       messageViewportRestoreCleanupRef.current?.();
     };
+    let scrollbarPointerActive = false;
     const markScrollbarPointerIntent = (event: PointerEvent) => {
       // 버블/이어쓰기 버튼 클릭은 스크롤 의도가 아니다. 실제 스크롤바를 누른 경우만
       // 복원 방어를 해제해 상태 전환 직후의 상단 점프를 놓치지 않게 한다.
       const rect = container.getBoundingClientRect();
       const nativeScrollbarWidth = Math.max(0, container.offsetWidth - container.clientWidth);
       const scrollbarHitWidth = Math.max(16, nativeScrollbarWidth + 4);
-      if (event.clientX >= rect.right - scrollbarHitWidth) markUserScrollIntent();
+      if (event.clientX >= rect.right - scrollbarHitWidth) {
+        scrollbarPointerActive = true;
+        markUserScrollIntent();
+      }
     };
+    const markScrollbarPointerMove = () => {
+      if (scrollbarPointerActive) markUserScrollIntent();
+    };
+    const releaseScrollbarPointer = () => { scrollbarPointerActive = false; };
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
       if (["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", " "].includes(event.key)) {
         markUserScrollIntent();
       }
     };
     const restoreIfUnexpectedTopReset = (source: "scroll" | "mutation") => {
+      // 수동 모드에서는 최상단 이동도 사용자의 선택이다. 자동 복원으로 덮어쓰지 않는다.
+      if (chatFollowModeRef.current === "manual") return false;
       const scrollTop = container.scrollTop;
       const previousScrollTop = lastStableMessagesScrollTopRef.current;
       const userInitiated = Date.now() < userScrollIntentUntilRef.current;
@@ -6049,7 +6101,12 @@ export default function ChatPage() {
           };
         }
       }
-      isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+      isNearBottomRef.current = isChatNearBottom(container);
+      if (userInitiated) {
+        const nextFollowMode = nextChatFollowModeAfterUserScroll(container);
+        if (nextFollowMode === "auto") userScrollPauseUntilRef.current = 0;
+        updateChatFollowMode(nextFollowMode);
+      }
       if (!isNearBottomRef.current) {
         userScrollPauseUntilRef.current = Date.now() + 4000;
         bottomStickUntilRef.current = 0;
@@ -6067,7 +6124,11 @@ export default function ChatPage() {
     container.addEventListener("scroll", handleScroll, { passive: true });
     container.addEventListener("wheel", markUserScrollIntent, { passive: true });
     container.addEventListener("touchstart", markUserScrollIntent, { passive: true });
+    container.addEventListener("touchmove", markUserScrollIntent, { passive: true });
     container.addEventListener("pointerdown", markScrollbarPointerIntent, { passive: true });
+    window.addEventListener("pointermove", markScrollbarPointerMove, { passive: true });
+    window.addEventListener("pointerup", releaseScrollbarPointer, { passive: true });
+    window.addEventListener("pointercancel", releaseScrollbarPointer, { passive: true });
     window.addEventListener("keydown", markKeyboardScrollIntent);
     return () => {
       mutationObserver.disconnect();
@@ -6075,10 +6136,14 @@ export default function ChatPage() {
       container.removeEventListener("scroll", handleScroll);
       container.removeEventListener("wheel", markUserScrollIntent);
       container.removeEventListener("touchstart", markUserScrollIntent);
+      container.removeEventListener("touchmove", markUserScrollIntent);
       container.removeEventListener("pointerdown", markScrollbarPointerIntent);
+      window.removeEventListener("pointermove", markScrollbarPointerMove);
+      window.removeEventListener("pointerup", releaseScrollbarPointer);
+      window.removeEventListener("pointercancel", releaseScrollbarPointer);
       window.removeEventListener("keydown", markKeyboardScrollIntent);
     };
-  }, [captureMessageViewportAnchor, restoreUnexpectedMessagesScroll]);
+  }, [captureMessageViewportAnchor, restoreUnexpectedMessagesScroll, updateChatFollowMode]);
 
   // ── Auto-scroll (초기 로드: instant, 이후: near-bottom일 때만) ──
   useLayoutEffect(() => {
@@ -6113,10 +6178,11 @@ export default function ChatPage() {
       const releaseInitialScrollLock = () => {
         observer.disconnect();
         isInitialLoadRef.current = false;
-        isNearBottomRef.current = container.scrollTop + container.clientHeight >= container.scrollHeight - 300;
+        isNearBottomRef.current = isChatNearBottom(container);
       };
       container.addEventListener("wheel", releaseInitialScrollLock, { passive: true, once: true });
       container.addEventListener("touchstart", releaseInitialScrollLock, { passive: true, once: true });
+      container.addEventListener("touchmove", releaseInitialScrollLock, { passive: true, once: true });
       container.addEventListener("pointerdown", releaseInitialScrollLock, { passive: true, once: true });
       const timeout = setTimeout(releaseInitialScrollLock, 800);
       return () => {
@@ -6124,15 +6190,23 @@ export default function ChatPage() {
         clearTimeout(timeout);
         container.removeEventListener("wheel", releaseInitialScrollLock);
         container.removeEventListener("touchstart", releaseInitialScrollLock);
+        container.removeEventListener("touchmove", releaseInitialScrollLock);
         container.removeEventListener("pointerdown", releaseInitialScrollLock);
       };
     } else {
       const bottomStickActive = Date.now() < bottomStickUntilRef.current;
       const activeReply = streamingRef.current || waitingBgRef.current;
-      if (bottomStickActive && activeReply && Date.now() >= userScrollPauseUntilRef.current) {
+      const followDecision = decideChatFollow({
+        mode: chatFollowModeRef.current,
+        isNearBottom: isNearBottomRef.current,
+        activeReply,
+        bottomStickActive: bottomStickActive && Date.now() >= userScrollPauseUntilRef.current,
+        messageCountGrew: _grew,
+      });
+      if (followDecision === "force-bottom") {
         isNearBottomRef.current = true;
         scrollToMessagesBottom(true);
-      } else if (isNearBottomRef.current && activeReply && _grew) {
+      } else if (followDecision === "follow-bottom") {
         // 응답 생성 중 새 메시지가 추가되는 경우에만 하단을 유지한다.
         // 일반 polling/merge로 기존 메시지가 교체될 때는 스크롤 위치를 건드리지 않는다.
         scrollToMessagesBottom();
@@ -6144,6 +6218,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!streaming) return;
     const iv = setInterval(() => {
+      if (chatFollowModeRef.current === "manual") return;
       if (!isNearBottomRef.current) return;
       scrollToMessagesBottom();
     }, 300);
@@ -6999,6 +7074,7 @@ export default function ChatPage() {
     sessionSwitchRef.current = false;
     suppressOlderLoadUntilRef.current = Date.now() + 8000;
     isInitialLoadRef.current = false;
+    updateChatFollowMode("auto");
     isNearBottomRef.current = true;
     userScrollPauseUntilRef.current = 0;
     bottomStickUntilRef.current = Date.now() + 180000;
@@ -8431,6 +8507,7 @@ export default function ChatPage() {
     restoreMessageViewportAnchor,
     settleScrollAfterMessageMerge,
     setMessagesPreservingViewport,
+    updateChatFollowMode,
     showCompletionToastOnce,
     streamingStatusPathFor,
     recordPendingDirectiveSent,
@@ -10874,13 +10951,15 @@ export default function ChatPage() {
 
         <UsageBar />
         {/* Messages */}
+        <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden" }}>
         <div
           ref={messagesContainerRef}
           className="ct-messages-scroll"
+          data-follow-mode={chatFollowMode}
           style={{
             "--ct-mobile-font-size": `${mobileChatFontPx}px`,
             "--ct-mobile-code-font-size": `${Math.max(15, mobileChatFontPx - 2)}px`,
-            flex: 1,
+            height: "100%",
             overflowY: "auto",
             overflowAnchor: "none" as never,
             scrollBehavior: "auto",
@@ -11105,6 +11184,7 @@ export default function ChatPage() {
           <ChatErrorBoundary>
           {(() => {
             const { display, lastAssistantId } = displayData;
+            const historyActionsLocked = shouldLockHistoryActions(streaming, waitingBgResponse);
             return display.map(({ msg, idx, hiddenMsgs }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
@@ -11116,7 +11196,7 @@ export default function ChatPage() {
                   <MessageItem
                     msg={msg}
                     idx={idx}
-                    streaming={streaming}
+                    historyActionsLocked={historyActionsLocked}
                     editingMsgId={editingMsgId}
                     editText={editText}
                     setEditingMsgId={setEditingMsgId}
@@ -11184,7 +11264,7 @@ export default function ChatPage() {
                       key={hm.id || `hidden-${hi}`}
                       msg={hm}
                       idx={idx + hi + 1}
-                      streaming={streaming}
+                      historyActionsLocked={historyActionsLocked}
                       editingMsgId={editingMsgId}
                       editText={editText}
                       setEditingMsgId={setEditingMsgId}
@@ -11312,6 +11392,35 @@ export default function ChatPage() {
           )}
 
           <div ref={messagesEndRef} style={{ overflowAnchor: "none" as never, minHeight: 1 }} />
+        </div>
+        {chatFollowMode === "manual" && messages.length > 0 && (
+          <button
+            data-chat-jump-to-latest="true"
+            type="button"
+            onClick={jumpToLatestMessage}
+            title="최신 메시지로 이동하고 자동 스크롤 다시 켜기"
+            aria-label="최신 메시지로 이동하고 자동 스크롤 다시 켜기"
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: "12px",
+              transform: "translateX(-50%)",
+              zIndex: 20,
+              minHeight: screenSize === "mobile" ? "42px" : "34px",
+              padding: screenSize === "mobile" ? "8px 16px" : "6px 14px",
+              borderRadius: "999px",
+              border: "1px solid rgba(99,102,241,0.45)",
+              background: "var(--ct-accent)",
+              color: "#fff",
+              fontSize: screenSize === "mobile" ? "15px" : "12px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 6px 20px rgba(0,0,0,0.28)",
+            }}
+          >
+            ↓ 최신으로
+          </button>
+        )}
         </div>
 
         {/* Input Area */}
