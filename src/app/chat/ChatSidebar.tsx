@@ -96,6 +96,7 @@ export interface ChatSidebarProps {
   createSession: () => void;
   deleteSession: (id: string) => void;
   deleteWorkspace?: (id: string) => void;
+  renameWorkspace?: (id: string, current: string) => void;
   setShowAddProject: (v: boolean) => void;
   theme: Theme;
   toggleTheme: () => void;
@@ -114,7 +115,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
     filteredSessions, renaming, setRenaming, commitRename,
     activeSession, onSessionSelect, isInitialLoadRef,
     onSessionContextMenu, search, setSearch,
-    createSession, deleteSession, deleteWorkspace, setShowAddProject, theme, toggleTheme,
+    createSession, deleteSession, deleteWorkspace, renameWorkspace, setShowAddProject, theme, toggleTheme,
     tagFilter, setTagFilter, allTags,
   } = props;
 
@@ -316,6 +317,25 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                       {expandedWorkspaceIds.includes(ws.id) ? "▾" : "▸"}
                     </span>
                   </button>
+                  {renameWorkspace && (
+                    <button
+                      title="프로젝트 별칭 수정"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        renameWorkspace(ws.id, ws.display_name || "");
+                      }}
+                      style={{
+                        width: "22px", height: "22px",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "none", borderRadius: "4px",
+                        background: "none", color: "var(--ct-text2)",
+                        cursor: "pointer", fontSize: "11px", opacity: 0.4,
+                        flexShrink: 0,
+                      }}
+                    >
+                      ✎
+                    </button>
+                  )}
                   {deleteWorkspace && (
                     <button
                       title="프로젝트 삭제"

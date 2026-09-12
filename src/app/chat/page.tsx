@@ -6841,6 +6841,24 @@ export default function ChatPage() {
     } catch { /* ignore */ }
   }
 
+  async function renameWorkspace(id: string, current: string) {
+    // name 은 [CEO] 통합지시 처럼 프로젝트 키를 담은 식별용 이름이라 바꾸면
+    // project_key 가 재파생되고 다른 동작이 딸려 온다. 표시용 별칭만 바꾼다.
+    const next = window.prompt("프로젝트 별칭을 입력하세요. (비우면 원래 이름으로 표시)", current);
+    if (next === null) return;
+    const value = next.trim();
+    try {
+      const updated = await chatApi<Workspace>(`/chat/workspaces/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ display_name: value || null }),
+      });
+      setWorkspaces((prev) => prev.map((w) =>
+        w.id === id ? { ...w, display_name: updated.display_name ?? (value || undefined) } : w));
+    } catch (e) {
+      alert(`별칭 변경 실패: ${(e as Error).message}`);
+    }
+  }
+
   async function togglePin(session: ChatSession) {
     try {
       const updated = await chatApi<ChatSession>(`/chat/sessions/${session.id}`, {
@@ -10581,6 +10599,7 @@ export default function ChatPage() {
         search={search} setSearch={setSearch}
         createSession={openCreateSessionModal} deleteSession={deleteSession}
         deleteWorkspace={deleteWorkspace}
+        renameWorkspace={renameWorkspace}
         setShowAddProject={setShowAddProject}
         theme={theme} toggleTheme={toggleTheme}
         tagFilter={tagFilter} setTagFilter={setTagFilter} allTags={allTags}
