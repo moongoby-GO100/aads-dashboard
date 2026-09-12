@@ -16,6 +16,7 @@ import {
 } from "@/lib/documentLinks";
 import { openManagedFile } from "@/lib/fileDownload";
 import { markdownSanitizeSchema } from "@/features/chat/rendering/markdownPolicy";
+import { staticArtifactHtml } from "@/features/chat/rendering/htmlPolicy";
 
 export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
 
@@ -173,7 +174,7 @@ function CodeBlockShell({ lang, code, highlightedChildren, codeClassName }: Code
           </button>
         </div>
         <iframe
-          srcDoc={code}
+          srcDoc={staticArtifactHtml(code)}
           style={{ width: "100%", height: "540px", border: "none", background: "#fff" }}
           sandbox=""
           title="HTML Preview"

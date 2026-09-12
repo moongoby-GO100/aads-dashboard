@@ -8,6 +8,10 @@
  */
 import { useState, useCallback } from "react";
 import type { ArtifactContent } from "@/hooks/useArtifactPanel";
+import {
+  openIsolatedHtmlPreview,
+  staticArtifactHtml,
+} from "@/features/chat/rendering/htmlPolicy";
 
 interface Props {
   artifact: ArtifactContent | null;
@@ -31,11 +35,8 @@ export default function ArtifactHtmlPreview({ artifact }: Props) {
   }, [htmlContent]);
 
   const handleOpenNewWindow = useCallback(() => {
-    const blob = new Blob([htmlContent], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }, [htmlContent]);
+    openIsolatedHtmlPreview(artifact?.title || "HTML 미리보기", htmlContent);
+  }, [artifact?.title, htmlContent]);
 
   if (!artifact || !htmlContent || htmlContent.length < 30) {
     return (
@@ -113,8 +114,8 @@ export default function ArtifactHtmlPreview({ artifact }: Props) {
       <div className="flex-1 min-h-0 overflow-hidden">
         {viewMode === "preview" ? (
           <iframe
-            srcDoc={htmlContent}
-            sandbox="allow-scripts"
+            srcDoc={staticArtifactHtml(htmlContent)}
+            sandbox=""
             title={artifact.title || "HTML Preview"}
             style={{
               width: "100%",

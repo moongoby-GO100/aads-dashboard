@@ -11,9 +11,10 @@ describe("generated HTML isolation", () => {
 
   it("keeps generated markup encoded inside an opaque sandbox", () => {
     const output = createIsolatedHtmlPreviewDocument("unsafe <title>", attack);
-    expect(output).toContain('sandbox="allow-scripts"');
+    expect(output).toContain('sandbox=""');
+    expect(output).not.toContain("allow-scripts");
     expect(output).not.toContain("allow-same-origin");
-    expect(output).toContain("connect-src &#39;none&#39;");
+    expect(output).toContain("connect-src 'none'");
     expect(output).not.toContain(`srcdoc="${attack}`);
     expect(output).toContain("&lt;/iframe&gt;&lt;script&gt;");
   });
@@ -24,6 +25,17 @@ describe("generated HTML isolation", () => {
     expect(output).toContain("form-action 'none'");
   });
 
+  it("cannot hide the trusted CSP in an attacker-controlled head comment", () => {
+    const payload = '<!-- <head> --><script>window.owned=1</script><img src="https://attacker.invalid/x">';
+    const output = staticArtifactHtml(payload);
+    const cspPosition = output.indexOf('Content-Security-Policy');
+    const payloadPosition = output.indexOf("&lt;!-- &lt;head&gt;");
+    expect(cspPosition).toBeGreaterThan(0);
+    expect(payloadPosition).toBeGreaterThan(cspPosition);
+    expect(output).toContain("script-src 'none'");
+    expect(output).toContain("connect-src 'none'");
+  });
+
   it("escapes all untrusted text in text previews", () => {
     const output = createStaticTextDocument("x", attack);
     expect(output).not.toContain(attack);
@@ -31,20 +43,21 @@ describe("generated HTML isolation", () => {
   });
 });
 
-describe("CSP injection keeps standards mode", () => {
-  it("puts the policy inside an existing head instead of before the doctype", () => {
+describe("trusted wrapper keeps standards mode", () => {
+  it("keeps an existing generated head encoded inside the child srcdoc", () => {
     const output = staticArtifactHtml("<!doctype html><html><head><title>a</title></head><body>b</body></html>");
     expect(output.startsWith("<!doctype html>")).toBe(true);
-    expect(output).toContain('<head><meta http-equiv="Content-Security-Policy"');
+    expect(output).toContain('&lt;head&gt;&lt;title&gt;a&lt;/title&gt;&lt;/head&gt;');
   });
 
-  it("puts the policy after a doctype when there is no head", () => {
+  it("wraps generated documents that have only a doctype", () => {
     const output = staticArtifactHtml("<!DOCTYPE html><p>a</p>");
-    expect(output.startsWith('<!DOCTYPE html><meta http-equiv="')).toBe(true);
+    expect(output.startsWith('<!doctype html><html lang="ko">')).toBe(true);
+    expect(output).toContain('&lt;!DOCTYPE html&gt;&lt;p&gt;a&lt;/p&gt;');
   });
 
-  it("prefixes the policy for fragments without a doctype", () => {
+  it("wraps fragments without promoting them to the outer document", () => {
     const output = staticArtifactHtml("<p>a</p>");
-    expect(output.startsWith('<meta http-equiv="Content-Security-Policy"')).toBe(true);
+    expect(output).toContain('srcdoc="&lt;p&gt;a&lt;/p&gt;"');
   });
 });
