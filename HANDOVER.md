@@ -2703,3 +2703,16 @@
 - 검증: Dashboard typecheck, lint 오류 0, 기준선 20/20, 보안 15/15, Node 24 production build 및 npm audit 0; Server focused pytest 15건과 신규 Ruff/py_compile 통과.
 - 상세 구현 기록은 `docs/chat-modernization-20260912/implementation/WP01.md`를 정본으로 사용한다.
 - WP02~WP09와 운영 브라우저 E2E는 미완료이며, 단계별 feature flag·legacy fallback·검수 게이트를 통과한 뒤 배포한다.
+
+## 2026-09-13 KST - Chat modernization WP06 rendering foundation
+
+- Added pure, opt-in rendering policies for bounded virtual rows, gesture-safe anchor correction,
+  image reservation, pinned page eviction, active-bubble token subscription, lossless streaming
+  Markdown classification, durable tool-log merging, and deduplicated terminal announcements.
+- The production `/chat` route and `page.tsx` are unchanged; this commit cannot activate the new
+  rendering path by itself.
+- Node 24 verification passed: typecheck, 7 focused policy cases, 22 rendering tests, 24 chat tests,
+  6 selftests, focused ESLint with zero findings, and `git diff --check`.
+- Full WP06 remains gated on consumer wiring plus browser DOM/focus/latency/heap evidence after
+  WP04/WP05 integration. The canonical scope record is
+  `docs/chat-modernization-20260912/implementation/WP06-FOUNDATION.md`.
