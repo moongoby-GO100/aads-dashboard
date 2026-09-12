@@ -7,7 +7,6 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "selftest": "node scripts/run-selftests.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
