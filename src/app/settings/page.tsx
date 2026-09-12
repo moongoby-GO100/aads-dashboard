@@ -920,6 +920,8 @@ function ClaudeAccountSwitcher() {
 export default function SettingsPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(0);
+  const [modelSubTab, setModelSubTab] = useState(0);
 
   useEffect(() => {
     api.getHealth()
@@ -931,139 +933,190 @@ export default function SettingsPage() {
   const ok = (v: boolean | undefined) =>
     v === undefined ? "var(--text-secondary)" : v ? "var(--success)" : "var(--danger)";
 
+  const TABS = ["모델 설정", "LLM 관리", "시스템"];
+  const MODEL_SUB_TABS = ["러너 모델", "지시서 생성", "모델 라우팅"];
+
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
       <Header title="Settings" />
-      <div className="flex-1 p-3 md:p-6 overflow-auto space-y-5">
-
-        {/* 러너 모델 설정 */}
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>러너 모델 우선순위</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            Size별 모델 실행 순서를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
-          </p>
-          <RunnerModelConfig />
-        </section>
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>지시서 생성 모델 설정</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            지시서 자동생성에 사용하는 모델 우선순위를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
-          </p>
-          <DirectiveModelConfig />
-        </section>
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>지시서 생성 모델 설정</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            지시서 자동생성에 사용하는 모델 우선순위를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
-          </p>
-          <DirectiveModelConfig />
-        </section>
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 라우팅 · 인텐트 정책</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            라우트별 기본 모델 및 인텐트별 모델 정책 — 변경 즉시 적용
-          </p>
-          <ModelSettingsPanel />
-        </section>
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM 키 및 모델 레지스트리</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            등록된 API 키 기준 실행 가능 모델 집합, 최근 동기화 상태, 채팅창 노출 순서를 한 화면에서 관리합니다.
-          </p>
-          <LlmRegistryWorkspacePanel />
-        </section>
-
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>DB 연결 상태</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            내부 PostgreSQL, Graph DB, DB Pool, 원격 프로젝트 DB 접근 상태를 확인합니다.
-          </p>
-          <DatabaseOverviewPanel graphReady={health?.graph_ready} />
-        </section>
-
-
-
-        {/* Claude 계정 관리 */}
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Claude 계정 관리</h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-            AADS에서 사용할 Claude OAuth 계정을 전환합니다. 서버 Max(운영) ↔ CEO PC(moongoby) 전환 가능합니다.
-          </p>
-          <ClaudeAccountSwitcher />
-        </section>
-
-        {/* API 상태 요약 */}
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>시스템 상태</h2>
-          {loading ? (
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>
-          ) : health ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>서버 상태</p>
-                <p className="font-bold" style={{ color: ok(health.status === "ok") }}>
-                  {health.status?.toUpperCase() ?? "UNKNOWN"}
-                </p>
-              </div>
-              <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>Graph DB</p>
-                <p className="font-bold" style={{ color: ok(health.graph_ready) }}>
-                  {health.graph_ready ? "READY" : "LOADING"}
-                </p>
-              </div>
-              <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>API 버전</p>
-                <p className="font-bold" style={{ color: "var(--text-primary)" }}>
-                  {health.version ?? "—"}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm font-bold" style={{ color: "var(--danger)" }}>서버 응답 없음</p>
-          )}
-        </section>
-
-        {/* 버전 / 인프라 정보 */}
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>버전 정보</h2>
-          <div className="space-y-2 text-sm">
-            {[
-              ["Dashboard", "v0.5.3 (Runner Model + AI Review Config)"],
-              ["HANDOVER", "v5.22 (T-038 Watchdog)"],
-              ["서버", "68 (aads.newtalk.kr)"],
-              ["API Base", "https://aads.newtalk.kr/api/v1"],
-              ["API Version", health?.version ?? "—"],
-              ["DB", "PostgreSQL 15 (aads-postgres:5433)"],
-              ["Watchdog", "aads-watchdog.service · 30초 주기"],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between py-1"
-                style={{ borderBottom: "1px solid var(--border)" }}>
-                <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-                <span style={{ color: "var(--text-primary)", fontFamily: "monospace", fontSize: 12 }}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 빠른 링크 */}
-        <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-          <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>빠른 링크</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {QUICK_LINKS.map((link) => (
-              <a key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg p-3 block transition-colors"
-                style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top tabs */}
+        <div className="shrink-0 px-3 md:px-6 pt-3" style={{ background: "var(--bg-primary)" }}>
+          <div className="flex gap-1" style={{ borderBottom: "1px solid var(--border)" }}>
+            {TABS.map((label, i) => (
+              <button
+                key={label}
+                onClick={() => setActiveTab(i)}
+                className="px-4 py-2.5 text-sm font-semibold transition-colors relative"
+                style={{
+                  color: activeTab === i ? "var(--accent)" : "var(--text-secondary)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
               >
-                <p className="text-sm font-semibold mb-0.5" style={{ color: "var(--accent)" }}>{link.label}</p>
-                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{link.desc}</p>
-              </a>
+                {label}
+                {activeTab === i && (
+                  <span style={{ position: "absolute", bottom: 0, left: 8, right: 8, height: 2, background: "var(--accent)", borderRadius: 1 }} />
+                )}
+              </button>
             ))}
           </div>
-        </section>
+        </div>
 
+        <div className="flex-1 p-3 md:p-6 overflow-auto space-y-5">
+          {/* Tab 0: 모델 설정 */}
+          {activeTab === 0 && (
+            <>
+              <div className="flex gap-2 flex-wrap">
+                {MODEL_SUB_TABS.map((label, i) => (
+                  <button
+                    key={label}
+                    onClick={() => setModelSubTab(i)}
+                    className="px-4 py-1.5 text-xs font-semibold rounded-full transition-colors"
+                    style={{
+                      background: modelSubTab === i ? "var(--accent)" : "var(--bg-hover)",
+                      color: modelSubTab === i ? "#fff" : "var(--text-secondary)",
+                      border: modelSubTab === i ? "1px solid var(--accent)" : "1px solid var(--border)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {modelSubTab === 0 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>러너 모델 우선순위</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    Size별 모델 실행 순서를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
+                  </p>
+                  <RunnerModelConfig />
+                </section>
+              )}
+
+              {modelSubTab === 1 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>지시서 생성 모델 설정</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    지시서 자동생성에 사용하는 모델 우선순위를 설정합니다. 1순위 실패 시 다음 순위로 자동 폴백됩니다.
+                  </p>
+                  <DirectiveModelConfig />
+                </section>
+              )}
+
+              {modelSubTab === 2 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 라우팅 · 인텐트 정책</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    라우트별 기본 모델 및 인텐트별 모델 정책 — 변경 즉시 적용
+                  </p>
+                  <ModelSettingsPanel />
+                </section>
+              )}
+            </>
+          )}
+
+          {/* Tab 1: LLM 관리 */}
+          {activeTab === 1 && (
+            <>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM 키 및 모델 레지스트리</h2>
+                <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                  등록된 API 키 기준 실행 가능 모델 집합, 최근 동기화 상태, 채팅창 노출 순서를 한 화면에서 관리합니다.
+                </p>
+                <LlmRegistryWorkspacePanel />
+              </section>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Claude 계정 관리</h2>
+                <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                  AADS에서 사용할 Claude OAuth 계정을 전환합니다. 서버 Max(운영) ↔ CEO PC(moongoby) 전환 가능합니다.
+                </p>
+                <ClaudeAccountSwitcher />
+              </section>
+            </>
+          )}
+
+          {/* Tab 2: 시스템 */}
+          {activeTab === 2 && (
+            <>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>DB 연결 상태</h2>
+                <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                  내부 PostgreSQL, Graph DB, DB Pool, 원격 프로젝트 DB 접근 상태를 확인합니다.
+                </p>
+                <DatabaseOverviewPanel graphReady={health?.graph_ready} />
+              </section>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>시스템 상태</h2>
+                {loading ? (
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>
+                ) : health ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>서버 상태</p>
+                      <p className="font-bold" style={{ color: ok(health.status === "ok") }}>
+                        {health.status?.toUpperCase() ?? "UNKNOWN"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>Graph DB</p>
+                      <p className="font-bold" style={{ color: ok(health.graph_ready) }}>
+                        {health.graph_ready ? "READY" : "LOADING"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>API 버전</p>
+                      <p className="font-bold" style={{ color: "var(--text-primary)" }}>
+                        {health.version ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm font-bold" style={{ color: "var(--danger)" }}>서버 응답 없음</p>
+                )}
+              </section>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>버전 정보</h2>
+                <div className="space-y-2 text-sm">
+                  {[
+                    ["Dashboard", "v0.5.4 (Tabbed Settings)"],
+                    ["HANDOVER", "v5.22 (T-038 Watchdog)"],
+                    ["서버", "68 (aads.newtalk.kr)"],
+                    ["API Base", "https://aads.newtalk.kr/api/v1"],
+                    ["API Version", health?.version ?? "—"],
+                    ["DB", "PostgreSQL 15 (aads-postgres:5433)"],
+                    ["Watchdog", "aads-watchdog.service · 30초 주기"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between py-1"
+                      style={{ borderBottom: "1px solid var(--border)" }}>
+                      <span style={{ color: "var(--text-secondary)" }}>{label}</span>
+                      <span style={{ color: "var(--text-primary)", fontFamily: "monospace", fontSize: 12 }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>빠른 링크</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {QUICK_LINKS.map((link) => (
+                    <a key={link.label}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg p-3 block transition-colors"
+                      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}
+                    >
+                      <p className="text-sm font-semibold mb-0.5" style={{ color: "var(--accent)" }}>{link.label}</p>
+                      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{link.desc}</p>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
