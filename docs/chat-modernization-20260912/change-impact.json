@@ -98,7 +98,7 @@
       "title": "Fail-closed chat auth, tenancy and accessibility policies",
       "owner": "AADS Security+FE+QA",
       "status": "implemented",
-      "source_version": "c9ceb2d",
+      "source_version": "af6a9e0",
       "trigger": "WP08 requires same-origin deep-link recovery, private-state cleanup, server-authoritative capability mapping, CSRF boundaries and deterministic accessibility policies before activation.",
       "requirements": ["FR27", "FR28", "FR31", "FR32"],
       "invariants": ["INV11", "INV15"],

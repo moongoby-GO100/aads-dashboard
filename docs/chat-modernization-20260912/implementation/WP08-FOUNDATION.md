@@ -2,7 +2,7 @@
 
 ## Scope and preservation
 
-This independent foundation starts from clean Dashboard `origin/main` at `c9ceb2d`. It adds pure,
+This independent foundation starts from clean Dashboard `origin/main` at `af6a9e0`. It adds pure,
 fail-closed policy functions and focused T27/T28/T31/T32 tests. It does not change `page.tsx`, the
 active auth helper, runtime/transport, composer, API/DB contracts, feature flags, or production.
 Existing bearer/cookie behavior therefore remains unchanged until the full cross-version WP08 gate.
