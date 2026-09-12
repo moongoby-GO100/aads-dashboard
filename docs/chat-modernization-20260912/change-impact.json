@@ -92,6 +92,34 @@
       "temporary_hotfix": {
         "enabled": false
       }
+    },
+    {
+      "change_id": "AADS-CHATMOD-WP08-FOUNDATION-20260913",
+      "title": "Fail-closed chat auth, tenancy and accessibility policies",
+      "owner": "AADS Security+FE+QA",
+      "status": "implemented",
+      "source_version": "c9ceb2d",
+      "trigger": "WP08 requires same-origin deep-link recovery, private-state cleanup, server-authoritative capability mapping, CSRF boundaries and deterministic accessibility policies before activation.",
+      "requirements": ["FR27", "FR28", "FR31", "FR32"],
+      "invariants": ["INV11", "INV15"],
+      "tests": ["T27", "T28", "T31", "T32"],
+      "affected_paths": [
+        "src/features/chat/auth/chatAuthPolicy.ts",
+        "src/features/chat/accessibility/chatAccessibilityPolicy.ts",
+        "tests/chat-modernization/wp08-auth-accessibility.test.mjs",
+        "docs/chat-modernization-20260912/change-impact.json",
+        "docs/chat-modernization-20260912/implementation/WP08-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "documentation": [
+        "docs/chat-modernization-20260912/implementation/WP08-FOUNDATION.md",
+        "HANDOVER.md"
+      ],
+      "telemetry_change": "No telemetry sink or payload is added; policies contain no content, draft text, token text, attachment content, credential, session ID or user ID logging.",
+      "rollback": "Revert the additive policy modules, focused tests, manifest entry and records; no API, DB, runtime route, auth mode, stored data or production flag changes.",
+      "temporary_hotfix": {
+        "enabled": false
+      }
     }
   ]
 }

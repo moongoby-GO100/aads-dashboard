@@ -2746,3 +2746,15 @@
   documentation, type and lint gates. Browser/mobile/device validation remains an activation gate.
 - The canonical scope and remaining gaps are recorded in
   `docs/chat-modernization-20260912/implementation/WP07-FOUNDATION.md`.
+
+## 2026-09-13 KST - Chat modernization WP08 auth/accessibility foundation
+
+- Added pure, inactive policies for same-origin chat login return URLs, principal-scoped private-state
+  cleanup, server-authoritative capabilities, cookie CSRF/bearer separation, focus restoration,
+  terminal-only announcements, reduced motion, virtual-row metadata and 44px mobile targets.
+- The active auth helper, `/chat` route, runtime/transport, composer, API/DB and feature flags are
+  unchanged. HttpOnly/BFF migration and browser/server/device acceptance remain gated on WP04/WP07.
+- Node 24 verification passed: focused T27/T28/T31/T32 6/6, all chat tests 35/35, rendering security
+  22/22, selftests 6/6, typecheck, docs/change-impact and `git diff --check`; scoped lint had zero
+  errors and the existing 22-warning baseline. Canonical scope and remaining gaps are recorded in
+  `docs/chat-modernization-20260912/implementation/WP08-FOUNDATION.md`.
