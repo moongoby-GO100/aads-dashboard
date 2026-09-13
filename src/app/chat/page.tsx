@@ -4319,7 +4319,7 @@ export default function ChatPage() {
 
   const refreshChatModelCatalog = useCallback(async () => {
     const [modelsRes, preferencesRes] = await Promise.allSettled([
-      chatApi<{ models: LlmRegistryModel[] }>("/llm-models"),
+      chatApi<{ models: LlmRegistryModel[] }>("/llm-models?view=selector"),
       chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
     ]);
     if (modelsRes.status === "fulfilled") {
@@ -4336,7 +4336,7 @@ export default function ChatPage() {
     let cancelled = false;
     const load = async () => {
       const [modelsRes, preferencesRes] = await Promise.allSettled([
-        chatApi<{ models: LlmRegistryModel[] }>("/llm-models"),
+        chatApi<{ models: LlmRegistryModel[] }>("/llm-models?view=selector"),
         chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
       ]);
       if (cancelled) return;

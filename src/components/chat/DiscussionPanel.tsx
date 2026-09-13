@@ -130,7 +130,9 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${BASE_URL}/llm-models`, {
+        // view=selector — 이 패널은 display_name/model_id/is_* 만 쓴다. 전체 응답은
+        // 1MB 이고 그중 60%가 여기서 쓰지 않는 metadata 다(2026-09-13 진단기 실측).
+        const res = await fetch(`${BASE_URL}/llm-models?view=selector`, {
           headers: authHdrs(),
         });
         if (!res.ok) return;
