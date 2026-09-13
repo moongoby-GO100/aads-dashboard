@@ -2819,6 +2819,8 @@
   current dashboard `main` branch.
 - Refreshed the deliberate `src/app/chat/page.tsx` integrity baseline after later reviewed chat
   changes had left the release gate pointing at the older directive-context revision.
+- After the subsequent hydration fix (`6472949`), re-pinned that gate to the reviewed current page
+  SHA-256 `3382eb0d4ac5df990186409acac29153b1cfee3c7405d58a74d61525f62e2eaf` before release.
 - Validation passed: TypeScript, scoped ESLint with zero errors (22 existing warnings), 49 chat
   regression tests, 23 rendering security tests, baseline, documentation, and change-impact gates.
 - Production completion still requires an immutable dashboard blue/green release, authenticated
