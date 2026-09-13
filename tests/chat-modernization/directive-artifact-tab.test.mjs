@@ -42,3 +42,12 @@ test("directive edit area scales with the viewport", () => {
   assert.ok(panel.includes("calc(100dvh - 240px)"));
   assert.ok(panel.includes('maxHeight: "calc(100dvh - 260px)"'));
 });
+
+test("directive drafts survive the bounded recent-artifact window after reload", () => {
+  const page = source("src/app/chat/page.tsx");
+  assert.ok(page.includes("fetchSessionArtifactSnapshot(fetchSid)"));
+  assert.ok(page.includes("/directive-drafts?limit=100"));
+  assert.ok(page.includes("retainArtifactWindow([...recent, ...directives])"));
+  assert.ok(page.includes("const directives = items.filter(isDirectiveDraftArtifact)"));
+  assert.ok(page.includes("const recentOthers = items.filter((item) => !isDirectiveDraftArtifact(item)).slice(0, CHAT_ARTIFACT_RENDER_LIMIT)"));
+});

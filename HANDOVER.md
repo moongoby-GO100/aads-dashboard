@@ -2785,3 +2785,15 @@
 - Verification: TypeScript, the focused directive artifact tests, chat regression/lint, production
   build, authenticated desktop/mobile capture, immutable blue/green release, and five-minute P0/P1
   monitoring are the release gates.
+
+## 2026-09-13 KST - Directive artifact reload persistence hotfix
+
+- The dedicated `지시서` tab now reloads up to 100 directive drafts through the existing
+  session-scoped directive-draft API and merges them with the bounded recent-artifact window.
+- The 60-item cap remains in place for non-directive artifacts, while directive drafts are retained
+  during session load, stream completion, OHVIS refreshes, document previews, and new draft creation.
+- This fixes the production case where a valid directive draft remained in PostgreSQL but disappeared
+  from the tab after newer table/task-card artifacts pushed it outside the recent 60 results.
+- Release gates: directive/chat regression, typecheck, scoped lint, production build, authenticated
+  desktop/mobile tab and editor capture, immutable dashboard blue/green deploy, and five-minute P0/P1
+  monitoring.

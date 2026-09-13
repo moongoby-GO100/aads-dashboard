@@ -120,6 +120,75 @@ type DirectiveDraftCreateResponse = {
   artifact: Artifact;
 };
 
+type DirectiveDraftListItem = {
+  id: string;
+  artifact_id?: string | null;
+  session_id?: string;
+  project_key?: string;
+  title: string;
+  content: string;
+  risk_level?: "low" | "medium" | "high";
+  current_revision?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type SessionArtifactSnapshot = {
+  items: Artifact[];
+  truncated: boolean;
+};
+
+function directiveDraftListArtifact(item: DirectiveDraftListItem, sessionId: string): Artifact | null {
+  if (!item.artifact_id) return null;
+  return {
+    id: item.artifact_id,
+    session_id: item.session_id || sessionId,
+    artifact_type: "report",
+    title: item.title.startsWith("지시 초안:") ? item.title : `지시 초안: ${item.title}`,
+    content: item.content,
+    metadata: {
+      subtype: "directive_draft",
+      draft_id: item.id,
+      revision: item.current_revision || 1,
+      status: item.status || "draft",
+      project_key: item.project_key,
+      risk_level: item.risk_level,
+      requires_human_review: true,
+    },
+    created_at: item.updated_at || item.created_at || new Date(0).toISOString(),
+  };
+}
+
+function retainArtifactWindow(items: Artifact[]): Artifact[] {
+  const directives = items.filter(isDirectiveDraftArtifact);
+  const recentOthers = items.filter((item) => !isDirectiveDraftArtifact(item)).slice(0, CHAT_ARTIFACT_RENDER_LIMIT);
+  const byId = new Map<string, Artifact>();
+  for (const item of [...directives, ...recentOthers]) {
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  return Array.from(byId.values()).sort(
+    (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  );
+}
+
+async function fetchSessionArtifactSnapshot(sessionId: string): Promise<SessionArtifactSnapshot> {
+  const encodedSessionId = encodeURIComponent(sessionId);
+  const [recent, directiveResponse] = await Promise.all([
+    chatApi<Artifact[]>(`/chat/artifacts?session_id=${encodedSessionId}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`),
+    chatApi<{ items: DirectiveDraftListItem[] }>(
+      `/chat/sessions/${encodedSessionId}/directive-drafts?limit=100`,
+    ).catch(() => ({ items: [] })),
+  ]);
+  const directives = directiveResponse.items
+    .map((item) => directiveDraftListArtifact(item, sessionId))
+    .filter((item): item is Artifact => item !== null);
+  return {
+    items: retainArtifactWindow([...recent, ...directives]),
+    truncated: recent.length > CHAT_ARTIFACT_RENDER_LIMIT,
+  };
+}
+
 function titleFromHref(href: string, fallback: string): string {
   const cleanFallback = fallback.trim();
   try {
@@ -5866,10 +5935,10 @@ export default function ChatPage() {
       // streaming-status API 실패 시 폴백: 일반 메시지 로드
       loadMessages(isPending ? false : true);
     });
-    chatApi<Artifact[]>(`/chat/artifacts?session_id=${fetchSid}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
-      .then((items) => {
-        setArtifactListTruncated(items.length > CHAT_ARTIFACT_RENDER_LIMIT);
-        setArtifacts(items.slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+    fetchSessionArtifactSnapshot(fetchSid)
+      .then((snapshot) => {
+        setArtifactListTruncated(snapshot.truncated);
+        setArtifacts(snapshot.items);
       })
       .catch(() => {
         setArtifactListTruncated(false);
@@ -7538,13 +7607,14 @@ export default function ChatPage() {
                 if (artifactFetchTimerRef.current) clearTimeout(artifactFetchTimerRef.current);
                 const sessionIdAtDone = requestSessionId;
                 artifactFetchTimerRef.current = setTimeout(() => {
-                  chatApi<Artifact[]>(`/chat/artifacts?session_id=${sessionIdAtDone}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
-                    .then((newArtifacts) => {
+                  fetchSessionArtifactSnapshot(sessionIdAtDone)
+                    .then((snapshot) => {
+                      const newArtifacts = snapshot.items;
                       setArtifacts((prev) => {
                         const prevIds = new Set(prev.map((a) => a.id));
-                        const visibleArtifacts = newArtifacts.slice(0, CHAT_ARTIFACT_RENDER_LIMIT);
+                        const visibleArtifacts = retainArtifactWindow(newArtifacts);
                         const added = visibleArtifacts.filter((a) => !prevIds.has(a.id));
-                        setArtifactListTruncated(newArtifacts.length > CHAT_ARTIFACT_RENDER_LIMIT);
+                        setArtifactListTruncated(snapshot.truncated);
                         if (added.length > 0) {
                           const typeLabels: Record<string, string> = {
                             report: "📄 보고서가 저장되었습니다",
@@ -9111,7 +9181,7 @@ export default function ChatPage() {
         },
       );
       const artifact = draft.artifact;
-      setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifacts((prev) => retainArtifactWindow([artifact, ...prev.filter((item) => item.id !== artifact.id)]));
       setArtifactTab("directive");
       setSelectedArtifactIdx(0);
       setArtifactMode("full");
@@ -9255,7 +9325,7 @@ export default function ChatPage() {
           }),
         },
       );
-      setArtifacts((prev) => [draft.artifact, ...prev.filter((item) => item.id !== draft.artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifacts((prev) => retainArtifactWindow([draft.artifact, ...prev.filter((item) => item.id !== draft.artifact.id)]));
       setArtifactTab("directive");
       setSelectedArtifactIdx(0);
       showCompletionToast("같은 원본 문답으로 지시서를 다시 생성했습니다. 이전 초안도 보존됩니다.", sessionId);
@@ -9348,7 +9418,7 @@ export default function ChatPage() {
       if (isStale()) return;
       const nextTab: ArtifactTab =
         artifactTabForArtifact(artifact);
-      setArtifacts((prev) => [artifact, ...prev.filter((item) => item.id !== artifact.id)].slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+      setArtifacts((prev) => retainArtifactWindow([artifact, ...prev.filter((item) => item.id !== artifact.id)]));
       setArtifactTab(nextTab);
       setSelectedArtifactIdx(0);
       setArtifactMode("full");
@@ -9512,10 +9582,10 @@ export default function ChatPage() {
       if (!currentSessionId || artifactFetchingRef.current) return;
       artifactFetchingRef.current = true;
       setTimeout(() => {
-        chatApi<Artifact[]>(`/chat/artifacts?session_id=${currentSessionId}&limit=${CHAT_ARTIFACT_FETCH_LIMIT}`)
-          .then((items) => {
-            setArtifactListTruncated(items.length > CHAT_ARTIFACT_RENDER_LIMIT);
-            setArtifacts(items.slice(0, CHAT_ARTIFACT_RENDER_LIMIT));
+        fetchSessionArtifactSnapshot(currentSessionId)
+          .then((snapshot) => {
+            setArtifactListTruncated(snapshot.truncated);
+            setArtifacts(snapshot.items);
           })
           .catch(() => {})
           .finally(() => { artifactFetchingRef.current = false; });
