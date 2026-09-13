@@ -4411,7 +4411,12 @@ export default function ChatPage() {
   const [completionToast, setCompletionToast] = useState<string | null>(null);
   const [completionToastKind, setCompletionToastKind] = useState<VoiceAlertKind>("completed");
   const [pushStatus, setPushStatus] = useState<PushNotificationStatus>("default");
-  const [voiceAlertsEnabled, setVoiceAlertsEnabledState] = useState(() => getVoiceAlertsEnabled());
+  // 초기값은 서버 렌더와 같아야 한다. getVoiceAlertsEnabled() 는 SSR 에서 false,
+  // 브라우저에서 true 를 돌려주므로 첫 렌더의 "🔊"/"🔇" 텍스트가 어긋나 hydration
+  // 이 깨진다(React #418 — 2026-09-13 프론트 진단기가 /chat 에서 잡았다).
+  // 실제 값은 마운트 effect 의 syncVoiceAlertState() 가 곧바로 맞춘다.
+  // 바로 아래 voiceAlertsSupported 가 이미 같은 방식이다.
+  const [voiceAlertsEnabled, setVoiceAlertsEnabledState] = useState(false);
   const [voiceAlertsSupported, setVoiceAlertsSupported] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);

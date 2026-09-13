@@ -322,7 +322,9 @@ async function fetchRegisteredChatModels(): Promise<ChatModelOption[]> {
       typeof window !== "undefined" ? localStorage.getItem("aads_token") : null;
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${_API_BASE}/llm-models`, {
+    // view=selector — 선택기에 필요한 필드만 받는다. 전체 응답은 1MB 였고
+    // 그중 60%가 이 화면이 쓰지 않는 metadata 였다(2026-09-13 진단기 실측).
+    const res = await fetch(`${_API_BASE}/llm-models?view=selector`, {
       headers,
       cache: "no-store",
     });
