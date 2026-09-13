@@ -34,6 +34,12 @@ interface ServerHealth {
   load?: number;
   load_5m?: number;
   load_15m?: number;
+  cpu_cores?: number;
+  cpu_model?: string;
+  cpu_arch?: string;
+  cpu_virtualization?: string;
+  cpu_threads_per_core?: number;
+  cpu_load_pct?: number;
   memory_pct?: number;
   memory_used_mb?: number;
   memory_total_mb?: number;
@@ -183,6 +189,12 @@ async function fetchServerHealth(
       load: load1m,
       load_5m: numberOrUndefined(data.load_5m),
       load_15m: numberOrUndefined(data.load_15m),
+      cpu_cores: numberOrUndefined(data.cpu_cores),
+      cpu_model: data.cpu_model,
+      cpu_arch: data.cpu_arch,
+      cpu_virtualization: data.cpu_virtualization,
+      cpu_threads_per_core: numberOrUndefined(data.cpu_threads_per_core),
+      cpu_load_pct: numberOrUndefined(data.cpu_load_pct),
       memory_pct: memoryPct,
       memory_used_mb: numberOrUndefined(data.memory_used_mb),
       memory_total_mb: numberOrUndefined(data.memory_total_mb),
@@ -458,7 +470,23 @@ export default function ServersPage() {
                   ) : (
                     <>
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>디스크</div>
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>
+                          CPU{health?.cpu_cores ? ` · ${health.cpu_cores}코어` : ""}
+                        </div>
+                        <GaugeBar pct={health?.cpu_load_pct} />
+                        <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
+                          {health?.cpu_load_pct != null ? `부하 ${health.cpu_load_pct}%` : "CPU 부하 미수집"}
+                          {health?.cpu_model ? ` · ${health.cpu_model}` : ""}
+                        </div>
+                        {(health?.cpu_arch || health?.cpu_virtualization || health?.cpu_threads_per_core) && (
+                          <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 2 }}>
+                            {health?.cpu_arch || ""}
+                            {health?.cpu_virtualization ? ` · ${health.cpu_virtualization}` : ""}
+                            {health?.cpu_threads_per_core ? ` · ${health.cpu_threads_per_core}스레드/코어` : ""}
+                          </div>
+                        )}
+
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8, marginBottom: 3 }}>디스크</div>
                         <GaugeBar pct={health?.disk_pct} />
                         <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
                           {health?.disk_used && health?.disk_total ? `${health.disk_used} / ${health.disk_total}` : "용량 미수집"}
