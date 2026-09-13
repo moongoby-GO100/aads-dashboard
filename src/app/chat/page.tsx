@@ -9091,6 +9091,7 @@ export default function ChatPage() {
     const messageIds = selectedResponse
       ? directiveSourceMessageIds(messages, selectedResponse)
       : null;
+    const composerDraft = chatInputRef.current?.getValue()?.trim() || "";
     if (selectedResponse && !messageIds) {
       setDirectiveDraftError("선택한 AI 응답과 직전 사용자 질문을 연결할 수 없습니다. 메시지를 새로고침한 뒤 다시 시도해주세요.");
       return;
@@ -9102,7 +9103,11 @@ export default function ChatPage() {
         `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts`,
         {
           method: "POST",
-          body: JSON.stringify(messageIds ? { context_window: 2, message_ids: messageIds } : { context_window: 8 }),
+          body: JSON.stringify({
+            context_window: messageIds ? 2 : 8,
+            ...(messageIds ? { message_ids: messageIds } : {}),
+            ...(composerDraft ? { composer_draft: composerDraft } : {}),
+          }),
         },
       );
       const artifact = draft.artifact;
@@ -9224,21 +9229,29 @@ export default function ChatPage() {
     setDirectiveDrafting(true);
     setDirectiveDraftError(null);
     try {
-      const response = await chatApi<{ items: Array<{ id: string; source_message_ids?: string[] }> }>(
+      const response = await chatApi<{ items: Array<{
+        id: string;
+        source_message_ids?: string[];
+        classification?: { composer_draft_content?: string | null };
+      }> }>(
         `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts?limit=100`,
       );
       const source = response.items.find((item) => item.id === draftId);
-      if (!source?.source_message_ids?.length) {
-        throw new Error("원본 문답을 찾을 수 없어 지시서를 다시 생성할 수 없습니다.");
+      const savedComposerDraft = source?.classification?.composer_draft_content?.trim() || "";
+      if (!source || (!source.source_message_ids?.length && !savedComposerDraft)) {
+        throw new Error("원본 문답이나 입력창 맥락을 찾을 수 없어 지시서를 다시 생성할 수 없습니다.");
       }
-      const sourceMessageIds = source.source_message_ids.slice(0, 16);
+      const sourceMessageIds = (source.source_message_ids || []).slice(0, 16);
+      const currentComposerDraft = chatInputRef.current?.getValue()?.trim() || "";
+      const composerDraft = currentComposerDraft || savedComposerDraft;
       const draft = await chatApi<DirectiveDraftCreateResponse>(
         `/chat/sessions/${encodeURIComponent(sessionId)}/directive-drafts`,
         {
           method: "POST",
           body: JSON.stringify({
             context_window: Math.max(2, sourceMessageIds.length),
-            message_ids: sourceMessageIds,
+            ...(sourceMessageIds.length ? { message_ids: sourceMessageIds } : {}),
+            ...(composerDraft ? { composer_draft: composerDraft } : {}),
           }),
         },
       );

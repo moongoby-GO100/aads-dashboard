@@ -2477,7 +2477,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 
                 if (isEditing) {
                   return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      minHeight: screenSize === "desktop"
+                        ? "clamp(420px, calc(100dvh - 300px), 820px)"
+                        : "clamp(320px, calc(100dvh - 240px), 720px)",
+                    }}>
                       <input
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
@@ -2509,8 +2516,9 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           outline: "none",
                           width: "100%",
                           boxSizing: "border-box",
-                          minHeight: "200px",
-                          maxHeight: "70vh",
+                          flex: 1,
+                          minHeight: screenSize === "desktop" ? "360px" : "280px",
+                          maxHeight: "calc(100dvh - 260px)",
                           resize: "vertical",
                           fontFamily: "inherit",
                         }}

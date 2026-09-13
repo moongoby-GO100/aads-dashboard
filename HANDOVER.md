@@ -2773,3 +2773,15 @@
   passed with zero errors (22 existing warnings), and the production build generated all 76 routes.
 - Release gate: commit/push, immutable dashboard blue/green deployment, authenticated `/chat`
   desktop/mobile capture, same-digest standby sync, and five-minute P0/P1 monitoring.
+## 2026-09-13 KST - Directive composer context and viewport-aware editing
+
+- Directive creation now sends the current unsent chat composer value as `composer_draft`; it does
+  not clear or submit the composer. Regeneration prefers the current composer value and otherwise
+  restores the exact saved generation context, including composer-only drafts.
+- The existing dedicated `지시서` tab remains the canonical location for directive-draft artifacts,
+  with `바로 지시하기`, `지시서 다시 생성`, `편집`, and `삭제` as its four bottom actions.
+- Artifact editing now consumes available dynamic viewport height (`dvh`) with desktop/mobile
+  minimums instead of a fixed 200px editor, while preserving manual vertical resize and panel scroll.
+- Verification: TypeScript, the focused directive artifact tests, chat regression/lint, production
+  build, authenticated desktop/mobile capture, immutable blue/green release, and five-minute P0/P1
+  monitoring are the release gates.

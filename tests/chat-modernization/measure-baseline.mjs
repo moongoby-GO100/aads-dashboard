@@ -5,7 +5,7 @@ import { loadPageFunctions, source } from "./source-loader.mjs";
 
 // C01/C11-C13/C29 / FR08/FR38 / INV03/INV09/INV15 / ADR03/ADR11 / T08/T38.
 const { mergeServerMessagesPreservingLocal } = loadPageFunctions(["mergeServerMessagesPreservingLocal"]);
-const EXPECTED_PAGE_SHA256 = "1e581e78b93a39c8014626d3b5462c144610a4880eff5c0784085ae965800a26";
+const EXPECTED_PAGE_SHA256 = "3879771897791ffbdf6c8b3fefdce5214fabe0d2d70ba0e01ca4bdd6129980ea";
 const pageSha256 = createHash("sha256").update(source("src/app/chat/page.tsx")).digest("hex");
 if (pageSha256 !== EXPECTED_PAGE_SHA256) {
   throw new Error(

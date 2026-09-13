@@ -28,3 +28,17 @@ test("directive panel exposes the four CEO actions", () => {
     assert.ok(panel.includes(label), `missing directive action: ${label}`);
   }
 });
+
+test("directive generation includes the current unsent composer draft", () => {
+  const page = source("src/app/chat/page.tsx");
+  assert.ok(page.includes('const composerDraft = chatInputRef.current?.getValue()?.trim() || ""'));
+  assert.ok(page.includes("composer_draft: composerDraft"));
+  assert.ok(page.includes("source?.classification?.composer_draft_content"));
+});
+
+test("directive edit area scales with the viewport", () => {
+  const panel = source("src/app/chat/ChatArtifactPanel.tsx");
+  assert.ok(panel.includes("calc(100dvh - 300px)"));
+  assert.ok(panel.includes("calc(100dvh - 240px)"));
+  assert.ok(panel.includes('maxHeight: "calc(100dvh - 260px)"'));
+});
