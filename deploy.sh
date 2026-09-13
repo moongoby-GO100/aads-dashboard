@@ -118,6 +118,8 @@ cleanup_deploy() {
 # --- deploy_runs 중앙 원장 기록 헬퍼 (AADS-192) ---
 DEPLOY_RUN_ID=""
 DEPLOY_RESULT="failed"
+# phase 는 "어디까지 갔는지"를 남긴다. 실패로 끝나면 이 값이 멈춘 단계가 된다.
+DEPLOY_PHASE="initializing"
 
 _db_exec() {
     local out rc
@@ -133,13 +135,20 @@ _db_exec() {
 
 record_deploy_start() {
     local sha="${AADS_RELEASE_SHA:-unknown}"
-    DEPLOY_RUN_ID=$(_db_exec "INSERT INTO deploy_runs(project,component,deploy_type,status,release_sha,created_at,updated_at,phase_started_at,requested_at,request_source) VALUES('AADS','dashboard','bluegreen','running','${sha}',NOW(),NOW(),NOW(),NOW(),'deploy.sh') RETURNING id" || true)
+    DEPLOY_RUN_ID=$(_db_exec "INSERT INTO deploy_runs(project,component,deploy_type,status,phase,release_sha,created_at,updated_at,phase_started_at,requested_at,request_source) VALUES('AADS','dashboard','bluegreen','running','${DEPLOY_PHASE}','${sha}',NOW(),NOW(),NOW(),NOW(),'deploy.sh') RETURNING id" || true)
     DEPLOY_RUN_ID="$(printf '%s' "${DEPLOY_RUN_ID}" | head -n 1 | tr -cd '0-9')"
     if [ -n "$DEPLOY_RUN_ID" ]; then
         log "[db] deploy_runs #${DEPLOY_RUN_ID} 시작 (sha=${sha})"
     else
         log "[db] 원장 기록 생략 — deploy_runs INSERT 실패 (배포는 계속 진행)"
     fi
+    return 0
+}
+
+record_deploy_phase() {
+    DEPLOY_PHASE="$1"
+    [ -z "${DEPLOY_RUN_ID}" ] && return 0
+    _db_exec "UPDATE deploy_runs SET phase='${DEPLOY_PHASE}', phase_started_at=NOW(), updated_at=NOW() WHERE id=${DEPLOY_RUN_ID}" >/dev/null || true
     return 0
 }
 
@@ -151,10 +160,10 @@ record_deploy_end() {
     _msg=$(tail -n 1 "$DEPLOY_LOG_FILE" 2>/dev/null | tr -d "'" | head -c 200 || true)
     [ -n "$_msg" ] || _msg="dashboard deploy failed"
     if [ "$DEPLOY_RESULT" = "success" ]; then
-        _db_exec "UPDATE deploy_runs SET status='success', phase_completed_at=NOW(), updated_at=NOW() WHERE id=${_id}" >/dev/null || true
+        _db_exec "UPDATE deploy_runs SET status='success', phase='completed', phase_completed_at=NOW(), updated_at=NOW() WHERE id=${_id}" >/dev/null || true
         log "[db] deploy_runs #${_id} 성공"
     else
-        _db_exec "UPDATE deploy_runs SET status='failed', phase_completed_at=NOW(), updated_at=NOW(), error_summary='${_msg}' WHERE id=${_id}" >/dev/null || true
+        _db_exec "UPDATE deploy_runs SET status='failed', phase='${DEPLOY_PHASE}', phase_completed_at=NOW(), updated_at=NOW(), error_summary='${_msg}' WHERE id=${_id}" >/dev/null || true
         log "[db] deploy_runs #${_id} 실패 (${_msg})"
     fi
     return 0
@@ -503,6 +512,7 @@ if docker ps -a --format '{{.Names}}' | grep -Fx "$TARGET_CONTAINER" >/dev/null 
 fi
 
 # Step 1: release image를 정확히 한 번 빌드한 뒤 비활성 슬롯을 같은 이미지로 기동
+record_deploy_phase build_candidate_image
 log "Step 1: release image 1회 빌드 (${AADS_RELEASE_SHA})"
 build_release_image
 log "Step 1.5: ${TARGET_SLOT} 슬롯 기동 (--no-build)"
@@ -510,12 +520,14 @@ docker compose "${COMPOSE_ARGS[@]}" up -d --no-build --no-deps "$TARGET_SERVICE"
 log "OK: ${TARGET_SLOT} 슬롯 기동 완료"
 
 # Step 2: 내부 헬스체크
+record_deploy_phase candidate_health
 if ! wait_health "$TARGET_HEALTH" "$MAX_WAIT" "$TARGET_SLOT"; then
     log "FAIL: ${TARGET_SLOT} 슬롯 헬스체크 실패 — 배포 중단"
     exit 1
 fi
 
 # Step 3: upstream 전환
+record_deploy_phase traffic_switch
 log "Step 3: nginx upstream → ${TARGET_SLOT}"
 acquire_nginx_switch_lock
 backup_upstream
@@ -669,6 +681,7 @@ else
     fi
 fi
 
+record_deploy_phase p0p1_monitoring
 if ! monitor_post_cutover "$POST_CUTOVER_STARTED_AT"; then
     log "FAIL: 배포 후 P0/P1 모니터링 실패 — release certification 중단"
     exit 1
