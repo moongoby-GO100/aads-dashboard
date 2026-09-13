@@ -120,28 +120,44 @@ DEPLOY_RUN_ID=""
 DEPLOY_RESULT="failed"
 
 _db_exec() {
-    docker exec aads-postgres psql -U aads -d aads -t -A -c "$1" 2>/dev/null || true
+    local out rc
+    out=$(docker exec aads-postgres psql -U aads -d aads -q -t -A -c "$1" 2>&1) || rc=$?
+    rc="${rc:-0}"
+    if [ "$rc" -ne 0 ] || printf '%s' "$out" | grep -q '^ERROR:'; then
+        printf '[db] 원장 기록 실패: %s\n' "$out" >> "$DEPLOY_LOG_FILE" 2>/dev/null || true
+        return 1
+    fi
+    printf '%s' "$out"
+    return 0
 }
 
 record_deploy_start() {
     local sha="${AADS_RELEASE_SHA:-unknown}"
-    DEPLOY_RUN_ID=$(_db_exec "INSERT INTO deploy_runs(project,component,deploy_type,status,release_sha,started_at,request_source) VALUES('AADS','dashboard','bluegreen','running','${sha}',NOW(),'deploy.sh') RETURNING id")
-    [ -n "$DEPLOY_RUN_ID" ] && log "[db] deploy_runs #${DEPLOY_RUN_ID} 시작 (sha=${sha})"
+    DEPLOY_RUN_ID=$(_db_exec "INSERT INTO deploy_runs(project,component,deploy_type,status,release_sha,created_at,updated_at,phase_started_at,requested_at,request_source) VALUES('AADS','dashboard','bluegreen','running','${sha}',NOW(),NOW(),NOW(),NOW(),'deploy.sh') RETURNING id" || true)
+    DEPLOY_RUN_ID="$(printf '%s' "${DEPLOY_RUN_ID}" | head -n 1 | tr -cd '0-9')"
+    if [ -n "$DEPLOY_RUN_ID" ]; then
+        log "[db] deploy_runs #${DEPLOY_RUN_ID} 시작 (sha=${sha})"
+    else
+        log "[db] 원장 기록 생략 — deploy_runs INSERT 실패 (배포는 계속 진행)"
+    fi
+    return 0
 }
 
 record_deploy_end() {
-    [ -z "$DEPLOY_RUN_ID" ] && return 0
+    [ -z "${DEPLOY_RUN_ID}" ] && return 0
     local _id="$DEPLOY_RUN_ID"
     DEPLOY_RUN_ID=""
-    local s
-    s=$(tail -n 1 "$DEPLOY_LOG_FILE" 2>/dev/null | tr -d "'" | head -c 200 || echo "dashboard deploy failed")
+    local _msg
+    _msg=$(tail -n 1 "$DEPLOY_LOG_FILE" 2>/dev/null | tr -d "'" | head -c 200 || true)
+    [ -n "$_msg" ] || _msg="dashboard deploy failed"
     if [ "$DEPLOY_RESULT" = "success" ]; then
-        _db_exec "UPDATE deploy_runs SET status='success', finished_at=NOW() WHERE id=${_id}"
+        _db_exec "UPDATE deploy_runs SET status='success', phase_completed_at=NOW(), updated_at=NOW() WHERE id=${_id}" >/dev/null || true
         log "[db] deploy_runs #${_id} 성공"
     else
-        _db_exec "UPDATE deploy_runs SET status='failed', finished_at=NOW(), error_summary='${s}' WHERE id=${_id}"
-        log "[db] deploy_runs #${_id} 실패 (${s})"
+        _db_exec "UPDATE deploy_runs SET status='failed', phase_completed_at=NOW(), updated_at=NOW(), error_summary='${_msg}' WHERE id=${_id}" >/dev/null || true
+        log "[db] deploy_runs #${_id} 실패 (${_msg})"
     fi
+    return 0
 }
 # --- end deploy_runs 헬퍼 ---
 
