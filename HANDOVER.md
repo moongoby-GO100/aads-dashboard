@@ -2797,3 +2797,17 @@
 - Release gates: directive/chat regression, typecheck, scoped lint, production build, authenticated
   desktop/mobile tab and editor capture, immutable dashboard blue/green deploy, and five-minute P0/P1
   monitoring.
+
+## 2026-09-13 KST - WP05 durable browser command activation
+
+- `/chat` now routes `interrupt`, `stop`, and `resume` through the WP05 durable command endpoint only
+  when the server advertises `chat.protocol.v2`; an unadvertised or older server keeps the existing
+  legacy endpoints unchanged.
+- The browser persists one payload-scoped idempotency key in `sessionStorage` while the outcome is
+  unknown, polls an in-flight replay by command ID, removes the key only after a terminal response,
+  and safely reuses it after a network disconnect.
+- Verification before release: TypeScript passed, chat regression passed 49/49, focused WP05 command
+  tests passed 4/4, scoped ESLint reported zero errors, and the production build generated 76 routes.
+- Release gates: commit/push, immutable dashboard blue/green deployment, server capability activation,
+  authenticated stop/resume/interrupt browser capture, same-digest standby sync, and five-minute
+  P0/P1 monitoring. Roll back by reverting this dashboard commit; legacy fallback remains available.

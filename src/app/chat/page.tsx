@@ -58,6 +58,7 @@ import { mergeMessageProjection } from "@/features/chat/domain/messageReducer";
 import type { ExecutionPhase } from "@/features/chat/domain/runtimeTypes";
 import { createChatRuntime } from "@/features/chat/runtime/createChatRuntime";
 import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusScheduler";
+import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -4765,16 +4766,23 @@ export default function ChatPage() {
     }
     resumeRequestInFlightRef.current.add(key);
     resumeRequestLastAtRef.current.set(key, now);
-    return fetch(`${BASE_URL}/chat/sessions/${sessionId}/resume`, {
-      method: "POST",
-      credentials: "include",
-      headers: { ...authHdrs(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model_override: options.modelOverride || null,
-        reset_retry_count: Boolean(options.resetRetryCount),
-      }),
+    const payload = {
+      model_override: options.modelOverride || null,
+      reset_retry_count: Boolean(options.resetRetryCount),
+    };
+    const advertisedCapabilities = advertisedRuntimeCapabilitiesRef.current.get(sessionId) || [];
+    return runChatCommand<{ resumed?: boolean }>({
+      sessionId,
+      commandType: "resume",
+      payload,
+      advertisedCapabilities,
+      legacyRequest: () => fetch(`${BASE_URL}/chat/sessions/${sessionId}/resume`, {
+        method: "POST",
+        credentials: "include",
+        headers: { ...authHdrs(), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then((response) => response.ok ? response.json() : null),
     })
-      .then((r) => r.ok ? r.json() : null)
       .finally(() => {
         resumeRequestInFlightRef.current.delete(key);
       });
@@ -7122,9 +7130,17 @@ export default function ChatPage() {
       scrollToMessagesBottom(true);
       // 백엔드 인터럽트 큐에 push (첨부파일 포함)
       if (activeSessionObjRef.current?.id) {
-        chatApi<{ queued: boolean; message?: string }>(`/chat/sessions/${activeSessionObjRef.current.id}/interrupt`, {
-          method: "POST",
-          body: JSON.stringify({ content: interruptContent, attachments: interruptAttachments }),
+        const interruptSessionId = activeSessionObjRef.current.id;
+        const interruptPayload = { content: interruptContent, attachments: interruptAttachments };
+        runChatCommand<{ queued: boolean; message?: string }>({
+          sessionId: interruptSessionId,
+          commandType: "interrupt",
+          payload: interruptPayload,
+          advertisedCapabilities: advertisedRuntimeCapabilitiesRef.current.get(interruptSessionId) || [],
+          legacyRequest: () => chatApi<{ queued: boolean; message?: string }>(
+            `/chat/sessions/${interruptSessionId}/interrupt`,
+            { method: "POST", body: JSON.stringify(interruptPayload) },
+          ),
         }).then((res) => {
           if (!res?.queued) {
             const idx = msgQueueRef.current.indexOf(interruptContent);
@@ -8524,13 +8540,18 @@ export default function ChatPage() {
     // 백엔드 프로세스도 강제 중단. 네트워크가 멈춰도 버튼 상태가 고착되지 않게 짧은 타임아웃을 둔다.
     const stopAbort = new AbortController();
     const stopTimeout = window.setTimeout(() => stopAbort.abort(), 8000);
-    fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
-        method: "POST",
-        credentials: "include",
-        headers: { ...authHdrs() },
+    runChatCommand<{ stopped?: boolean }>({
+        sessionId: sid,
+        commandType: "stop",
+        advertisedCapabilities: advertisedRuntimeCapabilitiesRef.current.get(sid) || [],
         signal: stopAbort.signal,
+        legacyRequest: () => fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
+          method: "POST",
+          credentials: "include",
+          headers: { ...authHdrs() },
+          signal: stopAbort.signal,
+        }).then((res) => res.ok ? res.json() : Promise.reject(new Error(`stop failed ${res.status}`))),
       })
-        .then((res) => res.ok ? res.json() : Promise.reject(new Error(`stop failed ${res.status}`)))
         .then((result) => {
           if (!result?.stopped) {
             console.warn("[chat-stop] backend did not confirm stop", { sessionId: sid, result });
@@ -8588,11 +8609,17 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const stopAbort = new AbortController();
     const stopTimeout = window.setTimeout(() => stopAbort.abort(), 8000);
-    fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
-      method: "POST",
-      credentials: "include",
-      headers: { ...authHdrs() },
+    runChatCommand<{ stopped?: boolean }>({
+      sessionId: sid,
+      commandType: "stop",
+      advertisedCapabilities: advertisedRuntimeCapabilitiesRef.current.get(sid) || [],
       signal: stopAbort.signal,
+      legacyRequest: () => fetch(`${BASE_URL}/chat/sessions/${sid}/stop`, {
+        method: "POST",
+        credentials: "include",
+        headers: { ...authHdrs() },
+        signal: stopAbort.signal,
+      }).then((response) => response.ok ? response.json() : Promise.reject(new Error(`stop failed ${response.status}`))),
     }).catch(() => {}).finally(() => {
       window.clearTimeout(stopTimeout);
       if (activeSessionRef.current === sid) {
@@ -8633,7 +8660,14 @@ export default function ChatPage() {
           return status.is_streaming;
         },
         confirm: () => window.confirm("기존 응답이 아직 진행 중입니다. 현재 응답을 중단하고 다시 전송할까요? 취소하면 응답이 유지됩니다. 내용만 추가하려면 입력창에서 추가 지시를 보내세요."),
-        stop: async () => { await chatApi(`/chat/sessions/${sessionId}/stop`, { method: "POST" }); },
+        stop: async () => {
+          await runChatCommand({
+            sessionId,
+            commandType: "stop",
+            advertisedCapabilities: advertisedRuntimeCapabilitiesRef.current.get(sessionId) || [],
+            legacyRequest: () => chatApi(`/chat/sessions/${sessionId}/stop`, { method: "POST" }),
+          });
+        },
       });
       if (!allowed) return false;
       if (streamingRef.current || waitingBgRef.current) {
