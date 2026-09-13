@@ -109,9 +109,41 @@ cleanup_release_context() {
 }
 
 cleanup_deploy() {
+    record_deploy_end
     cleanup_release_context
     cleanup_lock
 }
+
+
+# --- deploy_runs 중앙 원장 기록 헬퍼 (AADS-192) ---
+DEPLOY_RUN_ID=""
+DEPLOY_RESULT="failed"
+
+_db_exec() {
+    docker exec aads-postgres psql -U aads -d aads -t -A -c "$1" 2>/dev/null || true
+}
+
+record_deploy_start() {
+    local sha="${AADS_RELEASE_SHA:-unknown}"
+    DEPLOY_RUN_ID=$(_db_exec "INSERT INTO deploy_runs(project,component,deploy_type,status,release_sha,started_at,request_source) VALUES('AADS','dashboard','bluegreen','running','${sha}',NOW(),'deploy.sh') RETURNING id")
+    [ -n "$DEPLOY_RUN_ID" ] && log "[db] deploy_runs #${DEPLOY_RUN_ID} 시작 (sha=${sha})"
+}
+
+record_deploy_end() {
+    [ -z "$DEPLOY_RUN_ID" ] && return 0
+    local _id="$DEPLOY_RUN_ID"
+    DEPLOY_RUN_ID=""
+    local s
+    s=$(tail -n 1 "$DEPLOY_LOG_FILE" 2>/dev/null | tr -d "'" | head -c 200 || echo "dashboard deploy failed")
+    if [ "$DEPLOY_RESULT" = "success" ]; then
+        _db_exec "UPDATE deploy_runs SET status='success', finished_at=NOW() WHERE id=${_id}"
+        log "[db] deploy_runs #${_id} 성공"
+    else
+        _db_exec "UPDATE deploy_runs SET status='failed', finished_at=NOW(), error_summary='${s}' WHERE id=${_id}"
+        log "[db] deploy_runs #${_id} 실패 (${s})"
+    fi
+}
+# --- end deploy_runs 헬퍼 ---
 
 build_release_image() {
     cleanup_release_context
@@ -178,6 +210,7 @@ else
     export AADS_RELEASE_SHA="${AADS_RELEASE_SHA:-unknown}"
 fi
 log "릴리스 SHA: ${AADS_RELEASE_SHA}"
+record_deploy_start
 
 write_active_state() {
     local container="$1"
@@ -572,4 +605,5 @@ if ! monitor_post_cutover "$POST_CUTOVER_STARTED_AT"; then
 fi
 
 log "배포 완료 — 활성 슬롯: ${TARGET_SLOT}, 상태: $STATUS"
+DEPLOY_RESULT="success"
 log "AADS Dashboard blue-green 배포 성공"

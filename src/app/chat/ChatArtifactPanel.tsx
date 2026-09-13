@@ -877,6 +877,11 @@ function DeployStatusCard({
                     {durationLabel && ` (총 ${durationLabel})`}
                   </div>
                   <DeployChangeSummary item={item} />
+                  {item.error_summary && ["failed","error"].includes((itemStatus||"").toLowerCase()) && (
+                    <div style={{fontSize:10,color:"#ef4444",marginTop:4,overflowWrap:"anywhere"}}>
+                      ⚠️ {item.error_summary}
+                    </div>
+                  )}
                 </div>
               );
             })}
