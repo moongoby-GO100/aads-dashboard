@@ -599,6 +599,27 @@ except Exception:
 PYTOK
 )"
 QA_TOKEN="$(printf '%s' "$QA_TOKEN" | tr -d '[:space:]')"
+
+# QA 브라우저가 로그인 상태로 화면을 찍게 한다.
+#
+# 이게 없으면 /, /chat, /ops 가 전부 로그인 화면으로 찍힌다(2026-09-13 실측:
+# 스크린샷 4장이 23,241바이트로 바이트 동일). 감리가 로그인 UI 를 세 번
+# 채점하므로 점수에 아무 의미가 없다.
+#
+# 토큰에 유효기간이 있으므로 QA 직전에 매번 새로 만든다. 크론으로 돌리면
+# 만료된 뒤 조용히 로그인 화면으로 되돌아간다 — 화면상으로는 QA 가 도는
+# 것처럼 보여 더 나쁘다.
+_QA_STATE_REFRESH="${COMPOSE_DIR}/scripts/refresh_qa_storage_state.py"
+if [[ -x "$_QA_STATE_REFRESH" ]]; then
+    if python3 "$_QA_STATE_REFRESH" >/dev/null 2>&1; then
+        log "Step 7: QA 로그인 상태 갱신 완료"
+    else
+        log "⚠️ Step 7: QA 로그인 상태 갱신 실패 — 로그인 화면을 찍게 된다(점수 무의미)"
+    fi
+else
+    log "⚠️ Step 7: QA 로그인 상태 갱신 스크립트 없음: $_QA_STATE_REFRESH"
+fi
+
 if [[ -z "$QA_TOKEN" ]]; then
     log "⚠️ Step 7: QA 토큰 발급 실패 — QA 를 건너뛴다"
     QA_RESPONSE='{"error":"QA 토큰 발급 실패"}'
