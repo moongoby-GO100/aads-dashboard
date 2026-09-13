@@ -579,10 +579,37 @@ ACTIVE_API_PORT=$(awk '
 ' "$NGINX_UPSTREAM" 2>/dev/null || true)
 QA_API_BASE="${AADS_API_BASE:-http://127.0.0.1:${ACTIVE_API_PORT:-8100}}"
 log "Step 7: QA API base=${QA_API_BASE}"
-QA_RESPONSE=$(curl -sf -X POST "${QA_API_BASE}/api/v1/visual-qa/full-qa" \
-    -H "Content-Type: application/json" \
-    -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
-    --max-time 120 2>/dev/null || echo '{"error":"QA API 호출 실패"}')
+# QA 엔드포인트는 인증이 필요하다. 헤더 없이 부르면 401 이 나고 curl -sf 가
+# 실패해 아래 더미 JSON 으로 대체된다. 그러면 파싱 결과가 UNKNOWN 이 되어
+# "수동 확인 필요"만 찍힌다 — 2026-09-13 확인 결과 QA 는 이 때문에 한 번도
+# 실행된 적이 없었다. 배포마다 같은 줄이 남았지만 아무도 보지 않았다.
+#
+# 토큰은 컨테이너 안에서 만들어 stdin 으로만 받는다(argv 노출 방지).
+QA_TOKEN="$(docker exec -i "${QA_TOKEN_CONTAINER:-aads-server}" python3 - <<'PYTOK' 2>/dev/null || true
+import sys
+sys.path.insert(0, "/app")
+try:
+    from app.auth import create_token
+    print(create_token(
+        "79ee004e-1e2e-490f-aa05-b096814f180d", "moongoby@naver.com",
+        is_admin=True, tenant_id="2d701a8c-9596-4757-8588-faa4f7837112",
+    ))
+except Exception:
+    pass
+PYTOK
+)"
+QA_TOKEN="$(printf '%s' "$QA_TOKEN" | tr -d '[:space:]')"
+if [[ -z "$QA_TOKEN" ]]; then
+    log "⚠️ Step 7: QA 토큰 발급 실패 — QA 를 건너뛴다"
+    QA_RESPONSE='{"error":"QA 토큰 발급 실패"}'
+else
+    QA_RESPONSE=$(curl -sf -X POST "${QA_API_BASE}/api/v1/visual-qa/full-qa" \
+        -H "Authorization: Bearer ${QA_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
+        --max-time 240 2>/dev/null || echo '{"error":"QA API 호출 실패"}')
+fi
+unset QA_TOKEN
 
 QA_RESULT=$(echo "$QA_RESPONSE" | python3 -c "
 import sys, json
@@ -606,13 +633,19 @@ if [[ "$QA_RESULT" == *"FAIL"* ]]; then
                 -d parse_mode=HTML >/dev/null 2>&1 || true
         fi
     fi
-elif [[ "$QA_RESULT" == "ERROR" || "$QA_RESULT" == "UNKNOWN" || -z "$QA_RESULT" ]]; then
+elif [[ "$QA_RESULT" == *"PASS"* ]]; then
+    log "Step 7: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
+else
+    # PASS 도 FAIL 도 아닌 값은 전부 미확정으로 둔다.
+    #
+    # QA 응답의 verdict 는 "CEO 확인 요청" 같은 사람 판단 요청도 돌려준다.
+    # 이전 로직은 FAIL 이 아니면 통과로 간주해, 그런 값이 "✅ QA 통과"로
+    # 찍혔다. 인증을 붙여 QA 가 실제로 돌기 시작하면 이 구멍이 바로
+    # 거짓 통과가 된다 — 판단을 미루자는 응답을 합격으로 읽는 셈이다.
     log "⚠️ Step 7: QA 미확정 — $QA_RESULT (통과로 간주하지 않음, 수동 확인 필요)"
     if [ "${AADS_DASHBOARD_QA_STRICT:-false}" = "true" ]; then
         exit 1
     fi
-else
-    log "Step 7: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
 fi
 
 if ! monitor_post_cutover "$POST_CUTOVER_STARTED_AT"; then
