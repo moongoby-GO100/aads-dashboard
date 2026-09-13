@@ -104,6 +104,7 @@ interface DeployQueueItem {
   release_summary?: string | null;
   changed_files?: string[];
   changed_file_count?: number | null;
+  error_summary?: string | null;
 }
 
 interface DeployDurationItem {
