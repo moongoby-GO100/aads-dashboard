@@ -17,3 +17,6 @@ deploy-logs/
 
 # Build cache
 tsconfig.tsbuildinfo
+
+# Deploy run logs (AADS-192: dirty worktree blocks release preflight)
+deploy-*.log

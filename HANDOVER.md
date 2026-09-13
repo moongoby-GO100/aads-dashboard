@@ -2811,3 +2811,16 @@
 - Release gates: commit/push, immutable dashboard blue/green deployment, server capability activation,
   authenticated stop/resume/interrupt browser capture, same-digest standby sync, and five-minute
   P0/P1 monitoring. Roll back by reverting this dashboard commit; legacy fallback remains available.
+
+## 2026-09-14 KST - Directive workflow release revalidation
+
+- Revalidated the dedicated directive tab, its four actions, unsent composer context forwarding,
+  regeneration context restoration, reload persistence, and viewport-aware editor against the
+  current dashboard `main` branch.
+- Refreshed the deliberate `src/app/chat/page.tsx` integrity baseline after later reviewed chat
+  changes had left the release gate pointing at the older directive-context revision.
+- Validation passed: TypeScript, scoped ESLint with zero errors (22 existing warnings), 49 chat
+  regression tests, 23 rendering security tests, baseline, documentation, and change-impact gates.
+- Production completion still requires an immutable dashboard blue/green release, authenticated
+  `/chat` evidence or the documented API fallback, same-digest standby sync, and five-minute P0/P1
+  monitoring. Roll back by routing both dashboard slots to the prior `0286ea04e76c` image.
