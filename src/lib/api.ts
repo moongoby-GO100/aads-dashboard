@@ -681,6 +681,12 @@ export const api = {
   // Project Docs: 프로젝트별 문서 통합 조회
   // 지식 그래프 — 무엇이 무엇과 이어져 있나. 2026-09-14 신설.
   getKgStats: () => request<any>("/kg/stats"),
+  listKg: (type?: string, q?: string, limit = 60, offset = 0) =>
+    request<any>(
+      `/kg/list?limit=${limit}&offset=${offset}` +
+      (type ? `&type=${encodeURIComponent(type)}` : "") +
+      (q ? `&q=${encodeURIComponent(q)}` : ""),
+    ),
   traceKg: (q: string, limit = 40) =>
     request<any>(`/kg/trace?q=${encodeURIComponent(q)}&limit=${limit}`),
   // 무엇이 언제 바뀌었나 — 변경 원장 + 배포 원장. 2026-09-14 신설.

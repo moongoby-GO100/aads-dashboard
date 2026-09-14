@@ -37,6 +37,11 @@ interface TraceResult {
   outgoing: Rel[];
   incoming: Rel[];
 }
+interface ListItem {
+  id: number; type: string; name: string;
+  description: string; project: string; degree: number;
+}
+
 interface Stats {
   nodes: { type: string; count: number }[];
   relations: { type: string; label: string; count: number }[];
@@ -60,10 +65,32 @@ export default function GraphPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 검색창만 있으면 뭘 쳐야 할지 모르는 사람은 못 쓴다. 둘러볼 목록을 둔다.
+  const [listType, setListType] = useState<string | null>(null);
+  const [list, setList] = useState<ListItem[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listLoading, setListLoading] = useState(false);
 
   useEffect(() => {
     api.getKgStats().then((s) => setStats(s as Stats)).catch(() => setStats(null));
   }, []);
+
+  const loadList = useCallback(async (type: string | null) => {
+    setListLoading(true);
+    try {
+      const r = (await api.listKg(type || undefined, undefined, 60)) as
+        { items: ListItem[]; total: number };
+      setList(r.items || []);
+      setListTotal(r.total || 0);
+    } catch {
+      setList([]);
+      setListTotal(0);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadList(listType); }, [listType, loadList]);
 
   const run = useCallback(async (query: string) => {
     const term = query.trim();
@@ -121,6 +148,7 @@ export default function GraphPage() {
         <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.6 }}>
           파일·커밋·오류·문서가 어떻게 연결돼 있는지 따라갑니다.
           오류 기록·변경 기록·배포 기록에서 <b>자동으로 만든 연결</b>이며 추측이 아닙니다.
+          {stats && ` 현재 연결 ${stats.total_relations.toLocaleString()}개 · 대상 ${stats.total_nodes.toLocaleString()}개.`}
         </p>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -152,26 +180,77 @@ export default function GraphPage() {
           ))}
         </div>
 
-        {stats && !result && (
+        {!result && (
           <div style={{ ...card, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 700, marginBottom: 8 }}>
-              연결 {stats.total_relations.toLocaleString()}개 · 대상 {stats.total_nodes.toLocaleString()}개
-            </div>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--text-secondary)" }}>
-              {stats.nodes.map((n) => (
-                <span key={n.type}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <button onClick={() => setListType(null)}
+                style={{ padding: "4px 11px", borderRadius: 999, fontSize: 12,
+                         border: "1px solid var(--border)",
+                         background: listType === null ? "#2563eb" : "var(--bg-card)",
+                         color: listType === null ? "#fff" : "var(--text-secondary)" }}>
+                전체
+              </button>
+              {(stats?.nodes || []).map((n) => (
+                <button key={n.type} onClick={() => setListType(n.type)}
+                  style={{ padding: "4px 11px", borderRadius: 999, fontSize: 12,
+                           border: "1px solid var(--border)",
+                           background: listType === n.type ? "#2563eb" : "var(--bg-card)",
+                           color: listType === n.type ? "#fff" : "var(--text-secondary)" }}>
                   {TYPE_ICON[n.type] || "•"} {TYPE_LABEL[n.type] || n.type} {n.count.toLocaleString()}
-                </span>
+                </button>
               ))}
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-              {stats.relations.map((r) => (
-                <span key={r.type} style={{ marginRight: 14 }}>
-                  {r.label} {r.count.toLocaleString()}
-                </span>
-              ))}
+
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>
+              연결이 많은 것부터 {listTotal.toLocaleString()}개 중 {list.length}개 —
+              누르면 그 대상에서 따라갑니다
             </div>
+
+            {listLoading && (
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", padding: "8px 0" }}>
+                불러오는 중...
+              </div>
+            )}
+
+            {!listLoading && list.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", padding: "8px 0" }}>
+                이 종류는 아직 등록된 것이 없습니다.
+              </div>
+            )}
+
+            {!listLoading && list.map((it) => (
+              <button key={it.id} onClick={() => { setQ(it.name); void run(it.name); }}
+                style={{ display: "block", width: "100%", textAlign: "left", background: "none",
+                         border: "none", borderBottom: "1px solid var(--border)",
+                         padding: "6px 0", cursor: "pointer" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 11, color: it.degree > 0 ? "#2563eb" : "var(--text-secondary)",
+                                 minWidth: 52 }}>
+                    연결 {it.degree}
+                  </span>
+                  <span style={{ fontSize: 12 }}>{TYPE_ICON[it.type] || "•"}</span>
+                  <span style={{ fontSize: 12.5, color: "var(--text-primary)", wordBreak: "break-all" }}>
+                    {it.name}
+                  </span>
+                </div>
+                {it.description && (
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginLeft: 60,
+                                marginTop: 2, lineHeight: 1.5 }}>
+                    {it.description.slice(0, 100)}
+                  </div>
+                )}
+              </button>
+            ))}
           </div>
+        )}
+
+        {result && (
+          <button onClick={() => { setResult(null); setQ(""); }}
+            style={{ marginBottom: 12, padding: "5px 12px", borderRadius: 8, fontSize: 12,
+                     border: "1px solid var(--border)", background: "var(--bg-card)",
+                     color: "var(--text-secondary)", cursor: "pointer" }}>
+            ← 목록으로
+          </button>
         )}
 
         {loading && <div style={{ ...card, color: "var(--text-secondary)" }}>따라가는 중...</div>}
