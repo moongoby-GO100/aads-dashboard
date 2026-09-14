@@ -5,6 +5,8 @@ import React, { useEffect, useState, useCallback } from "react";
 type ClaudeSlotUsage = {
   slot: string;
   label?: string;
+  // AADS 소유가 아닌 계정. 1·2 가 모두 불가능할 때만 쓰인다.
+  last_resort?: boolean;
   source?: string;
   sampled_at?: string | null;
   primary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
@@ -333,7 +335,10 @@ export default function UsageBar() {
       {slots.length > 0 ? (
         slots.map((sl) => {
           const name = sl.label || `slot ${sl.slot}`;
-          const dot = sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
+          const lastResort = sl.last_resort === true;
+          // 최후 수단 계정은 색부터 다르다. 같은 초록·파랑으로 그리면
+          // 대표님이 남의 한도가 줄고 있는 것을 우리 계정으로 읽는다.
+          const dot = lastResort ? "\uD83D\uDFE0" : sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
           const seen = sl.secondary.used_percent == null && sl.primary.used_percent == null;
           const keyName = slotMeta(sl.slot)?.key_name ?? "";
           const isActive = activeSlot === sl.slot;
@@ -342,27 +347,36 @@ export default function UsageBar() {
             <React.Fragment key={`claude-slot-${sl.slot}`}>
               <button
                 type="button"
-                disabled={isActive || !keyName || switching !== null}
+                disabled={lastResort || isActive || !keyName || switching !== null}
                 onClick={() => void switchPrimary(keyName, name, exhausted)}
                 title={[
-                  isActive ? "\uD604\uC7AC 1\uC21C\uC704 \uACC4\uC815" : keyName ? `\uD074\uB9AD\uD558\uBA74 ${name} \uC744(\uB97C) 1\uC21C\uC704\uB85C` : "",
+                  lastResort
+                    ? "\uCD5C\uD6C4 \uC218\uB2E8 \uACC4\uC815 \u2014 \uC2AC\uB86F 1\u00B72 \uAC00 \uBAA8\uB450 \uBD88\uAC00\uB2A5\uD560 \uB54C\uB9CC \uC4F0\uC785\uB2C8\uB2E4. 1\uC21C\uC704\uB85C \uC9C0\uC815\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."
+                    : isActive ? "\uD604\uC7AC 1\uC21C\uC704 \uACC4\uC815" : keyName ? `\uD074\uB9AD\uD558\uBA74 ${name} \uC744(\uB97C) 1\uC21C\uC704\uB85C` : "",
                   sl.sampled_at ? `\uCE21\uC815 ${new Date(sl.sampled_at).toLocaleTimeString()} (${sl.source || "-"})` : "\uC544\uC9C1 \uCE21\uC815\uAC12 \uC5C6\uC74C",
                   exhausted ? "\uC8FC\uAC04 \uD55C\uB3C4 \uC18C\uC9C4" : "",
                 ].filter(Boolean).join("\n")}
                 style={{
                   fontSize: "10px", fontWeight: 700, whiteSpace: "nowrap",
                   padding: "1px 7px", borderRadius: "9px",
-                  border: `1px solid ${isActive ? "#22c55e88" : "var(--ct-border)"}`,
-                  background: isActive ? "#22c55e18" : "transparent",
+                  border: `1px solid ${lastResort ? "#f59e0b66" : isActive ? "#22c55e88" : "var(--ct-border)"}`,
+                  background: lastResort ? "#f59e0b12" : isActive ? "#22c55e18" : "transparent",
                   color: exhausted ? "var(--ct-text3, #999)" : "var(--ct-text2)",
                   opacity: switching === keyName ? 0.5 : exhausted && !isActive ? 0.6 : 1,
-                  cursor: isActive || !keyName || switching !== null ? "default" : "pointer",
+                  cursor: lastResort || isActive || !keyName || switching !== null ? "default" : "pointer",
                 }}
               >
                 {dot} {name}{isActive ? " \u25CF" : ""}
+                {lastResort && (
+                  <span style={{ marginLeft: "4px", fontSize: "9px", fontWeight: 700, color: "#f59e0b" }}>
+                    {"\uCD5C\uD6C4\uC218\uB2E8"}
+                  </span>
+                )}
               </button>
               {seen ? (
-                <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>\uCE21\uC815 \uB300\uAE30</span>
+                <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>
+                  {lastResort ? "\uBBF8\uC0AC\uC6A9" : "\uCE21\uC815 \uB300\uAE30"}
+                </span>
               ) : (
                 <>
                   <MiniBar
