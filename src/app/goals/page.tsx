@@ -24,6 +24,8 @@ type BoardOwner = {
   session_id: string; role_key: string; title: string; state: string;
   milestone: string | null; last_at: string | null;
   tool_calls: number; dispatch_count: number; note: string | null;
+  milestone_id?: string | null; variant?: string | null;
+  paused?: boolean; paused_reason?: string | null; open_notes?: number;
 };
 type GoalDoc = { kind: string; doc_path: string; title: string | null };
 type Board = {
@@ -37,6 +39,8 @@ const docLabel: Record<string, string> = {
 const docMissingLabel: Record<string, string> = { plan: "기획서", prd: "PRD" };
 
 const stateColor: Record<string, string> = {
+  "확인 대기": "#7c3aed",
+  "멈춤": "#64748b",
   "작업 중": "#2563eb",
   "진행 중": "#2563eb",
   "응답 대기": "#d97706",
@@ -158,6 +162,36 @@ export default function GoalsPage() {
   }, [selectedId, updatedAt]);
 
   const [board, setBoard] = useState<Board | null>(null);
+  const [ownerBusy, setOwnerBusy] = useState<string | null>(null);
+
+  const reloadBoard = useCallback(async (gid: string) => {
+    try { setBoard(await api.getGoalBoard(gid)); } catch { /* 조회 실패가 화면을 막지 않는다 */ }
+  }, []);
+
+  const ownerAction = useCallback(async (
+    kind: "pause" | "resume" | "restart" | "stop", o: BoardOwner,
+  ) => {
+    if (!selectedId) return;
+    if (kind === "pause") {
+      // 이유 없이 멈춘 카드는 사흘 뒤에 왜 멈췄는지 아무도 모른다.
+      const reason = window.prompt(`${o.title} 을(를) 멈춥니다.\n왜 멈추는지 적어 주십시오.`)?.trim();
+      if (!reason) return;
+      setOwnerBusy(o.session_id);
+      try { await api.pauseOwner(selectedId, o.session_id, reason); } finally { setOwnerBusy(null); }
+    } else if (kind === "resume") {
+      setOwnerBusy(o.session_id);
+      try { await api.resumeOwner(selectedId, o.session_id); } finally { setOwnerBusy(null); }
+    } else if (kind === "restart") {
+      if (!window.confirm(`${o.title} 에게 처음부터 다시 지시합니다.\n지금까지의 대화는 남지만 발송 기록은 지워집니다.`)) return;
+      setOwnerBusy(o.session_id);
+      try { await api.restartOwner(selectedId, o.session_id); } finally { setOwnerBusy(null); }
+    } else {
+      if (!window.confirm(`${o.title} 의 진행 중인 응답을 지금 중단합니다.\n지금까지 생성된 내용은 남습니다.`)) return;
+      setOwnerBusy(o.session_id);
+      try { await api.stopOwnerStream(o.session_id); } finally { setOwnerBusy(null); }
+    }
+    await reloadBoard(selectedId);
+  }, [selectedId, reloadBoard]);
   useEffect(() => {
     if (!selectedId) { setBoard(null); return; }
     let alive = true;
@@ -278,6 +312,30 @@ export default function GoalsPage() {
                             {o.dispatch_count > 1 ? ` · 재알림 ${o.dispatch_count}회` : ""}
                           </div>
                           {o.note && <div style={{ marginTop: 4, fontSize: 10.5, color: "#dc2626" }}>{o.note}</div>}
+                          {o.paused && o.paused_reason && (
+                            <div style={{ marginTop: 4, fontSize: 10.5, color: "var(--text-secondary)" }}>
+                              대표님이 멈춤 — {o.paused_reason}
+                            </div>
+                          )}
+                          {(o.open_notes || 0) > 0 && (
+                            <div style={{ marginTop: 4, fontSize: 10.5, color: "#d97706" }}>
+                              ✏ 의견·수정 요청 {o.open_notes}건 — 응답 대기
+                            </div>
+                          )}
+                          <div style={{ marginTop: 7, display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            {(["pause", "resume", "restart", "stop"] as const)
+                              .filter((k) => (k === "resume" ? o.paused : k === "pause" ? !o.paused : true))
+                              .map((k) => (
+                                <button key={k} type="button" disabled={ownerBusy === o.session_id}
+                                  onClick={(e) => { e.preventDefault(); void ownerAction(k, o); }}
+                                  style={{ minHeight: 28, padding: "0 9px", fontSize: 11, borderRadius: 6,
+                                           border: "1px solid var(--border)", background: "var(--bg-card)",
+                                           color: k === "stop" ? "#dc2626" : "var(--text-primary)",
+                                           cursor: ownerBusy === o.session_id ? "wait" : "pointer" }}>
+                                  {{ pause: "⏸ 멈춤", resume: "▶ 계속하기", restart: "↻ 재시작", stop: "■ 지금 중단" }[k]}
+                                </button>
+                              ))}
+                          </div>
                         </a>
                       );
                     })}

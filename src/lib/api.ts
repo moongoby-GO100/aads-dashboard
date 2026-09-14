@@ -944,6 +944,18 @@ export const api = {
   directGoal: (goalId: string, message: string, roles?: string[]) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/direct`,
       { method: "POST", body: JSON.stringify({ message, roles }) }),
+  // 담당별 제어 — 멈춤은 진행 중 응답을 끊지 않는다. 끊으려면 stopSession.
+  pauseOwner: (goalId: string, sessionId: string, reason: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}/pause`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
+  resumeOwner: (goalId: string, sessionId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}/pause`,
+      { method: "DELETE" }),
+  restartOwner: (goalId: string, sessionId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}/restart`,
+      { method: "POST", body: JSON.stringify({}) }),
+  stopOwnerStream: (sessionId: string) =>
+    request<any>(`/chat/sessions/${encodeURIComponent(sessionId)}/stop`, { method: "POST" }),
   rewindMilestone: (milestoneId: string, reason?: string) =>
     request<any>(`/goals/milestones/${encodeURIComponent(milestoneId)}/rewind`,
       { method: "POST", body: JSON.stringify({ reason }) }),
