@@ -23,6 +23,17 @@ build steps between concurrent builds, so cancelling one cancels the other. A pa
 with it (`deploy_runs` #414, `context canceled`). This is what "one image build per
 release SHA" protects against.
 
+`deploy.sh` now refuses to build when another `docker build --tag aads-dashboard:`
+is already running. The rule was written here first and broken the same day by the
+agent who wrote it — a documented rule is not a control. Where an agent keeps
+breaking a rule, put the check in code.
+
+**A release that is already active is not rebuilt.** `deploy.sh` compares the active
+container's image against the release SHA and skips when they match (`phase=
+already_current`, one second instead of fifteen minutes). 2026-09-14 had two such
+duplicate builds: `8643a17e` (#419, #420) and `ca252ef09674` (#425, #426). Pass
+`--force` when a rebuild is genuinely wanted.
+
 **`nohup` is not enough to detach a deploy.** Two restarts died as `context canceled`
 when the launching shell went away; the docker client disconnecting cancels the build.
 Launch it so it survives the caller, and verify the run reached `success` in

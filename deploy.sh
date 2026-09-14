@@ -30,6 +30,15 @@ NGINX_UPSTREAM="/etc/nginx/conf.d/aads-upstream.conf"
 NGINX_UPSTREAM_SOURCE="/root/aads/aads-server/nginx-aads-upstream.conf"
 MAX_WAIT=90
 LOCKFILE="/tmp/aads-dashboard-deploy.lock"
+
+# --force: 이미 활성인 릴리스라도 다시 빌드한다. 기본값은 건너뜀이다 —
+# 실수로 같은 SHA 를 두 번 빌드하는 쪽이 훨씬 자주 일어난다.
+for _arg in "$@"; do
+    case "$_arg" in
+        --force|-f) DEPLOY_FORCE=1 ;;
+    esac
+done
+DEPLOY_FORCE="${DEPLOY_FORCE:-0}"
 DEPLOY_LOG_DIR="${STATE_DIR}/deploy-logs"
 DEPLOY_LOG_FILE="${DEPLOY_LOG_DIR}/dashboard-deploy-$(date '+%Y%m%d-%H%M%S').log"
 RELEASE_CONTEXT_DIR=""
@@ -182,6 +191,27 @@ build_release_image() {
         install -m 600 "${STATE_DIR}/.env.local" "${RELEASE_CONTEXT_DIR}/.env.local"
     fi
     log "clean release context: ${RELEASE_CONTEXT_DIR} (release=${AADS_RELEASE_SHA})"
+
+    # 같은 이미지를 동시에 빌드하지 않는다.
+    #
+    # BuildKit 은 동일한 빌드 단계를 병행 빌드 간에 공유한다. 한쪽을 취소하면
+    # 다른 쪽도 context canceled 로 함께 죽는다. 2026-09-14 실제로 그렇게
+    # deploy_runs #414 를 날렸고, 규칙을 AGENTS.md 에 써넣은 뒤 같은 날 또
+    # 어겼다. 문서 규칙은 지켜지지 않는다고 가정하고 여기서 막는다.
+    # 실행 파일이 docker 인 프로세스만 본다. pgrep -f 는 같은 문자열을 담은
+    # 셸 명령까지 잡아서, 조회하는 쪽이 자기 자신을 빌드로 오인한다
+    # (2026-09-14 이 함정에 여러 번 빠졌다).
+    local _busy
+    _busy=$(ps -eo pid=,comm=,args= 2>/dev/null \
+            | awk '$2 == "docker" && /build --tag aads-dashboard:/ {print}' | head -3)
+    if [ -n "$_busy" ]; then
+        log "FAIL: 같은 이미지를 빌드 중인 프로세스가 있다. 끝난 뒤 다시 시도하라."
+        while IFS= read -r _l; do
+            [ -n "$_l" ] && log "      ${_l:0:110}"
+        done <<< "$_busy"
+        return 1
+    fi
+
     docker build --tag "aads-dashboard:${AADS_RELEASE_SHA}" "$RELEASE_CONTEXT_DIR"
     cleanup_release_context
 }
@@ -503,6 +533,26 @@ else
 fi
 log "현재 활성 슬롯: $ACTIVE_SLOT"
 log "배포 대상 슬롯: $TARGET_SLOT"
+
+# Step 0.1: 이미 그 릴리스가 돌고 있으면 빌드하지 않는다.
+#
+# 2026-09-14 하루에만 같은 SHA 를 두 번 빌드한 일이 두 번 있었다
+# (8643a17e → #419·#420, ca252ef09674 → #425·#426). 한 번에 13~15분이고
+# 8코어 서버에서 빌드는 부하의 주범이다. 원장에도 같은 SHA 가 두 줄로 남아
+# "무엇이 언제 나갔나" 를 읽기 어렵게 만든다.
+#
+# 재배포가 필요하면 --force 로 명시한다. 기본값이 "건너뜀" 이어야 실수로
+# 낭비하지 않는다.
+_active_image="$(docker inspect "$PREV_CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || true)"
+if [ "${DEPLOY_FORCE:-0}" != "1" ] && [ "$_active_image" = "aads-dashboard:${AADS_RELEASE_SHA}" ]; then
+    log "SKIP: ${AADS_RELEASE_SHA} 가 이미 활성이다 (${PREV_CONTAINER}). 빌드·전환을 건너뛴다."
+    log "      재배포하려면 DEPLOY_FORCE=1 또는 --force 를 쓴다."
+    # status 는 CHECK 제약이 있어 임의 값을 넣을 수 없다. 건너뛴 것은 실패가
+    # 아니므로 success 로 두고, 무슨 일이 있었는지는 phase 에 남긴다.
+    record_deploy_phase "already_current"
+    DEPLOY_RESULT="success"
+    exit 0
+fi
 
 # Step 0.5: 대상 슬롯 잔여 컨테이너 정리
 remove_container_if_foreign "$TARGET_CONTAINER" "$TARGET_SERVICE"
