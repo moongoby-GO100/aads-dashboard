@@ -222,16 +222,29 @@ export default function UsageBar() {
   }, [fetchUsage]);
 
   useEffect(() => {
+    // 2026-09-14 /chat 실측: 16초 동안 이 호출이 **7회** 나갔다. 2초 주기라
+    // 탭 하나당 시간당 1,800회다. 릴레이 여유 슬롯 표시는 그 정도로 자주
+    // 볼 이유가 없다 — 20초로 늘리고 탭이 안 보이면 건너뛴다.
+    //
+    // 탭 복귀(visibilitychange)에는 즉시 한 번 부른다. 숨어 있는 동안
+    // 바뀐 값을 바로 보여주려면 그 한 번이 필요하다.
+    const RELAY_POLL_MS = 20_000;
     const run = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void fetchRelayCapacity();
     };
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void fetchRelayCapacity();
+      }
+    };
     const initial = window.setTimeout(run, 0);
-    const iv = window.setInterval(run, 2_000);
-    document.addEventListener("visibilitychange", run);
+    const iv = window.setInterval(run, RELAY_POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(iv);
-      document.removeEventListener("visibilitychange", run);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [fetchRelayCapacity]);
 

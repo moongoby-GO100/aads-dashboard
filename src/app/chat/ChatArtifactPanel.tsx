@@ -1047,10 +1047,27 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   useEffect(() => {
     const panelVisible = showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden");
     if (!panelVisible) return;
-    void loadDeployStatus();
-    const statusInterval = setInterval(() => void loadDeployStatus(true), 15000);
+
+    // 첫 화면 경로에서 뺀다.
+    //
+    // 2026-09-14 /chat 실측: 이 호출이 **6,606ms / 78,713바이트** 로 초기
+    // 로딩에서 가장 느린 API 였다. 시작 1,857ms → 종료 8,463ms.
+    // 사용자가 채팅을 쓰기 시작하는 시점을 이 하나가 6초 넘게 잡아먹는다.
+    //
+    // 배포 상태는 지금 당장 필요한 정보가 아니다. 첫 페인트가 끝난 뒤에
+    // 가져오고, 탭이 안 보이면 건너뛴다. 15초 주기는 그대로 둔다.
+    const FIRST_FETCH_DELAY_MS = 4000;
+    const firstFetch = setTimeout(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void loadDeployStatus();
+    }, FIRST_FETCH_DELAY_MS);
+    const statusInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void loadDeployStatus(true);
+    }, 15000);
     const clockInterval = setInterval(() => setDeployNowMs(Date.now()), 1000);
     return () => {
+      clearTimeout(firstFetch);
       clearInterval(statusInterval);
       clearInterval(clockInterval);
     };

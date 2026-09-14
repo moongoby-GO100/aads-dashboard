@@ -316,6 +316,53 @@ function documentArtifactIdFromHref(href: string): string {
 // 13 → 약 19.5초. 진행 중인 세션에는 적용하지 않는다.
 const IDLE_STATUS_POLL_TICKS = 13;
 
+// ── 첫 메시지 선요청 ────────────────────────────────────────────────
+//
+// 2026-09-14 /chat 실측. 메시지가 화면에 뜨기까지 **세 번 왕복** 했다.
+//
+//   1,921 ─ 5,109  /chat/workspaces
+//   5,311 ─ 8,060  /chat/sessions/{id}        ← 어느 워크스페이스인지 확인
+//   8,706 ─ 9,475  /chat/messages
+//
+// 앞의 두 번은 "이 세션이 어느 워크스페이스에 속하나" 를 알아내는 과정이다.
+// 그런데 **세션 id 는 처음부터 URL 해시에 있다**(`/chat#5090a247-...`).
+// 메시지는 워크스페이스를 몰라도 바로 부를 수 있다.
+//
+// 그래서 해시가 있으면 즉시 요청을 걸어 두고, 나중에 세션이 정해졌을 때
+// 이미 받아 둔 것을 쓴다. 앞의 두 왕복(약 6.8초)과 겹쳐진다.
+//
+// 결과를 못 쓰게 되는 경우(해시 세션이 삭제됐거나 다른 세션으로 전환)에는
+// 조용히 버린다. 잘못된 세션의 메시지를 화면에 올리는 것보다 낫다.
+type PrefetchedMessages = {
+  sid: string;
+  promise: Promise<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>;
+};
+let _messagePrefetch: PrefetchedMessages | null = null;
+
+function startMessagePrefetch(): void {
+  if (typeof window === "undefined" || _messagePrefetch) return;
+  const sid = window.location.hash.replace(/^#/, "").trim();
+  // UUID 모양이 아니면 세션 id 가 아니다.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sid)) return;
+  _messagePrefetch = {
+    sid,
+    promise: chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+      `/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`
+    ),
+  };
+  // 실패해도 여기서 삼킨다. 본 경로가 다시 부른다.
+  void _messagePrefetch.promise.catch(() => { _messagePrefetch = null; });
+}
+
+function takeMessagePrefetch(sid: string) {
+  if (_messagePrefetch && _messagePrefetch.sid === sid) {
+    const p = _messagePrefetch.promise;
+    _messagePrefetch = null;
+    return p;
+  }
+  return null;
+}
+
 function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
   const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
   return `/chat/sessions/${sessionId}/streaming-status${ack}`;
@@ -5572,6 +5619,8 @@ export default function ChatPage() {
 
   // ── Load workspaces (restore last active from localStorage) ──
   useEffect(() => {
+    // 워크스페이스 응답을 기다리지 않고 메시지를 먼저 건다. 위 주석 참고.
+    startMessagePrefetch();
     chatApi<Workspace[]>("/chat/workspaces")
       .then(async (ws) => {
         setWorkspaces(ws);
@@ -5807,9 +5856,10 @@ export default function ChatPage() {
     // BUG-1 FIX: cancelled 클로저로 race condition 방지 (activeSessionRef 대신)
     let cancelled = false;
     const loadMessages = (filterPlaceholder: boolean) =>
-      chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
-        `/chat/messages?session_id=${fetchSid}&limit=120&include_streaming=true&fields=render`
-      )
+      (takeMessagePrefetch(fetchSid) ??
+        chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
+          `/chat/messages?session_id=${fetchSid}&limit=120&include_streaming=true&fields=render`
+        ))
         .then((result) => {
           const msgs = result.messages;
           if (cancelled) return msgs;
