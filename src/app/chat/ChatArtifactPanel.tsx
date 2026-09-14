@@ -187,6 +187,12 @@ export interface ChatArtifactPanelProps {
   artifactTab: ArtifactTab;
   setArtifactTab: (v: ArtifactTab) => void;
   artifactCounts: Record<string, number>;
+  // 이 대화가 **파일로 저장한 문서**. 아티팩트(대화 안 생성물)와 다르다.
+  sessionDocs?: Array<{
+    path: string; name: string; dir: string; icon: string;
+    at: string | null; writes: number; tool: string;
+  }>;
+  sessionOtherFiles?: number;
   filteredArtifacts: Artifact[];
   activeArtifact: Artifact | null;
   selectedArtifactIdx: number;
@@ -993,6 +999,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     screenSize, showArtifactPanel, artifactMode, setArtifactMode,
     mobileOverlay, setMobileOverlay,
     artifacts, artifactTab, setArtifactTab, artifactCounts,
+    sessionDocs = [], sessionOtherFiles = 0,
     systemMessages, unreadLogCount,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective, sendDirectiveNow, regenerateDirective, deleteDirective, sessionId,
@@ -1626,6 +1633,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
                     { key: "directive" as ArtifactTab, icon: "📝", label: "지시서" },
                     { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                    { key: "files" as ArtifactTab, icon: "🗂", label: "문서파일" },
                     { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                     { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                     { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
@@ -1633,6 +1641,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
                   ]
                 ).filter((tab) => {
+                  if (tab.key === "files") return true;
                   if (tab.key === "tasks" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda" || tab.key === "directive") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
                 }).map((tab) => (
@@ -2289,6 +2298,50 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     });
                   })()}
                 </div>
+              ) : artifactTab === "files" ? (
+                <div style={{ padding: "10px 12px", overflowY: "auto", height: "100%" }}>
+                  {sessionDocs.length === 0 ? (
+                    <div style={{ padding: 22, textAlign: "center", color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7 }}>
+                      이 대화가 파일로 저장한 문서가 아직 없습니다.
+                      <br />
+                      담당이 <code>write_remote_file</code> 로 저장한 문서가 여기 모입니다.
+                      {sessionOtherFiles > 0 && (
+                        <>
+                          <br />
+                          <span style={{ fontSize: 11.5 }}>
+                            문서가 아닌 파일 {sessionOtherFiles}건은 제외했습니다.
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: 8, fontSize: 11.5, color: "var(--text-secondary)" }}>
+                        문서 {sessionDocs.length}건
+                        {sessionOtherFiles > 0 && ` · 문서가 아닌 파일 ${sessionOtherFiles}건은 제외`}
+                      </div>
+                      {sessionDocs.map((d) => (
+                        <a key={d.path} href={`/docs?path=${encodeURIComponent(d.path)}`}
+                           title={d.path}
+                           style={{ display: "block", marginBottom: 6, padding: "8px 10px", borderRadius: 8,
+                                    border: "1px solid var(--border)", background: "var(--bg-primary)",
+                                    textDecoration: "none" }}>
+                          <div style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
+                            <span>{d.icon}</span>
+                            <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-primary)", wordBreak: "break-all" }}>
+                              {d.name}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                            {d.dir || "/"}
+                            {d.writes > 1 && ` · ${d.writes}회 수정`}
+                            {d.at && ` · ${new Date(d.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
+                          </div>
+                        </a>
+                      ))}
+                    </>
+                  )}
+                </div>
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
                   <RunnerHostStatus emphasis="error" />
@@ -2859,6 +2912,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "agenda" as ArtifactTab, icon: "📋", label: "아이디어 메모" },
                 { key: "directive" as ArtifactTab, icon: "📝", label: "지시서" },
                 { key: "report" as ArtifactTab, icon: "📄", label: "보고서" },
+                { key: "files" as ArtifactTab, icon: "🗂", label: "문서파일" },
                 { key: "dialog" as ArtifactTab, icon: "💬", label: "대화응답" },
                 { key: "code" as ArtifactTab, icon: "💻", label: "코드" },
                 { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },

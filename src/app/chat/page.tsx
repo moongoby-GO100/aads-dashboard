@@ -9900,6 +9900,35 @@ export default function ChatPage() {
     return () => window.removeEventListener("ohvis-task-update", handler);
   }, [activeSession?.id]);
 
+  // 이 대화가 파일로 저장한 문서. 아티팩트(대화 안 생성물)와 다르다.
+  const [sessionDocs, setSessionDocs] = useState<Array<{
+    path: string; name: string; dir: string; icon: string;
+    at: string | null; writes: number; tool: string;
+  }>>([]);
+  const [sessionOtherFiles, setSessionOtherFiles] = useState(0);
+
+  useEffect(() => {
+    const sid = activeSession?.id;
+    if (!sid) { setSessionDocs([]); setSessionOtherFiles(0); return; }
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await chatApi<{ documents?: typeof sessionDocs; other_files?: number }>(
+          `/chat/sessions/${encodeURIComponent(sid)}/documents`,
+        );
+        if (!alive) return;
+        setSessionDocs(r.documents || []);
+        setSessionOtherFiles(r.other_files || 0);
+      } catch { /* 목록 조회 실패가 대화를 막지 않는다 */ }
+    };
+    void load();
+    const iv = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void load();
+    }, 60_000);
+    return () => { alive = false; window.clearInterval(iv); };
+  }, [activeSession?.id]);
+
   const artifactCounts: Record<string, number> = useMemo(() => ({
     directive: artifacts.filter(isDirectiveDraftArtifact).length,
     report: artifacts.filter((a) => artifactMatchesTab(a, "report")).length,
@@ -9909,8 +9938,9 @@ export default function ChatPage() {
     agenda: 0,
     log: systemMessages.length,
     deploy: 0,
+    files: sessionDocs.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
-  }), [artifacts, systemMessages.length]);
+  }), [artifacts, systemMessages.length, sessionDocs.length]);
 
   function openCreateSessionModal() {
     const defaultRole = getWorkspaceDefaultRole(activeWsObj);
@@ -13015,6 +13045,8 @@ export default function ChatPage() {
         mobileOverlay={mobileOverlay} setMobileOverlay={setMobileOverlay}
         artifacts={artifacts} artifactTab={artifactTab} setArtifactTab={setArtifactTab}
         artifactCounts={artifactCounts}
+        sessionDocs={sessionDocs}
+        sessionOtherFiles={sessionOtherFiles}
         systemMessages={systemMessages}
         unreadLogCount={unreadLogCount}
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
