@@ -680,6 +680,9 @@ export const api = {
 
   // Project Docs: 프로젝트별 문서 통합 조회
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
+  // 문서 **내용** 으로 찾는다 — 파일명이 아니라 뜻으로. 2026-09-14 신설.
+  searchProjectDocs: (q: string, limit = 20) =>
+    request<any>(`/project-docs/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   getProjectDocContent: (project: string, basePath: string, filePath: string) =>
     request<any>(`/project-docs/content?project=${encodeURIComponent(project)}&base_path=${encodeURIComponent(basePath)}&file_path=${encodeURIComponent(filePath)}`),
 

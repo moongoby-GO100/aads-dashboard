@@ -6,6 +6,23 @@ import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import Link from "next/link";
 
+interface DocSearchHit {
+  path: string;
+  name: string;
+  project: string;
+  title: string;
+  heading: string;
+  snippet: string;
+  similarity: number;
+}
+
+interface DocSearchIndex {
+  docs: number;
+  chunks: number;
+  searchable: number;
+  coverage_pct: number;
+}
+
 interface DocFile {
   name: string;
   path: string;
@@ -516,6 +533,14 @@ export default function DocsPage() {
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [search, setSearch] = useState("");
+  // 파일명 검색과 내용 검색을 나눈다. 파일명 검색은 무엇을 찾는지 이미
+  // 알고 있을 때만 쓸 수 있는데, 문서가 823건이고 이름이 대부분
+  // `20260914_AADS_..._REPORT.md` 꼴이라 그럴 일이 드물다.
+  const [searchMode, setSearchMode] = useState<"name" | "content">("name");
+  const [contentHits, setContentHits] = useState<DocSearchHit[] | null>(null);
+  const [contentSearching, setContentSearching] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [indexInfo, setIndexInfo] = useState<DocSearchIndex | null>(null);
   const [selectedFile, setSelectedFile] = useState<ListedDocFile | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileMeta, setFileMeta] = useState<{
@@ -632,6 +657,59 @@ export default function DocsPage() {
       setContentLoading(false);
     }
   }, []);
+
+  // 검색 결과의 절대경로를 스캔 목록의 파일과 맞춘다. 서버는 절대경로만
+  // 주는데 뷰어는 base_path + 상대경로를 요구한다. API 를 바꾸는 대신
+  // 이미 받아 둔 목록에서 찾는다.
+  const findScannedFile = useCallback((absPath: string): { project: string; file: ListedDocFile } | null => {
+    const snapshot = dataRef.current;
+    if (!snapshot?.projects) return null;
+    for (const project of snapshot.projects) {
+      for (const file of project.files) {
+        const full = file.full_path || `${file.base_path}/${file.path}`;
+        if (full === absPath || absPath.endsWith(`/${file.path}`)) {
+          return { project: project.project, file: { ...file, project: project.project } };
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  const runContentSearch = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setContentHits(null);
+      setContentError(null);
+      return;
+    }
+    setContentSearching(true);
+    setContentError(null);
+    try {
+      const r = (await api.searchProjectDocs(q, 20)) as {
+        results?: DocSearchHit[];
+        index?: DocSearchIndex;
+      };
+      setContentHits(r.results || []);
+      setIndexInfo(r.index || null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "알 수 없는 오류";
+      // 503 은 임베딩 경로가 죽었다는 뜻이다. 거짓 결과를 보여주느니
+      // 못 찾는다고 말하는 편이 낫다.
+      setContentError(message.includes("503")
+        ? "내용 검색을 지금 쓸 수 없습니다. 파일명 검색을 사용하세요."
+        : message);
+      setContentHits([]);
+    } finally {
+      setContentSearching(false);
+    }
+  }, []);
+
+  // 내용 검색은 타자마다 부르지 않는다 — 질문 하나가 임베딩 한 번이다.
+  useEffect(() => {
+    if (searchMode !== "content") return;
+    const t = setTimeout(() => { void runContentSearch(search); }, 450);
+    return () => clearTimeout(t);
+  }, [search, searchMode, runContentSearch]);
 
   const handleOpenFile = useCallback((project: string, file: ListedDocFile) => {
     if (!isDesktop && typeof window !== "undefined") {
@@ -859,10 +937,34 @@ export default function DocsPage() {
                 </button>
               </div>
 
+              <div className="flex gap-1 mb-2">
+                {([["name", "파일명"], ["content", "내용(뜻으로)"]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setSearchMode(mode)}
+                    className="px-2.5 py-1 rounded-lg text-xs"
+                    style={{
+                      background: searchMode === mode ? "var(--accent, #2563eb)" : "var(--bg-card)",
+                      color: searchMode === mode ? "#fff" : "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {searchMode === "content" && indexInfo && indexInfo.coverage_pct < 99 && (
+                  <span className="px-2 py-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                    색인 {indexInfo.coverage_pct}% — 아직 채우는 중입니다
+                  </span>
+                )}
+              </div>
+
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="파일명 또는 경로 검색..."
+                  placeholder={searchMode === "content"
+                    ? "무엇이 궁금한가요? 예: 채팅이 왜 느려졌지"
+                    : "파일명 또는 경로 검색..."}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
@@ -994,7 +1096,73 @@ export default function DocsPage() {
             </div>
 
             <div className="flex-1 overflow-auto p-2 space-y-1">
-              {loading ? (
+              {searchMode === "content" ? (
+                // ── 내용 검색 결과 ──
+                contentSearching ? (
+                  <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
+                    찾는 중...
+                  </div>
+                ) : contentError ? (
+                  <div className="text-center py-12 text-red-400 text-sm px-4">{contentError}</div>
+                ) : contentHits === null ? (
+                  <div className="text-center py-12 text-sm px-6" style={{ color: "var(--text-secondary)" }}>
+                    문장으로 물어보세요. 파일 이름을 몰라도 됩니다.
+                    <br />
+                    <span className="text-xs">예: &quot;채팅이 왜 느려졌지&quot;, &quot;배포 절차&quot;</span>
+                  </div>
+                ) : contentHits.length === 0 ? (
+                  <div className="text-center py-12 text-sm" style={{ color: "var(--text-secondary)" }}>
+                    찾지 못했습니다
+                    {indexInfo && indexInfo.coverage_pct < 99 && (
+                      <div className="text-xs mt-2">
+                        색인이 {indexInfo.coverage_pct}% 만 채워져 있어 아직 못 찾는 문서가 있습니다
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  contentHits.map((hit, index) => {
+                    const scanned = findScannedFile(hit.path);
+                    return (
+                      <button
+                        key={`${hit.path}-${index}`}
+                        onClick={() => {
+                          if (scanned) handleOpenFile(scanned.project, scanned.file);
+                        }}
+                        disabled={!scanned}
+                        className="w-full text-left px-3 py-2 rounded-lg transition-colors"
+                        style={{
+                          background: "var(--bg-card)",
+                          border: "1px solid var(--border)",
+                          cursor: scanned ? "pointer" : "default",
+                          opacity: scanned ? 1 : 0.7,
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                            {hit.title || hit.name}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                                style={{ background: "var(--bg-hover, rgba(127,127,127,.15))", color: "var(--text-secondary)" }}>
+                            {hit.project}
+                          </span>
+                        </div>
+                        {hit.heading && (
+                          <div className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                            › {hit.heading}
+                          </div>
+                        )}
+                        <div className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                          {hit.snippet}
+                        </div>
+                        <div className="text-[10px] mt-1 truncate" style={{ color: "var(--text-secondary)", opacity: 0.7 }}>
+                          {hit.name}
+                          {!scanned && " · 목록에 없어 열 수 없습니다"}
+                        </div>
+                      </button>
+                    );
+                  })
+                )
+              ) : loading ? (
                 <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
                   스캔 중...
                 </div>
