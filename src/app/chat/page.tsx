@@ -312,6 +312,10 @@ function documentArtifactIdFromHref(href: string): string {
   return `doc-link-${href.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120)}`;
 }
 
+// 유휴 세션의 streaming-status 조회 간격 = 스케줄러 tick(1.5초) × 이 값.
+// 13 → 약 19.5초. 진행 중인 세션에는 적용하지 않는다.
+const IDLE_STATUS_POLL_TICKS = 13;
+
 function streamingStatusPath(sessionId: string, ackedCompletionToken?: string | null): string {
   const ack = ackedCompletionToken ? `?acked_completion_token=${encodeURIComponent(ackedCompletionToken)}` : "";
   return `/chat/sessions/${sessionId}/streaming-status${ack}`;
@@ -6331,7 +6335,14 @@ export default function ChatPage() {
     // BUG-SESSION-MIX FIX: cancelled 클로저로 세션 전환 시 in-flight 폴링 응답 폐기
     let cancelled = false;
     // P0: 복구/최종저장 상태를 5~10초 안에 화면에 반영하기 위해 1.5초 tick.
-    // idle 세션은 아래 tickCount skip으로 약 7.5초마다만 조회한다.
+    // 진행 중일 때만 1.5초다. 유휴 세션은 아래 skip 으로 약 19.5초마다 조회한다.
+    //
+    // 2026-09-14 실측: streaming-status 가 24시간 63,031회 호출됐다. 같은 기간
+    // 실제로 보낸 메시지는 111건이다. 유휴 폴링이 대부분이었다.
+    // 유휴 간격을 7.5초에서 19.5초로 늘리고, 탭이 안 보이는 동안에는 건너뛴다
+    // — 탭 복귀 시 handleTabFocusRefetch 가 한 번 조회하므로 놓치지 않는다.
+    // 진행 중(streaming/waitingBg)에는 종전대로 매 tick 조회한다. 응답을
+    // 기다리는 중에 간격을 늘리면 완료가 늦게 보인다.
     let tickCount = 0;
     let prevWaitingBg = false; // waitingBg 전환 감지용
     let streamingStuckCount = 0; // streaming stuck 안전장치 카운터
@@ -6349,7 +6360,11 @@ export default function ChatPage() {
       if (prevWaitingBg && !_waitingBg) { tickCount = 0; }
       prevWaitingBg = _waitingBg;
       tickCount++;
-      if (!_waitingBg && !_streaming && tickCount % 5 !== 0) return;
+      if (!_waitingBg && !_streaming) {
+        // 유휴 + 화면에 안 보임 → 조회하지 않는다.
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+        if (tickCount % IDLE_STATUS_POLL_TICKS !== 0) return;
+      }
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
       let ss: StreamingStatusPayload | null = null;
       try {
