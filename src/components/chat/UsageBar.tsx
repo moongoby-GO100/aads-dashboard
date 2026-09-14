@@ -112,9 +112,14 @@ function formatResetSeconds(seconds?: number): string {
   return hours > 0 ? `${days}d${hours}h` : `${days}d`;
 }
 
-function MiniBar({ pct, label, detail, resetIn }: { pct: number; label: string; detail: string; resetIn?: string }) {
-  const clampedPct = Math.min(pct, 100);
-  const remaining = (100 - clampedPct).toFixed(0);
+// pct 가 null 이면 **아직 측정값이 없다**는 뜻이다. 막대 자리는 그대로 두고
+// 숫자만 "—" 로 적는다. 0% 로 그리면 "한도를 하나도 안 썼다" 는 주장이 되는데,
+// 그건 측정한 사실이 아니다. 자리를 비우면 계정마다 줄이 어긋나 읽기 어렵다.
+function MiniBar({ pct, label, detail, resetIn }: { pct: number | null; label: string; detail: string; resetIn?: string }) {
+  const unknown = pct == null;
+  const clampedPct = unknown ? 0 : Math.min(pct, 100);
+  const remaining = unknown ? "—" : `${(100 - clampedPct).toFixed(0)}%`;
+  const textColor = unknown ? "var(--ct-text3, #999)" : barColor(clampedPct);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "5px", minWidth: 0 }} title={detail}>
       <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
@@ -127,8 +132,8 @@ function MiniBar({ pct, label, detail, resetIn }: { pct: number; label: string; 
           background: barColor(clampedPct), transition: "width 0.3s",
         }} />
       </div>
-      <span style={{ fontSize: "10px", color: barColor(clampedPct), fontWeight: 600, whiteSpace: "nowrap" }}>
-        {remaining}%
+      <span style={{ fontSize: "10px", color: textColor, fontWeight: 600, whiteSpace: "nowrap" }}>
+        {remaining}
       </span>
       {resetIn && (
         <span style={{ fontSize: "9px", color: "var(--ct-text3, #999)", whiteSpace: "nowrap" }}>
@@ -339,7 +344,10 @@ export default function UsageBar() {
           // 최후 수단 계정은 색부터 다르다. 같은 초록·파랑으로 그리면
           // 대표님이 남의 한도가 줄고 있는 것을 우리 계정으로 읽는다.
           const dot = lastResort ? "\uD83D\uDFE0" : sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
-          const seen = sl.secondary.used_percent == null && sl.primary.used_percent == null;
+          const detailText = (window_: string, pct: number | null) =>
+            pct == null
+              ? `${name} ${window_} \uc794\ub7c9: \uc544\uc9c1 \uce21\uc815\uac12\uc774 \uc5c6\uc2b5\ub2c8\ub2e4`
+              : `${name} ${window_} \uc794\ub7c9: ${(100 - pct).toFixed(0)}%`;
           const keyName = slotMeta(sl.slot)?.key_name ?? "";
           const isActive = activeSlot === sl.slot;
           const exhausted = (sl.secondary.used_percent ?? 0) >= 100;
@@ -373,26 +381,21 @@ export default function UsageBar() {
                   </span>
                 )}
               </button>
-              {seen ? (
-                <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>
-                  {lastResort ? "\uBBF8\uC0AC\uC6A9" : "\uCE21\uC815 \uB300\uAE30"}
-                </span>
-              ) : (
-                <>
-                  <MiniBar
-                    pct={sl.primary.used_percent ?? 0}
-                    label="5h"
-                    detail={`${name} 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (sl.primary.used_percent ?? 0)).toFixed(0)}%`}
-                    resetIn={formatResetTime(sl.primary.resets_at ?? undefined)}
-                  />
-                  <MiniBar
-                    pct={sl.secondary.used_percent ?? 0}
-                    label="1w"
-                    detail={`${name} 1\uc8fc \uc794\ub7c9: ${(100 - (sl.secondary.used_percent ?? 0)).toFixed(0)}%`}
-                    resetIn={formatResetTime(sl.secondary.resets_at ?? undefined)}
-                  />
-                </>
-              )}
+              {/* 계정마다 같은 자리에 같은 막대를 둔다. 측정값이 없는 계정만
+                  따로 글자를 적으면 줄이 어긋나 한눈에 비교가 안 된다.
+                  측정 전에는 막대는 비고 숫자만 "—" 로 나온다. */}
+              <MiniBar
+                pct={sl.primary.used_percent}
+                label="5h"
+                detail={detailText("5\uc2dc\uac04", sl.primary.used_percent)}
+                resetIn={formatResetTime(sl.primary.resets_at ?? undefined)}
+              />
+              <MiniBar
+                pct={sl.secondary.used_percent}
+                label="1w"
+                detail={detailText("1\uc8fc", sl.secondary.used_percent)}
+                resetIn={formatResetTime(sl.secondary.resets_at ?? undefined)}
+              />
             </React.Fragment>
           );
         })
