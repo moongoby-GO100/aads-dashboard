@@ -7,6 +7,9 @@ type ClaudeSlotUsage = {
   label?: string;
   // AADS 소유가 아닌 계정. 1·2 가 모두 불가능할 때만 쓰인다.
   last_resort?: boolean;
+  // 최후 수단 계정은 대표님이 켠 동안에만 폴백 후보가 된다.
+  enabled?: boolean;
+  gate_changed_at?: string | null;
   source?: string;
   sampled_at?: string | null;
   primary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
@@ -202,6 +205,36 @@ export default function UsageBar() {
     }
   }, [switching, fetchUsage]);
 
+  const [gating, setGating] = useState<string | null>(null);
+
+  // 최후 수단 계정 스위치. 켠 직후 서버가 그 계정에 최소 호출 한 번을 보내
+  // 한도 헤더를 받아오므로, 새로고침하면 바로 숫자가 찬다.
+  const toggleSlot = useCallback(async (slot: string, name: string, next: boolean) => {
+    if (gating) return;
+    if (next && !window.confirm(
+      `${name} 계정을 사용 가능으로 바꿉니다.\n\n` +
+      "우리 계정(슬롯 1·2)이 모두 불가능할 때만 이 계정으로 응답합니다. " +
+      "쓰이면 그쪽 주간 한도가 줄어들고, 쓰이는 순간 알림이 올라갑니다.")) return;
+    const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
+    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    setGating(slot);
+    setSwitchError(null);
+    try {
+      const res = await fetch(`${BASE}/settings/auth-keys/slot-enabled`, {
+        method: "POST", credentials: "include", headers,
+        body: JSON.stringify({ slot, enabled: next }),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${(await res.text().catch(() => "")).slice(0, 120)}`);
+      await fetchUsage();
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : "스위치 적용 실패");
+    } finally {
+      setGating(null);
+    }
+  }, [gating, fetchUsage]);
+
   const fetchRelayCapacity = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -343,7 +376,8 @@ export default function UsageBar() {
           const lastResort = sl.last_resort === true;
           // 최후 수단 계정은 색부터 다르다. 같은 초록·파랑으로 그리면
           // 대표님이 남의 한도가 줄고 있는 것을 우리 계정으로 읽는다.
-          const dot = lastResort ? "\uD83D\uDFE0" : sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
+          const slotOn = !lastResort || sl.enabled === true;
+          const dot = lastResort ? (slotOn ? "\uD83D\uDFE0" : "\u26AA") : sl.slot === "1" ? "\uD83D\uDD35" : "\uD83D\uDFE2";
           const detailText = (window_: string, pct: number | null) =>
             pct == null
               ? `${name} ${window_} \uc794\ub7c9: \uc544\uc9c1 \uce21\uc815\uac12\uc774 \uc5c6\uc2b5\ub2c8\ub2e4`
@@ -367,8 +401,8 @@ export default function UsageBar() {
                 style={{
                   fontSize: "10px", fontWeight: 700, whiteSpace: "nowrap",
                   padding: "1px 7px", borderRadius: "9px",
-                  border: `1px solid ${lastResort ? "#f59e0b66" : isActive ? "#22c55e88" : "var(--ct-border)"}`,
-                  background: lastResort ? "#f59e0b12" : isActive ? "#22c55e18" : "transparent",
+                  border: `1px solid ${lastResort ? (slotOn ? "#f59e0b66" : "var(--ct-border)") : isActive ? "#22c55e88" : "var(--ct-border)"}`,
+                  background: lastResort && slotOn ? "#f59e0b12" : isActive ? "#22c55e18" : "transparent",
                   color: exhausted ? "var(--ct-text3, #999)" : "var(--ct-text2)",
                   opacity: switching === keyName ? 0.5 : exhausted && !isActive ? 0.6 : 1,
                   cursor: lastResort || isActive || !keyName || switching !== null ? "default" : "pointer",
@@ -381,6 +415,29 @@ export default function UsageBar() {
                   </span>
                 )}
               </button>
+              {lastResort && (
+                // 켜짐/꺼짐이 한눈에 보여야 한다. 꺼져 있으면 이 계정은
+                // 폴백 후보에도 오르지 않는다 — 회색이 그 뜻이다.
+                <button
+                  type="button"
+                  disabled={gating !== null}
+                  onClick={() => void toggleSlot(sl.slot, name, !slotOn)}
+                  title={slotOn
+                    ? "\uB204\uB974\uBA74 \uB055\uB2C8\uB2E4. \uAEBC\uC9C0\uBA74 \uD3F4\uBC31 \uD6C4\uBCF4\uC5D0\uC11C \uBE60\uC9D1\uB2C8\uB2E4."
+                    : "\uB204\uB974\uBA74 \uCF2D\uB2C8\uB2E4. \uC2AC\uB86F 1\u00B72 \uAC00 \uBAA8\uB450 \uBD88\uAC00\uB2A5\uD560 \uB54C\uB9CC \uC4F0\uC785\uB2C8\uB2E4."}
+                  style={{
+                    fontSize: "9px", fontWeight: 800, whiteSpace: "nowrap",
+                    padding: "1px 7px", borderRadius: "9px", marginLeft: "-6px",
+                    border: `1px solid ${slotOn ? "#f59e0b" : "var(--ct-border)"}`,
+                    background: slotOn ? "#f59e0b" : "transparent",
+                    color: slotOn ? "#1a1a1a" : "var(--ct-text3, #999)",
+                    opacity: gating === sl.slot ? 0.5 : 1,
+                    cursor: gating !== null ? "default" : "pointer",
+                  }}
+                >
+                  {slotOn ? "\uCF1C\uC9D0" : "\uAEBC\uC9D0"}
+                </button>
+              )}
               {/* 계정마다 같은 자리에 같은 막대를 둔다. 측정값이 없는 계정만
                   따로 글자를 적으면 줄이 어긋나 한눈에 비교가 안 된다.
                   측정 전에는 막대는 비고 숫자만 "—" 로 나온다. */}
