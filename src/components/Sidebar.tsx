@@ -189,7 +189,7 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
 
       <aside
         className={`
-          fixed top-0 left-0 h-full z-50 w-56 flex flex-col
+          fixed top-0 left-0 h-full z-50 w-60 flex flex-col
           transition-transform duration-300
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           md:relative md:translate-x-0 md:h-screen md:z-auto
@@ -215,8 +215,8 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
           {ready && favItems.length > 0 && (
             <div className="mb-2">
               <div
-                className="px-3 py-1 text-[11px] font-semibold"
-                style={{ color: "var(--text-secondary)" }}
+                className="px-3 py-1.5 text-[15px] font-bold"
+                style={{ color: "var(--text-primary)" }}
               >
                 ★ 즐겨찾기
               </div>
@@ -227,7 +227,7 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
 
           {ready && favItems.length === 0 && (
             <div
-              className="px-3 py-2 mb-1 text-[11px] leading-relaxed"
+              className="px-3 py-2 mb-1 text-[12px] leading-relaxed"
               style={{ color: "var(--text-secondary)" }}
             >
               메뉴 옆 ☆ 를 누르면 여기 위로 올라옵니다.
@@ -240,14 +240,20 @@ export default function Sidebar({ isOpen, isInternalAdmin, onOpen, onClose }: Si
               <div key={group}>
                 <button
                   onClick={() => toggleGroup(group)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold rounded-lg"
-                  style={{ color: "var(--text-secondary)" }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-[15px] font-bold rounded-lg transition-colors"
+                  style={{ color: "var(--text-primary)" }}
                   aria-expanded={expanded}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-hover)")}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "")}
                 >
                   <span>{group}</span>
-                  <span style={{ opacity: 0.6 }}>{expanded ? "▾" : `▸ ${items.length}`}</span>
+                  <span className="text-[13px] font-semibold" style={{ opacity: 0.55 }}>
+                    {expanded ? "▾" : `${items.length} ▸`}
+                  </span>
                 </button>
-                {expanded && <div className="space-y-1 mb-1">{items.map((item) => row(item))}</div>}
+                {expanded && (
+                  <div className="space-y-0.5 mb-2 pl-2">{items.map((item) => row(item))}</div>
+                )}
               </div>
             );
           })}
