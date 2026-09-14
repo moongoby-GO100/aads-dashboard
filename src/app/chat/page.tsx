@@ -6091,14 +6091,23 @@ export default function ChatPage() {
         chatViewportController.correctContentResize();
       });
     });
+    const observedRows = new WeakSet<HTMLElement>();
     const observeMessageRows = () => {
-      container.querySelectorAll<HTMLElement>("[data-message-id]").forEach((row) => resizeObserver.observe(row));
+      container.querySelectorAll<HTMLElement>("[data-message-id]").forEach((row) => {
+        if (observedRows.has(row)) return;
+        observedRows.add(row);
+        resizeObserver.observe(row);
+      });
     };
+    // characterData:true means a streaming reply fires this observer on every
+    // token.  Re-scanning and re-observing every rendered row that often
+    // starved the scroll handler, so the rescan is coalesced into the audit
+    // frame and already-observed rows are skipped.
     const mutationObserver = new MutationObserver(() => {
-      observeMessageRows();
       if (mutationAuditFrame) return;
       mutationAuditFrame = requestAnimationFrame(() => {
         mutationAuditFrame = 0;
+        observeMessageRows();
         restoreIfUnexpectedTopReset("mutation");
       });
     });

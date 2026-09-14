@@ -78,6 +78,12 @@ const defaultFrames: FrameScheduler = {
   cancel: (id) => cancelAnimationFrame(id),
 };
 
+/**
+ * How many rows on each side of the anchor are remembered as restore
+ * fallbacks.  Anything further away is a different part of the conversation.
+ */
+const ANCHOR_NEIGHBOR_SPAN = 8;
+
 function rowKey(element: HTMLElement): string | null {
   return element.dataset.messageRenderId || element.dataset.messageId || null;
 }
@@ -111,7 +117,14 @@ export function createDomChatViewportAdapter(
       return {
         renderKey: anchor ? rowKey(anchor) : null,
         messageId: anchor?.dataset.messageId || null,
-        neighborKeys: [...following, ...preceding]
+        // Only the rows adjacent to the anchor can serve as a fallback: if none
+        // of them survived the mutation, the anchor's neighbourhood is gone and
+        // a far-away row would restore the wrong position anyway.  Keeping the
+        // whole list made every scroll event allocate one key per rendered row.
+        neighborKeys: [
+          ...following.slice(0, ANCHOR_NEIGHBOR_SPAN),
+          ...preceding.slice(0, ANCHOR_NEIGHBOR_SPAN),
+        ]
           .map(rowKey)
           .filter((key): key is string => Boolean(key)),
         offsetPx: anchor ? anchor.offsetTop - container.scrollTop : 0,
@@ -141,9 +154,20 @@ export function createDomChatViewportAdapter(
         anchor.renderKey || anchor.renderId || anchor.messageId,
         ...(anchor.neighborKeys || []),
       ].filter((key): key is string => Boolean(key));
-      const target = targetKeys
-        .map((key) => rows(container).find((element) => rowKey(element) === key) || null)
-        .find((element): element is HTMLElement => Boolean(element));
+      // `.map()` does not short-circuit, so the previous form re-ran
+      // querySelectorAll once per candidate key — quadratic in the rendered row
+      // count, on a path that runs for every ResizeObserver frame while a reply
+      // streams.  Index the rows once and stop at the first surviving key.
+      const rowsByKey = new Map<string, HTMLElement>();
+      for (const element of rows(container)) {
+        const key = rowKey(element);
+        if (key && !rowsByKey.has(key)) rowsByKey.set(key, element);
+      }
+      let target: HTMLElement | null = null;
+      for (const key of targetKeys) {
+        const found = rowsByKey.get(key);
+        if (found) { target = found; break; }
+      }
       const offset = Number.isFinite(anchor.offsetPx) ? anchor.offsetPx : Number(anchor.offsetTop || 0);
       const desired = target ? target.offsetTop - offset : anchor.scrollTop;
       const nextScrollTop = Math.max(0, Math.min(maxScrollTop, desired));
@@ -254,7 +278,13 @@ export class ChatViewportController {
     const mode = nextChatFollowModeAfterUserScroll(metrics);
     this.setFollowMode(mode);
     if (mode === "auto") {
-      this.gestureActiveUntil = 0;
+      // Resuming follow does NOT end the gesture.  Clearing the window here let
+      // the 300ms streaming tick write the bottom while the user was still
+      // scrolling: any nudge smaller than the near-bottom threshold was undone
+      // before the next wheel event, so the view felt stuck to the bottom.  The
+      // window now expires on its own, which is what protects an in-flight
+      // gesture.  noteUserSend()/jumpToLatest() still clear it explicitly,
+      // because there the user asked to be taken to the bottom.
       this.setUnreadCount(0);
     }
     if (!this.nearBottom) this.bottomStickUntil = 0;

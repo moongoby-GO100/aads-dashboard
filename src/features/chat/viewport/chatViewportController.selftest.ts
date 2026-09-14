@@ -125,4 +125,26 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes[h.writes.length - 1], "anchor:stable", "resize uses latest stable anchor");
 }
 
-console.log("PASS: WP02 viewport controller T01-T04 cases");
+// T05: a nudge that stays inside the near-bottom band must survive the
+// streaming tick.  Resuming auto-follow used to clear the gesture window in the
+// same call, so the very next bottom write undid the user scroll and the view
+// felt stuck to the bottom while a reply streamed.
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_400, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.recordScroll(true);
+  assertEqual(h.controller.mode, "auto", "a nudge inside the band keeps follow armed");
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.length, 0, "streaming tick never fights an open gesture");
+  h.setNow(2_000);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.join(","), "bottom,bottom", "follow resumes once the gesture expires");
+}
+
+console.log("PASS: WP02 viewport controller T01-T05 cases");
