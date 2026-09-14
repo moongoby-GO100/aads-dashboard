@@ -570,12 +570,18 @@ function normalizeQueuedInterruptDisplayContent(content: string): string {
 }
 
 function isUserInterruptMessage(message: ChatMessage): boolean {
-  return message.role === "user" && (
+  if (message.role !== "user") return false;
+  if (
     message.intent === "queued_interrupt" ||
     message.intent === "interrupt_queued" ||
     message.intent === "interrupt_applied" ||
-    message.intent === "interrupt_completed"
-  );
+    message.intent === "interrupt_completed" ||
+    message.intent === "recovered_interrupt"
+  ) return true;
+  // An interrupt the server has not classified yet is still a 추가 지시 bubble to
+  // the reader.  Leaving these out is why roughly half of them showed no status
+  // at all and there was no way to tell whether the instruction had landed.
+  return !message.intent && String(message.content || "").trimStart().startsWith("[추가 지시]");
 }
 
 function interruptStatusBadge(message: ChatMessage): { label: string; color: string; bg: string; border: string } | null {
@@ -594,6 +600,17 @@ function interruptStatusBadge(message: ChatMessage): { label: string; color: str
       color: "#2563eb",
       bg: "rgba(37,99,235,0.10)",
       border: "rgba(37,99,235,0.22)",
+    };
+  }
+  if (message.intent === "recovered_interrupt") {
+    // The stream had already ended when this arrived, so the server prepended it
+    // to the next turn as "[이전 추가 지시]".  It did land — just one turn later —
+    // and saying so is the difference between a trustworthy queue and a silent one.
+    return {
+      label: "다음 응답에 반영됨",
+      color: "#0891b2",
+      bg: "rgba(8,145,178,0.10)",
+      border: "rgba(8,145,178,0.24)",
     };
   }
   return {
