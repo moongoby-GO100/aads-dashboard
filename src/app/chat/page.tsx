@@ -6,6 +6,7 @@ import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
 import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
+import { GoalPanel } from "@/components/GoalPanel";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
@@ -3829,6 +3830,9 @@ export default function ChatPage() {
     progress: number; milestone: string | null; dispatch_note: string | null;
   }>>([]);
   const [goalsHalted, setGoalsHalted] = useState(false);
+  // 띠를 누르면 우측 패널이 열린다. 대화는 그대로 있다 — 창을 떠나지
+  // 않고 근거를 보고 그 자리에서 판정하고 바로 되물을 수 있다.
+  const [panelGoalId, setPanelGoalId] = useState<string | null>(null);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -11528,15 +11532,18 @@ export default function ChatPage() {
               {sessionGoals.map((g) => {
                 const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
                 const c = g.dispatch_note ? "#dc2626" : g.status === "active" ? "#2563eb" : "#64748b";
+                const open = panelGoalId === g.goal_id;
                 return (
-                  <a key={g.goal_id} href={`/goals?goal=${encodeURIComponent(g.goal_id)}`}
-                     title={g.dispatch_note || undefined}
-                     style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 10px", borderRadius: 999, border: `1px solid ${c}`, background: "var(--bg-card)", textDecoration: "none", fontSize: 11.5 }}>
+                  <button key={g.goal_id} type="button"
+                     title={g.dispatch_note || "누르면 목표 진행을 옆에서 봅니다"}
+                     onClick={() => setPanelGoalId(open ? null : g.goal_id)}
+                     style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 10px", borderRadius: 999, border: `1px solid ${c}`, background: open ? "rgba(37,99,235,.10)" : "var(--bg-card)", fontSize: 11.5, cursor: "pointer" }}>
                     <span style={{ fontWeight: 800, color: c }}>🎯 {g.title}</span>
                     <span style={{ color: "var(--text-secondary)" }}>{pct}%</span>
                     {g.milestone && <span style={{ color: "var(--text-primary)" }}>· {g.milestone}</span>}
                     {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
-                  </a>
+                    <span style={{ color: "var(--text-secondary)" }}>{open ? "▴" : "▾"}</span>
+                  </button>
                 );
               })}
             </div>
@@ -12966,6 +12973,19 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {/* 목표 패널 — 띠를 누르면 열린다. 대화는 그대로 있다.
+          diff 패널과 같은 자리를 쓰되, 둘이 동시에 뜨면 화면이 좁아지므로
+          diff 가 뜨면 목표 패널은 물러난다. 코드 승인이 더 급하다. */}
+      {panelGoalId && !diffApproval.payload && (
+        <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 40, display: "flex", boxShadow: "-8px 0 24px rgba(0,0,0,.18)" }}>
+          <GoalPanel
+            goalId={panelGoalId}
+            onClose={() => setPanelGoalId(null)}
+            onOpenSession={(sid) => { window.location.hash = sid; }}
+          />
+        </div>
+      )}
 
       {/* AADS-188D: Code 패널 (diff_preview 시에만 표시) */}
       {diffApproval.payload && (

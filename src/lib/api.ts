@@ -944,6 +944,11 @@ export const api = {
   directGoal: (goalId: string, message: string, roles?: string[]) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/direct`,
       { method: "POST", body: JSON.stringify({ message, roles }) }),
+  // 마일스톤 판정 — 반려는 사유가 담당에게 전달된다.
+  confirmMilestone: (milestoneId: string, ok: boolean, reason?: string) =>
+    request<any>(`/goals/milestones/${encodeURIComponent(milestoneId)}/confirm`,
+      { method: "POST", body: JSON.stringify({ ok, reason }) }),
+
   // 담당 붙이기 — **세션을 만들지 않는다.** 이미 있는 창을 붙일 뿐이다.
   getGoalCandidates: (goalId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/candidates`),
