@@ -105,6 +105,38 @@ export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
   }
 }
 
+/**
+ * 최소 간격 가드 — 방금 받은 요청이면 건너뛴다(`null` 반환).
+ *
+ * in-flight 합치기는 **겹치는** 요청만 잡는다. 그런데 effect 가 의존성 변화로
+ * 다시 도는 경우는 앞 요청이 끝난 뒤에 시작하므로 겹치지 않는다
+ * (2026-09-14 실측: 동일한 /chat/messages?limit=120 이 4834~7133ms,
+ *  9235~10204ms 로 2,102ms 간격. 각 393,849B).
+ *
+ * 캐시가 아니다 — 옛 값을 돌려주지 않고 **호출을 생략**한다. 호출부는 null 을
+ * "지금은 갱신할 필요 없음" 으로 읽고 기존 상태를 유지하면 된다. 오래된 값을
+ * 새 값인 척 돌려주는 것보다 안전하다.
+ *
+ * 실패는 간격을 소비하지 않는다. 한 번 실패하면 다음 시도까지 막히면 안 된다.
+ */
+const _lastFetchAt = new Map<string, number>();
+
+export async function chatApiThrottled<T>(
+  path: string,
+  minIntervalMs: number,
+  opts?: RequestInit,
+): Promise<T | null> {
+  const now = Date.now();
+  if (now - (_lastFetchAt.get(path) ?? 0) < minIntervalMs) return null;
+  _lastFetchAt.set(path, now);
+  try {
+    return await chatApi<T>(path, opts);
+  } catch (e) {
+    _lastFetchAt.delete(path);
+    throw e;
+  }
+}
+
 export async function updateArtifact(
   artifactId: string,
   data: { title?: string; content?: string }

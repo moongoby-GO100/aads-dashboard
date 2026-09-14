@@ -35,7 +35,7 @@ import {
   type VoiceAlertKind,
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
-import { BASE_URL, getToken, authHdrs, chatApi, uploadChatFile } from "./api";
+import { BASE_URL, getToken, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
 import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
@@ -4170,9 +4170,11 @@ export default function ChatPage() {
     }
     setTodoLoading(true);
     try {
-      const items = await chatApi<ChatTodoItem[]>(
-        `/chat/sessions/${sid}/todos?include_completed=true&cleanup_stale=true`
+      // 여러 경로에서 불려 2초 사이 같은 125KB 를 두 번 받고 있었다.
+      const items = await chatApiThrottled<ChatTodoItem[]>(
+        `/chat/sessions/${sid}/todos?include_completed=true&cleanup_stale=true`, 2000
       );
+      if (items === null) return;   // 방금 받았다 — 기존 목록 유지
       if (activeSessionRef.current === sid) {
         setTodoItems(items);
         setTodoError(null);
@@ -6023,8 +6025,11 @@ export default function ChatPage() {
     const sid = activeSession.id;
     const timer = setTimeout(() => {
       if (activeSessionRef.current !== sid) return;
-      chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(`/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`)
-        .then((result) => result.messages)
+      // 3초 안에 같은 요청을 이미 받았으면 건너뛴다. 이 안전망은 messages 가
+      // 비어 보일 때 도는데, 최초 로드가 방금 같은 393KB 를 받아온 경우가 있다.
+      chatApiThrottled<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
+        `/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`, 3000)
+        .then((result) => result?.messages ?? [])
         .then((msgs) => {
           if (activeSessionRef.current !== sid) return;
           if (msgs.length > 0) {
