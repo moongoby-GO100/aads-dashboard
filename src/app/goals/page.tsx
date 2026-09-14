@@ -25,7 +25,16 @@ type BoardOwner = {
   milestone: string | null; last_at: string | null;
   tool_calls: number; dispatch_count: number; note: string | null;
 };
-type Board = { halted: boolean; owners: BoardOwner[] };
+type GoalDoc = { kind: string; doc_path: string; title: string | null };
+type Board = {
+  halted: boolean; owners: BoardOwner[];
+  documents?: GoalDoc[]; has_design?: boolean; missing_design?: string[];
+};
+
+const docLabel: Record<string, string> = {
+  plan: "📋 기획서", prd: "📐 PRD", report: "📊 리포트", reference: "🔗 참고",
+};
+const docMissingLabel: Record<string, string> = { plan: "기획서", prd: "PRD" };
 
 const stateColor: Record<string, string> = {
   "작업 중": "#2563eb",
@@ -221,6 +230,30 @@ export default function GoalsPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
                 <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>마일스톤 {detail.milestones_completed}/{detail.milestones_total} · 자동 진행은 각 완료기준과 연결 작업 상태가 모두 충족될 때만 실행됩니다.</div>
               </div>
+              {board && (
+                <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)" }} aria-label="목표 설계 문서">
+                  {board.documents && board.documents.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {board.documents.map((d) => (
+                        <a key={d.doc_path} href={`/docs?path=${encodeURIComponent(d.doc_path)}`}
+                           title={d.doc_path}
+                           style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", textDecoration: "none" }}>
+                          <span style={{ fontWeight: 700 }}>{docLabel[d.kind] || "🔗 문서"}</span>
+                          <span style={{ marginLeft: 6, color: "var(--text-secondary)" }}>
+                            {d.title || d.doc_path.split("/").pop()}
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                  {board.missing_design && board.missing_design.length > 0 && (
+                    <div style={{ marginTop: board.documents?.length ? 7 : 0, fontSize: 11.5, color: "#d97706" }}>
+                      ⚠ {board.missing_design.map((k) => docMissingLabel[k] || k).join("와 ")} 없음 — 먼저 쓰십시오
+                    </div>
+                  )}
+                </div>
+              )}
+
               {board && board.owners.length > 0 && (
                 <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)" }} aria-label="담당별 현재 상태">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
