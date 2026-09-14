@@ -935,6 +935,18 @@ export const api = {
     request<GoalSummary[]>(`/goals${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   getGoalStatus: (goalId: string) =>
     request<GoalDetail>(`/goals/${encodeURIComponent(goalId)}/status`),
+  // 담당별 현재 상태. 창을 하나씩 열지 않아도 되게.
+  getGoalBoard: (goalId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/board`),
+  // 개입 — 전체 정지 · 방향 지시 · 되돌리기
+  setGoalHalt: (on: boolean, reason?: string) =>
+    request<any>("/goals/halt", { method: "POST", body: JSON.stringify({ on, reason }) }),
+  directGoal: (goalId: string, message: string, roles?: string[]) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/direct`,
+      { method: "POST", body: JSON.stringify({ message, roles }) }),
+  rewindMilestone: (milestoneId: string, reason?: string) =>
+    request<any>(`/goals/milestones/${encodeURIComponent(milestoneId)}/rewind`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
 
   // Prompt Assets (5-Layer System)
   getPromptAssets: (layer?: number) =>

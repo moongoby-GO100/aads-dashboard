@@ -15,7 +15,35 @@ import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import type { GoalDetail, GoalSummary } from "@/lib/api";
 
-const PROJECTS = ["ALL", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS"];
+// 통합지시가 보는 프로젝트와 맞춘다. 여기만 7개로 박혀 있으면 FOOD·LAW 같은
+// 업무 워크스페이스의 목표가 화면에서 아예 안 보인다.
+const PROJECTS = ["ALL", "AADS", "KIS", "GO100", "SF", "NTV2", "NAS",
+                  "FOOD", "LAW", "COM", "DESIGN", "ACCT", "KAKAOBOT"];
+
+type BoardOwner = {
+  session_id: string; role_key: string; title: string; state: string;
+  milestone: string | null; last_at: string | null;
+  tool_calls: number; dispatch_count: number; note: string | null;
+};
+type Board = { halted: boolean; owners: BoardOwner[] };
+
+const stateColor: Record<string, string> = {
+  "작업 중": "#2563eb",
+  "진행 중": "#2563eb",
+  "응답 대기": "#d97706",
+  "응답 끊김": "#dc2626",
+  "막힘": "#dc2626",
+  "지시 없음": "#64748b",
+};
+
+function sinceText(iso: string | null): string {
+  if (!iso) return "—";
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return "방금";
+  if (min < 60) return `${min}분 전`;
+  const h = Math.floor(min / 60);
+  return h < 24 ? `${h}시간 전` : `${Math.floor(h / 24)}일 전`;
+}
 
 const statusColor: Record<string, string> = {
   completed: "#16a34a",
@@ -120,6 +148,20 @@ export default function GoalsPage() {
     api.getGoalStatus(selectedId).then(setDetail).catch((cause) => setError(cause instanceof Error ? cause.message : "목표 상세를 불러오지 못했습니다."));
   }, [selectedId, updatedAt]);
 
+  const [board, setBoard] = useState<Board | null>(null);
+  useEffect(() => {
+    if (!selectedId) { setBoard(null); return; }
+    let alive = true;
+    const load = () => {
+      api.getGoalBoard(selectedId)
+        .then((b) => { if (alive) setBoard(b); })
+        .catch(() => { if (alive) setBoard(null); });
+    };
+    load();
+    const timer = window.setInterval(load, 15000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [selectedId]);
+
   const graph = useMemo(() => detail ? buildGraph(detail) : { nodes: [], edges: [] }, [detail]);
   const counts = useMemo(() => ({
     active: goals.filter((g) => g.status === "active").length,
@@ -179,7 +221,37 @@ export default function GoalsPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
                 <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>마일스톤 {detail.milestones_completed}/{detail.milestones_total} · 자동 진행은 각 완료기준과 연결 작업 상태가 모두 충족될 때만 실행됩니다.</div>
               </div>
-              <div style={{ height: 540 }} aria-label="목표 실행 상태 그래프">
+              {board && board.owners.length > 0 && (
+                <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)" }} aria-label="담당별 현재 상태">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>담당 {board.owners.length}명</strong>
+                    {board.halted && <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>전체 정지 중</span>}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(268px,1fr))", gap: 8 }}>
+                    {board.owners.map((o) => {
+                      const c = stateColor[o.state] || "#64748b";
+                      return (
+                        <a key={o.session_id} href={`/chat#${o.session_id}`}
+                           style={{ display: "block", padding: "9px 11px", borderRadius: 9, border: `1px solid var(--border)`, borderLeft: `3px solid ${c}`, background: "var(--bg-primary)", textDecoration: "none" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>{o.title}</span>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: c, whiteSpace: "nowrap" }}>{o.state}</span>
+                          </div>
+                          <div style={{ marginTop: 3, fontSize: 11, color: "var(--text-secondary)" }}>
+                            {o.milestone ? o.milestone : "맡은 마일스톤 없음"}
+                          </div>
+                          <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)" }}>
+                            {sinceText(o.last_at)} · 도구 {o.tool_calls}회
+                            {o.dispatch_count > 1 ? ` · 재알림 ${o.dispatch_count}회` : ""}
+                          </div>
+                          {o.note && <div style={{ marginTop: 4, fontSize: 10.5, color: "#dc2626" }}>{o.note}</div>}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div style={{ height: 420 }} aria-label="목표 실행 상태 그래프">
                 <ReactFlow nodes={graph.nodes} edges={graph.edges} nodeTypes={nodeTypes} fitView minZoom={0.25} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable>
                   <Background gap={22} size={1} /><Controls showInteractive={false} />
                 </ReactFlow>

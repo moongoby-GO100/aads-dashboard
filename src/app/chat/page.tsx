@@ -3819,6 +3819,41 @@ export default function ChatPage() {
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
 
+  // 이 대화가 참여 중인 목표.
+  //
+  // 2026-09-14 대표님 요청: "해당 채팅창에도 참여 진행중 골들이 표시되었으면
+  // 좋겠다". 담당이 지시를 받아도 **그것이 무엇의 일부인지** 알 수가 없었다.
+  // 맡은 마일스톤과 목표 진행률을 대화 위에 얇게 둔다.
+  const [sessionGoals, setSessionGoals] = useState<Array<{
+    goal_id: string; title: string; status: string; project: string;
+    progress: number; milestone: string | null; dispatch_note: string | null;
+  }>>([]);
+  const [goalsHalted, setGoalsHalted] = useState(false);
+
+  useEffect(() => {
+    const sid = activeSession?.id;
+    if (!sid) { setSessionGoals([]); setGoalsHalted(false); return; }
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await chatApi<{ halted?: boolean; goals?: typeof sessionGoals }>(
+          `/goals/for-session/${encodeURIComponent(sid)}`,
+        );
+        if (!alive) return;
+        setSessionGoals(r.goals || []);
+        setGoalsHalted(Boolean(r.halted));
+      } catch {
+        // 목표 조회 실패가 대화를 막으면 안 된다.
+      }
+    };
+    void load();
+    const iv = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void load();
+    }, 30_000);
+    return () => { alive = false; window.clearInterval(iv); };
+  }, [activeSession?.id]);
+
   // 실매매 승인 대기 — 이 대화가 올린 요청만 띄운다.
   //
   // 2026-09-14 CEO 지시로 실매매 경로 변경이 도구 실행 전에 막힌다
@@ -11483,6 +11518,30 @@ export default function ChatPage() {
               최근 150건만 표시 중 (전체 {displayData.totalCount}건)
             </div>
           )}
+          {sessionGoals.length > 0 && (
+            <div style={{ margin: "0 0 8px", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              {goalsHalted && (
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>
+                  전체 정지 중 — 조사만 가능합니다
+                </span>
+              )}
+              {sessionGoals.map((g) => {
+                const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
+                const c = g.dispatch_note ? "#dc2626" : g.status === "active" ? "#2563eb" : "#64748b";
+                return (
+                  <a key={g.goal_id} href={`/goals?goal=${encodeURIComponent(g.goal_id)}`}
+                     title={g.dispatch_note || undefined}
+                     style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 10px", borderRadius: 999, border: `1px solid ${c}`, background: "var(--bg-card)", textDecoration: "none", fontSize: 11.5 }}>
+                    <span style={{ fontWeight: 800, color: c }}>🎯 {g.title}</span>
+                    <span style={{ color: "var(--text-secondary)" }}>{pct}%</span>
+                    {g.milestone && <span style={{ color: "var(--text-primary)" }}>· {g.milestone}</span>}
+                    {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
           {approvals.length > 0 && (
             <div style={{
               margin: "0 0 12px", padding: "12px 14px", borderRadius: 10,
