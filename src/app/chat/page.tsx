@@ -2543,7 +2543,15 @@ const MessageItem = memo(function MessageItem({
     ? String(msg.thinking_summary || msg.thought_summary || "").trim()
     : "";
   const normalizedToolEvents = normalizeToolEventsForRender(msg.tools_called);
-  const hasToolSummary = msg.role === "assistant" && !isVisiblyStreaming && !streamingContent && messageHasToolSummary(msg);
+  // 진행 중에도 도구 목록을 보여준다.
+  //
+  // 2026-09-14 이전에는 `!isVisiblyStreaming` 조건이 붙어 **끝난 뒤에만**
+  // 펼쳐졌다. 정작 필요한 것은 도는 동안이다. 22분간 도구를 89번 부르는데
+  // 화면에는 "생성 중 (도구 45회)" 한 줄뿐이었다.
+  //
+  // 스트리밍 중에는 본문이 따로 흐르므로 자동으로 펼치지는 않는다 —
+  // 접힌 채로 두고 개수를 보여주면 필요할 때 열어보면 된다.
+  const hasToolSummary = msg.role === "assistant" && !streamingContent && messageHasToolSummary(msg);
   const toolEventsForRender = normalizedToolEvents.length > 0 ? normalizedToolEvents : buildSummaryToolEvents(msg);
   const toolHydrationStatus = String(msg.tool_hydration_status || "");
 
@@ -3810,6 +3818,42 @@ export default function ChatPage() {
   const thinkingBufRef = useRef("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
+
+  // 진행 로그를 서버 기록에서 복원한다.
+  //
+  // 2026-09-14. `toolLogs` 는 SSE 를 받으며 쌓는 **브라우저 메모리**다.
+  // 새로고침하거나 SSE 가 한 번 끊기면 전부 사라진다. 22분짜리 작업에서
+  // 그 사이 재연결이 없을 리 없고, 그러면 화면에 남는 것은 "도구 45회" 라는
+  // 숫자 하나뿐이다. 실제로는 89번 불렀는데 그 숫자마저 낡아 있었다.
+  //
+  // 서버는 진행 중 버블(`streaming_placeholder`)에 도구 기록을 계속 쌓는다.
+  // 로컬이 비어 있으면 그걸로 채운다. 로컬이 있으면 그게 더 최신이므로
+  // 건드리지 않는다.
+  const restoreToolLogsFromServer = useCallback((msgs: ChatMessage[]) => {
+    const ph = msgs.find((m) => m.intent === "streaming_placeholder");
+    const events = ph?.tools_called;
+    if (!Array.isArray(events) || events.length === 0) return;
+    setToolLogs((prev) => {
+      if (prev.length > 0) return prev;
+      const rebuilt: { icon: string; text: string; sub?: string }[] = [];
+      for (const ev of events as Array<Record<string, unknown>>) {
+        if (ev?.type !== "tool_use") continue;
+        const name = String(ev.tool_name || "");
+        if (!name) continue;
+        const inp = (ev.tool_input && typeof ev.tool_input === "object")
+          ? (ev.tool_input as Record<string, unknown>) : {};
+        const param = inp.path || inp.query || inp.url || inp.command
+          || inp.file_path || inp.task || inp.project
+          || (Object.values(inp).filter((v) => typeof v === "string")[0] as string) || "";
+        rebuilt.push({
+          icon: "🔧",
+          text: `${name} 실행`,
+          sub: param ? String(param).slice(0, 80) : undefined,
+        });
+      }
+      return rebuilt;
+    });
+  }, []);
   // AADS-190: 세션 비용/턴 + Yellow 경고 + 도구턴 한도
   const [sessionCost, setSessionCost] = useState<string | null>(null);
   const [sessionTurns, setSessionTurns] = useState<number | null>(null);
@@ -5871,6 +5915,8 @@ export default function ChatPage() {
           });
           {
             const finalMsgs = processed.length > 0 ? processed : msgs;
+            // 새로고침·재연결 뒤에도 진행 상황이 보이게 한다.
+            restoreToolLogsFromServer(finalMsgs);
             setMessagesPreservingViewport((prev) => (
               prev.length > 0
                 ? mergeServerMessagesPreservingLocal(prev, finalMsgs)
