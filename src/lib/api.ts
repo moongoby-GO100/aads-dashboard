@@ -944,6 +944,16 @@ export const api = {
   directGoal: (goalId: string, message: string, roles?: string[]) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/direct`,
       { method: "POST", body: JSON.stringify({ message, roles }) }),
+  // 담당 붙이기 — **세션을 만들지 않는다.** 이미 있는 창을 붙일 뿐이다.
+  getGoalCandidates: (goalId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/candidates`),
+  addGoalOwner: (goalId: string, body: { session_id: string; role_key?: string; as_lead?: boolean }) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/owners`,
+      { method: "POST", body: JSON.stringify(body) }),
+  removeGoalOwner: (goalId: string, sessionId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }),
+
   // 담당별 제어 — 멈춤은 진행 중 응답을 끊지 않는다. 끊으려면 stopSession.
   pauseOwner: (goalId: string, sessionId: string, reason: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}/pause`,

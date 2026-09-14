@@ -26,10 +26,15 @@ type BoardOwner = {
   tool_calls: number; dispatch_count: number; note: string | null;
   milestone_id?: string | null; variant?: string | null;
   paused?: boolean; paused_reason?: string | null; open_notes?: number;
+  is_lead?: boolean;
+};
+type Candidate = {
+  session_id: string; title: string; role_key: string;
+  message_count: number; has_prompt: boolean;
 };
 type GoalDoc = { kind: string; doc_path: string; title: string | null };
 type Board = {
-  halted: boolean; owners: BoardOwner[];
+  halted: boolean; owners: BoardOwner[]; has_lead?: boolean;
   documents?: GoalDoc[]; has_design?: boolean; missing_design?: string[];
 };
 
@@ -163,6 +168,11 @@ export default function GoalsPage() {
 
   const [board, setBoard] = useState<Board | null>(null);
   const [ownerBusy, setOwnerBusy] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [pick, setPick] = useState<Candidate | null>(null);
+  const [roleKey, setRoleKey] = useState("");
+  const [asLead, setAsLead] = useState(false);
 
   const reloadBoard = useCallback(async (gid: string) => {
     try { setBoard(await api.getGoalBoard(gid)); } catch { /* 조회 실패가 화면을 막지 않는다 */ }
@@ -204,6 +214,28 @@ export default function GoalsPage() {
     const timer = window.setInterval(load, 15000);
     return () => { alive = false; window.clearInterval(timer); };
   }, [selectedId]);
+
+  const openAdd = useCallback(async (lead: boolean) => {
+    if (!selectedId) return;
+    setAsLead(lead); setPick(null); setRoleKey(""); setAddOpen(true);
+    try { setCandidates((await api.getGoalCandidates(selectedId)).candidates || []); }
+    catch { setCandidates([]); }
+  }, [selectedId]);
+
+  const submitAdd = useCallback(async () => {
+    if (!selectedId || !pick) return;
+    setOwnerBusy(pick.session_id);
+    try {
+      const r = await api.addGoalOwner(selectedId, {
+        session_id: pick.session_id,
+        role_key: roleKey.trim() || undefined,
+        as_lead: asLead,
+      });
+      if (r?.warning) window.alert(r.warning);
+      setAddOpen(false);
+      await reloadBoard(selectedId);
+    } finally { setOwnerBusy(null); }
+  }, [selectedId, pick, roleKey, asLead, reloadBoard]);
 
   const graph = useMemo(() => detail ? buildGraph(detail) : { nodes: [], edges: [] }, [detail]);
   const counts = useMemo(() => ({
@@ -290,18 +322,42 @@ export default function GoalsPage() {
 
               {board && board.owners.length > 0 && (
                 <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)" }} aria-label="담당별 현재 상태">
+                  {/* 주도는 위로 뺀다. 나란히 두면 동급으로 읽히는데,
+                      주도는 목표 전체를 지고 담당의 신고를 판정한다. */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>담당 {board.owners.length}명</strong>
+                    <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>주도</strong>
                     {board.halted && <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>전체 정지 중</span>}
+                  </div>
+                  {!board.has_lead && (
+                    <div style={{ padding: "11px 13px", marginBottom: 12, borderRadius: 9, border: "1px solid #d97706", background: "rgba(217,119,6,.07)" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#d97706" }}>⚠ 주도 미지정 — 취합하고 판정할 사람이 없습니다</div>
+                      <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-secondary)" }}>담당이 신고해도 완료 판정이 되지 않습니다.</div>
+                      <button type="button" onClick={() => void openAdd(true)}
+                        style={{ marginTop: 8, minHeight: 30, padding: "0 11px", fontSize: 11.5, borderRadius: 7, border: "1px solid #d97706", background: "var(--bg-card)", color: "#d97706", fontWeight: 700, cursor: "pointer" }}>
+                        + 주도 지정
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0 8px" }}>
+                    <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>담당 {board.owners.filter((o) => !o.is_lead).length}명</strong>
+                    <button type="button" onClick={() => void openAdd(false)}
+                      style={{ minHeight: 30, padding: "0 11px", fontSize: 11.5, borderRadius: 7, border: "1px solid var(--accent)", background: "var(--bg-card)", color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>
+                      + 담당 추가
+                    </button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(268px,1fr))", gap: 8 }}>
                     {board.owners.map((o) => {
                       const c = stateColor[o.state] || "#64748b";
                       return (
                         <a key={o.session_id} href={`/chat#${o.session_id}`}
-                           style={{ display: "block", padding: "9px 11px", borderRadius: 9, border: `1px solid var(--border)`, borderLeft: `3px solid ${c}`, background: "var(--bg-primary)", textDecoration: "none" }}>
+                           style={{ display: "block", padding: o.is_lead ? "11px 13px" : "9px 11px", borderRadius: 9,
+                                    border: o.is_lead ? "2px solid var(--accent)" : "1px solid var(--border)",
+                                    borderLeft: `3px solid ${c}`, background: "var(--bg-primary)", textDecoration: "none",
+                                    gridColumn: o.is_lead ? "1 / -1" : undefined, order: o.is_lead ? -1 : 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>{o.title}</span>
+                            <span style={{ fontSize: o.is_lead ? 13.5 : 12.5, fontWeight: 700, color: "var(--text-primary)" }}>
+                              {o.is_lead ? "👑 " : ""}{o.title}
+                            </span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: c, whiteSpace: "nowrap" }}>{o.state}</span>
                           </div>
                           <div style={{ marginTop: 3, fontSize: 11, color: "var(--text-secondary)" }}>
@@ -351,6 +407,64 @@ export default function GoalsPage() {
           </section>
         </div>
       </main>
+      {addOpen && (
+        <div role="dialog" aria-modal="true" onClick={() => setAddOpen(false)}
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 16, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "min(560px,100%)", maxHeight: "86vh", overflow: "auto", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 14, padding: 18 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>
+              {asLead ? "주도 지정" : "담당 추가"}
+            </h2>
+            <p style={{ marginTop: 5, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              이미 있는 채팅창을 이 목표에 붙입니다. 새 채팅창은 직접 만드십시오.
+              같은 워크스페이스의 창만 고를 수 있습니다.
+            </p>
+
+            <div style={{ marginTop: 13, maxHeight: 260, overflow: "auto", border: "1px solid var(--border)", borderRadius: 9 }}>
+              {candidates.length === 0 && (
+                <div style={{ padding: 18, fontSize: 12, color: "var(--text-secondary)" }}>
+                  붙일 수 있는 채팅창이 없습니다. 이 워크스페이스의 창이 모두 이미 묶여 있습니다.
+                </div>
+              )}
+              {candidates.map((cd) => (
+                <button key={cd.session_id} type="button" onClick={() => { setPick(cd); setRoleKey(cd.role_key || ""); }}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: 0,
+                           borderBottom: "1px solid var(--border)", cursor: "pointer",
+                           background: pick?.session_id === cd.session_id ? "rgba(37,99,235,.10)" : "transparent" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>{cd.title}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>메시지 {cd.message_count}</span>
+                  </div>
+                  <div style={{ marginTop: 2, fontSize: 11, color: "var(--text-secondary)" }}>
+                    역할 {cd.role_key || "없음"}{cd.role_key && !cd.has_prompt ? " · 프롬프트 없음" : ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <label style={{ display: "block", marginTop: 13, fontSize: 12, color: "var(--text-secondary)" }}>
+              역할 키 <span style={{ opacity: .75 }}>(비우면 그 창의 기존 역할을 씁니다)</span>
+              <input value={roleKey} onChange={(e) => setRoleKey(e.target.value)} placeholder="예: RiskOwner"
+                style={{ display: "block", width: "100%", marginTop: 5, minHeight: 38, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13 }} />
+            </label>
+
+            <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 11, fontSize: 12.5, color: "var(--text-primary)", cursor: "pointer" }}>
+              <input type="checkbox" checked={asLead} onChange={(e) => setAsLead(e.target.checked)} />
+              이 담당을 <strong>주도</strong>로 지정
+            </label>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 17 }}>
+              <button type="button" onClick={() => setAddOpen(false)}
+                style={{ minHeight: 38, padding: "0 15px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer" }}>취소</button>
+              <button type="button" disabled={!pick || ownerBusy !== null} onClick={() => void submitAdd()}
+                style={{ minHeight: 38, padding: "0 17px", borderRadius: 8, border: 0, background: pick ? "var(--accent)" : "var(--border)", color: "white", fontWeight: 700, cursor: pick ? "pointer" : "not-allowed" }}>
+                붙이기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`@media (max-width: 850px){.goal-layout{grid-template-columns:1fr!important}.goal-layout>section:last-child{min-height:520px!important}}`}</style>
     </div>
   );
