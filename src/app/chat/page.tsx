@@ -11553,7 +11553,14 @@ export default function ChatPage() {
             </div>
           )}
           {sessionGoals.length > 0 && (
-            <div style={{ margin: "0 0 8px", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            // 대화 목록 맨 위에 두면 스크롤과 함께 올라가 버린다 —
+            // 메시지가 150건 넘는 창에서는 사실상 보이지 않는다. 붙여 둔다.
+            <div style={{
+              position: "sticky", top: 0, zIndex: 5,
+              margin: "0 0 8px", padding: "6px 0",
+              background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
+              display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center",
+            }}>
               {goalsHalted && (
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>
                   전체 정지 중 — 조사만 가능합니다
