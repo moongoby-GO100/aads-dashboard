@@ -643,7 +643,16 @@ function isUserInterruptMessage(message: ChatMessage): boolean {
   return !message.intent && String(message.content || "").trimStart().startsWith("[추가 지시]");
 }
 
-function interruptStatusBadge(message: ChatMessage): { label: string; color: string; bg: string; border: string } | null {
+// 스트림이 끝난 뒤 이 시간 안에 상태 전이가 없으면 '미반영'으로 본다.
+// 주황색 '대기' 배지로 조용히 남겨두면 읽는 사람은 지시가 들어간 줄 안다 —
+// 2026-09-15 실측에서 24시간 인터럽트 46건이 전부 execution_id NULL 이었고,
+// 그중 상당수가 그렇게 대기 배지인 채로 사라졌다.
+const INTERRUPT_UNRESOLVED_GRACE_MS = 60_000;
+
+function interruptStatusBadge(
+  message: ChatMessage,
+  unresolved = false,
+): { label: string; color: string; bg: string; border: string } | null {
   if (!isUserInterruptMessage(message)) return null;
   // The carrying message already contains the recovered instruction text, so
   // this is the only place the reader can be told it landed.
@@ -682,12 +691,61 @@ function interruptStatusBadge(message: ChatMessage): { label: string; color: str
       border: "rgba(8,145,178,0.24)",
     };
   }
+  if (unresolved) {
+    // 조용한 큐는 신뢰를 잃는다. 어느 응답도 먹지 않았다는 사실을 드러내고,
+    // 옆의 버튼으로 곧바로 다시 보낼 수 있게 한다.
+    return {
+      label: "미반영 — 다시 보내기",
+      color: "#dc2626",
+      bg: "rgba(220,38,38,0.12)",
+      border: "rgba(220,38,38,0.28)",
+    };
+  }
   return {
     label: "추가 지시 대기",
     color: "#d97706",
     bg: "rgba(217,119,6,0.12)",
     border: "rgba(217,119,6,0.26)",
   };
+}
+
+/** 지시 버블과 응답 버블을 execution_id 로 묶는다.
+ *
+ * 서버가 지시를 소비하는 순간 그 지시 메시지에 소비한 실행/세대를 찍는다
+ * (chat_service `_fetch_persisted_interrupts`). 같은 execution_id 를 가진
+ * 응답 버블이 그 지시를 먹은 응답이다 — 새 컬럼도, 별도 조회도 필요 없다.
+ */
+function buildInterruptIndex(
+  messages: ChatMessage[],
+  opts: { streamingSessionActive: boolean; now: number },
+): { appliedByExecution: Map<string, string[]>; unresolvedIds: Set<string> } {
+  const appliedByExecution = new Map<string, string[]>();
+  const unresolvedIds = new Set<string>();
+  for (const m of messages) {
+    if (!isUserInterruptMessage(m)) continue;
+    const intent = String(m.intent || "");
+    const landed =
+      intent === "interrupt_applied" ||
+      intent === "interrupt_completed" ||
+      intent === "recovered_interrupt" ||
+      String(m.content || "").trimStart().startsWith("[이전 추가 지시]");
+    if (landed) {
+      const execId = String(m.execution_id || "");
+      if (execId) {
+        const bucket = appliedByExecution.get(execId);
+        if (bucket) bucket.push(m.id);
+        else appliedByExecution.set(execId, [m.id]);
+      }
+      continue;
+    }
+    // 스트림이 도는 동안의 대기는 정상이다. 오탐으로 재전송을 부추기면
+    // 같은 지시가 두 번 들어간다.
+    if (opts.streamingSessionActive) continue;
+    const created = m.created_at ? new Date(m.created_at).getTime() : 0;
+    if (!created || opts.now - created < INTERRUPT_UNRESOLVED_GRACE_MS) continue;
+    unresolvedIds.add(m.id);
+  }
+  return { appliedByExecution, unresolvedIds };
 }
 
 function isRunnerChatMessage(message: ChatMessage): boolean {
@@ -2490,6 +2548,12 @@ interface MessageItemProps {
   onViewportTarget?: (element: HTMLElement) => void;
   screenSize: ScreenSize;
   mobileFontPx: number;
+  /** 이 응답 버블이 반영한 추가 지시 메시지 id 들 (assistant 전용) */
+  appliedInterruptIds?: string[];
+  /** 어느 응답도 먹지 않은 추가 지시 (user 전용) */
+  interruptUnresolved?: boolean;
+  onJumpToMessage?: (messageId: string) => void;
+  onResendInterrupt?: (msg: ChatMessage) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -2502,6 +2566,7 @@ const MessageItem = memo(function MessageItem({
   onRequestToolHydration,
   onViewportTarget,
   screenSize, mobileFontPx,
+  appliedInterruptIds, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
 }: MessageItemProps) {
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
@@ -3300,7 +3365,7 @@ const MessageItem = memo(function MessageItem({
             flexWrap: "wrap",
           }}>
             {(() => {
-              const badge = interruptStatusBadge(msg);
+              const badge = interruptStatusBadge(msg, interruptUnresolved);
               return badge ? (
                 <span style={{
                   display: "inline-flex",
@@ -3316,6 +3381,23 @@ const MessageItem = memo(function MessageItem({
                 }}>{badge.label}</span>
               ) : null;
             })()}
+            {interruptUnresolved && onResendInterrupt && (
+              <button
+                type="button"
+                title="이 추가 지시를 입력창으로 되돌려 다시 보냅니다"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onResendInterrupt(msg); }}
+                style={{
+                  padding: "1px 6px",
+                  borderRadius: "8px",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  background: "rgba(220,38,38,0.08)",
+                  color: "#dc2626",
+                  border: "1px solid rgba(220,38,38,0.28)",
+                }}
+              >↻ 다시 보내기</button>
+            )}
             {msg.edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
           </div>
@@ -3389,6 +3471,26 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+              {appliedInterruptIds && appliedInterruptIds.length > 0 && (
+                <button
+                  type="button"
+                  title="이 응답이 반영한 추가 지시로 이동합니다"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJumpToMessage?.(appliedInterruptIds[0]); }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                    padding: "1px 6px",
+                    borderRadius: "8px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    cursor: onJumpToMessage ? "pointer" : "default",
+                    background: "rgba(37,99,235,0.10)",
+                    color: "#2563eb",
+                    border: "1px solid rgba(37,99,235,0.24)",
+                  }}
+                >↳ 추가지시 {appliedInterruptIds.length}건 반영</button>
+              )}
               {placeholderStatus ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: placeholderStatus.bg, color: placeholderStatus.color, border: `1px solid ${placeholderStatus.border}` }}>{placeholderStatus.label}</span>
               ) : !isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
@@ -10176,6 +10278,40 @@ export default function ChatPage() {
   }, [messages]);
 
   // PERF: O(1) lookup maps
+  // 미반영 판정은 시간이 지나야 참이 된다. 20초마다 다시 계산해
+  // 적색 배지가 유예시간 직후에 뜨게 한다.
+  const [interruptIndexTick, setInterruptIndexTick] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setInterruptIndexTick(Date.now()), 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const interruptIndex = useMemo(
+    () => buildInterruptIndex(messages, {
+      streamingSessionActive: Boolean(streaming || waitingBgResponse),
+      now: interruptIndexTick,
+    }),
+    [messages, streaming, waitingBgResponse, interruptIndexTick],
+  );
+  const jumpToMessage = useCallback((messageId: string) => {
+    if (typeof document === "undefined") return;
+    const row = document.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
+    if (!row) return;
+    // 뷰포트 쓰기는 전부 어댑터를 거친다(WP02 계약, viewport-controller.test.mjs).
+    // 여기서 scrollIntoView 를 직접 부르면 채팅 스크롤 정책이 주인을 둘 갖게
+    // 되고, 그게 지금까지 스크롤이 튀던 방식이다.
+    scrollMessageElementIntoView(row);
+    const previous = row.style.outline;
+    row.style.outline = "2px solid rgba(37,99,235,0.55)";
+    window.setTimeout(() => { row.style.outline = previous; }, 1600);
+  }, [scrollMessageElementIntoView]);
+  const resendInterrupt = useCallback((msg: ChatMessage) => {
+    // 자동 재전송은 하지 않는다. 같은 지시가 두 번 들어가는 것보다
+    // 한 번 더 누르게 하는 편이 낫다.
+    const text = normalizeQueuedInterruptDisplayContent(String(msg.content || ""));
+    if (!text) return;
+    handleCopyToInput(text);
+  }, [handleCopyToInput]);
+
   const messageByIdMap = useMemo(() => {
     const map = new Map<string, ChatMessage>();
     for (const m of messages) map.set(m.id, m);
@@ -11723,6 +11859,14 @@ export default function ChatPage() {
                     onViewportTarget={scrollMessageElementIntoView}
                     screenSize={screenSize}
                     mobileFontPx={mobileChatFontPx}
+                    appliedInterruptIds={
+                      msg.role === "assistant" && msg.execution_id
+                        ? interruptIndex.appliedByExecution.get(String(msg.execution_id))
+                        : undefined
+                    }
+                    interruptUnresolved={interruptIndex.unresolvedIds.has(msg.id)}
+                    onJumpToMessage={jumpToMessage}
+                    onResendInterrupt={resendInterrupt}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
