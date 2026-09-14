@@ -1018,7 +1018,17 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployNowMs, setDeployNowMs] = useState(() => Date.now());
 
-  const loadDeployStatus = useCallback(async () => {
+  // 이 effect 는 artifactMode·screenSize·showArtifactPanel 에 매달려 있어서,
+  // 마운트 직후 화면 폭이 확정되며 한 번 더 돈다. 그때마다 88KB 를 다시 받았다
+  // (2026-09-14 실측: 2271~3697ms, 4300~6227ms — 앞 요청이 끝난 뒤라 in-flight
+  // 합치기로는 잡히지 않는다). 마지막으로 받은 지 얼마 안 됐으면 건너뛴다.
+  const lastDeployFetchRef = useRef(0);
+  const DEPLOY_MIN_INTERVAL_MS = 10_000;
+
+  const loadDeployStatus = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastDeployFetchRef.current < DEPLOY_MIN_INTERVAL_MS) return;
+    lastDeployFetchRef.current = now;
     setDeployLoading(true);
     try {
       // chatApi 경유 — 같은 GET 이 이미 날아가 있으면 합쳐진다. 이 패널은 보이는
@@ -1038,7 +1048,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     const panelVisible = showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden");
     if (!panelVisible) return;
     void loadDeployStatus();
-    const statusInterval = setInterval(() => void loadDeployStatus(), 15000);
+    const statusInterval = setInterval(() => void loadDeployStatus(true), 15000);
     const clockInterval = setInterval(() => setDeployNowMs(Date.now()), 1000);
     return () => {
       clearInterval(statusInterval);

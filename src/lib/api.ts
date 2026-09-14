@@ -275,6 +275,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+const _meInflight = new Map<string, Promise<MeResponse | null>>();
+
 export const api = {
   getCollectorOverview: () => request<CollectorOverview>("/authenticated-site-collector/overview"),
   getCollectorSites: (projectKey?: string) =>
@@ -346,10 +348,22 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  getMe: (token: string) =>
-    fetch(`${BASE_URL}/auth/me`, {
+  // 같은 토큰으로 동시에 여러 번 불린다(2026-09-14 /chat 실측: 2280~2957ms,
+  // 2314~3285ms 로 겹쳐서 2회). 진행 중인 요청만 공유하고 끝나면 즉시 버린다 —
+  // 캐시가 아니므로 로그인 상태 갱신 의도를 막지 않는다.
+  getMe: (token: string): Promise<MeResponse | null> => {
+    const pending = _meInflight.get(token);
+    if (pending) return pending;
+    const run = fetch(`${BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
-    }).then((r) => (r.ok ? r.json() as Promise<MeResponse> : null)),
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<MeResponse>) : null))
+      .finally(() => {
+        _meInflight.delete(token);
+      });
+    _meInflight.set(token, run);
+    return run;
+  },
 
   getConversations: (project?: string, keyword?: string, limit = 50, offset = 0) =>
     request<ConversationsResponse>(
