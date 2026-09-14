@@ -581,11 +581,28 @@ function isUserInterruptMessage(message: ChatMessage): boolean {
   // An interrupt the server has not classified yet is still a 추가 지시 bubble to
   // the reader.  Leaving these out is why roughly half of them showed no status
   // at all and there was no way to tell whether the instruction had landed.
+  // A recovered interrupt is hidden as its own bubble (displayData drops
+  // intent === "recovered_interrupt") because the server already prepended its
+  // text to the next turn as "[이전 추가 지시]".  Rendering both would print the
+  // instruction twice, so the badge has to travel with the carrying message.
+  // Without this the cyan "반영됨" state added for recovered_interrupt is dead
+  // code and the 추가 지시 looks like it was silently dropped.
+  if (String(message.content || "").trimStart().startsWith("[이전 추가 지시]")) return true;
   return !message.intent && String(message.content || "").trimStart().startsWith("[추가 지시]");
 }
 
 function interruptStatusBadge(message: ChatMessage): { label: string; color: string; bg: string; border: string } | null {
   if (!isUserInterruptMessage(message)) return null;
+  // The carrying message already contains the recovered instruction text, so
+  // this is the only place the reader can be told it landed.
+  if (String(message.content || "").trimStart().startsWith("[이전 추가 지시]")) {
+    return {
+      label: "이전 추가 지시 반영됨",
+      color: "#0891b2",
+      bg: "rgba(8,145,178,0.10)",
+      border: "rgba(8,145,178,0.24)",
+    };
+  }
   if (message.intent === "interrupt_completed") {
     return {
       label: "응답 포함 완료",
