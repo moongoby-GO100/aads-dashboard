@@ -45,23 +45,64 @@ function handleChat401(): void {
   }
 }
 
+/**
+ * 같은 GET 이 이미 날아가 있으면 그 약속을 함께 쓴다(in-flight coalescing).
+ *
+ * /chat 진입 시 같은 요청이 여러 effect 에서 겹쳐 나간다. 2026-09-14 실측:
+ *
+ *   /chat/messages?...&limit=120&fields=render   357KB 를 325ms 간격으로 2회
+ *   /ops/deploy/status                            94KB 를 1.3초 간격으로 2회
+ *   /auth/me, /health/relay-capacity              각 2회 이상
+ *
+ * 호출부가 세 군데 흩어져 있어 하나씩 고치면 다음에 또 생긴다. 여기서 합친다.
+ *
+ * 캐시가 아니라 **진행 중인 요청만** 공유한다. 응답이 끝나면 즉시 버리므로
+ * 폴링이나 갱신 의도를 막지 않는다. GET 이 아니거나 본문/AbortSignal 이 있는
+ * 요청은 손대지 않는다 — 부수효과가 있는 요청을 합치면 안 된다.
+ */
+const _inflight = new Map<string, Promise<unknown>>();
+
+function _coalesceKey(path: string, opts?: RequestInit): string | null {
+  const method = (opts?.method || "GET").toUpperCase();
+  if (method !== "GET") return null;
+  if (opts?.body != null || opts?.signal != null) return null;
+  return path;
+}
+
 export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...opts,
-    credentials: opts?.credentials ?? "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHdrs(),
-      ...((opts?.headers as Record<string, string>) || {}),
-    },
-  });
-  if (res.status === 401) {
-    handleChat401();
-    throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+  const key = _coalesceKey(path, opts);
+  if (key) {
+    const pending = _inflight.get(key);
+    if (pending) return pending as Promise<T>;
   }
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-  if (res.status === 204) return undefined as unknown as T;
-  return res.json() as Promise<T>;
+
+  const run = (async (): Promise<T> => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...opts,
+      credentials: opts?.credentials ?? "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHdrs(),
+        ...((opts?.headers as Record<string, string>) || {}),
+      },
+    });
+    if (res.status === 401) {
+      handleChat401();
+      throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+    }
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    if (res.status === 204) return undefined as unknown as T;
+    return res.json() as Promise<T>;
+  })();
+
+  if (!key) return run;
+  _inflight.set(key, run);
+  try {
+    return await run;
+  } finally {
+    // 성공이든 실패든 즉시 비운다. 실패를 남겨두면 다음 재시도까지 같이 실패한다.
+    _inflight.delete(key);
+  }
 }
 
 export async function updateArtifact(

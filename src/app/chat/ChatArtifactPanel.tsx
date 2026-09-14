@@ -5,7 +5,7 @@ import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import RunnerHostStatus from "./RunnerHostStatus";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
-import { BASE_URL, authHdrs, updateArtifact } from "./api";
+import { BASE_URL, authHdrs, chatApi, updateArtifact } from "./api";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import {
   openIsolatedHtmlPreview,
@@ -1021,9 +1021,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const loadDeployStatus = useCallback(async () => {
     setDeployLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/ops/deploy/status`, { headers: authHdrs(), credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-      const data = await res.json();
+      // chatApi 경유 — 같은 GET 이 이미 날아가 있으면 합쳐진다. 이 패널은 보이는
+      // 순간 한 번 + 15초마다 부르는데, 마운트 직후 panelVisible 이 흔들리며
+      // 94KB 응답을 1.3초 간격으로 두 번 받고 있었다(2026-09-14 실측).
+      const data = await chatApi<DeployObservabilityStatus>("/ops/deploy/status");
       setDeployStatus(data);
       setDeployError(null);
     } catch (e) {
