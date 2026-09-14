@@ -3819,6 +3819,56 @@ export default function ChatPage() {
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [toolLogs, setToolLogs] = useState<{icon:string; text:string; sub?:string}[]>([]);
 
+  // 실매매 승인 대기 — 이 대화가 올린 요청만 띄운다.
+  //
+  // 2026-09-14 CEO 지시로 실매매 경로 변경이 도구 실행 전에 막힌다
+  // (`live_trading_guard`). 막히면 요청이 남고, 담당은 대기한다.
+  // 승인 화면(/approvals)까지 가지 않고 **대화 안에서 바로** 결정할 수
+  // 있어야 한다 — 대화를 보던 흐름이 끊기면 승인이 밀린다.
+  //
+  // 승인 호출은 이 브라우저가 CEO 인증으로 직접 한다. 에이전트를 거치지
+  // 않는다 — 에이전트가 자기 요청을 스스로 승인하면 게이트가 무의미하다.
+  const [approvals, setApprovals] = useState<Array<{
+    id: string; tool: string; summary: string; at: string;
+  }>>([]);
+  const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
+
+  const refreshApprovals = useCallback(async (sid: string) => {
+    if (!sid) { setApprovals([]); return; }
+    try {
+      // 이 페이지의 관례대로 chatApi 를 쓴다 — 같은 GET 이 겹치면 합쳐진다.
+      const r = await chatApi<{
+        pending?: Array<{ id: string; tool: string; summary: string; at: string }>;
+      }>(`/approvals/pending?session_id=${encodeURIComponent(sid)}`);
+      setApprovals(r.pending || []);
+    } catch {
+      // 승인 조회 실패가 대화를 막으면 안 된다.
+    }
+  }, []);
+
+  const decideApproval = useCallback(async (id: string, decision: "approved" | "rejected") => {
+    setApprovalBusy(id);
+    try {
+      await chatApi(`/approvals/${encodeURIComponent(id)}/decide?decision=${decision}`, { method: "POST" });
+      setApprovals((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      // 실패하면 목록에 그대로 남는다 — 다음 폴링에서 다시 보인다.
+    } finally {
+      setApprovalBusy(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    const sid = activeSession?.id;
+    if (!sid) { setApprovals([]); return; }
+    void refreshApprovals(sid);
+    const iv = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshApprovals(sid);
+    }, 15_000);
+    return () => window.clearInterval(iv);
+  }, [activeSession?.id, refreshApprovals]);
+
   // 진행 로그를 서버 기록에서 복원한다.
   //
   // 2026-09-14. `toolLogs` 는 SSE 를 받으며 쌓는 **브라우저 메모리**다.
@@ -11433,6 +11483,63 @@ export default function ChatPage() {
               최근 150건만 표시 중 (전체 {displayData.totalCount}건)
             </div>
           )}
+          {approvals.length > 0 && (
+            <div style={{
+              margin: "0 0 12px", padding: "12px 14px", borderRadius: 10,
+              background: "rgba(214,53,59,.08)", border: "1px solid rgba(214,53,59,.35)",
+              borderLeft: "4px solid #D6353B",
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ct-text)", marginBottom: 2 }}>
+                실매매 변경 승인 대기 {approvals.length}건
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--ct-text2)", marginBottom: 10, lineHeight: 1.6 }}>
+                담당이 실매매 조건을 바꾸려 했고 <b>실행은 막혀 있습니다</b>.
+                승인해야 진행됩니다. 승인은 2시간 동안만 유효합니다.
+              </div>
+              {approvals.map((a) => (
+                <div key={a.id} style={{
+                  padding: "8px 0", borderTop: "1px solid rgba(214,53,59,.2)",
+                }}>
+                  <div style={{ fontSize: 12, color: "var(--ct-text)", fontWeight: 600 }}>
+                    {a.tool} <span style={{ fontWeight: 400, color: "var(--ct-text2)" }}>· {a.at}</span>
+                  </div>
+                  <div style={{
+                    fontSize: 11.5, color: "var(--ct-text2)", marginTop: 3, lineHeight: 1.55,
+                    whiteSpace: "pre-wrap", wordBreak: "break-all",
+                    maxHeight: 92, overflowY: "auto",
+                  }}>{a.summary}</div>
+                  <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+                    <button
+                      onClick={() => void decideApproval(a.id, "approved")}
+                      disabled={approvalBusy === a.id}
+                      style={{
+                        padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                        border: "none", background: "#16a34a", color: "#fff",
+                        cursor: approvalBusy === a.id ? "default" : "pointer",
+                        opacity: approvalBusy === a.id ? .6 : 1,
+                      }}
+                    >
+                      {approvalBusy === a.id ? "처리 중..." : "승인"}
+                    </button>
+                    <button
+                      onClick={() => void decideApproval(a.id, "rejected")}
+                      disabled={approvalBusy === a.id}
+                      style={{
+                        padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                        border: "1px solid var(--ct-border)", background: "transparent",
+                        color: "var(--ct-text2)",
+                        cursor: approvalBusy === a.id ? "default" : "pointer",
+                        opacity: approvalBusy === a.id ? .6 : 1,
+                      }}
+                    >
+                      거절
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <ChatErrorBoundary>
           {(() => {
             const { display, lastAssistantId } = displayData;

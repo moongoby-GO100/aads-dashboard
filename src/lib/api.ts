@@ -680,6 +680,15 @@ export const api = {
 
   // Project Docs: 프로젝트별 문서 통합 조회
   // 지식 그래프 — 무엇이 무엇과 이어져 있나. 2026-09-14 신설.
+  // 실매매 승인 — 사람만 부른다. 에이전트 도구로 노출하지 않는다.
+  getPendingApprovals: (sessionId?: string) =>
+    request<any>(`/approvals/pending${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""}`),
+  decideApproval: (id: string, decision: "approved" | "rejected", reason = "") =>
+    request<any>(
+      `/approvals/${encodeURIComponent(id)}/decide?decision=${decision}` +
+      (reason ? `&reason=${encodeURIComponent(reason)}` : ""),
+      { method: "POST" },
+    ),
   getKgStats: () => request<any>("/kg/stats"),
   listKg: (type?: string, q?: string, limit = 60, offset = 0) =>
     request<any>(

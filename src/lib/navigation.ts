@@ -87,6 +87,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/education/index.html", label: "교육자료 포털", icon: "📘", adminOnly: true, external: true, group: "문서·기록" },
   { href: "/exports/llm-models-current.html", label: "LLM 모델 현황 2026", icon: "🤖", adminOnly: true, external: true, group: "문서·기록" },
   { href: "/admin/deploy", label: "배포 현황", icon: "🚀", adminOnly: true, group: "관리자" },
+  { href: "/approvals", label: "승인 대기", icon: "✅", adminOnly: true, group: "운영·서버" },
   { href: "/changes", label: "변경 이력", icon: "📝", adminOnly: true, group: "문서·기록" },
   { href: "/graph", label: "지식 그래프", icon: "🕸️", adminOnly: true, group: "문서·기록" },
   { href: "/admin/app-settings", label: "오비스 앱 설정", icon: "📱", adminOnly: true, group: "관리자" },
