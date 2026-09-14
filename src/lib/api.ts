@@ -679,6 +679,9 @@ export const api = {
     request<any>("/settings/directive-models", { method: "PUT", body: JSON.stringify({ configs }) }),
 
   // Project Docs: 프로젝트별 문서 통합 조회
+  // 무엇이 언제 바뀌었나 — 변경 원장 + 배포 원장. 2026-09-14 신설.
+  getChangesDigest: (days = 7, project?: string) =>
+    request<any>(`/changes/digest?days=${days}${project ? `&project=${encodeURIComponent(project)}` : ""}`),
   scanProjectDocs: (force?: boolean) => request<any>(`/project-docs/scan${force ? "?force=true" : ""}`),
   // 문서 **내용** 으로 찾는다 — 파일명이 아니라 뜻으로. 2026-09-14 신설.
   searchProjectDocs: (q: string, limit = 20) =>
