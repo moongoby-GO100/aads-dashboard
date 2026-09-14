@@ -125,6 +125,12 @@ export async function login(email: string, password: string): Promise<string> {
   return data.token;
 }
 
+// TTL 캐시는 있는데 진행 중인 요청을 막는 장치가 없었다. /chat 진입 시
+// page.tsx:3633 과 ClientLayout.tsx:66 이 거의 동시에 부르는데, 첫 응답이
+// 아직 안 와서 cachedMe 가 비어 있으므로 둘 다 네트워크로 나간다
+// (2026-09-14 실측: 1623~2025ms, 1652~2438ms 로 겹침).
+let meInflight: Promise<CurrentUser | null> | null = null;
+
 export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
   const token = syncTokenCookieFromStorage();
@@ -133,17 +139,25 @@ export async function getMe(): Promise<CurrentUser | null> {
   if (cachedMe && cachedMe.token === token && cachedMe.expiresAt > now) {
     return cachedMe.user;
   }
-  try {
-    const res = await fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) { logout(); return null; }
-    const user = await res.json();
-    cachedMe = { token, user, expiresAt: now + ME_CACHE_TTL_MS };
-    return user;
-  } catch {
-    return null;
-  }
+  if (meInflight) return meInflight;
+
+  meInflight = (async (): Promise<CurrentUser | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { logout(); return null; }
+      const user = await res.json();
+      cachedMe = { token, user, expiresAt: Date.now() + ME_CACHE_TTL_MS };
+      return user;
+    } catch {
+      return null;
+    } finally {
+      // 성공이든 실패든 즉시 버린다. 남겨두면 다음 호출이 옛 결과를 받는다.
+      meInflight = null;
+    }
+  })();
+  return meInflight;
 }
 
 export function logout() {
