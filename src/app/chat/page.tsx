@@ -3987,10 +3987,22 @@ export default function ChatPage() {
     }
   }, []);
 
-  const decideApproval = useCallback(async (id: string, decision: "approved" | "rejected") => {
+  // 승인은 세 갈래다 — 이번 건만 / 이 미션 동안 / 거부.
+  //
+  // 2026-09-15. 그전에는 승인이 무조건 1회·2시간이었다. 같은 작업을 이어서
+  // 하려면 대표님이 매번 다시 누르셔야 했고, 그 피로가 곧 승인 지연이었다.
+  // 미션 승인도 무제한은 아니다 — 횟수 상한과 시간 상한을 둘 다 건다.
+  const decideApproval = useCallback(async (
+    id: string,
+    decision: "approved" | "rejected",
+    scope: "single" | "mission" = "single",
+  ) => {
     setApprovalBusy(id);
     try {
-      await chatApi(`/approvals/${encodeURIComponent(id)}/decide?decision=${decision}`, { method: "POST" });
+      const q = decision === "approved"
+        ? `decision=approved&scope=${scope}&hours=2${scope === "mission" ? "&max_executions=20" : ""}`
+        : "decision=rejected";
+      await chatApi(`/approvals/${encodeURIComponent(id)}/decide?${q}`, { method: "POST" });
       setApprovals((prev) => prev.filter((a) => a.id !== id));
     } catch {
       // 실패하면 목록에 그대로 남는다 — 다음 폴링에서 다시 보인다.
@@ -11733,7 +11745,8 @@ export default function ChatPage() {
               </div>
               <div style={{ fontSize: 11.5, color: "var(--ct-text2)", marginBottom: 10, lineHeight: 1.6 }}>
                 담당이 실매매 조건을 바꾸려 했고 <b>실행은 막혀 있습니다</b>.
-                승인해야 진행됩니다. 승인은 2시간 동안만 유효합니다.
+                승인해야 진행됩니다. <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은
+                최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동으로 만료됩니다.
               </div>
               {approvals.map((a) => (
                 <div key={a.id} style={{
@@ -11749,7 +11762,7 @@ export default function ChatPage() {
                   }}>{a.summary}</div>
                   <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
                     <button
-                      onClick={() => void decideApproval(a.id, "approved")}
+                      onClick={() => void decideApproval(a.id, "approved", "single")}
                       disabled={approvalBusy === a.id}
                       style={{
                         padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
@@ -11758,7 +11771,21 @@ export default function ChatPage() {
                         opacity: approvalBusy === a.id ? .6 : 1,
                       }}
                     >
-                      {approvalBusy === a.id ? "처리 중..." : "승인"}
+                      {approvalBusy === a.id ? "처리 중..." : "이번 건만"}
+                    </button>
+                    <button
+                      onClick={() => void decideApproval(a.id, "approved", "mission")}
+                      disabled={approvalBusy === a.id}
+                      title="이 미션 동안 같은 도구의 같은 작업을 최대 20회까지 자동 허용 (2시간)"
+                      style={{
+                        padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                        border: "1px solid #16a34a", background: "transparent",
+                        color: "#16a34a",
+                        cursor: approvalBusy === a.id ? "default" : "pointer",
+                        opacity: approvalBusy === a.id ? .6 : 1,
+                      }}
+                    >
+                      이 미션 동안
                     </button>
                     <button
                       onClick={() => void decideApproval(a.id, "rejected")}
