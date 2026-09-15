@@ -76,6 +76,54 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
     return () => window.clearInterval(t);
   }, [load]);
 
+  // 승인 설정. 대표님이 담당과 대화하다 바로 켜고 끄실 수 있어야 한다 —
+  // `/goals` 로 옮겨 가면 그 대화 맥락이 끊긴다.
+  const [policy, setPolicy] = useState<{
+    auto_approve_high: boolean; auto_approve_critical: boolean;
+    max_executions: number; used: number;
+  } | null>(null);
+  const [countDraft, setCountDraft] = useState("200");
+
+  useEffect(() => {
+    let alive = true;
+    api.getGoalApprovalPolicy(goalId)
+      .then((p) => { if (alive) setPolicy(p); })
+      .catch(() => { if (alive) setPolicy(null); });
+    return () => { alive = false; };
+  }, [goalId]);
+
+  useEffect(() => { setCountDraft(String(policy?.max_executions ?? 200)); },
+            [policy?.max_executions]);
+
+  const savePolicy = useCallback(async (patch: Partial<{
+    auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number;
+  }>) => {
+    const next = {
+      auto_approve_high: policy?.auto_approve_high ?? false,
+      auto_approve_critical: policy?.auto_approve_critical ?? false,
+      max_executions: policy?.max_executions || 200,
+      ...patch,
+    };
+    // 주문·자금은 한 번 더 묻는다. 돈이 직접 걸린다.
+    if (patch.auto_approve_critical === true &&
+        !window.confirm("주문·자금·서비스 재기동까지 이 목표 동안 묻지 않고 통과시킵니다.\n돈이 직접 걸립니다. 계속할까요?")) {
+      return;
+    }
+    try {
+      const saved = await api.setGoalApprovalPolicy(goalId, next);
+      setPolicy({ ...next, used: saved.used ?? 0 });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "승인 설정을 저장하지 못했습니다.");
+    }
+  }, [goalId, policy]);
+
+  // 글자마다 저장하면 "200" 이 2 → 20 → 200 으로 세 번 저장된다.
+  const commitCount = useCallback(async () => {
+    const n = Math.min(5000, Math.max(1, Number(countDraft) || 1));
+    setCountDraft(String(n));
+    if (n !== policy?.max_executions) await savePolicy({ max_executions: n });
+  }, [countDraft, policy, savePolicy]);
+
   const judge = useCallback(async (m: Milestone, ok: boolean) => {
     // 반려는 사유 없이 받지 않는다. 담당이 왜 반려됐는지 모르면 같은 것을
     // 다시 올린다.
@@ -166,6 +214,42 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
             </div>
           );
         })}
+
+        {/* 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
+            켜 두면 담당이 같은 종류의 변경을 할 때마다 묻지 않는다. */}
+        <div style={{ marginTop: 15, padding: "9px 11px", borderRadius: 8,
+                      border: `1px solid ${policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--border)"}`,
+                      background: "var(--bg-primary)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 11.5, color: "var(--text-primary)" }}>승인 설정</strong>
+            <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+              {policy && (policy.auto_approve_high || policy.auto_approve_critical)
+                ? `사용 ${policy.used}/${policy.max_executions}회`
+                : "변경마다 묻습니다"}
+            </span>
+          </div>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6, fontSize: 11, color: "var(--text-primary)", cursor: "pointer" }}>
+            <input type="checkbox" checked={!!policy?.auto_approve_high}
+                   onChange={(e) => void savePolicy({ auto_approve_high: e.target.checked })} />
+            실매매 <b>코드 수정</b> 미리 승인
+          </label>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, fontSize: 11, color: "#dc2626", cursor: "pointer" }}>
+            <input type="checkbox" checked={!!policy?.auto_approve_critical}
+                   onChange={(e) => void savePolicy({ auto_approve_critical: e.target.checked })} />
+            <b>주문·자금</b>까지 미리 승인
+          </label>
+          <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-secondary)", display: "flex", gap: 5, alignItems: "center" }}>
+            허용
+            <input type="number" min={1} max={5000} value={countDraft}
+                   onChange={(e) => setCountDraft(e.target.value)}
+                   onBlur={() => void commitCount()}
+                   onKeyDown={(e) => { if (e.key === "Enter") void commitCount(); }}
+                   style={{ width: 66, padding: "2px 5px", fontSize: 11, borderRadius: 5,
+                            border: "1px solid var(--border)", background: "var(--bg-card)",
+                            color: "var(--text-primary)" }} />
+            회 — 넘으면 다시 묻습니다
+          </div>
+        </div>
 
         {board && board.owners.length > 0 && (
           <>
