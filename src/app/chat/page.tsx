@@ -2291,6 +2291,14 @@ function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: 
 const RESPONSE_OVERVIEW_MIN_CHARS = 1200;
 const RESPONSE_OVERVIEW_MAX_SECTIONS = 7;
 const RESPONSE_OVERVIEW_SOURCE_TAG_RE = /\[(?:DB\s*조회|코드\s*확인|로그|명령|도구|검증|실측|출처|공식문서|미측정)[^\]]*\]/gi;
+function shortGoalTitle(title: string): string {
+  const t = (title || "").trim();
+  const numbered = t.match(/^#\s*(\d+)/);
+  if (numbered) return `#${numbered[1]}`;
+  const noParens = t.replace(/\s*[（(][^)）]*[)）]\s*$/, "").trim();
+  return noParens.length > 12 ? `${noParens.slice(0, 12)}…` : noParens;
+}
+
 const RESPONSE_OVERVIEW_WORKFLOW_RE = /(목표|요청|목적|계획|플랜|진행|수행\s*내역|조치\s*내역|결과|완료|검증|테스트|리스크|문제점|다음\s*단계|권장\s*조치)/;
 
 type ResponseOverview = {
@@ -3928,10 +3936,22 @@ export default function ChatPage() {
   // 2026-09-14 대표님 요청: "해당 채팅창에도 참여 진행중 골들이 표시되었으면
   // 좋겠다". 담당이 지시를 받아도 **그것이 무엇의 일부인지** 알 수가 없었다.
   // 맡은 마일스톤과 목표 진행률을 대화 위에 얇게 둔다.
+  // 목표 제목을 띠에 들어갈 길이로 줄인다.
+  //
+  // 실측(2026-09-15): 담당 세션 대부분이 목표 3개를 진다. 제목은
+  // "#119 상한가따라잡기 일일 수익률 3% 이상 달성 (1차 목표)" 처럼 33자까지
+  // 간다. 셋을 그대로 그리면 띠가 두세 줄이 되어 대화를 가린다.
+  //
+  // 규칙은 둘이다 — `#번호` 로 시작하면 그 번호가 이름이다(대표님도 그렇게
+  // 부르신다). 아니면 괄호 부연을 떼고 12자에서 자른다. 전체 제목은
+  // 마우스를 올리면 나온다.
   const [sessionGoals, setSessionGoals] = useState<Array<{
     goal_id: string; title: string; status: string; project: string;
     progress: number; milestone: string | null; dispatch_note: string | null;
+    is_lead?: boolean;
   }>>([]);
+  // 담당 목표는 기본으로 접는다. 제목이 길어 여러 개면 대화를 가린다.
+  const [goalStripOpen, setGoalStripOpen] = useState(false);
   const [goalsHalted, setGoalsHalted] = useState(false);
   // 띠를 누르면 우측 패널이 열린다. 대화는 그대로 있다 — 창을 떠나지
   // 않고 근거를 보고 그 자리에서 판정하고 바로 되물을 수 있다.
@@ -11818,29 +11838,72 @@ export default function ChatPage() {
               margin: "0 0 8px", padding: "6px 0",
               background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
               display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center",
+              maxHeight: 62, overflowY: "auto",
             }}>
               {goalsHalted && (
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>
                   전체 정지 중 — 조사만 가능합니다
                 </span>
               )}
-              {sessionGoals.map((g) => {
-                const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
-                const c = g.dispatch_note ? "#dc2626" : g.status === "active" ? "#2563eb" : "#64748b";
-                const open = panelGoalId === g.goal_id;
+              {(() => {
+                // 주도 목표를 앞에 세운다. 이 창이 책임지는 목표와 참여만
+                // 하는 목표는 무게가 다르다 (2026-09-15 대표님 지시).
+                const lead = sessionGoals.filter((g) => g.is_lead);
+                const member = sessionGoals.filter((g) => !g.is_lead);
+                const blocked = member.filter((g) => g.dispatch_note);
+                // 막힌 목표는 접지 않는다. 접어 두면 막힌 줄 모른다.
+                const shown = goalStripOpen ? member : blocked;
+                const hidden = member.length - shown.length;
+                const chip = (g: typeof sessionGoals[number], isLead: boolean) => {
+                  const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
+                  const c = g.dispatch_note ? "#dc2626" : isLead ? "#d97706" : g.status === "active" ? "#2563eb" : "#64748b";
+                  const open = panelGoalId === g.goal_id;
+                  return (
+                    <button key={g.goal_id} type="button"
+                       title={`${isLead ? "주도 목표 — 이 창이 취합하고 판정합니다" : "담당 목표 — 맡은 몫을 진행합니다"}\n${g.title}${g.dispatch_note ? `\n막힘: ${g.dispatch_note}` : ""}`}
+                       onClick={() => setPanelGoalId(open ? null : g.goal_id)}
+                       style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 260,
+                                padding: isLead ? "4px 11px" : "3px 9px", borderRadius: 999,
+                                border: `${isLead ? 2 : 1}px solid ${c}`,
+                                background: open ? "rgba(37,99,235,.10)" : isLead ? "rgba(217,119,6,.08)" : "var(--bg-card)",
+                                fontSize: isLead ? 11.5 : 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      <span style={{ fontWeight: 800, color: c }}>
+                        {isLead ? "👑" : "●"} {shortGoalTitle(g.title)}
+                      </span>
+                      <span style={{ color: "var(--text-secondary)" }}>{pct}%</span>
+                      {isLead && g.milestone && (
+                        <span style={{ color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
+                          · {g.milestone}
+                        </span>
+                      )}
+                      {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
+                      <span style={{ color: "var(--text-secondary)" }}>{open ? "▴" : "▾"}</span>
+                    </button>
+                  );
+                };
                 return (
-                  <button key={g.goal_id} type="button"
-                     title={g.dispatch_note || "누르면 목표 진행을 옆에서 봅니다"}
-                     onClick={() => setPanelGoalId(open ? null : g.goal_id)}
-                     style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "4px 10px", borderRadius: 999, border: `1px solid ${c}`, background: open ? "rgba(37,99,235,.10)" : "var(--bg-card)", fontSize: 11.5, cursor: "pointer" }}>
-                    <span style={{ fontWeight: 800, color: c }}>🎯 {g.title}</span>
-                    <span style={{ color: "var(--text-secondary)" }}>{pct}%</span>
-                    {g.milestone && <span style={{ color: "var(--text-primary)" }}>· {g.milestone}</span>}
-                    {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
-                    <span style={{ color: "var(--text-secondary)" }}>{open ? "▴" : "▾"}</span>
-                  </button>
+                  <>
+                    {lead.map((g) => chip(g, true))}
+                    {shown.map((g) => chip(g, false))}
+                    {hidden > 0 && (
+                      <button type="button" onClick={() => setGoalStripOpen(true)}
+                        title={member.filter((g) => !shown.includes(g)).map((g) => g.title).join("\n")}
+                        style={{ padding: "3px 9px", borderRadius: 999, border: "1px dashed var(--ct-border)",
+                                 background: "transparent", color: "var(--text-secondary)",
+                                 fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        담당 목표 +{hidden}
+                      </button>
+                    )}
+                    {goalStripOpen && member.length > blocked.length && (
+                      <button type="button" onClick={() => setGoalStripOpen(false)}
+                        style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
+                                 color: "var(--text-secondary)", fontSize: 11, cursor: "pointer" }}>
+                        접기
+                      </button>
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </div>
           )}
 
