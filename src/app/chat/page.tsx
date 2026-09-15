@@ -11838,7 +11838,7 @@ export default function ChatPage() {
               margin: "0 0 8px", padding: "6px 0",
               background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
               display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center",
-              maxHeight: 62, overflowY: "auto",
+              maxHeight: goalStripOpen ? 132 : 62, overflowY: "auto",
             }}>
               {goalsHalted && (
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>
@@ -11865,19 +11865,19 @@ export default function ChatPage() {
                        style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 260,
                                 padding: isLead ? "4px 11px" : "3px 9px", borderRadius: 999,
                                 border: `${isLead ? 2 : 1}px solid ${c}`,
-                                background: open ? "rgba(37,99,235,.10)" : isLead ? "rgba(217,119,6,.08)" : "var(--bg-card)",
+                                background: open ? "rgba(37,99,235,.10)" : isLead ? "rgba(217,119,6,.08)" : "var(--ct-card)",
                                 fontSize: isLead ? 11.5 : 11, cursor: "pointer", whiteSpace: "nowrap" }}>
                       <span style={{ fontWeight: 800, color: c }}>
                         {isLead ? "👑" : "●"} {shortGoalTitle(g.title)}
                       </span>
-                      <span style={{ color: "var(--text-secondary)" }}>{pct}%</span>
+                      <span style={{ color: "var(--ct-text2)" }}>{pct}%</span>
                       {isLead && g.milestone && (
-                        <span style={{ color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
+                        <span style={{ color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
                           · {g.milestone}
                         </span>
                       )}
                       {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
-                      <span style={{ color: "var(--text-secondary)" }}>{open ? "▴" : "▾"}</span>
+                      <span style={{ color: "var(--ct-text2)" }}>{open ? "▴" : "▾"}</span>
                     </button>
                   );
                 };
@@ -11889,7 +11889,7 @@ export default function ChatPage() {
                       <button type="button" onClick={() => setGoalStripOpen(true)}
                         title={member.filter((g) => !shown.includes(g)).map((g) => g.title).join("\n")}
                         style={{ padding: "3px 9px", borderRadius: 999, border: "1px dashed var(--ct-border)",
-                                 background: "transparent", color: "var(--text-secondary)",
+                                 background: "transparent", color: "var(--ct-text2)",
                                  fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
                         담당 목표 +{hidden}
                       </button>
@@ -11897,7 +11897,7 @@ export default function ChatPage() {
                     {goalStripOpen && member.length > blocked.length && (
                       <button type="button" onClick={() => setGoalStripOpen(false)}
                         style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
-                                 color: "var(--text-secondary)", fontSize: 11, cursor: "pointer" }}>
+                                 color: "var(--ct-text2)", fontSize: 11, cursor: "pointer" }}>
                         접기
                       </button>
                     )}
