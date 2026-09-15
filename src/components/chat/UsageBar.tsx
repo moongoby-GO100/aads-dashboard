@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { api } from "@/lib/api";
 
 type ClaudeSlotUsage = {
   slot: string;
@@ -235,6 +236,38 @@ export default function UsageBar() {
     }
   }, [gating, fetchUsage]);
 
+  // 슬롯별 프로젝트 배정. 비어 있으면 모든 프로젝트가 쓴다는 뜻이다.
+  const [slotProjects, setSlotProjects] = useState<Record<string, string[]>>({});
+
+  const fetchSlotProjects = useCallback(async () => {
+    try {
+      const r = await api.getSlotProjects() as { slots?: Record<string, string[]> };
+      setSlotProjects(r.slots || {});
+    } catch { /* 배정 조회 실패가 사용량 표시를 막으면 안 된다 */ }
+  }, []);
+
+  useEffect(() => { void fetchSlotProjects(); }, [fetchSlotProjects]);
+
+  // 배정 편집은 쉼표로 받는다. 프로젝트 키가 짧고(ACCT·GO100) 몇 개 안 된다 —
+  // 체크박스 목록을 띠에 넣으면 정작 사용량이 안 보인다.
+  const editSlotProjects = useCallback(async (slot: string, name: string) => {
+    const now = (slotProjects[slot] || []).join(", ");
+    const next = window.prompt(
+      `${name} 계정을 먼저 쓸 프로젝트를 쉼표로 적어 주십시오.\n` +
+      "비워 두면 모든 프로젝트가 씁니다.\n" +
+      "예: ACCT, FOOD",
+      now,
+    );
+    if (next === null) return;
+    const list = next.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+    try {
+      await api.setSlotProjects(slot, list);
+      await fetchSlotProjects();
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : "배정을 저장하지 못했습니다");
+    }
+  }, [slotProjects, fetchSlotProjects]);
+
   const fetchRelayCapacity = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -414,6 +447,25 @@ export default function UsageBar() {
                     {"\uCD5C\uD6C4\uC218\uB2E8"}
                   </span>
                 )}
+              </button>
+              {/* 배정된 프로젝트. 비어 있으면 '전체' — 누르면 고친다. */}
+              <button
+                type="button"
+                onClick={() => void editSlotProjects(sl.slot, name)}
+                title={(slotProjects[sl.slot] || []).length > 0
+                  ? "\uC774 \uD504\uB85C\uC81D\uD2B8\uB4E4\uC774 \uC774 \uACC4\uC815\uC744 \uBA3C\uC800 \uC500\uB2C8\uB2E4. \uB204\uB974\uBA74 \uACE0\uCE69\uB2C8\uB2E4."
+                  : "\uBAA8\uB4E0 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC500\uB2C8\uB2E4. \uB204\uB974\uBA74 \uBC30\uC815\uD569\uB2C8\uB2E4."}
+                style={{
+                  fontSize: "9px", fontWeight: 700, whiteSpace: "nowrap",
+                  padding: "1px 6px", borderRadius: "9px", marginLeft: "-6px",
+                  border: "1px dashed var(--ct-border)", background: "transparent",
+                  color: (slotProjects[sl.slot] || []).length > 0 ? "#2563eb" : "var(--ct-text3, #999)",
+                  cursor: "pointer",
+                }}
+              >
+                {(slotProjects[sl.slot] || []).length > 0
+                  ? (slotProjects[sl.slot] || []).join(",")
+                  : "\uC804\uCCB4"}
               </button>
               {lastResort && (
                 // 켜짐/꺼짐이 한눈에 보여야 한다. 꺼져 있으면 이 계정은

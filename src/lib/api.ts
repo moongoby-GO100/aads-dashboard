@@ -983,6 +983,13 @@ export const api = {
     }),
   // 목표 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
   // 매번 묻지 않기 위해 존재한다 (2026-09-15 대표님 지시).
+  // 슬롯별 프로젝트 배정. 배정이 없는 슬롯은 모든 프로젝트가 쓴다.
+  getSlotProjects: () => request<any>("/settings/auth-keys/slot-projects"),
+  setSlotProjects: (slot: string, projects: string[]) =>
+    request<any>(`/settings/auth-keys/slot-projects/${encodeURIComponent(slot)}`, {
+      method: "POST",
+      body: JSON.stringify({ projects }),
+    }),
   getGoalApprovalPolicy: (goalId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/approval-policy`),
   setGoalApprovalPolicy: (
