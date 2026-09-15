@@ -355,12 +355,53 @@ export default function GoalsPage() {
             })}
           </section>
 
-          <section style={{ minHeight: 620, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden" }}>
+          <section style={{ minHeight: 720, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden" }}>
             {!detail ? <div style={{ padding: 28, color: "var(--text-secondary)" }}>왼쪽에서 목표를 선택하십시오.</div> : <>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
                 <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>마일스톤 {detail.milestones_completed}/{detail.milestones_total} · 자동 진행은 각 완료기준과 연결 작업 상태가 모두 충족될 때만 실행됩니다.</div>
               </div>
+              {/* 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
+                  담당 목록 안에 두었더니 스크롤 아래로 묻혔다(2026-09-15 대표님
+                  지적 "안 나온다"). 목표 제목 바로 아래로 올리고, 담당이 없는
+                  목표에서도 보이게 한다. */}
+              <div style={{ margin: "12px 18px 10px", padding: "10px 12px", borderRadius: 9,
+                              border: `1px solid ${policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--border)"}`,
+                              background: "var(--bg-primary)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 12.5, color: "var(--text-primary)" }}>승인 설정</strong>
+                    <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>
+                      {policy && (policy.auto_approve_high || policy.auto_approve_critical)
+                        ? `사용 ${policy.used}/${policy.max_executions}회 · 목표가 끝나면 함께 끝납니다`
+                        : "지금은 변경마다 대표님께 묻습니다"}
+                    </span>
+                  </div>
+                  <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8, fontSize: 11.5, color: "var(--text-primary)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!policy?.auto_approve_high}
+                           onChange={(e) => void savePolicy({ auto_approve_high: e.target.checked })} />
+                    실매매 <b>코드 수정</b>을 이 목표 달성까지 미리 승인
+                  </label>
+                  <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 5, fontSize: 11.5, color: "#dc2626", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!policy?.auto_approve_critical}
+                           onChange={(e) => void savePolicy({ auto_approve_critical: e.target.checked })} />
+                    <b>주문·자금·서비스 재기동</b>까지 미리 승인 (돈이 직접 걸립니다)
+                  </label>
+                  <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    허용 횟수
+                    {/* 글자마다 저장하면 "200" 을 칠 때 2 → 20 → 200 으로
+                        세 번 저장된다. 다 치고 빠져나갈 때(또는 Enter) 저장한다. */}
+                    <input type="number" min={1} max={5000}
+                           value={countDraft}
+                           onChange={(e) => setCountDraft(e.target.value)}
+                           onBlur={() => void commitCount()}
+                           onKeyDown={(e) => { if (e.key === "Enter") void commitCount(); }}
+                           style={{ width: 78, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
+                                    border: "1px solid var(--border)", background: "var(--bg-card)",
+                                    color: "var(--text-primary)" }} />
+                    회 — 넘으면 다시 묻습니다
+                  </div>
+                </div>
+
               {board && (
                 <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border)" }} aria-label="목표 설계 문서">
                   {board.documents && board.documents.length > 0 ? (
@@ -403,45 +444,6 @@ export default function GoalsPage() {
                       </button>
                     </div>
                   )}
-                  {/* 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
-                      매번 묻지 않기 위해 존재한다. 주문·자금은 따로 켜야 한다. */}
-                  <div style={{ margin: "12px 0 8px", padding: "10px 12px", borderRadius: 9,
-                                border: `1px solid ${policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--border)"}`,
-                                background: "var(--bg-primary)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                      <strong style={{ fontSize: 12.5, color: "var(--text-primary)" }}>승인 설정</strong>
-                      <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>
-                        {policy && (policy.auto_approve_high || policy.auto_approve_critical)
-                          ? `사용 ${policy.used}/${policy.max_executions}회 · 목표가 끝나면 함께 끝납니다`
-                          : "지금은 변경마다 대표님께 묻습니다"}
-                      </span>
-                    </div>
-                    <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8, fontSize: 11.5, color: "var(--text-primary)", cursor: "pointer" }}>
-                      <input type="checkbox" checked={!!policy?.auto_approve_high}
-                             onChange={(e) => void savePolicy({ auto_approve_high: e.target.checked })} />
-                      실매매 <b>코드 수정</b>을 이 목표 달성까지 미리 승인
-                    </label>
-                    <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 5, fontSize: 11.5, color: "#dc2626", cursor: "pointer" }}>
-                      <input type="checkbox" checked={!!policy?.auto_approve_critical}
-                             onChange={(e) => void savePolicy({ auto_approve_critical: e.target.checked })} />
-                      <b>주문·자금·서비스 재기동</b>까지 미리 승인 (돈이 직접 걸립니다)
-                    </label>
-                    <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      허용 횟수
-                      {/* 글자마다 저장하면 "200" 을 칠 때 2 → 20 → 200 으로
-                          세 번 저장된다. 다 치고 빠져나갈 때(또는 Enter) 저장한다. */}
-                      <input type="number" min={1} max={5000}
-                             value={countDraft}
-                             onChange={(e) => setCountDraft(e.target.value)}
-                             onBlur={() => void commitCount()}
-                             onKeyDown={(e) => { if (e.key === "Enter") void commitCount(); }}
-                             style={{ width: 78, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
-                                      border: "1px solid var(--border)", background: "var(--bg-card)",
-                                      color: "var(--text-primary)" }} />
-                      회 — 넘으면 다시 묻습니다
-                    </div>
-                  </div>
-
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0 8px" }}>
                     <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>담당 {board.owners.filter((o) => !o.is_lead).length}명</strong>
                     <button type="button" onClick={() => void openAdd(false)}
@@ -512,8 +514,13 @@ export default function GoalsPage() {
                   </div>
                 </div>
               )}
-              <div style={{ height: 420 }} aria-label="목표 실행 상태 그래프">
-                <ReactFlow nodes={graph.nodes} edges={graph.edges} nodeTypes={nodeTypes} fitView minZoom={0.25} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable>
+              {/* 트리는 화면 높이를 따라간다. 420px 고정이면 노드가 늘수록
+                  fitView 가 계속 축소해 카드 글씨를 읽을 수 없다
+                  (2026-09-15 대표님 지적). 최소 480, 화면의 58%까지 쓴다. */}
+              <div style={{ height: "clamp(480px, 58vh, 760px)" }} aria-label="목표 실행 상태 그래프">
+                <ReactFlow nodes={graph.nodes} edges={graph.edges} nodeTypes={nodeTypes} fitView
+                  fitViewOptions={{ padding: 0.12, minZoom: 0.55, maxZoom: 1.1 }}
+                  minZoom={0.4} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} elementsSelectable>
                   <Background gap={22} size={1} /><Controls showInteractive={false} />
                 </ReactFlow>
               </div>
