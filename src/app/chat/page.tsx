@@ -3971,9 +3971,20 @@ export default function ChatPage() {
   // 승인 호출은 이 브라우저가 CEO 인증으로 직접 한다. 에이전트를 거치지
   // 않는다 — 에이전트가 자기 요청을 스스로 승인하면 게이트가 무의미하다.
   const [approvals, setApprovals] = useState<Array<{
-    id: string; tool: string; summary: string; at: string;
+    id: string; tool: string; summary: string; at: string; risk?: string;
   }>>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
+  // 여러 건을 한 번에 처리하는 체크박스 선택 — critical 등급은 실수 방지를
+  // 위해 선택 대상에서 제외하고 개별 클릭만 받는다 (2026-09-15).
+  const [selectedApprovalIds, setSelectedApprovalIds] = useState<Set<string>>(new Set());
+  const [bulkApprovalBusy, setBulkApprovalBusy] = useState(false);
+  const toggleApprovalSelected = useCallback((id: string) => {
+    setSelectedApprovalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   // 승인 팝업 — 대화 스크롤 위치와 무관하게 화면 위로 올린다.
   //
@@ -4006,7 +4017,7 @@ export default function ChatPage() {
     try {
       // 이 페이지의 관례대로 chatApi 를 쓴다 — 같은 GET 이 겹치면 합쳐진다.
       const r = await chatApi<{
-        pending?: Array<{ id: string; tool: string; summary: string; at: string }>;
+        pending?: Array<{ id: string; tool: string; summary: string; at: string; risk?: string }>;
       }>(`/approvals/pending?session_id=${encodeURIComponent(sid)}`);
       setApprovals(r.pending || []);
     } catch {
@@ -4041,6 +4052,39 @@ export default function ChatPage() {
       setApprovalBusy(null);
     }
   }, []);
+
+  // 체크박스로 고른 여러 건을 순서대로 처리한다. 동시 요청이 아니라
+  // 순차 처리다 — 같은 세션 상태를 동시에 두 번 건드리지 않기 위함.
+  const decideApprovalBulk = useCallback(async (
+    ids: string[],
+    decision: "approved" | "rejected",
+    scope: "single" | "mission" = "single",
+  ) => {
+    if (ids.length === 0) return;
+    setBulkApprovalBusy(true);
+    try {
+      for (const id of ids) {
+        await decideApproval(id, decision, scope);
+      }
+    } finally {
+      setSelectedApprovalIds(new Set());
+      setBulkApprovalBusy(false);
+    }
+  }, [decideApproval]);
+
+  // 이미 결정됐거나 만료돼 목록에서 빠진 항목은 선택에서도 지운다.
+  useEffect(() => {
+    setSelectedApprovalIds((prev) => {
+      if (prev.size === 0) return prev;
+      const validIds = new Set(approvals.map((a) => a.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (validIds.has(id)) next.add(id); else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [approvals]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -12064,11 +12108,61 @@ export default function ChatPage() {
                   이 대화에서 <b>보호 게이트에 막힌 작업</b>입니다. 승인해야 이어서 진행됩니다.{" "}
                   <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은 최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동 만료됩니다.
                 </div>
+                {popupApprovals.filter((a) => a.risk !== "critical").length >= 2 && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                    padding: "8px 0 10px", borderBottom: "1px dashed rgba(214,53,59,.3)", marginBottom: 4,
+                  }}>
+                    <span style={{ fontSize: 12, color: "var(--ct-text2)" }}>선택 {selectedApprovalIds.size}건</span>
+                    <button
+                      onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "approved", "single")}
+                      disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                      style={{
+                        padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 700, border: "none",
+                        background: "#16a34a", color: "#fff",
+                        cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                        opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                      }}
+                    >선택 일괄 승인(이번만)</button>
+                    <button
+                      onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "approved", "mission")}
+                      disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                      style={{
+                        padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 700,
+                        border: "1px solid #16a34a", background: "transparent", color: "#16a34a",
+                        cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                        opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                      }}
+                    >선택 일괄 승인(미션 동안)</button>
+                    <button
+                      onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "rejected")}
+                      disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                      style={{
+                        padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                        border: "1px solid var(--ct-border)", background: "transparent", color: "var(--ct-text2)",
+                        cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                        opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                      }}
+                    >선택 일괄 거부</button>
+                  </div>
+                )}
                 {popupApprovals.map((a) => (
                   <div key={a.id} style={{
                     padding: "10px 0", borderTop: "1px solid rgba(214,53,59,.22)",
                   }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }}>
+                      {a.risk !== "critical" ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedApprovalIds.has(a.id)}
+                          onChange={() => toggleApprovalSelected(a.id)}
+                          disabled={bulkApprovalBusy}
+                          aria-label="일괄 승인 선택"
+                          style={{ width: 15, height: 15, cursor: "pointer", flex: "0 0 auto" }}
+                        />
+                      ) : (
+                        <span title="critical 등급은 실수 방지를 위해 개별 승인만 가능합니다" style={{ fontSize: 11 }}>⛔</span>
+                      )}
                       {a.tool} <span style={{ fontWeight: 400, color: "var(--ct-text2)" }}>· {a.at}</span>
                     </div>
                     <div style={{
@@ -12173,11 +12267,58 @@ export default function ChatPage() {
                 승인해야 진행됩니다. <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은
                 최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동으로 만료됩니다.
               </div>
+              {approvals.filter((a) => a.risk !== "critical").length >= 2 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", padding: "6px 0 8px" }}>
+                  <span style={{ fontSize: 11.5, color: "var(--ct-text2)" }}>선택 {selectedApprovalIds.size}건</span>
+                  <button
+                    onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "approved", "single")}
+                    disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                    style={{
+                      padding: "4px 12px", borderRadius: 7, fontSize: 11.5, fontWeight: 700, border: "none",
+                      background: "#16a34a", color: "#fff",
+                      cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                      opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                    }}
+                  >선택 일괄 승인</button>
+                  <button
+                    onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "approved", "mission")}
+                    disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                    style={{
+                      padding: "4px 12px", borderRadius: 7, fontSize: 11.5, fontWeight: 700,
+                      border: "1px solid #16a34a", background: "transparent", color: "#16a34a",
+                      cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                      opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                    }}
+                  >선택 일괄 승인(미션)</button>
+                  <button
+                    onClick={() => void decideApprovalBulk(Array.from(selectedApprovalIds), "rejected")}
+                    disabled={bulkApprovalBusy || selectedApprovalIds.size === 0}
+                    style={{
+                      padding: "4px 12px", borderRadius: 7, fontSize: 11.5, fontWeight: 600,
+                      border: "1px solid var(--ct-border)", background: "transparent", color: "var(--ct-text2)",
+                      cursor: selectedApprovalIds.size === 0 ? "default" : "pointer",
+                      opacity: selectedApprovalIds.size === 0 || bulkApprovalBusy ? .5 : 1,
+                    }}
+                  >선택 일괄 거부</button>
+                </div>
+              )}
               {approvals.map((a) => (
                 <div key={a.id} style={{
                   padding: "8px 0", borderTop: "1px solid rgba(214,53,59,.2)",
                 }}>
-                  <div style={{ fontSize: 12, color: "var(--ct-text)", fontWeight: 600 }}>
+                  <div style={{ fontSize: 12, color: "var(--ct-text)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                    {a.risk !== "critical" ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedApprovalIds.has(a.id)}
+                        onChange={() => toggleApprovalSelected(a.id)}
+                        disabled={bulkApprovalBusy}
+                        aria-label="일괄 승인 선택"
+                        style={{ width: 14, height: 14, cursor: "pointer", flex: "0 0 auto" }}
+                      />
+                    ) : (
+                      <span title="critical 등급은 실수 방지를 위해 개별 승인만 가능합니다" style={{ fontSize: 10.5 }}>⛔</span>
+                    )}
                     {a.tool} <span style={{ fontWeight: 400, color: "var(--ct-text2)" }}>· {a.at}</span>
                   </div>
                   <div style={{
