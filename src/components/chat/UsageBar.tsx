@@ -11,6 +11,10 @@ type ClaudeSlotUsage = {
   // 최후 수단 계정은 대표님이 켠 동안에만 폴백 후보가 된다.
   enabled?: boolean;
   gate_changed_at?: string | null;
+  // 스스로 갱신하지 못하는 슬롯의 유일한 신호.
+  token_alive?: boolean;
+  token_checked_at?: number | null;
+  token_status?: number | null;
   source?: string;
   sampled_at?: string | null;
   primary: { used_percent: number | null; window_minutes: number; resets_at?: string | null };
@@ -248,25 +252,52 @@ export default function UsageBar() {
 
   useEffect(() => { void fetchSlotProjects(); }, [fetchSlotProjects]);
 
-  // 배정 편집은 쉼표로 받는다. 프로젝트 키가 짧고(ACCT·GO100) 몇 개 안 된다 —
-  // 체크박스 목록을 띠에 넣으면 정작 사용량이 안 보인다.
-  const editSlotProjects = useCallback(async (slot: string, name: string) => {
-    const now = (slotProjects[slot] || []).join(", ");
-    const next = window.prompt(
-      `${name} 계정을 먼저 쓸 프로젝트를 쉼표로 적어 주십시오.\n` +
-      "비워 두면 모든 프로젝트가 씁니다.\n" +
-      "예: ACCT, FOOD",
-      now,
-    );
-    if (next === null) return;
-    const list = next.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+  // 등록된 프로젝트 목록. 드롭다운으로 고르게 하려면 목록이 있어야 한다 —
+  // 쉼표 입력은 오타 하나로 배정이 통째로 빗나간다.
+  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+  const [editingSlot, setEditingSlot] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getChatWorkspaces()
+      .then((r: any) => {
+        const keys = Array.from(new Set(
+          (r?.workspaces || r || [])
+            .map((w: any) => String(w.project_key || "").toUpperCase())
+            .filter(Boolean),
+        )) as string[];
+        setKnownProjects(keys.sort());
+      })
+      .catch(() => setKnownProjects([]));
+  }, []);
+
+  const toggleProject = useCallback(async (slot: string, key: string) => {
+    const current = new Set(slotProjects[slot] || []);
+    if (current.has(key)) current.delete(key);
+    else current.add(key);
     try {
-      await api.setSlotProjects(slot, list);
+      await api.setSlotProjects(slot, Array.from(current).sort());
       await fetchSlotProjects();
     } catch (e) {
       setSwitchError(e instanceof Error ? e.message : "배정을 저장하지 못했습니다");
     }
   }, [slotProjects, fetchSlotProjects]);
+
+  // 토큰 교체. 리프레시가 없는 슬롯은 죽으면 사람이 새 값을 넣는 수밖에 없다 —
+  // 서버에 들어가 .env 를 고치지 않고 여기서 끝내게 한다.
+  const replaceToken = useCallback(async (slot: string, name: string) => {
+    const token = window.prompt(
+      `${name} 계정의 새 OAuth 토큰을 붙여넣어 주십시오.\n` +
+      "이 계정은 리프레시 토큰이 없어 자동 갱신이 되지 않습니다.",
+    );
+    if (!token || !token.trim()) return;
+    try {
+      await api.replaceSlotToken(slot, token.trim());
+      await fetchUsage();
+      setSwitchError(null);
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : "토큰을 바꾸지 못했습니다");
+    }
+  }, [fetchUsage]);
 
   const fetchRelayCapacity = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
@@ -448,10 +479,28 @@ export default function UsageBar() {
                   </span>
                 )}
               </button>
-              {/* 배정된 프로젝트. 비어 있으면 '전체' — 누르면 고친다. */}
+              {/* 토큰 상태. 자동 갱신이 안 되는 슬롯은 이것이 유일한 신호다.
+                  죽었으면 눌러서 그 자리에서 새 값을 넣는다 — 서버에 들어가
+                  .env 를 고치러 가지 않는다. */}
+              {lastResort && sl.token_alive === false && (
+                <button
+                  type="button"
+                  onClick={() => void replaceToken(sl.slot, name)}
+                  title={"\uD1A0\uD070\uC774 \uB9CC\uB8CC\uB410\uC2B5\uB2C8\uB2E4. \uB204\uB974\uBA74 \uC0C8 \uAC12\uC744 \uB123\uC2B5\uB2C8\uB2E4."}
+                  style={{
+                    fontSize: "9px", fontWeight: 800, whiteSpace: "nowrap",
+                    padding: "1px 6px", borderRadius: "9px", marginLeft: "-6px",
+                    border: "1px solid #ef4444", background: "#ef444418",
+                    color: "#ef4444", cursor: "pointer",
+                  }}
+                >
+                  {"\uD1A0\uD070 \uB9CC\uB8CC \u2014 \uAD50\uCCB4"}
+                </button>
+              )}
+              {/* 배정된 프로젝트. 비어 있으면 '전체' — 누르면 고른다. */}
               <button
                 type="button"
-                onClick={() => void editSlotProjects(sl.slot, name)}
+                onClick={() => setEditingSlot(editingSlot === sl.slot ? null : sl.slot)}
                 title={(slotProjects[sl.slot] || []).length > 0
                   ? "\uC774 \uD504\uB85C\uC81D\uD2B8\uB4E4\uC774 \uC774 \uACC4\uC815\uC744 \uBA3C\uC800 \uC500\uB2C8\uB2E4. \uB204\uB974\uBA74 \uACE0\uCE69\uB2C8\uB2E4."
                   : "\uBAA8\uB4E0 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC500\uB2C8\uB2E4. \uB204\uB974\uBA74 \uBC30\uC815\uD569\uB2C8\uB2E4."}
@@ -467,6 +516,43 @@ export default function UsageBar() {
                   ? (slotProjects[sl.slot] || []).join(",")
                   : "\uC804\uCCB4"}
               </button>
+              {editingSlot === sl.slot && (
+                <span style={{ position: "relative", display: "inline-block" }}>
+                  <span style={{
+                    position: "absolute", top: "14px", left: 0, zIndex: 40,
+                    minWidth: "160px", maxHeight: "260px", overflowY: "auto",
+                    padding: "6px", borderRadius: "8px",
+                    border: "1px solid var(--ct-border)", background: "var(--ct-bg)",
+                    boxShadow: "0 8px 24px rgba(0,0,0,.28)",
+                  }}>
+                    <span style={{ display: "block", fontSize: "9.5px", color: "var(--ct-text3, #999)", padding: "2px 4px 4px" }}>
+                      {"\uACE0\uB978 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC774 \uACC4\uC815\uC744 \uBA3C\uC800 \uC500\uB2C8\uB2E4. \uBE44\uC6B0\uBA74 \uC804\uCCB4."}
+                    </span>
+                    {knownProjects.map((key) => {
+                      const on = (slotProjects[sl.slot] || []).includes(key);
+                      return (
+                        <label key={key} style={{
+                          display: "flex", gap: "6px", alignItems: "center",
+                          padding: "3px 4px", fontSize: "11px", cursor: "pointer",
+                          color: "var(--ct-text2)",
+                        }}>
+                          <input type="checkbox" checked={on}
+                                 onChange={() => void toggleProject(sl.slot, key)} />
+                          {key}
+                        </label>
+                      );
+                    })}
+                    <button type="button" onClick={() => setEditingSlot(null)}
+                      style={{ marginTop: "4px", width: "100%", padding: "3px",
+                               fontSize: "10px", borderRadius: "6px",
+                               border: "1px solid var(--ct-border)",
+                               background: "transparent", color: "var(--ct-text2)",
+                               cursor: "pointer" }}>
+                      {"\uB2EB\uAE30"}
+                    </button>
+                  </span>
+                </span>
+              )}
               {lastResort && (
                 // 켜짐/꺼짐이 한눈에 보여야 한다. 꺼져 있으면 이 계정은
                 // 폴백 후보에도 오르지 않는다 — 회색이 그 뜻이다.
