@@ -106,6 +106,29 @@ export default function ApprovalsPage() {
     return () => clearInterval(iv);
   }, [load]);
 
+  // 미션 승인의 유효 시간·횟수. 고정값이면 목표마다 맞지 않는다 —
+  // 하루 한 번으로 끝내실 때와 자주 확인하실 때가 다르다.
+  // 브라우저에 남겨 다음에도 같은 값으로 시작한다.
+  const [grantHours, setGrantHours] = useState(12);
+  const [grantCount, setGrantCount] = useState(20);
+
+  useEffect(() => {
+    try {
+      const h = Number(localStorage.getItem("aads_grant_hours"));
+      const c = Number(localStorage.getItem("aads_grant_count"));
+      if (h >= 1 && h <= 24) setGrantHours(h);
+      if (c >= 1 && c <= 500) setGrantCount(c);
+    } catch { /* 사생활 보호 모드면 기본값으로 간다 */ }
+  }, []);
+
+  const rememberGrant = useCallback((h: number, c: number) => {
+    setGrantHours(h); setGrantCount(c);
+    try {
+      localStorage.setItem("aads_grant_hours", String(h));
+      localStorage.setItem("aads_grant_count", String(c));
+    } catch { /* 저장 못 해도 이번 조작은 그대로 먹는다 */ }
+  }, []);
+
   const decide = useCallback(async (
     id: string,
     decision: "approved" | "rejected",
@@ -113,7 +136,10 @@ export default function ApprovalsPage() {
   ) => {
     setBusy(id);
     try {
-      await api.decideApproval(id, decision, "", { scope, hours: 12, maxExecutions: scope === "mission" ? 20 : 1 });
+      await api.decideApproval(id, decision, "", {
+        scope, hours: grantHours,
+        maxExecutions: scope === "mission" ? grantCount : 1,
+      });
       setDone((p) => ({ ...p, [id]: decision === "rejected" ? "거부" : scope === "mission" ? "미션 승인" : "승인" }));
       setItems((p) => p.filter((x) => x.id !== id));
     } catch (e) {
@@ -121,7 +147,7 @@ export default function ApprovalsPage() {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [grantHours, grantCount]);
 
   const ackAll = useCallback(async () => {
     setBusy("ack-all");
@@ -183,9 +209,31 @@ export default function ApprovalsPage() {
         )}
 
         {/* ── 승인 필요 ─────────────────────────────────────────── */}
-        <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", margin: "18px 0 10px" }}>
-          ⛔ 승인 필요 {items.length > 0 && `${items.length}건`}
-        </h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                      gap: 10, flexWrap: "wrap", margin: "18px 0 10px" }}>
+          <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>
+            ⛔ 승인 필요 {items.length > 0 && `${items.length}건`}
+          </h2>
+          {/* 미션 승인의 유효 범위. 고정값이면 목표마다 맞지 않는다. */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5,
+                        color: "var(--text-secondary)" }}>
+            미션 승인
+            <input type="number" min={1} max={24} value={grantHours}
+                   onChange={(e) => rememberGrant(
+                     Math.min(24, Math.max(1, Number(e.target.value) || 1)), grantCount)}
+                   style={{ width: 54, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
+                            border: "1px solid var(--border)", background: "var(--bg-card)",
+                            color: "var(--text-primary)" }} />
+            시간 ·
+            <input type="number" min={1} max={500} value={grantCount}
+                   onChange={(e) => rememberGrant(
+                     grantHours, Math.min(500, Math.max(1, Number(e.target.value) || 1)))}
+                   style={{ width: 64, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
+                            border: "1px solid var(--border)", background: "var(--bg-card)",
+                            color: "var(--text-primary)" }} />
+            회
+          </div>
+        </div>
 
         {!loading && items.length === 0 && !error && (
           <div style={{ ...card, color: "var(--text-secondary)", fontSize: 14 }}>
@@ -252,7 +300,7 @@ export default function ApprovalsPage() {
                     cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
                   }}
                 >
-                  이 미션 동안 (12h·20회)
+                  이 미션 동안 ({grantHours}h·{grantCount}회)
                 </button>
                 <button
                   onClick={() => void decide(it.id, "rejected")}

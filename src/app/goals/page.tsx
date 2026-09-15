@@ -192,6 +192,12 @@ export default function GoalsPage() {
     return () => { alive = false; };
   }, [selectedId]);
 
+  // 허용 횟수는 다 치고 나서 저장한다.
+  const [countDraft, setCountDraft] = useState("200");
+  useEffect(() => {
+    setCountDraft(String(policy?.max_executions ?? 200));
+  }, [policy?.max_executions]);
+
   // 설정 저장. 주문·자금을 켤 때는 한 번 묻는다 — 돈이 직접 걸린다.
   const savePolicy = useCallback(async (patch: Partial<{
     auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number;
@@ -214,6 +220,12 @@ export default function GoalsPage() {
       window.alert(e instanceof Error ? e.message : "승인 설정을 저장하지 못했습니다");
     }
   }, [selectedId, policy]);
+
+  const commitCount = useCallback(async () => {
+    const n = Math.min(5000, Math.max(1, Number(countDraft) || 1));
+    setCountDraft(String(n));
+    if (n !== policy?.max_executions) await savePolicy({ max_executions: n });
+  }, [countDraft, policy, savePolicy]);
 
   // 주도 바꾸기. 목표에 적힌 주도가 정본이라, 이걸 바꾸면 화면·지시·보고
   // 경로가 모두 따라온다.
@@ -416,9 +428,13 @@ export default function GoalsPage() {
                     </label>
                     <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                       허용 횟수
+                      {/* 글자마다 저장하면 "200" 을 칠 때 2 → 20 → 200 으로
+                          세 번 저장된다. 다 치고 빠져나갈 때(또는 Enter) 저장한다. */}
                       <input type="number" min={1} max={5000}
-                             value={policy?.max_executions ?? 200}
-                             onChange={(e) => void savePolicy({ max_executions: Number(e.target.value) || 1 })}
+                             value={countDraft}
+                             onChange={(e) => setCountDraft(e.target.value)}
+                             onBlur={() => void commitCount()}
+                             onKeyDown={(e) => { if (e.key === "Enter") void commitCount(); }}
                              style={{ width: 78, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
                                       border: "1px solid var(--border)", background: "var(--bg-card)",
                                       color: "var(--text-primary)" }} />
