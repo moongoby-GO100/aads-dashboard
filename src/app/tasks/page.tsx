@@ -7,7 +7,6 @@ import { api } from "@/lib/api";
 import { useTaskPolling } from "@/hooks/useTaskPolling";
 import { TaskTable } from "@/components/tasks/TaskTable";
 import MermaidDiagram from "@/components/MermaidDiagram";
-import MermaidDiagram from "@/components/MermaidDiagram";
 import type { CrossDirective } from "@/services/taskApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -969,17 +968,9 @@ function MarkdownRenderer({ content }: { content: string }) {
             <div className={`px-3 py-1 text-xs font-mono ${isMermaid ? "bg-blue-900 text-blue-300" : "bg-gray-700 text-gray-400"}`}>
               {isMermaid ? "diagram (mermaid)" : lang}
             </div>
+          )}
           {isMermaid ? (
             <MermaidDiagram
-              chart={codeLines.join("\n")}
-              className="p-3 overflow-auto max-h-[400px] bg-blue-950 text-blue-200"
-              fallbackClassName="text-xs font-mono leading-relaxed"
-            />
-          ) : (
-            <pre className="p-3 text-xs font-mono leading-relaxed overflow-auto max-h-[400px] whitespace-pre bg-gray-900 text-gray-300">
-              {codeLines.join("\n")}
-            </pre>
-          )}
               chart={codeLines.join("\n")}
               className="p-3 overflow-auto max-h-[400px] bg-blue-950 text-blue-200"
               fallbackClassName="text-xs font-mono leading-relaxed"

@@ -6,7 +6,6 @@ import RunnerHostStatus from "./RunnerHostStatus";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import MermaidDiagram from "@/components/MermaidDiagram";
-import MermaidDiagram from "@/components/MermaidDiagram";
 import { BASE_URL, authHdrs, chatApi, updateArtifact } from "./api";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import {
@@ -2766,6 +2765,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           {"📎 " + (displayArtifact.title || "파일 다운로드")}
                         </a>
                       ) : displayArtifact.artifact_type === "chart" ? (
+                        displayArtifact.metadata?.subtype === "mermaid" ? (
                           <div
                             onClick={() => openArtifactInNewTab(displayArtifact)}
                             title="차트를 새 탭으로 열기"
@@ -2781,6 +2781,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                               fallbackStyle={{ background: "transparent" }}
                             />
                           </div>
+                        ) : (
                           <div
                             onClick={() => openArtifactInNewTab(displayArtifact)}
                             title="차트를 새 탭으로 열기"
