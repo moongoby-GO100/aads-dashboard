@@ -191,6 +191,7 @@ export interface ChatArtifactPanelProps {
   sessionDocs?: Array<{
     path: string; name: string; dir: string; icon: string;
     at: string | null; writes: number; tool: string;
+    source?: string; source_label?: string; repo?: string; view_url?: string | null;
   }>;
   sessionOtherFiles?: number;
   filteredArtifacts: Artifact[];
@@ -2304,7 +2305,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     <div style={{ padding: 22, textAlign: "center", color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7 }}>
                       이 대화가 파일로 저장한 문서가 아직 없습니다.
                       <br />
-                      담당이 <code>write_remote_file</code> 로 저장한 문서가 여기 모입니다.
+                      담당이 파일로 저장한 문서(직접 저장·명령 실행·러너 산출물)가 여기 모입니다.
                       {sessionOtherFiles > 0 && (
                         <>
                           <br />
@@ -2320,25 +2321,45 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         문서 {sessionDocs.length}건
                         {sessionOtherFiles > 0 && ` · 문서가 아닌 파일 ${sessionOtherFiles}건은 제외`}
                       </div>
-                      {sessionDocs.map((d) => (
-                        <a key={d.path} href={`/docs?path=${encodeURIComponent(d.path)}`}
-                           title={d.path}
-                           style={{ display: "block", marginBottom: 6, padding: "8px 10px", borderRadius: 8,
-                                    border: "1px solid var(--border)", background: "var(--bg-primary)",
-                                    textDecoration: "none" }}>
-                          <div style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
-                            <span>{d.icon}</span>
-                            <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-primary)", wordBreak: "break-all" }}>
-                              {d.name}
-                            </span>
-                          </div>
-                          <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
-                            {d.dir || "/"}
-                            {d.writes > 1 && ` · ${d.writes}회 수정`}
-                            {d.at && ` · ${new Date(d.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
-                          </div>
-                        </a>
-                      ))}
+                      {sessionDocs.map((d) => {
+                        // 링크는 뷰어가 실제로 열 수 있을 때만 건다.
+                        // 예전에는 `/docs?path=` 로 걸었는데 /docs 는
+                        // project·base_path·file_path 셋을 읽는다 — 그 링크는
+                        // 아무것도 열지 못하고 문서 목록 첫 화면으로 떨어졌다.
+                        const body = (
+                          <>
+                            <div style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
+                              <span>{d.icon}</span>
+                              <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-primary)", wordBreak: "break-all" }}>
+                                {d.name}
+                              </span>
+                              {d.source_label && (
+                                <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)",
+                                               border: "1px solid var(--border)", borderRadius: 5,
+                                               padding: "1px 5px", whiteSpace: "nowrap" }}>
+                                  {d.source_label}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                              {d.dir || "/"}
+                              {d.writes > 1 && ` · ${d.writes}회 수정`}
+                              {d.at && ` · ${new Date(d.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
+                              {!d.view_url && " · 뷰어가 열 수 없는 경로"}
+                            </div>
+                          </>
+                        );
+                        const box: React.CSSProperties = {
+                          display: "block", marginBottom: 6, padding: "8px 10px", borderRadius: 8,
+                          border: "1px solid var(--border)", background: "var(--bg-primary)",
+                          textDecoration: "none",
+                        };
+                        return d.view_url ? (
+                          <a key={d.path} href={d.view_url} title={d.path} style={box}>{body}</a>
+                        ) : (
+                          <div key={d.path} title={d.path} style={{ ...box, cursor: "default" }}>{body}</div>
+                        );
+                      })}
                     </>
                   )}
                 </div>

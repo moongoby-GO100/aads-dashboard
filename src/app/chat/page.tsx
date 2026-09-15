@@ -10173,6 +10173,7 @@ export default function ChatPage() {
   const [sessionDocs, setSessionDocs] = useState<Array<{
     path: string; name: string; dir: string; icon: string;
     at: string | null; writes: number; tool: string;
+    source?: string; source_label?: string; repo?: string; view_url?: string | null;
   }>>([]);
   const [sessionOtherFiles, setSessionOtherFiles] = useState(0);
 
