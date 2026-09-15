@@ -3982,6 +3982,8 @@ export default function ChatPage() {
   // 상태다 — 사용자가 찾아가야 하는 자리에 두면 안 된다.
   // 닫으면 사라지지 않고 하단 카드 + 플로팅 배지로 남아 다시 열 수 있다.
   const [dismissedApprovalIds, setDismissedApprovalIds] = useState<string[]>([]);
+  // 결정 직후 서버 기록을 당겨오기 위한 신호.
+  const [approvalDecisionTick, setApprovalDecisionTick] = useState(0);
   const approvalAlertedRef = useRef<Set<string>>(new Set<string>());
   const popupApprovals = useMemo(
     () => approvals.filter((a) => !dismissedApprovalIds.includes(a.id)),
@@ -4029,6 +4031,10 @@ export default function ChatPage() {
         : "decision=rejected";
       await chatApi(`/approvals/${encodeURIComponent(id)}/decide?${q}`, { method: "POST" });
       setApprovals((prev) => prev.filter((a) => a.id !== id));
+      // 서버가 결정을 대화에 기록하고 막힌 작업을 이어서 돌린다.
+      // 유휴 세션은 메시지를 폴링하지 않으므로 여기서 직접 당겨온다 —
+      // 그러지 않으면 버튼을 눌러도 화면에 아무 일도 안 일어난 것처럼 보인다.
+      setApprovalDecisionTick((n) => n + 1);
     } catch {
       // 실패하면 목록에 그대로 남는다 — 다음 폴링에서 다시 보인다.
     } finally {
@@ -4386,6 +4392,30 @@ export default function ChatPage() {
     chatViewportController.enqueueMutationAnchor(chatViewportController.captureAnchor(), reason);
     setMessages(next);
   }, [chatViewportController, setMessages]);
+
+  // 승인/거절 직후 — 서버가 남긴 결정 기록을 바로 화면에 올린다.
+  // 이어지는 재개 턴은 기존 streaming-status 폴링이 잡아 버블로 띄운다.
+  useEffect(() => {
+    if (approvalDecisionTick === 0) return;
+    const sid = activeSessionRef.current;
+    if (!sid) return;
+    let alive = true;
+    const pull = () => {
+      chatApi<{ messages: ChatMessage[] }>(
+        `/chat/messages?session_id=${sid}&limit=60&include_streaming=true&fields=render`
+      )
+        .then((r) => {
+          if (!alive || activeSessionRef.current !== sid) return;
+          const fresh = r?.messages || [];
+          if (fresh.length === 0) return;
+          setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+        })
+        .catch(() => { /* 폴링이 다음 주기에 다시 가져온다 */ });
+    };
+    const t1 = window.setTimeout(pull, 500);
+    const t2 = window.setTimeout(pull, 3000);
+    return () => { alive = false; window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, [approvalDecisionTick, setMessagesPreservingViewport]);
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(VERSION_REFRESH_VIEWPORT_KEY);
