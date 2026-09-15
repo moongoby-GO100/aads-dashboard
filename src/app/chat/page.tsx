@@ -11876,8 +11876,20 @@ export default function ChatPage() {
                 const lead = sessionGoals.filter((g) => g.is_lead);
                 const member = sessionGoals.filter((g) => !g.is_lead);
                 const blocked = member.filter((g) => g.dispatch_note);
-                // 막힌 목표는 접지 않는다. 접어 두면 막힌 줄 모른다.
-                const shown = goalStripOpen ? member : blocked;
+                // **기본은 펼침이다.**
+                //
+                // 처음엔 담당 목표를 접어 두게 만들었는데, 대부분 세션은
+                // 주도 목표가 없어 띠가 통째로 사라졌다 — 대표님이 바로
+                // 알아채셨다("목표버튼이 숨겨져서 안보인다"). 가리지 않는
+                // 것과 안 보이는 것은 다르다.
+                //
+                // 이름을 짧게 줄여 놓았으므로(#310·#119) 네 개까지는 한 줄에
+                // 들어간다. 그보다 많을 때만 접는다. 막힌 목표는 언제나
+                // 보인다 — 접어 두면 막힌 줄 모른다.
+                const VISIBLE_MEMBERS = 4;
+                const shown = goalStripOpen
+                  ? member
+                  : member.filter((g, i) => i < VISIBLE_MEMBERS || g.dispatch_note);
                 const hidden = member.length - shown.length;
                 const chip = (g: typeof sessionGoals[number], isLead: boolean) => {
                   const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
@@ -11919,7 +11931,7 @@ export default function ChatPage() {
                         담당 목표 +{hidden}
                       </button>
                     )}
-                    {goalStripOpen && member.length > blocked.length && (
+                    {goalStripOpen && member.length > VISIBLE_MEMBERS && (
                       <button type="button" onClick={() => setGoalStripOpen(false)}
                         style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
                                  color: "var(--ct-text2)", fontSize: 11, cursor: "pointer" }}>
