@@ -985,6 +985,12 @@ export const api = {
   // 매번 묻지 않기 위해 존재한다 (2026-09-15 대표님 지시).
   // 슬롯별 프로젝트 배정. 배정이 없는 슬롯은 모든 프로젝트가 쓴다.
   getSlotProjects: () => request<any>("/settings/auth-keys/slot-projects"),
+  // 토큰은 본문으로만 보낸다. 쿼리스트링에 실으면 접근 로그에 남는다.
+  replaceSlotToken: (slot: string, token: string) =>
+    request<any>(`/settings/auth-keys/slot-token/${encodeURIComponent(slot)}`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
   setSlotProjects: (slot: string, projects: string[]) =>
     request<any>(`/settings/auth-keys/slot-projects/${encodeURIComponent(slot)}`, {
       method: "POST",
