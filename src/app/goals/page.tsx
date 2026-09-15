@@ -178,6 +178,43 @@ export default function GoalsPage() {
     try { setBoard(await api.getGoalBoard(gid)); } catch { /* 조회 실패가 화면을 막지 않는다 */ }
   }, []);
 
+  const [policy, setPolicy] = useState<{
+    auto_approve_high: boolean; auto_approve_critical: boolean;
+    max_executions: number; used: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedId) { setPolicy(null); return; }
+    let alive = true;
+    api.getGoalApprovalPolicy(selectedId)
+      .then((p) => { if (alive) setPolicy(p); })
+      .catch(() => { if (alive) setPolicy(null); });
+    return () => { alive = false; };
+  }, [selectedId]);
+
+  // 설정 저장. 주문·자금을 켤 때는 한 번 묻는다 — 돈이 직접 걸린다.
+  const savePolicy = useCallback(async (patch: Partial<{
+    auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number;
+  }>) => {
+    if (!selectedId) return;
+    const next = {
+      auto_approve_high: policy?.auto_approve_high ?? false,
+      auto_approve_critical: policy?.auto_approve_critical ?? false,
+      max_executions: policy?.max_executions || 200,
+      ...patch,
+    };
+    if (patch.auto_approve_critical === true &&
+        !window.confirm("주문·자금·서비스 재기동까지 이 목표 동안 묻지 않고 통과시킵니다.\n돈이 직접 걸립니다. 계속할까요?")) {
+      return;
+    }
+    try {
+      const saved = await api.setGoalApprovalPolicy(selectedId, next);
+      setPolicy({ ...next, used: saved.used ?? 0 });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "승인 설정을 저장하지 못했습니다");
+    }
+  }, [selectedId, policy]);
+
   // 주도 바꾸기. 목표에 적힌 주도가 정본이라, 이걸 바꾸면 화면·지시·보고
   // 경로가 모두 따라온다.
   const makeLead = useCallback(async (o: BoardOwner) => {
@@ -354,6 +391,41 @@ export default function GoalsPage() {
                       </button>
                     </div>
                   )}
+                  {/* 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
+                      매번 묻지 않기 위해 존재한다. 주문·자금은 따로 켜야 한다. */}
+                  <div style={{ margin: "12px 0 8px", padding: "10px 12px", borderRadius: 9,
+                                border: `1px solid ${policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--border)"}`,
+                                background: "var(--bg-primary)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: 12.5, color: "var(--text-primary)" }}>승인 설정</strong>
+                      <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>
+                        {policy && (policy.auto_approve_high || policy.auto_approve_critical)
+                          ? `사용 ${policy.used}/${policy.max_executions}회 · 목표가 끝나면 함께 끝납니다`
+                          : "지금은 변경마다 대표님께 묻습니다"}
+                      </span>
+                    </div>
+                    <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8, fontSize: 11.5, color: "var(--text-primary)", cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!policy?.auto_approve_high}
+                             onChange={(e) => void savePolicy({ auto_approve_high: e.target.checked })} />
+                      실매매 <b>코드 수정</b>을 이 목표 달성까지 미리 승인
+                    </label>
+                    <label style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 5, fontSize: 11.5, color: "#dc2626", cursor: "pointer" }}>
+                      <input type="checkbox" checked={!!policy?.auto_approve_critical}
+                             onChange={(e) => void savePolicy({ auto_approve_critical: e.target.checked })} />
+                      <b>주문·자금·서비스 재기동</b>까지 미리 승인 (돈이 직접 걸립니다)
+                    </label>
+                    <div style={{ marginTop: 7, fontSize: 11, color: "var(--text-secondary)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      허용 횟수
+                      <input type="number" min={1} max={5000}
+                             value={policy?.max_executions ?? 200}
+                             onChange={(e) => void savePolicy({ max_executions: Number(e.target.value) || 1 })}
+                             style={{ width: 78, padding: "3px 6px", fontSize: 11.5, borderRadius: 6,
+                                      border: "1px solid var(--border)", background: "var(--bg-card)",
+                                      color: "var(--text-primary)" }} />
+                      회 — 넘으면 다시 묻습니다
+                    </div>
+                  </div>
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0 8px" }}>
                     <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>담당 {board.owners.filter((o) => !o.is_lead).length}명</strong>
                     <button type="button" onClick={() => void openAdd(false)}

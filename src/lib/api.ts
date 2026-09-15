@@ -981,6 +981,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ session_id: sessionId }),
     }),
+  // 목표 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
+  // 매번 묻지 않기 위해 존재한다 (2026-09-15 대표님 지시).
+  getGoalApprovalPolicy: (goalId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/approval-policy`),
+  setGoalApprovalPolicy: (
+    goalId: string,
+    body: { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number },
+  ) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/approval-policy`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   removeGoalOwner: (goalId: string, sessionId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }),
