@@ -1,6 +1,7 @@
 // AADS-dashboard-rebuild: refactored
 "use client";
 import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo, memo } from "react";
+import { createPortal } from "react-dom";
 import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
@@ -3974,6 +3975,30 @@ export default function ChatPage() {
   }>>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
 
+  // 승인 팝업 — 대화 스크롤 위치와 무관하게 화면 위로 올린다.
+  //
+  // 2026-09-15 CEO 지시. 승인 카드를 응답 버블 하단으로 옮겼지만(f9f7b22)
+  // 스크롤을 올려 읽고 있으면 여전히 보이지 않는다. 승인 대기는 실행이 멈춘
+  // 상태다 — 사용자가 찾아가야 하는 자리에 두면 안 된다.
+  // 닫으면 사라지지 않고 하단 카드 + 플로팅 배지로 남아 다시 열 수 있다.
+  const [dismissedApprovalIds, setDismissedApprovalIds] = useState<string[]>([]);
+  const approvalAlertedRef = useRef<Set<string>>(new Set<string>());
+  const popupApprovals = useMemo(
+    () => approvals.filter((a) => !dismissedApprovalIds.includes(a.id)),
+    [approvals, dismissedApprovalIds],
+  );
+  const closeApprovalPopup = useCallback(() => {
+    setDismissedApprovalIds(approvals.map((a) => a.id));
+  }, [approvals]);
+  const reopenApprovalPopup = useCallback(() => setDismissedApprovalIds([]), []);
+
+  useEffect(() => {
+    if (popupApprovals.length === 0) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeApprovalPopup(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [popupApprovals.length, closeApprovalPopup]);
+
   const refreshApprovals = useCallback(async (sid: string) => {
     if (!sid) { setApprovals([]); return; }
     try {
@@ -5649,6 +5674,17 @@ export default function ChatPage() {
   const showCompletionToast = useCallback((msg: string, sessionId?: string | null) => {
     showChatStatusAlert("completed", msg, { sessionId, dedupeKey: msg });
   }, [showChatStatusAlert]);
+
+  // 승인 요청이 새로 걸리면 한 번 알린다 — 화면을 안 보고 있어도 안다.
+  useEffect(() => {
+    for (const a of approvals) {
+      if (approvalAlertedRef.current.has(a.id)) continue;
+      approvalAlertedRef.current.add(a.id);
+      showChatStatusAlert("interrupted", `승인 대기 — ${a.tool} 실행이 막혀 있습니다`, {
+        dedupeKey: `approval:${a.id}`,
+      });
+    }
+  }, [approvals, showChatStatusAlert]);
 
   const showCompletionToastOnce = useCallback(function showCompletionToastOnce(
     aiMsgId?: string | null,
@@ -11963,6 +11999,134 @@ export default function ChatPage() {
                 }}
               >{stopRequesting ? "중지중" : "■ 중지"}</button>
             </div>
+          )}
+
+          {/* 승인 팝업 — 막힌 실행을 화면 위로 올린다. 닫아도 아래 카드와 플로팅 배지로 남는다. */}
+          {popupApprovals.length > 0 && typeof document !== "undefined" && createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`승인 대기 ${popupApprovals.length}건`}
+              onClick={closeApprovalPopup}
+              style={{
+                position: "fixed", inset: 0, zIndex: 10050,
+                background: "rgba(8,10,16,.55)",
+                display: "flex", justifyContent: "center",
+                alignItems: screenSize === "mobile" ? "flex-end" : "center",
+                padding: screenSize === "mobile" ? 0 : 24,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%", maxWidth: 540, maxHeight: "84vh", overflowY: "auto",
+                  background: "var(--ct-bg)", color: "var(--ct-text)",
+                  border: "1px solid rgba(214,53,59,.45)", borderTop: "4px solid #D6353B",
+                  borderRadius: screenSize === "mobile" ? "16px 16px 0 0" : 14,
+                  boxShadow: "0 18px 60px rgba(0,0,0,.45)",
+                  padding: "16px 16px 14px",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>
+                  🔴 승인 대기 {popupApprovals.length}건 — 실행이 막혀 있습니다
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ct-text2)", lineHeight: 1.6, marginBottom: 12 }}>
+                  이 대화에서 <b>보호 게이트에 막힌 작업</b>입니다. 승인해야 이어서 진행됩니다.{" "}
+                  <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은 최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동 만료됩니다.
+                </div>
+                {popupApprovals.map((a) => (
+                  <div key={a.id} style={{
+                    padding: "10px 0", borderTop: "1px solid rgba(214,53,59,.22)",
+                  }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>
+                      {a.tool} <span style={{ fontWeight: 400, color: "var(--ct-text2)" }}>· {a.at}</span>
+                    </div>
+                    <div style={{
+                      fontSize: 12, color: "var(--ct-text2)", marginTop: 4, lineHeight: 1.55,
+                      whiteSpace: "pre-wrap", wordBreak: "break-all",
+                      maxHeight: 140, overflowY: "auto",
+                    }}>{a.summary}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={() => void decideApproval(a.id, "approved", "single")}
+                        disabled={approvalBusy === a.id}
+                        style={{
+                          flex: screenSize === "mobile" ? "1 1 46%" : "0 0 auto",
+                          minHeight: 44, padding: "8px 18px", borderRadius: 9,
+                          fontSize: 13, fontWeight: 700, border: "none",
+                          background: "#16a34a", color: "#fff",
+                          cursor: approvalBusy === a.id ? "default" : "pointer",
+                          opacity: approvalBusy === a.id ? .6 : 1,
+                        }}
+                      >
+                        {approvalBusy === a.id ? "처리 중..." : "이번 건만 승인"}
+                      </button>
+                      <button
+                        onClick={() => void decideApproval(a.id, "approved", "mission")}
+                        disabled={approvalBusy === a.id}
+                        title="이 미션 동안 같은 도구의 같은 작업을 최대 20회까지 자동 허용 (2시간)"
+                        style={{
+                          flex: screenSize === "mobile" ? "1 1 46%" : "0 0 auto",
+                          minHeight: 44, padding: "8px 18px", borderRadius: 9,
+                          fontSize: 13, fontWeight: 700,
+                          border: "1px solid #16a34a", background: "transparent", color: "#16a34a",
+                          cursor: approvalBusy === a.id ? "default" : "pointer",
+                          opacity: approvalBusy === a.id ? .6 : 1,
+                        }}
+                      >
+                        이 미션 동안
+                      </button>
+                      <button
+                        onClick={() => void decideApproval(a.id, "rejected")}
+                        disabled={approvalBusy === a.id}
+                        style={{
+                          flex: screenSize === "mobile" ? "1 1 100%" : "0 0 auto",
+                          minHeight: 44, padding: "8px 18px", borderRadius: 9,
+                          fontSize: 13, fontWeight: 600,
+                          border: "1px solid var(--ct-border)", background: "transparent",
+                          color: "var(--ct-text2)",
+                          cursor: approvalBusy === a.id ? "default" : "pointer",
+                          opacity: approvalBusy === a.id ? .6 : 1,
+                        }}
+                      >
+                        거절
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={closeApprovalPopup}
+                  style={{
+                    width: "100%", marginTop: 12, minHeight: 40, padding: "8px 12px",
+                    borderRadius: 9, fontSize: 12, fontWeight: 600,
+                    border: "1px solid var(--ct-border)", background: "transparent",
+                    color: "var(--ct-text2)", cursor: "pointer",
+                  }}
+                >
+                  나중에 — 대화 하단 카드와 우측 배지로 남습니다
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )}
+
+          {/* 팝업을 닫아도 승인이 남아 있으면 배지로 계속 보인다 — 누르면 다시 열린다. */}
+          {approvals.length > 0 && popupApprovals.length === 0 && typeof document !== "undefined" && createPortal(
+            <button
+              onClick={reopenApprovalPopup}
+              title="승인 대기 항목 다시 보기"
+              style={{
+                position: "fixed", right: 16,
+                bottom: screenSize === "mobile" ? 104 : 118,
+                zIndex: 10040, minHeight: 40, padding: "8px 16px",
+                borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+                border: "1px solid rgba(214,53,59,.5)", background: "#D6353B", color: "#fff",
+                boxShadow: "0 8px 24px rgba(214,53,59,.35)", cursor: "pointer",
+              }}
+            >
+              🔴 승인 대기 {approvals.length}건
+            </button>,
+            document.body,
           )}
 
           {approvals.length > 0 && (
