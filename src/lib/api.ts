@@ -974,6 +974,13 @@ export const api = {
   addGoalOwner: (goalId: string, body: { session_id: string; role_key?: string; as_lead?: boolean }) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners`,
       { method: "POST", body: JSON.stringify(body) }),
+  // 이미 붙어 있는 담당을 주도로 바꾼다. 붙일 때만 정할 수 있어서
+  // 나중에 바꿀 길이 없었다 (2026-09-15 대표님 지적).
+  setGoalLead: (goalId: string, sessionId: string) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/lead`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
   removeGoalOwner: (goalId: string, sessionId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" }),

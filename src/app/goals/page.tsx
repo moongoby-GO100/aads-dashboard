@@ -178,6 +178,22 @@ export default function GoalsPage() {
     try { setBoard(await api.getGoalBoard(gid)); } catch { /* 조회 실패가 화면을 막지 않는다 */ }
   }, []);
 
+  // 주도 바꾸기. 목표에 적힌 주도가 정본이라, 이걸 바꾸면 화면·지시·보고
+  // 경로가 모두 따라온다.
+  const makeLead = useCallback(async (o: BoardOwner) => {
+    if (!selectedId) return;
+    if (!window.confirm(`${o.title} 을(를) 이 목표의 주도로 세웁니다.\n기존 주도는 담당으로 내려갑니다.`)) return;
+    setOwnerBusy(o.session_id);
+    try {
+      await api.setGoalLead(selectedId, o.session_id);
+      await reloadBoard(selectedId);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "주도 변경에 실패했습니다");
+    } finally {
+      setOwnerBusy(null);
+    }
+  }, [selectedId, reloadBoard]);
+
   const ownerAction = useCallback(async (
     kind: "pause" | "resume" | "restart" | "stop", o: BoardOwner,
   ) => {
@@ -379,6 +395,16 @@ export default function GoalsPage() {
                             </div>
                           )}
                           <div style={{ marginTop: 7, display: "flex", gap: 5, flexWrap: "wrap" }}>
+                            {!o.is_lead && (
+                              <button type="button" disabled={ownerBusy === o.session_id}
+                                onClick={(e) => { e.preventDefault(); void makeLead(o); }}
+                                style={{ minHeight: 28, padding: "0 9px", fontSize: 11, borderRadius: 6,
+                                         border: "1px solid var(--accent)", background: "transparent",
+                                         color: "var(--accent)",
+                                         cursor: ownerBusy === o.session_id ? "wait" : "pointer" }}>
+                                👑 주도로
+                              </button>
+                            )}
                             {(["pause", "resume", "restart", "stop"] as const)
                               .filter((k) => (k === "resume" ? o.paused : k === "pause" ? !o.paused : true))
                               .map((k) => (
