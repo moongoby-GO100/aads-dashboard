@@ -6,6 +6,7 @@ import PipelineHealthTab from "@/components/PipelineHealthCard";
 import { api } from "@/lib/api";
 import { useTaskPolling } from "@/hooks/useTaskPolling";
 import { TaskTable } from "@/components/tasks/TaskTable";
+import MermaidDiagram from "@/components/MermaidDiagram";
 import type { CrossDirective } from "@/services/taskApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -968,9 +969,17 @@ function MarkdownRenderer({ content }: { content: string }) {
               {isMermaid ? "diagram (mermaid)" : lang}
             </div>
           )}
-          <pre className={`p-3 text-xs font-mono leading-relaxed overflow-auto max-h-[400px] whitespace-pre ${isMermaid ? "bg-blue-950 text-blue-200" : "bg-gray-900 text-gray-300"}`}>
-            {codeLines.join("\n")}
-          </pre>
+          {isMermaid ? (
+            <MermaidDiagram
+              chart={codeLines.join("\n")}
+              className="p-3 overflow-auto max-h-[400px] bg-blue-950 text-blue-200"
+              fallbackClassName="text-xs font-mono leading-relaxed"
+            />
+          ) : (
+            <pre className="p-3 text-xs font-mono leading-relaxed overflow-auto max-h-[400px] whitespace-pre bg-gray-900 text-gray-300">
+              {codeLines.join("\n")}
+            </pre>
+          )}
         </div>
       );
       i++;
