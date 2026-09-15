@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { buildGoalDocHref } from "@/lib/documentLinks";
 
 type Milestone = {
   id: string; title: string; status: string; sequence_order: number;
@@ -276,12 +277,19 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
 
         {board?.documents && board.documents.length > 0 && (
           <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {board.documents.map((d) => (
-              <a key={d.doc_path} href={`/docs?path=${encodeURIComponent(d.doc_path)}`}
-                 style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)", color: "var(--text-secondary)", textDecoration: "none" }}>
-                {d.kind === "plan" ? "📋 기획서" : d.kind === "prd" ? "📐 PRD" : "🔗 문서"}
-              </a>
-            ))}
+            {board.documents.map((d) => {
+              const href = buildGoalDocHref(d.doc_path);
+              const icon = d.kind === "plan" ? "📋" : d.kind === "prd" ? "📐" : "🔗";
+              const label = (d.title || "").trim() || d.doc_path.split("/").pop() || "문서";
+              // 새 탭으로 연다 — 담당과의 대화 맥락을 두고 문서만 본다.
+              return (
+                <a key={d.doc_path} href={href || undefined} target="_blank" rel="noopener noreferrer"
+                   title={`${label} — ${d.doc_path}`}
+                   style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)", color: "var(--text-secondary)", textDecoration: "none", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {icon} {label}
+                </a>
+              );
+            })}
           </div>
         )}
       </div>

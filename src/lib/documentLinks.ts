@@ -369,6 +369,25 @@ export function normalizeDocumentHref(href: string): string {
   return raw;
 }
 
+// ── 목표 문서 링크 ────────────────────────────────────────────────────
+// 2026-09-15: 목표 패널과 /goals 카드가 문서를 `/docs?path=<절대경로>` 로 걸었다.
+// /docs 는 `project`·`base_path`·`file_path` 만 읽으므로(app/docs/page.tsx) 그 링크는
+// 문서를 열지 못하고 파일 목록만 띄웠다 — "링크 버튼을 눌러도 바로 안 열린다"의 원인.
+// 저장된 절대 경로 → 실제 주소 변환은 여기 한 곳에서만 한다.
+const SERVER_STATIC_REPORTS_PREFIX = "/root/aads/aads-server/app/static/reports/";
+
+export function buildGoalDocHref(docPath: string): string {
+  const raw = (docPath || "").trim();
+  if (!raw || isUnsafeLink(raw)) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // nginx 가 /reports/ 를 FastAPI /static/reports/ 로 서빙한다(aads-reports.inc).
+  // HTML 리포트는 소스가 아니라 렌더된 화면을 열어야 한다.
+  if (raw.startsWith(SERVER_STATIC_REPORTS_PREFIX) && !raw.split("/").includes("..")) {
+    return buildPublicHref("/reports/", raw.slice(SERVER_STATIC_REPORTS_PREFIX.length));
+  }
+  return normalizeDocumentHref(raw);
+}
+
 export function normalizeDocumentRouteParams(params: DocumentRouteParams): DocumentRouteParams {
   const project = params.project.trim();
   const basePath = params.basePath.trim().replace(/\/+$/, "");

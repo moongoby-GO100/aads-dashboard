@@ -1,4 +1,5 @@
 import {
+  buildGoalDocHref,
   isArtifactPreviewHref,
   isPreviewableTextFile,
   normalizeDocumentHref,
@@ -212,6 +213,30 @@ for (const item of textFileCases) {
   const actual = isPreviewableTextFile(item.input);
   if (actual !== item.expected) {
     throw new Error(`isPreviewableTextFile(${JSON.stringify(item.input)}) => ${actual}, expected ${item.expected}`);
+  }
+}
+
+// ── 목표 문서 링크 ──
+const goalDocCases: Array<{ input: string; expected: string }> = [
+  // HTML 리포트는 렌더된 화면(nginx /reports/)으로 연다
+  {
+    input: "/root/aads/aads-server/app/static/reports/go100/goal100bn_plan_v2.0.html",
+    expected: "/reports/go100/goal100bn_plan_v2.0.html",
+  },
+  // 저장소 문서는 공통 뷰어 링크로 보낸다
+  {
+    input: "/root/aads/aads-server/docs/prd/20260915_GOAL100BN_PRD.md",
+    expected: "/docs?project=AADS&base_path=%2Fapp%2Fdocs&file_path=prd%2F20260915_GOAL100BN_PRD.md",
+  },
+  { input: "https://example.com/plan.html", expected: "https://example.com/plan.html" },
+  { input: "javascript:alert(1)", expected: "" },
+  { input: "", expected: "" },
+];
+
+for (const item of goalDocCases) {
+  const actual = buildGoalDocHref(item.input);
+  if (actual !== item.expected) {
+    throw new Error(`buildGoalDocHref(${JSON.stringify(item.input)}) => ${JSON.stringify(actual)}, expected ${JSON.stringify(item.expected)}`);
   }
 }
 

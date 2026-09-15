@@ -14,6 +14,7 @@ import "@xyflow/react/dist/style.css";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import type { GoalDetail, GoalSummary } from "@/lib/api";
+import { buildGoalDocHref } from "@/lib/documentLinks";
 
 // 통합지시가 보는 프로젝트와 맞춘다. 여기만 7개로 박혀 있으면 FOOD·LAW 같은
 // 업무 워크스페이스의 목표가 화면에서 아예 안 보인다.
@@ -407,7 +408,8 @@ export default function GoalsPage() {
                   {board.documents && board.documents.length > 0 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {board.documents.map((d) => (
-                        <a key={d.doc_path} href={`/docs?path=${encodeURIComponent(d.doc_path)}`}
+                        <a key={d.doc_path} href={buildGoalDocHref(d.doc_path) || undefined}
+                           target="_blank" rel="noopener noreferrer"
                            title={d.doc_path}
                            style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", textDecoration: "none" }}>
                           <span style={{ fontWeight: 700 }}>{docLabel[d.kind] || "🔗 문서"}</span>
