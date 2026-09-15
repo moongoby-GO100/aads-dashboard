@@ -1,16 +1,21 @@
 "use client";
 
 /**
- * 승인 대기 — 실매매 조건 변경을 CEO 가 결정한다.
+ * 승인 — 되돌릴 수 없고 돈이 걸린 것만 여기서 결정한다.
  *
  * 2026-09-14 CEO 지시 — "실매매조건은 나의 승인후 진행해야지".
+ * 2026-09-15 CEO 지시 — "완전 진짜 내 승인을 받아야하는것만 승인 받게".
  *
- * 담당 세션이 실매매 경로를 바꾸려 하면 `live_trading_guard` 가 도구 실행
- * 전에 막고 여기에 요청을 남긴다. 승인하기 전까지 아무것도 바뀌지 않는다.
+ * 그 전에는 읽기 명령·문서 작성·목표 정리까지 전부 `[실매매] high` 로
+ * 올라왔다. 대기 8건 중 진짜 승인 대상은 2건이었다. 오탐이 여섯이면
+ * 다음번엔 내용을 안 보고 누르게 되고, 그때 진짜 하나가 같이 통과한다.
  *
- * 승인은 **사람만** 한다. 이 화면은 CEO 인증으로 API 를 직접 부르고,
- * 채팅 에이전트에게는 승인 도구를 주지 않았다 — 에이전트가 자기 요청을
- * 스스로 승인할 수 있으면 게이트가 없는 것과 같다.
+ * 그래서 화면을 둘로 나눈다.
+ *   ⛔ 승인 필요 — 막혀 있다. 결정해야 움직인다.
+ *   🔔 알림     — 막지 않았다. 아니다 싶으면 되돌리면 된다.
+ *
+ * 승인은 **사람만** 한다. 채팅 에이전트에게는 승인 도구를 주지 않았다 —
+ * 에이전트가 자기 요청을 스스로 승인할 수 있으면 게이트가 없는 것과 같다.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -22,24 +27,69 @@ interface Pending {
   tool: string;
   summary: string;
   risk: string;
+  gate_source?: string;
+  tier?: string;
   requested_by: string;
   work_key: string;
   at: string;
+  expires_in_min?: number;
+}
+
+interface Notification {
+  id: string;
+  tool: string;
+  summary: string;
+  risk: string;
+  gate_source?: string;
+  requested_by: string;
+  at: string;
+}
+
+interface GateStatus {
+  live_trading_gate: boolean;
+  direction_guard: boolean;
+  waiting: number;
+  unread_notifications: number;
+}
+
+const RISK_STYLE: Record<string, { color: string; label: string }> = {
+  critical: { color: "#D6353B", label: "주문·자금" },
+  high: { color: "#e07a1f", label: "실매매 코드" },
+  medium: { color: "#c9a227", label: "방향 변경" },
+};
+
+function riskOf(risk: string) {
+  return RISK_STYLE[risk] || { color: "#8a8a8a", label: risk || "기타" };
+}
+
+function remaining(min?: number): string {
+  if (min == null) return "";
+  if (min < 60) return `${min}분 남음`;
+  const h = Math.floor(min / 60);
+  return h < 24 ? `${h}시간 남음` : `${Math.floor(h / 24)}일 남음`;
 }
 
 export default function ApprovalsPage() {
   const [items, setItems] = useState<Pending[]>([]);
+  const [notes, setNotes] = useState<Notification[]>([]);
+  const [gate, setGate] = useState<GateStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      const r = (await api.getPendingApprovals()) as { pending: Pending[] };
-      setItems(r.pending || []);
+      const [p, n, g] = await Promise.allSettled([
+        api.getPendingApprovals() as Promise<{ pending: Pending[] }>,
+        api.getApprovalNotifications() as Promise<{ notifications: Notification[] }>,
+        api.getApprovalGateStatus() as Promise<GateStatus>,
+      ]);
+      if (p.status === "fulfilled") setItems(p.value.pending || []);
+      else throw p.reason;
+      if (n.status === "fulfilled") setNotes(n.value.notifications || []);
+      if (g.status === "fulfilled") setGate(g.value);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다");
     } finally {
@@ -56,14 +106,30 @@ export default function ApprovalsPage() {
     return () => clearInterval(iv);
   }, [load]);
 
-  const decide = useCallback(async (id: string, decision: "approved" | "rejected") => {
+  const decide = useCallback(async (
+    id: string,
+    decision: "approved" | "rejected",
+    scope: "single" | "mission" = "single",
+  ) => {
     setBusy(id);
     try {
-      await api.decideApproval(id, decision);
-      setDone((p) => ({ ...p, [id]: decision }));
+      await api.decideApproval(id, decision, "", { scope, hours: 12, maxExecutions: scope === "mission" ? 20 : 1 });
+      setDone((p) => ({ ...p, [id]: decision === "rejected" ? "거부" : scope === "mission" ? "미션 승인" : "승인" }));
       setItems((p) => p.filter((x) => x.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "처리하지 못했습니다");
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  const ackAll = useCallback(async () => {
+    setBusy("ack-all");
+    try {
+      await api.acknowledgeAllApprovalNotifications();
+      setNotes([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "확인 처리하지 못했습니다");
     } finally {
       setBusy(null);
     }
@@ -76,101 +142,180 @@ export default function ApprovalsPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-page, #0b0b0c)" }}>
-      <Header title="승인 대기" />
+      <Header title="승인" />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px 60px" }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", marginBottom: 4 }}>
-          승인 대기
+          승인
         </h1>
         <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 18, lineHeight: 1.7 }}>
-          담당이 <b>실매매 조건</b>을 바꾸려 하면 여기에 올라옵니다.
-          승인하기 전까지 <b>아무것도 바뀌지 않습니다</b> — 요청만 남고 실행은 막혀 있습니다.
+          <b>되돌릴 수 없고 돈이 걸린 것</b>만 막습니다 — 주문 경로, 실매매 스위치,
+          배정금액, 실매매 서비스 재기동, 진입·청산 파라미터.
           <br />
-          조사·분석·백테스트·읽기는 승인 없이 그대로 돕니다.
+          되돌릴 수 있는 변경(목표·프롬프트, 실매매 주변 코드)은 막지 않고 아래 알림에만 남습니다.
+          읽기·백테스트·문서는 아무것도 하지 않습니다.
         </p>
+
+        {gate && !gate.live_trading_gate && (
+          <div style={{ ...card, marginBottom: 14, borderColor: "#D6353B", background: "rgba(214,53,59,.08)" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "#D6353B" }}>
+              🚫 실매매 게이트가 꺼져 있습니다
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--text-secondary)", marginTop: 4 }}>
+              지금은 아무것도 막지 않습니다. <code>LIVE_TRADING_GATE_ENABLED=true</code> 로 다시 켜야 합니다.
+            </div>
+          </div>
+        )}
 
         {Object.keys(done).length > 0 && (
           <div style={{ ...card, marginBottom: 14, borderColor: "#16a34a" }}>
             <div style={{ fontSize: 13, color: "var(--text-primary)" }}>
-              방금 처리: {Object.entries(done).map(([id, d]) =>
-                `${id.slice(0, 8)} ${d === "approved" ? "승인" : "거절"}`).join(" · ")}
+              방금 처리: {Object.entries(done).map(([id, d]) => `${id.slice(0, 8)} ${d}`).join(" · ")}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-              승인은 2시간 동안 유효합니다. 담당이 그 안에 실행하지 않으면 다시 요청해야 합니다.
+              미션 승인은 12시간·20회까지 유효합니다. 그 안에는 같은 일로 다시 묻지 않습니다.
             </div>
           </div>
         )}
 
-        {loading && items.length === 0 && (
+        {error && <div style={{ ...card, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+        {loading && items.length === 0 && notes.length === 0 && (
           <div style={{ ...card, color: "var(--text-secondary)" }}>불러오는 중...</div>
         )}
-        {error && <div style={{ ...card, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+
+        {/* ── 승인 필요 ─────────────────────────────────────────── */}
+        <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", margin: "18px 0 10px" }}>
+          ⛔ 승인 필요 {items.length > 0 && `${items.length}건`}
+        </h2>
 
         {!loading && items.length === 0 && !error && (
           <div style={{ ...card, color: "var(--text-secondary)", fontSize: 14 }}>
-            대기 중인 승인 요청이 없습니다.
+            대기 중인 승인이 없습니다.
             <div style={{ fontSize: 12.5, marginTop: 6 }}>
-              담당들이 조사·분석을 하는 중이거나, 아직 실매매 변경까지 가지 않았습니다.
+              담당들은 조사·분석·코드 수정을 승인 없이 계속하고 있습니다.
             </div>
           </div>
         )}
 
-        {items.map((it) => (
-          <div key={it.id} style={{ ...card, marginBottom: 12, borderLeft: "4px solid #D6353B" }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <span style={{
-                fontSize: 11, padding: "2px 8px", borderRadius: 999,
-                background: "rgba(214,53,59,.12)", color: "#D6353B", fontWeight: 600,
-              }}>
-                실매매 · {it.risk}
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>
-                {it.tool}
-              </span>
-              <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{it.at}</span>
-            </div>
+        {items.map((it) => {
+          const rk = riskOf(it.risk);
+          return (
+            <div key={it.id} style={{ ...card, marginBottom: 12, borderLeft: `4px solid ${rk.color}` }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                <span style={{
+                  fontSize: 11, padding: "2px 8px", borderRadius: 999,
+                  background: `${rk.color}22`, color: rk.color, fontWeight: 700,
+                }}>
+                  {rk.label}
+                </span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>
+                  {it.tool}
+                </span>
+                <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{it.at}</span>
+                {it.expires_in_min != null && (
+                  <span style={{ fontSize: 11.5, color: "var(--text-secondary)", marginLeft: "auto" }}>
+                    {remaining(it.expires_in_min)}
+                  </span>
+                )}
+              </div>
 
-            <pre style={{
-              margin: "10px 0 0", padding: "10px 12px", borderRadius: 6,
-              background: "var(--bg-hover, rgba(127,127,127,.08))",
-              fontSize: 12, lineHeight: 1.6, color: "var(--text-primary)",
-              whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 180, overflowY: "auto",
-            }}>{it.summary}</pre>
+              <pre style={{
+                margin: "10px 0 0", padding: "10px 12px", borderRadius: 6,
+                background: "var(--bg-hover, rgba(127,127,127,.08))",
+                fontSize: 12, lineHeight: 1.6, color: "var(--text-primary)",
+                whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 180, overflowY: "auto",
+              }}>{it.summary}</pre>
 
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
-              요청 세션 <code>{it.requested_by.slice(0, 8)}</code>
-              {" · "}
-              <a href={`/chat#${it.requested_by}`} style={{ color: "#2563C7" }}>
-                그 대화 열기
-              </a>
-            </div>
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
+                요청 세션 <code>{it.requested_by.slice(0, 8)}</code>
+                {" · "}
+                <a href={`/chat#${it.requested_by}`} style={{ color: "#2563C7" }}>그 대화 열기</a>
+              </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button
-                onClick={() => void decide(it.id, "approved")}
-                disabled={busy === it.id}
-                style={{
-                  padding: "7px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  border: "none", background: "#16a34a", color: "#fff",
-                  cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
-                }}
-              >
-                {busy === it.id ? "처리 중..." : "승인"}
-              </button>
-              <button
-                onClick={() => void decide(it.id, "rejected")}
-                disabled={busy === it.id}
-                style={{
-                  padding: "7px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  border: "1px solid var(--border)", background: "var(--bg-card)",
-                  color: "var(--text-secondary)",
-                  cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
-                }}
-              >
-                거절
-              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => void decide(it.id, "approved", "single")}
+                  disabled={busy === it.id}
+                  style={{
+                    padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    border: "none", background: "#16a34a", color: "#fff",
+                    cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
+                  }}
+                >
+                  {busy === it.id ? "처리 중..." : "이번 건만"}
+                </button>
+                <button
+                  onClick={() => void decide(it.id, "approved", "mission")}
+                  disabled={busy === it.id}
+                  style={{
+                    padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    border: "1px solid #16a34a", background: "transparent", color: "#16a34a",
+                    cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
+                  }}
+                >
+                  이 미션 동안 (12h·20회)
+                </button>
+                <button
+                  onClick={() => void decide(it.id, "rejected")}
+                  disabled={busy === it.id}
+                  style={{
+                    padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    border: "1px solid var(--border)", background: "var(--bg-card)",
+                    color: "var(--text-secondary)",
+                    cursor: busy === it.id ? "default" : "pointer", opacity: busy === it.id ? .6 : 1,
+                  }}
+                >
+                  거부
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        {/* ── 알림 ─────────────────────────────────────────────── */}
+        {notes.length > 0 && (
+          <>
+            <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", margin: "24px 0 6px" }}>
+              🔔 알림 {notes.length}건
+            </h2>
+            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 10 }}>
+              막지 않았습니다. 아니다 싶으면 되돌리세요.
+            </p>
+            <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+              {notes.map((n, i) => {
+                const rk = riskOf(n.risk);
+                return (
+                  <div key={n.id} style={{
+                    padding: "10px 14px", display: "flex", gap: 10, alignItems: "baseline",
+                    borderTop: i === 0 ? "none" : "1px solid var(--border)", flexWrap: "wrap",
+                  }}>
+                    <span style={{ fontSize: 11, color: rk.color, fontWeight: 700, minWidth: 64 }}>
+                      {rk.label}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: "var(--text-primary)", flex: 1, minWidth: 0,
+                                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {n.summary.split("\n")[0]}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{n.at}</span>
+                  </div>
+                );
+              })}
+              <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", textAlign: "right" }}>
+                <button
+                  onClick={() => void ackAll()}
+                  disabled={busy === "ack-all"}
+                  style={{
+                    padding: "6px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                    border: "1px solid var(--border)", background: "var(--bg-card)",
+                    color: "var(--text-secondary)",
+                    cursor: busy === "ack-all" ? "default" : "pointer",
+                  }}
+                >
+                  {busy === "ack-all" ? "처리 중..." : `${notes.length}건 모두 확인`}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

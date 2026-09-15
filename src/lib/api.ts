@@ -683,12 +683,31 @@ export const api = {
   // 실매매 승인 — 사람만 부른다. 에이전트 도구로 노출하지 않는다.
   getPendingApprovals: (sessionId?: string) =>
     request<any>(`/approvals/pending${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""}`),
-  decideApproval: (id: string, decision: "approved" | "rejected", reason = "") =>
+  // scope="mission" 이면 이 미션 동안 max_executions 회까지 다시 묻지 않는다.
+  // 되돌릴 수 없고 돈이 걸린 것만 여기까지 온다 — 나머지는 알림으로 간다.
+  decideApproval: (
+    id: string,
+    decision: "approved" | "rejected",
+    reason = "",
+    opts: { scope?: "single" | "mission"; hours?: number; maxExecutions?: number } = {},
+  ) =>
     request<any>(
       `/approvals/${encodeURIComponent(id)}/decide?decision=${decision}` +
+      `&scope=${opts.scope || "single"}` +
+      `&hours=${opts.hours ?? 12}` +
+      `&max_executions=${opts.maxExecutions ?? (opts.scope === "mission" ? 20 : 1)}` +
       (reason ? `&reason=${encodeURIComponent(reason)}` : ""),
       { method: "POST" },
     ),
+  // 막지 않고 알린 것들 — 이미 실행된 일이다. 승인이 아니라 읽음 표시를 한다.
+  getApprovalNotifications: (limit = 50) =>
+    request<any>(`/approvals/notifications?limit=${limit}`),
+  acknowledgeApprovalNotification: (id: string) =>
+    request<any>(`/approvals/${encodeURIComponent(id)}/acknowledge`, { method: "POST" }),
+  acknowledgeAllApprovalNotifications: () =>
+    request<any>("/approvals/acknowledge-all", { method: "POST" }),
+  // 게이트가 조용히 꺼져 있으면 "승인할 게 없다" 로 읽힌다. 화면이 구분해야 한다.
+  getApprovalGateStatus: () => request<any>("/approvals/gate-status"),
   getKgStats: () => request<any>("/kg/stats"),
   listKg: (type?: string, q?: string, limit = 60, offset = 0) =>
     request<any>(
