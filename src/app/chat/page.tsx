@@ -2299,6 +2299,29 @@ function shortGoalTitle(title: string): string {
   return noParens.length > 12 ? `${noParens.slice(0, 12)}…` : noParens;
 }
 
+type ApprovalScope = "single" | "mission" | "session" | "project";
+
+// 승인 범위별 시간·횟수 상한.
+//
+// 2026-09-15 대표님 지시 — "세션별, 프로젝트별 승인부분을 주고 진행하게".
+// 그전에는 이번 건만 / 같은 대상 둘뿐이라, 대상이 바뀔 때마다 새 카드가 떴다
+// (12시간 카드 89장에 실사용 18회). 범위를 넓히되 **무제한은 두지 않는다** —
+// 넓을수록 오래 가지만 시간과 횟수가 둘 다 걸려 있다.
+const APPROVAL_GRANTS: Record<ApprovalScope, { hours: number; max: number; label: string; hint: string }> = {
+  single: { hours: 2, max: 1, label: "이번 건만", hint: "이 요청 하나만 1회 허용 (2시간)" },
+  mission: { hours: 2, max: 20, label: "같은 대상", hint: "이 대화에서 같은 도구로 같은 대상을 최대 20회 (2시간)" },
+  session: { hours: 4, max: 50, label: "이 대화 동안", hint: "이 대화에서 같은 도구를 대상 구분 없이 최대 50회 (4시간)" },
+  project: { hours: 8, max: 100, label: "이 프로젝트 동안", hint: "다른 대화까지 포함해 같은 프로젝트에서 같은 도구를 최대 100회 (8시간)" },
+};
+
+// 주문·자금(critical)에는 넓은 범위를 **그리지 않는다.** 서버도 눌린 뒤에
+// 미션으로 낮추지만, 누를 수 있게 두면 언젠가 눌린다.
+function approvalScopesFor(risk?: string): ApprovalScope[] {
+  return risk === "critical"
+    ? ["single", "mission"]
+    : ["single", "mission", "session", "project"];
+}
+
 const RESPONSE_OVERVIEW_WORKFLOW_RE = /(목표|요청|목적|계획|플랜|진행|수행\s*내역|조치\s*내역|결과|완료|검증|테스트|리스크|문제점|다음\s*단계|권장\s*조치)/;
 
 type ResponseOverview = {
@@ -4053,12 +4076,14 @@ export default function ChatPage() {
   const decideApproval = useCallback(async (
     id: string,
     decision: "approved" | "rejected",
-    scope: "single" | "mission" = "single",
+    scope: ApprovalScope = "single",
   ) => {
     setApprovalBusy(id);
     try {
+      const grant = APPROVAL_GRANTS[scope] ?? APPROVAL_GRANTS.single;
       const q = decision === "approved"
-        ? `decision=approved&scope=${scope}&hours=2${scope === "mission" ? "&max_executions=20" : ""}`
+        ? `decision=approved&scope=${scope}&hours=${grant.hours}`
+          + (scope === "single" ? "" : `&max_executions=${grant.max}`)
         : "decision=rejected";
       await chatApi(`/approvals/${encodeURIComponent(id)}/decide?${q}`, { method: "POST" });
       setApprovals((prev) => prev.filter((a) => a.id !== id));
@@ -12169,7 +12194,10 @@ export default function ChatPage() {
                 </div>
                 <div style={{ fontSize: 12, color: "var(--ct-text2)", lineHeight: 1.6, marginBottom: 12 }}>
                   이 대화에서 <b>보호 게이트에 막힌 작업</b>입니다. 승인해야 이어서 진행됩니다.{" "}
-                  <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은 최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동 만료됩니다.
+                  범위는 넓을수록 오래갑니다 — <b>이번 건만</b> 1회/2시간,{" "}
+                  <b>같은 대상</b> 20회/2시간, <b>이 대화 동안</b> 50회/4시간,{" "}
+                  <b>이 프로젝트 동안</b> 100회/8시간. 어느 것도 무제한이 아니며 시간이 지나면 자동 만료됩니다.
+                  주문·자금(critical) 건은 넓은 범위를 쓸 수 없습니다.
                 </div>
                 {popupApprovals.filter((a) => a.risk !== "critical").length >= 2 && (
                   <div style={{
@@ -12234,35 +12262,26 @@ export default function ChatPage() {
                       maxHeight: 140, overflowY: "auto",
                     }}>{a.summary}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                      <button
-                        onClick={() => void decideApproval(a.id, "approved", "single")}
-                        disabled={approvalBusy === a.id}
-                        style={{
-                          flex: screenSize === "mobile" ? "1 1 46%" : "0 0 auto",
-                          minHeight: 44, padding: "8px 18px", borderRadius: 9,
-                          fontSize: 13, fontWeight: 700, border: "none",
-                          background: "#16a34a", color: "#fff",
-                          cursor: approvalBusy === a.id ? "default" : "pointer",
-                          opacity: approvalBusy === a.id ? .6 : 1,
-                        }}
-                      >
-                        {approvalBusy === a.id ? "처리 중..." : "이번 건만 승인"}
-                      </button>
-                      <button
-                        onClick={() => void decideApproval(a.id, "approved", "mission")}
-                        disabled={approvalBusy === a.id}
-                        title="이 미션 동안 같은 도구의 같은 작업을 최대 20회까지 자동 허용 (2시간)"
-                        style={{
-                          flex: screenSize === "mobile" ? "1 1 46%" : "0 0 auto",
-                          minHeight: 44, padding: "8px 18px", borderRadius: 9,
-                          fontSize: 13, fontWeight: 700,
-                          border: "1px solid #16a34a", background: "transparent", color: "#16a34a",
-                          cursor: approvalBusy === a.id ? "default" : "pointer",
-                          opacity: approvalBusy === a.id ? .6 : 1,
-                        }}
-                      >
-                        이 미션 동안
-                      </button>
+                      {approvalScopesFor(a.risk).map((sc, i) => (
+                        <button
+                          key={sc}
+                          onClick={() => void decideApproval(a.id, "approved", sc)}
+                          disabled={approvalBusy === a.id}
+                          title={APPROVAL_GRANTS[sc].hint}
+                          style={{
+                            flex: screenSize === "mobile" ? "1 1 46%" : "0 0 auto",
+                            minHeight: 44, padding: "8px 18px", borderRadius: 9,
+                            fontSize: 13, fontWeight: 700,
+                            border: i === 0 ? "none" : "1px solid #16a34a",
+                            background: i === 0 ? "#16a34a" : "transparent",
+                            color: i === 0 ? "#fff" : "#16a34a",
+                            cursor: approvalBusy === a.id ? "default" : "pointer",
+                            opacity: approvalBusy === a.id ? .6 : 1,
+                          }}
+                        >
+                          {i === 0 && approvalBusy === a.id ? "처리 중..." : APPROVAL_GRANTS[sc].label}
+                        </button>
+                      ))}
                       <button
                         onClick={() => void decideApproval(a.id, "rejected")}
                         disabled={approvalBusy === a.id}
@@ -12327,8 +12346,9 @@ export default function ChatPage() {
               </div>
               <div style={{ fontSize: 11.5, color: "var(--ct-text2)", marginBottom: 10, lineHeight: 1.6 }}>
                 이 답변을 만들다가 <b>보호 게이트에 막힌 작업</b>입니다.
-                승인해야 진행됩니다. <b>이번 건만</b>은 1회, <b>이 미션 동안</b>은
-                최대 20회까지 허용하며, 둘 다 2시간이 지나면 자동으로 만료됩니다.
+                승인해야 진행됩니다. 범위는 <b>이번 건만</b> 1회/2시간,{" "}
+                <b>같은 대상</b> 20회/2시간, <b>이 대화 동안</b> 50회/4시간,{" "}
+                <b>이 프로젝트 동안</b> 100회/8시간이며 전부 자동 만료됩니다.
               </div>
               {approvals.filter((a) => a.risk !== "critical").length >= 2 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", padding: "6px 0 8px" }}>
@@ -12389,33 +12409,25 @@ export default function ChatPage() {
                     whiteSpace: "pre-wrap", wordBreak: "break-all",
                     maxHeight: 92, overflowY: "auto",
                   }}>{a.summary}</div>
-                  <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-                    <button
-                      onClick={() => void decideApproval(a.id, "approved", "single")}
-                      disabled={approvalBusy === a.id}
-                      style={{
-                        padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
-                        border: "none", background: "#16a34a", color: "#fff",
-                        cursor: approvalBusy === a.id ? "default" : "pointer",
-                        opacity: approvalBusy === a.id ? .6 : 1,
-                      }}
-                    >
-                      {approvalBusy === a.id ? "처리 중..." : "이번 건만"}
-                    </button>
-                    <button
-                      onClick={() => void decideApproval(a.id, "approved", "mission")}
-                      disabled={approvalBusy === a.id}
-                      title="이 미션 동안 같은 도구의 같은 작업을 최대 20회까지 자동 허용 (2시간)"
-                      style={{
-                        padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
-                        border: "1px solid #16a34a", background: "transparent",
-                        color: "#16a34a",
-                        cursor: approvalBusy === a.id ? "default" : "pointer",
-                        opacity: approvalBusy === a.id ? .6 : 1,
-                      }}
-                    >
-                      이 미션 동안
-                    </button>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 8 }}>
+                    {approvalScopesFor(a.risk).map((sc, i) => (
+                      <button
+                        key={sc}
+                        onClick={() => void decideApproval(a.id, "approved", sc)}
+                        disabled={approvalBusy === a.id}
+                        title={APPROVAL_GRANTS[sc].hint}
+                        style={{
+                          padding: "5px 15px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                          border: i === 0 ? "none" : "1px solid #16a34a",
+                          background: i === 0 ? "#16a34a" : "transparent",
+                          color: i === 0 ? "#fff" : "#16a34a",
+                          cursor: approvalBusy === a.id ? "default" : "pointer",
+                          opacity: approvalBusy === a.id ? .6 : 1,
+                        }}
+                      >
+                        {i === 0 && approvalBusy === a.id ? "처리 중..." : APPROVAL_GRANTS[sc].label}
+                      </button>
+                    ))}
                     <button
                       onClick={() => void decideApproval(a.id, "rejected")}
                       disabled={approvalBusy === a.id}
