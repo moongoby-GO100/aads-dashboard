@@ -262,15 +262,6 @@ export default function LlmRegistryWorkspacePanel() {
   const [msg, setMsg] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [newKey, setNewKey] = useState({
-    provider: "anthropic",
-    key_name: "",
-    value: "",
-    label: "",
-    priority: 1,
-    notes: "",
-  });
 
   const flash = useCallback((text: string) => {
     setMsg(text);
@@ -420,25 +411,6 @@ export default function LlmRegistryWorkspacePanel() {
     }
     flash("키 값 업데이트 완료");
   }, [editVal, expandedProviders, flash, load, loadProviderDetails]);
-
-  const addKey = useCallback(async () => {
-    if (!newKey.key_name.trim() || !newKey.value.trim()) {
-      flash("key_name과 value는 필수입니다");
-      return;
-    }
-    await api.createLlmKey({
-      provider: newKey.provider.trim(),
-      key_name: newKey.key_name.trim(),
-      value: newKey.value.trim(),
-      label: newKey.label.trim(),
-      priority: newKey.priority,
-      notes: newKey.notes.trim(),
-    });
-    setShowAdd(false);
-    setNewKey({ provider: "anthropic", key_name: "", value: "", label: "", priority: 1, notes: "" });
-    await load();
-    flash("키 추가 완료");
-  }, [flash, load, newKey]);
 
   const syncNow = useCallback(async () => {
     setSyncing(true);
@@ -856,44 +828,6 @@ export default function LlmRegistryWorkspacePanel() {
         </div>
       </div>
 
-      {showAdd ? (
-        <div className="rounded-lg p-4 space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-          <h4 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>새 키 추가</h4>
-          <div className="grid grid-cols-2 gap-3">
-            {[["provider", "Provider (예: anthropic)"], ["key_name", "Key Name (예: ANTHROPIC_AUTH_TOKEN_3)"], ["label", "Label (예: primary)"], ["value", "API Key 값"]].map(([field, ph]) => (
-              <input
-                key={field}
-                value={newKey[field as keyof typeof newKey] as string | number}
-                onChange={(e) => setNewKey((prev) => ({ ...prev, [field]: field === "priority" ? Number(e.target.value) : e.target.value }))}
-                placeholder={ph}
-                type={field === "value" ? "password" : "text"}
-                className="text-sm rounded px-3 py-2"
-                style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", gridColumn: field === "value" ? "1 / -1" : undefined }}
-              />
-            ))}
-            <input
-              type="number"
-              value={newKey.priority}
-              onChange={(e) => setNewKey((prev) => ({ ...prev, priority: Number(e.target.value) }))}
-              placeholder="우선순위 (낮을수록 먼저)"
-              className="text-sm rounded px-3 py-2"
-              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => void addKey()} className="px-4 py-2 rounded text-sm font-bold" style={{ background: "var(--accent)", color: "#fff" }}>추가</button>
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded text-sm" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>취소</button>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowAdd(true)}
-          className="w-full py-2 rounded-lg text-sm font-bold border-dashed"
-          style={{ border: "1px dashed var(--border)", color: "var(--accent)", background: "transparent" }}
-        >
-          + 새 LLM API 키 추가
-        </button>
-      )}
     </div>
   );
 }

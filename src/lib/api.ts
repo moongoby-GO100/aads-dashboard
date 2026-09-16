@@ -910,6 +910,13 @@ export const api = {
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
   // 코덱스 계정별 사용량 (PRD-LLM-ACCOUNT-RUNTIME-BINDING)
   getCodexUsage: () => request<any>("/llm-keys/codex-usage"),
+  // 통합 계정 카드 — 키·바인딩·사용량을 서버가 합쳐 내려준다 (PRD-SETTINGS-UNIFIED-ACCOUNT-CARD)
+  getLlmOverview: () => request<any>("/llm-keys/overview"),
+  getProviderOptions: () => request<any>("/llm-keys/providers"),
+  getNewKeyDefaults: (provider: string) =>
+    request<any>(`/llm-keys/new-key-defaults?provider=${encodeURIComponent(provider)}`),
+  checkKeyDuplicate: (value: string) =>
+    request<any>("/llm-keys/check-duplicate", { method: "POST", body: JSON.stringify({ value }) }),
   // 구독 계정(코덱스/클로드) 런타임 바인딩 + 재로그인
   getAccountBindings: () => request<any>("/llm-keys/account-bindings"),
   startAccountLogin: (target: string) =>
