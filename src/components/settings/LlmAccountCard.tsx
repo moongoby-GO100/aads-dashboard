@@ -19,7 +19,10 @@ import AccountLoginModal from "./AccountLoginModal";
 
 type State = "ok" | "rate_limited" | "needs_login" | "inactive" | "unknown";
 
+type UsageWindow = { window_minutes: number | null; used_percent: number; resets_at: string | null };
+
 type Account = {
+  windows: UsageWindow[];
   key_name: string; provider: string; label: string; priority: number;
   is_active: boolean; kind: "subscription"; masked_value: string; slot: string | null;
   state: State; bound: boolean; needs_login: boolean; login_in_progress: boolean;
@@ -60,6 +63,14 @@ const STATE_COLOR: Record<State, string> = {
   ok: "#16a34a", rate_limited: "#dc2626", needs_login: "#d97706",
   inactive: "var(--text-secondary)", unknown: "var(--text-secondary)",
 };
+
+/** 창 길이를 사람이 읽는 이름으로. 300분=5시간, 10080분=주간. */
+function windowLabel(minutes: number | null): string {
+  if (!minutes) return "";
+  if (minutes >= 10080) return "주간";
+  if (minutes >= 60) return `${Math.round(minutes / 60)}시간`;
+  return `${minutes}분`;
+}
 
 function Bar({ pct, color }: { pct: number; color: string }) {
   return (
@@ -196,18 +207,25 @@ export default function LlmAccountCard() {
                   </span>
                   <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)", width: 26 }}>p{a.priority}</span>
                   <span className="text-xs font-semibold shrink-0" style={{ color, width: 72 }}>{STATE_TEXT[a.state]}</span>
-                  <span className="shrink-0" style={{ width: 168 }}>
-                    {a.used_percent !== null ? (
-                      <>
-                        <Bar pct={a.used_percent} color={color} />
+                  {/* 창 구성이 provider 마다 다르다. 코덱스는 주간 하나,
+                      클로드는 5시간 + 주간이다. window_minutes 로 이름을 정하고
+                      'primary/secondary' 라는 순서에 기대지 않는다. */}
+                  <span className="shrink-0 space-y-0.5" style={{ width: 186 }}>
+                    {a.windows.length > 0 ? a.windows.map((w) => (
+                      <span key={w.window_minutes ?? "n"} className="block">
+                        <Bar pct={w.used_percent} color={w.used_percent >= 90 ? "#dc2626" : w.used_percent >= 80 ? "#d97706" : color} />
                         <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          {a.used_percent.toFixed(0)}% · {a.rate_limited_until ? `${kst(a.rate_limited_until)} 복귀` : a.resets_at ? `${kst(a.resets_at)} 리셋` : ""}
+                          {windowLabel(w.window_minutes)} {w.used_percent.toFixed(0)}%
+                          {w.resets_at ? ` · ${kst(w.resets_at)} 리셋` : ""}
                         </span>
-                      </>
-                    ) : (
-                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        {a.provider === "codex" ? "기록 없음 — 첫 호출 후 표시" : "—"}
                       </span>
+                    )) : (
+                      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                        기록 없음 — 첫 호출 후 표시
+                      </span>
+                    )}
+                    {a.rate_limited_until && (
+                      <span className="block text-xs" style={{ color: "#dc2626" }}>{kst(a.rate_limited_until)} 복귀</span>
                     )}
                   </span>
                   <span className="flex gap-1 shrink-0">
