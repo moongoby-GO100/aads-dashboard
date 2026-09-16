@@ -2635,6 +2635,50 @@ const MessageItem = memo(function MessageItem({
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
 }: MessageItemProps) {
   const [interruptListOpen, setInterruptListOpen] = useState(false);
+  const [interruptListOpenBottom, setInterruptListOpenBottom] = useState(false);
+  // 같은 요약줄을 버블 위아래 두 곳에 건다. 긴 보고에서는 상단 줄이 화면 밖으로
+  // 밀려나, 다 읽고 났을 때 "무엇이 반영된 답인지" 확인할 방법이 없었다.
+  const renderAppliedInterrupts = (placement: "top" | "bottom") => {
+    if (msg.role !== "assistant" || !appliedInterrupts || appliedInterrupts.length === 0) return null;
+    const open = placement === "top" ? interruptListOpen : interruptListOpenBottom;
+    const setOpen = placement === "top" ? setInterruptListOpen : setInterruptListOpenBottom;
+    return (
+      <div style={placement === "top"
+        ? { marginBottom: "6px", marginLeft: "4px" }
+        : { marginTop: "6px", marginLeft: "4px" }}>
+        <button
+          type="button"
+          title="이 응답이 반영한 추가지시 목록"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            padding: "2px 8px", borderRadius: "10px",
+            fontSize: "11px", fontWeight: 700, cursor: "pointer",
+            background: "rgba(37,99,235,0.10)", color: "#2563eb",
+            border: "1px solid rgba(37,99,235,0.24)",
+          }}
+        >↳ 반영된 추가지시 {appliedInterrupts.length}건 {open ? "\u25b2" : "\u25bc"}</button>
+        {open && (
+          <div style={{ marginTop: "4px", display: "flex", flexDirection: "column", gap: "3px" }}>
+            {appliedInterrupts.map((ref, i) => (
+              <button
+                key={`${placement}-${ref.id}`}
+                type="button"
+                title="원문 지시로 이동"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJumpToMessage?.(ref.id); }}
+                style={{
+                  textAlign: "left", padding: "3px 8px", borderRadius: "8px",
+                  fontSize: "11px", cursor: onJumpToMessage ? "pointer" : "default",
+                  background: "rgba(37,99,235,0.05)", color: "var(--ct-text2)",
+                  border: "1px solid rgba(37,99,235,0.16)",
+                }}
+              >{i + 1}. {ref.text.slice(0, 120)}{ref.text.length > 120 ? "\u2026" : ""}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
@@ -2890,40 +2934,7 @@ const MessageItem = memo(function MessageItem({
         )}
         {/* 반영된 추가지시 — 답을 읽기 전에 몇 건이 들어갔는지 먼저 보여준다.
             원문 버블은 시간순 자리에 그대로 두고 참조만 올린다(PRD 2.3 2안). */}
-        {msg.role === "assistant" && appliedInterrupts && appliedInterrupts.length > 0 && (
-          <div style={{ marginBottom: "6px", marginLeft: "4px" }}>
-            <button
-              type="button"
-              title="이 응답이 반영한 추가지시 목록"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInterruptListOpen((v) => !v); }}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: "4px",
-                padding: "2px 8px", borderRadius: "10px",
-                fontSize: "11px", fontWeight: 700, cursor: "pointer",
-                background: "rgba(37,99,235,0.10)", color: "#2563eb",
-                border: "1px solid rgba(37,99,235,0.24)",
-              }}
-            >↳ 반영된 추가지시 {appliedInterrupts.length}건 {interruptListOpen ? "\u25b2" : "\u25bc"}</button>
-            {interruptListOpen && (
-              <div style={{ marginTop: "4px", display: "flex", flexDirection: "column", gap: "3px" }}>
-                {appliedInterrupts.map((ref, i) => (
-                  <button
-                    key={ref.id}
-                    type="button"
-                    title="원문 지시로 이동"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJumpToMessage?.(ref.id); }}
-                    style={{
-                      textAlign: "left", padding: "3px 8px", borderRadius: "8px",
-                      fontSize: "11px", cursor: onJumpToMessage ? "pointer" : "default",
-                      background: "rgba(37,99,235,0.05)", color: "var(--ct-text2)",
-                      border: "1px solid rgba(37,99,235,0.16)",
-                    }}
-                  >{i + 1}. {ref.text.slice(0, 120)}{ref.text.length > 120 ? "\u2026" : ""}</button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {renderAppliedInterrupts("top")}
         {/* 출처 배지: Pipeline Runner / Agent / System */}
         {msg.role === "assistant" && (() => {
           const badgeMap: Record<string, { icon: string; label: string; color: string; bg: string }> = {
@@ -3576,6 +3587,8 @@ const MessageItem = memo(function MessageItem({
             )}
           </div>
         )}
+        {/* 하단에도 같은 요약줄 — 응답을 끝까지 읽은 자리에서 바로 확인한다. */}
+        {renderAppliedInterrupts("bottom")}
         {msg.role === "assistant" && (
           <div
             data-message-actions="assistant"
@@ -10451,11 +10464,21 @@ export default function ChatPage() {
 
   type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[] };
   const displayData = useMemo(() => {
+    // "[이전 추가 지시]" 로 다음 턴에 실려 나간 원문들. recovered_interrupt 버블을
+    // 감출지는 이 실림 여부로만 판단한다 — 실리지 않았는데 감추면 그 지시는 화면에서
+    // 통째로 사라지고, 보낸 사람은 무시당한 줄 안다(2026-09-16 실측 00a63b7a).
+    const carriedInterruptText = messages
+      .map(m => String(m.content || "").trimStart())
+      .filter(t => t.startsWith("[이전 추가 지시]"))
+      .join("\n");
     const sortedAll = [...messages]
       .filter(m => {
         if (isHiddenSystemChatMessage(m)) return false;
         if (m.intent === "ai_review_warning") return false;
-        if (m.intent === "recovered_interrupt") return false;
+        if (m.intent === "recovered_interrupt") {
+          const body = normalizeQueuedInterruptDisplayContent(String(m.content || "")).slice(0, 40).trim();
+          if (!body || carriedInterruptText.includes(body)) return false;
+        }
         if (isShortInterruptionPlaceholder(m)) return false;
         if (isInterruptedLikeMessage(m)) {
           return hasMeaningfulDisplayContent(m);
