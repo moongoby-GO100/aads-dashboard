@@ -908,6 +908,17 @@ export const api = {
   updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
     request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
+  // 코덱스 계정별 사용량 (PRD-LLM-ACCOUNT-RUNTIME-BINDING)
+  getCodexUsage: () => request<any>("/llm-keys/codex-usage"),
+  // 구독 계정(코덱스/클로드) 런타임 바인딩 + 재로그인
+  getAccountBindings: () => request<any>("/llm-keys/account-bindings"),
+  startAccountLogin: (target: string) =>
+    request<any>("/llm-keys/account-login", { method: "POST", body: JSON.stringify({ target }) }),
+  getAccountLogin: (loginId: string) => request<any>(`/llm-keys/account-login/${loginId}`),
+  submitAccountLoginCode: (loginId: string, code: string) =>
+    request<any>(`/llm-keys/account-login/${loginId}/code`, { method: "POST", body: JSON.stringify({ code }) }),
+  cancelAccountLogin: (loginId: string) =>
+    request<any>(`/llm-keys/account-login/${loginId}`, { method: "DELETE" }),
 
   // LLM Models Registry
   getLlmModels: (params?: { provider?: string; active_only?: boolean }) => {
