@@ -123,7 +123,7 @@ function formatResetSeconds(seconds?: number): string {
 // pct 가 null 이면 **아직 측정값이 없다**는 뜻이다. 막대 자리는 그대로 두고
 // 숫자만 "—" 로 적는다. 0% 로 그리면 "한도를 하나도 안 썼다" 는 주장이 되는데,
 // 그건 측정한 사실이 아니다. 자리를 비우면 계정마다 줄이 어긋나 읽기 어렵다.
-function MiniBar({ pct, label, detail, resetIn }: { pct: number | null; label: string; detail: string; resetIn?: string }) {
+function MiniBar({ pct, label, detail, resetIn, width = 48 }: { pct: number | null; label: string; detail: string; resetIn?: string; width?: number }) {
   const unknown = pct == null;
   const clampedPct = unknown ? 0 : Math.min(pct, 100);
   const remaining = unknown ? "—" : `${(100 - clampedPct).toFixed(0)}%`;
@@ -132,7 +132,7 @@ function MiniBar({ pct, label, detail, resetIn }: { pct: number | null; label: s
     <div style={{ display: "flex", alignItems: "center", gap: "5px", minWidth: 0 }} title={detail}>
       <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
       <div style={{
-        width: "48px", height: "6px", borderRadius: "3px",
+        width: `${width}px`, height: "6px", borderRadius: "3px",
         background: "var(--ct-border)", overflow: "hidden", flexShrink: 0,
       }}>
         <div style={{
@@ -469,7 +469,9 @@ export default function UsageBar() {
 
   const summaryChip = (acc: OverviewAccount | null, kind: string) => {
     if (!acc) return null;
-    const name = (acc.label || acc.key_name).split(" ")[0];
+    // 한 줄에 다 들어가야 한다. 도메인과 괄호 주석은 떼고 계정 이름만 남긴다 —
+    // moong76@gmail → moong76, jinah-biseo(244) → jinah-biseo.
+    const name = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
         <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>{kind}</span>
@@ -477,7 +479,7 @@ export default function UsageBar() {
         {acc.windows.length === 0
           ? <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>기록 없음</span>
           : acc.windows.map((w) => (
-              <MiniBar key={w.window_minutes ?? "n"} pct={w.used_percent}
+              <MiniBar key={w.window_minutes ?? "n"} pct={w.used_percent} width={34}
                 label={windowName(w.window_minutes)}
                 detail={`${name} ${windowName(w.window_minutes)} 잔량 ${(100 - w.used_percent).toFixed(0)}%`} />
             ))}
