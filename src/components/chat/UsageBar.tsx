@@ -152,7 +152,28 @@ function MiniBar({ pct, label, detail, resetIn }: { pct: number | null; label: s
   );
 }
 
+type OverviewAccount = {
+  key_name: string; provider: string; label: string; slot: string | null;
+  state: string; priority: number;
+  windows: Array<{ window_minutes: number | null; used_percent: number; resets_at: string | null }>;
+  rate_limited_until: string | null;
+};
+
+/** 창 길이로 이름을 정한다. primary/secondary 순서에 기대면 안 된다 —
+ *  코덱스의 primary 는 주간이고 클로드의 primary 는 5시간이라, 순서로 읽으면
+ *  코덱스의 주간 소진을 '5시간' 자리에 그리게 된다(2026-09-16 실측 버그). */
+function windowName(minutes: number | null): string {
+  if (!minutes) return "";
+  if (minutes >= 10080) return "주간";
+  if (minutes >= 60) return `${Math.round(minutes / 60)}h`;
+  return `${minutes}m`;
+}
+
 export default function UsageBar() {
+  // 기본은 접힘. 채팅 중 알아야 할 것은 "지금 쓰는 계정이 얼마나 남았나" 하나다.
+  // 나머지(릴레이 진단·프로젝트 배정·게이트)는 펼쳤을 때와 설정 화면에 있다.
+  const [collapsed, setCollapsed] = useState(true);
+  const [overview, setOverview] = useState<{ accounts: OverviewAccount[] } | null>(null);
   const [claude, setClaude] = useState<UsageData | null>(null);
   const [codex, setCodex] = useState<CodexData | null>(null);
   const [relay, setRelay] = useState<RelayCapacity | null>(null);
@@ -251,6 +272,29 @@ export default function UsageBar() {
   }, []);
 
   useEffect(() => { void fetchSlotProjects(); }, [fetchSlotProjects]);
+
+  // 접힘 여부는 대표님 선택이므로 브라우저에 남긴다.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("aads_usagebar_collapsed");
+      if (saved !== null) setCollapsed(saved === "1");
+    } catch { /* 저장소를 못 읽어도 기본값(접힘)으로 돈다 */ }
+  }, []);
+
+  // 접힘 줄은 설정 화면과 같은 단일 응답을 쓴다. 두 화면이 서로 다른 경로로
+  // 같은 숫자를 계산하면 값이 어긋난다 — 2026-09-16 오전에 그렇게 어긋났다.
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      try {
+        const d = await (api as unknown as { getLlmOverview: () => Promise<{ accounts: OverviewAccount[] }> }).getLlmOverview();
+        if (alive) setOverview(d);
+      } catch { /* 접힘 줄만 비고, 펼침은 기존 경로로 돈다 */ }
+    };
+    void run();
+    const iv = window.setInterval(run, 30_000);
+    return () => { alive = false; window.clearInterval(iv); };
+  }, []);
 
   // 등록된 프로젝트 목록. 드롭다운으로 고르게 하려면 목록이 있어야 한다 —
   // 쉼표 입력은 오타 하나로 배정이 통째로 빗나간다.
@@ -397,12 +441,96 @@ export default function UsageBar() {
       ].filter(Boolean).join("\n")
     : "릴레이 상태를 불러오지 못했습니다. 2초마다 자동 재시도합니다.";
 
+  // ── 접힘 줄에 쓸 값 ──────────────────────────────────────────────
+  // 지금 쓰는 클로드 슬롯과, 새 세션이 배정받을 코덱스 계정 하나씩만 고른다.
+  const ovAccounts = overview?.accounts ?? [];
+  const curClaude = ovAccounts.find((a) => a.provider === "anthropic" && a.slot === `slot${activeSlot}`)
+    ?? ovAccounts.find((a) => a.provider === "anthropic" && a.state === "ok")
+    ?? null;
+  const curCodex = ovAccounts.filter((a) => a.provider === "codex")
+    .sort((a, b) => a.priority - b.priority)
+    .find((a) => a.state === "ok")
+    ?? ovAccounts.find((a) => a.provider === "codex")
+    ?? null;
+  // 잔량이 가장 적은 창 = 가장 먼저 막히는 창. 경고는 그것만 띄운다.
+  const tightest = [curClaude, curCodex]
+    .flatMap((a) => (a ? a.windows.map((w) => ({ acc: a, w })) : []))
+    .sort((x, y) => (100 - x.w.used_percent) - (100 - y.w.used_percent))[0];
+  const tightRemain = tightest ? 100 - tightest.w.used_percent : 100;
+  const stopped = ovAccounts.filter((a) => a.state === "rate_limited");
+
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("aads_usagebar_collapsed", next ? "1" : "0"); } catch { /* 저장 못 해도 동작엔 지장 없다 */ }
+      return next;
+    });
+  };
+
+  const summaryChip = (acc: OverviewAccount | null, kind: string) => {
+    if (!acc) return null;
+    const name = (acc.label || acc.key_name).split(" ")[0];
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>{kind}</span>
+        <span style={{ fontSize: "10px", color: "var(--ct-text)" }}>{name}</span>
+        {acc.windows.length === 0
+          ? <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>기록 없음</span>
+          : acc.windows.map((w) => (
+              <MiniBar key={w.window_minutes ?? "n"} pct={w.used_percent}
+                label={windowName(w.window_minutes)}
+                detail={`${name} ${windowName(w.window_minutes)} 잔량 ${(100 - w.used_percent).toFixed(0)}%`} />
+            ))}
+      </span>
+    );
+  };
+
+  if (collapsed) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
+        padding: "3px 14px", borderBottom: "1px solid var(--ct-border)",
+        background: "var(--ct-sb)", fontSize: "10px",
+      }}>
+        {!overview ? (
+          <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>사용량 확인 중…</span>
+        ) : (
+          <>
+            {summaryChip(curClaude, "클로드")}
+            {summaryChip(curCodex, "코덱스")}
+            {tightRemain <= 20 && tightest && (
+              <span style={{ fontSize: "10px", color: tightRemain <= 10 ? "#ef4444" : "#f59e0b", whiteSpace: "nowrap" }}>
+                ⚠ {windowName(tightest.w.window_minutes)} {tightRemain.toFixed(0)}% 남음
+              </span>
+            )}
+            {stopped.length > 0 && (
+              <span style={{ fontSize: "10px", color: "#ef4444", whiteSpace: "nowrap" }}
+                    title={stopped.map((a) => `${a.label}: ${a.rate_limited_until ?? ""}`).join(" / ")}>
+                ⛔ 정지 {stopped.length}
+              </span>
+            )}
+          </>
+        )}
+        <button type="button" onClick={toggle} title="펼치기"
+          style={{ marginLeft: "auto", border: "none", background: "transparent",
+                   color: "var(--ct-text3, #999)", cursor: "pointer", fontSize: "11px" }}>
+          ▸
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
       padding: "3px 14px", borderBottom: "1px solid var(--ct-border)",
       background: "var(--ct-sb)", fontSize: "10px",
     }}>
+      <button type="button" onClick={toggle} title="접기"
+        style={{ border: "none", background: "transparent", color: "var(--ct-text3, #999)",
+                 cursor: "pointer", fontSize: "11px" }}>
+        ▾
+      </button>
       {relay && (
         <span
           data-relay-capacity="true"
@@ -624,18 +752,22 @@ export default function UsageBar() {
         return (
           <React.Fragment key={`codex-${cx.limit_id || i}`}>
             <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)", marginLeft: "4px" }}>{cname}</span>
-            <MiniBar
-              pct={cx.primary?.used_percent ?? 0}
-              label="5h"
-              detail={`${cname} 5\uc2dc\uac04 \uc794\ub7c9: ${(100 - (cx.primary?.used_percent ?? 0)).toFixed(0)}%`}
-              resetIn={formatResetSeconds(cx.primary?.resets_in_sec)}
-            />
-            <MiniBar
-              pct={cx.secondary?.used_percent ?? 0}
-              label="1w"
-              detail={`${cname} 1\uc8fc \uc794\ub7c9: ${(100 - (cx.secondary?.used_percent ?? 0)).toFixed(0)}%`}
-              resetIn={formatResetSeconds(cx.secondary?.resets_in_sec)}
-            />
+            {/* \ucc3d \uc774\ub984\uc744 window_minutes \ub85c \uc815\ud55c\ub2e4. 'primary=5h' \ub85c \ubc15\uc544\ub450\uba74
+                \ucf54\ub371\uc2a4\uc758 \uc8fc\uac04 \uc18c\uc9c4\uc774 5\uc2dc\uac04 \uc790\ub9ac\uc5d0 \uadf8\ub824\uc9c4\ub2e4 \u2014 2026-09-16 \uc2e4\uce21:
+                primary \uac00 window_minutes=10080(\uc8fc\uac04) \uc778\ub370 "5h 0%" \ub85c \ubcf4\uc600\uace0,
+                \uc606\uc758 "1w 100%" \ub294 \uac12\uc774 \uc5c6\ub294 secondary \uc600\ub2e4.
+                \uac12\uc774 \uc5c6\ub294 \ucc3d\uc740 \uc544\uc608 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4. */}
+            {[cx.primary, cx.secondary].map((w, wi) =>
+              w && w.used_percent != null ? (
+                <MiniBar
+                  key={`cx-w-${wi}`}
+                  pct={w.used_percent}
+                  label={windowName(w.window_minutes ?? null)}
+                  detail={`${cname} ${windowName(w.window_minutes ?? null)} \uc794\ub7c9: ${(100 - w.used_percent).toFixed(0)}%`}
+                  resetIn={formatResetSeconds(w.resets_in_sec)}
+                />
+              ) : null,
+            )}
           </React.Fragment>
         );
       })}

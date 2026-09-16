@@ -211,11 +211,15 @@ export default function LlmAccountCard() {
                       클로드는 5시간 + 주간이다. window_minutes 로 이름을 정하고
                       'primary/secondary' 라는 순서에 기대지 않는다. */}
                   <span className="shrink-0 space-y-0.5" style={{ width: 186 }}>
+                    {/* 숫자는 **잔량**이다. 채팅창 상단과 같은 방향으로 맞춘다 —
+                        한쪽은 사용량, 한쪽은 잔량이면 같은 계정의 같은 창이
+                        97% 와 3% 로 보인다(2026-09-16 실측). 막대는 사용량만큼
+                        차오르고 숫자는 남은 양을 적는다. */}
                     {a.windows.length > 0 ? a.windows.map((w) => (
                       <span key={w.window_minutes ?? "n"} className="block">
                         <Bar pct={w.used_percent} color={w.used_percent >= 90 ? "#dc2626" : w.used_percent >= 80 ? "#d97706" : color} />
                         <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          {windowLabel(w.window_minutes)} {w.used_percent.toFixed(0)}%
+                          {windowLabel(w.window_minutes)} {(100 - w.used_percent).toFixed(0)}% 남음
                           {w.resets_at ? ` · ${kst(w.resets_at)} 리셋` : ""}
                         </span>
                       </span>
