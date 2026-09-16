@@ -9,6 +9,7 @@ import {
   messageRenderSubscriptionKey,
   planMarkdownRender,
   reduceToolLog,
+  splitStreamingMarkdown,
   terminalAnnouncement,
 } from "./contentPerformancePolicy";
 
@@ -150,5 +151,44 @@ describe("T44 — payload and cache budgets", () => {
       { key: "new", lastAccess: 3, pinned: false },
     ], 2);
     expect(eviction).toEqual({ evict: ["old"], retainedOverflow: 0 });
+  });
+});
+
+
+describe("스트리밍 본문 분할 — 앞은 얼리고 꼬리만 그린다", () => {
+  const para = (n: number) => `문단 ${n}. ${"가".repeat(700)}`;
+
+  it("짧은 본문은 나누지 않는다", () => {
+    const source = "짧은 답입니다.";
+    expect(splitStreamingMarkdown(source)).toEqual({ frozen: [], tail: source });
+  });
+
+  it("나눠도 원문이 한 글자도 바뀌지 않는다", () => {
+    const source = [para(1), para(2), para(3), "쓰는 중"].join("\n\n");
+    const { frozen, tail } = splitStreamingMarkdown(source);
+    expect(frozen.length).toBeGreaterThan(0);
+    expect([...frozen, tail].join("\n")).toBe(source);
+  });
+
+  it("경계는 한 번 정해지면 움직이지 않는다", () => {
+    const base = [para(1), para(2), para(3), "쓰는 중"].join("\n\n");
+    const grown = `${base} 더 씁니다.\n\n${para(4)}\n\n꼬리`;
+    const first = splitStreamingMarkdown(base).frozen;
+    const second = splitStreamingMarkdown(grown).frozen;
+    expect(second.slice(0, first.length)).toEqual(first);
+  });
+
+  it("코드펜스 안에서는 끊지 않는다", () => {
+    const source = [
+      para(1),
+      "```python",
+      `x = 1\n\ny = 2\n\n${"# ".repeat(400)}`,
+      "```",
+      "꼬리",
+    ].join("\n\n");
+    const { frozen } = splitStreamingMarkdown(source);
+    for (const block of frozen) {
+      expect(block.split("```").length % 2).toBe(1);
+    }
   });
 });

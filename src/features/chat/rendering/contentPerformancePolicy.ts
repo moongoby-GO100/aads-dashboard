@@ -32,6 +32,61 @@ export function planMarkdownRender(source: string, streaming: boolean): Markdown
   };
 }
 
+/** 확정 블록의 최소 길이. 너무 잘면 DOM 만 늘고, 너무 크면 재파싱이 안 준다. */
+export const STREAM_FREEZE_MIN_CHARS = 1200;
+
+export type StreamingMarkdownSplit = Readonly<{
+  frozen: readonly string[];
+  tail: string;
+}>;
+
+/**
+ * 스트리밍 본문을 "다시 안 바뀌는 앞부분" 과 "지금 써지는 꼬리" 로 나눈다.
+ *
+ * 매 갱신마다 본문 전체를 다시 파싱하는 것이 느려서, 예전에는 앞부분을
+ * 8,000자에서 잘라 버렸다(AADS-BUBBLE-FLASH-P1). 읽고 있던 글이 사라지는
+ * 것을 대표님이 2026-09-16 에 지적하셨다.
+ *
+ * 자르는 대신 나눈다. 경계는 한 번 정해지면 움직이지 않는다 — 경계가 앞쪽
+ * 내용만으로 결정되기 때문이다. 그래서 확정 블록의 문자열이 불변이고
+ * React.memo 가 재파싱을 막는다. 꼬리만 매번 다시 파싱하면 되므로 본문이
+ * 얼마나 길든 비용은 꼬리 길이에 비례한다.
+ *
+ * 코드펜스 안에서는 끊지 않는다 — 반쪽 펜스는 전혀 다른 것으로 렌더된다.
+ * 표는 안에 빈 줄이 없어 통째로 꼬리에 있다가 함께 확정된다.
+ */
+export function splitStreamingMarkdown(source: string): StreamingMarkdownSplit {
+  if (!source || source.length < STREAM_FREEZE_MIN_CHARS) {
+    return { frozen: [], tail: source || "" };
+  }
+
+  const lines = source.split("\n");
+  const frozen: string[] = [];
+  let blockStart = 0;
+  let blockChars = 0;
+  let fenceOpen = false;
+
+  // 마지막 줄은 아직 써지는 중이므로 경계 후보에서 뺀다.
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const line = lines[i];
+    blockChars += line.length + 1;
+    if (line.trimStart().startsWith("```")) {
+      fenceOpen = !fenceOpen;
+      continue;
+    }
+    if (fenceOpen) continue;
+    if (line.trim() !== "") continue;
+    if ((lines[i + 1] ?? "").trim() === "") continue;  // 연속 빈 줄은 뒤쪽을 경계로
+    if (blockChars < STREAM_FREEZE_MIN_CHARS) continue;
+    frozen.push(lines.slice(blockStart, i + 1).join("\n"));
+    blockStart = i + 1;
+    blockChars = 0;
+  }
+
+  if (frozen.length === 0) return { frozen: [], tail: source };
+  return { frozen, tail: lines.slice(blockStart).join("\n") };
+}
+
 /** Historical rows do not subscribe to the active token clock. */
 export function messageRenderSubscriptionKey(input: Readonly<{
   renderKey: string;

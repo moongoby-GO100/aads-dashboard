@@ -17,7 +17,7 @@ import {
 import { openManagedFile } from "@/lib/fileDownload";
 import { markdownSanitizeSchema } from "@/features/chat/rendering/markdownPolicy";
 import { staticArtifactHtml } from "@/features/chat/rendering/htmlPolicy";
-import { planMarkdownRender } from "@/features/chat/rendering/contentPerformancePolicy";
+import { planMarkdownRender, splitStreamingMarkdown } from "@/features/chat/rendering/contentPerformancePolicy";
 
 export type DocumentLinkHandler = (href: string, label: string) => void | Promise<void>;
 
@@ -613,4 +613,44 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   );
 });
 
-export { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock };
+/**
+ * 스트리밍 중인 본문을 확정 블록 + 꼬리로 나눠 그린다.
+ *
+ * 확정 블록은 문자열이 다시 안 바뀌므로 MarkdownBlock 의 memo 가 재파싱을
+ * 막는다. 꼬리만 매 갱신 다시 파싱한다. 그래서 본문이 길어져도 앞부분을
+ * 잘라낼 필요가 없다 — 대표님이 읽던 글이 사라지던 원인이 그 절단이었다.
+ *
+ * 완료된 메시지는 이 경로를 타지 않는다. 최종 렌더는 예전 그대로 본문
+ * 하나를 통으로 파싱한다.
+ */
+const StreamingMarkdownBlock = React.memo(function StreamingMarkdownBlock({
+  text,
+  linkColor,
+  onDocumentLinkClick,
+}: {
+  text: string;
+  linkColor?: string;
+  onDocumentLinkClick?: DocumentLinkHandler;
+}) {
+  const { frozen, tail } = useMemo(() => splitStreamingMarkdown(text), [text]);
+  return (
+    <>
+      {frozen.map((block, index) => (
+        <MarkdownBlock
+          key={`frozen-${index}`}
+          text={block}
+          linkColor={linkColor}
+          onDocumentLinkClick={onDocumentLinkClick}
+        />
+      ))}
+      <MarkdownBlock
+        text={tail}
+        streaming
+        linkColor={linkColor}
+        onDocumentLinkClick={onDocumentLinkClick}
+      />
+    </>
+  );
+});
+
+export { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, StreamingMarkdownBlock };

@@ -38,7 +38,7 @@ import {
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, getToken, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
-import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
+import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
 import { allowReplyReplacement, shouldQueueAdditionalInstruction } from "@/lib/chatReplacementGuard";
@@ -513,6 +513,11 @@ type DesignRequestCreateResponse = {
 };
 
 const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
+// 스트리밍 표시 주기. 초당 약 10회 — 사람 눈에 "이어서 써진다" 고 보이는
+// 하한이 대략 초당 8회다 (2026-09-16 대표님 지적으로 450/900ms 에서 내렸다).
+const STREAM_DRAIN_TICK_MS = 100;
+const STREAM_FLUSH_MIN_INTERVAL_MS = 90;
+
 const INITIAL_GATEWAY_RETRY_LIMIT = 30;
 const INITIAL_GATEWAY_RETRY_DELAY_MS = 5000;
 const PROVIDER_CAPACITY_OR_LIMIT_MARKERS = [
@@ -2603,7 +2608,6 @@ const MessageItem = memo(function MessageItem({
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
-  const LIVE_STREAM_RENDER_LIMIT = 8000;  // AADS-BUBBLE-FLASH-P1
   const CrfMarkdown = useCallback(
     ({ content }: { content: string }) => (
       <MarkdownBlock text={content} onDocumentLinkClick={onDocumentLinkClick} />
@@ -2686,14 +2690,29 @@ const MessageItem = memo(function MessageItem({
   const activeStreamingContent = isActiveStreamingPlaceholder
     ? (streamingContent || msg.content || "")
     : streamingContent;
-  // AADS-SCROLL-JUMP-P1: 8,000자 절단은 "라이브 스트림 버퍼(streamingContent)가 소스일 때"만 적용한다.
-  // "복구중" 같은 상태 힌트만으로 라이브 렌더로 전환되면 소스가 msg.content(전체 본문)로 바뀌는데,
-  // 이때도 절단하면 scrollHeight가 급감해 뷰포트 복원이 실패하고 화면이 상단으로 튄다.
-  // 버퍼가 소스인 경우는 스트리밍 중에도 이미 절단돼 있어 전환 시 높이 변화가 없다.
-  const isLiveBufferSource = Boolean(streamingContent) && activeStreamingContent === streamingContent;
-  const displayedStreamingContent = isLiveBufferSource && activeStreamingContent && activeStreamingContent.length > LIVE_STREAM_RENDER_LIMIT
-    ? `... 앞 ${activeStreamingContent.length - LIVE_STREAM_RENDER_LIMIT}자 생략\n\n${activeStreamingContent.slice(-LIVE_STREAM_RENDER_LIMIT)}`
-    : activeStreamingContent;
+  // 2026-09-16: 라이브 본문을 더 이상 잘라내지 않는다.
+  //
+  // 예전에는 8,000자를 넘으면 앞부분을 버리고 꼬리만 그렸다(BUBBLE-FLASH-P1).
+  // 재파싱 비용 때문이었는데, 대표님이 읽고 계시던 윗부분이 스트리밍 도중
+  // 사라지는 부작용이 있었다. 이제 StreamingMarkdownBlock 이 확정 블록을
+  // 얼리고 꼬리만 다시 파싱하므로 자를 이유가 없다. 높이도 단조 증가만 해서
+  // SCROLL-JUMP 경로를 건드리지 않는다.
+  const displayedStreamingContent = activeStreamingContent;
+  // 2026-09-16: 도구 구간에는 본문이 비어 진행 패널만 남는다.
+  //
+  // 모델이 도구를 부르는 동안에는 텍스트 토큰이 나오지 않는다. 직전 턴은
+  // 도구 67회에 본문 496자였다. 그 구간의 버블에는 이 패널이 전부인데,
+  // 패널이 맨 위에 멈춰 있어 방금 무엇을 했는지가 화면 밖으로 밀렸다.
+  // 새 기록이 붙을 때마다 최신 줄로 따라 내려가고, 본문이 없는 동안에는
+  // 패널을 더 높게 쓴다.
+  const toolLogScrollRef = useRef<HTMLDivElement | null>(null);
+  const toolLogCount = streamToolLogs?.length || 0;
+  const lastToolLogText = streamToolLogs?.[toolLogCount - 1]?.text || "";
+  useEffect(() => {
+    const el = toolLogScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [toolLogCount, lastToolLogText, streamToolStatus]);
   const responseOverview = useMemo(
     () => (msg.role === "assistant" && !isVisiblyStreaming ? buildResponseOverview(msg.content || "") : null),
     [isVisiblyStreaming, msg.content, msg.role],
@@ -3030,13 +3049,16 @@ const MessageItem = memo(function MessageItem({
                 </div>
               )}
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
-                <div style={{
+                <div ref={toolLogScrollRef} style={{
                   fontSize: "12px", borderRadius: "8px",
                   background: "rgba(108,99,255,0.06)",
                   border: "1px solid rgba(108,99,255,0.2)",
                   padding: "8px 10px",
                   marginBottom: streamingContent ? "8px" : "0",
-                  maxHeight: "180px", overflowY: "auto" as const,
+                  // 본문이 아직 없으면 이 패널이 버블의 전부다. 그때는 더 높게 쓴다.
+                  maxHeight: displayedStreamingContent ? "180px" : "340px",
+                  overflowY: "auto" as const,
+                  scrollBehavior: "smooth" as const,
                 }}>
                   {streamToolLogs?.map((log, i) => (
                     <div key={i} style={{ marginBottom: "4px" }}>
@@ -3090,9 +3112,8 @@ const MessageItem = memo(function MessageItem({
               ) : null}
               {displayedStreamingContent ? (
                 <>
-                  <MarkdownBlock
+                  <StreamingMarkdownBlock
                     text={displayedStreamingContent}
-                    streaming
                     onDocumentLinkClick={onDocumentLinkClick}
                   />
                   <StreamingCaret />
@@ -7992,22 +8013,32 @@ export default function ChatPage() {
       let _displayedText = "";
       let _drainTimer: ReturnType<typeof setInterval> | null = null;
       let _lastDrainFlushAt = 0;
+      // 2026-09-16: 길이에 따라 450/900ms 로 벌리던 것을 90ms 고정으로 바꿨다.
+      //
+      // 초당 1~2회 갱신이면 글이 이어서 써지는 게 아니라 문단이 통째로
+      // 튀어나온다(대표님 지적). 사람 눈에 "이어진다" 고 보이는 하한이
+      // 대략 초당 8회다. 간격을 좁혀도 되는 이유는 StreamingMarkdownBlock
+      // 이 확정 블록을 얼려 재파싱을 꼬리로 한정하기 때문이다 — 길이에
+      // 따라 간격을 벌리던 이유 자체가 없어졌다.
+      //
+      // startTransition 도 뺐다. 전환 업데이트는 React 가 다른 일에 밀리면
+      // 뒤로 미뤄서, 긴 대화에서는 실제 간격이 450ms 보다 더 벌어졌다.
+      // 스트리밍 텍스트는 미룰 대상이 아니다.
       const _flushDrain = (force = false) => {
         if (_tokenQueue.length === 0) return;
         const now = Date.now();
-        const minInterval = _displayedText.length > 12000 ? 900 : 450;
-        if (!force && now - _lastDrainFlushAt < minInterval) return;
+        if (!force && now - _lastDrainFlushAt < STREAM_FLUSH_MIN_INTERVAL_MS) return;
         while (_tokenQueue.length > 0) _displayedText += _tokenQueue.shift()!;
         _lastDrainFlushAt = now;
         if (!isStale()) {
-          startTransition(() => setStreamBuf(_displayedText));
+          setStreamBuf(_displayedText);
         }
       };
       const _startDrain = () => {
         if (_drainTimer) return;
         _drainTimer = setInterval(() => {
           _flushDrain();
-        }, 250);
+        }, STREAM_DRAIN_TICK_MS);
       };
 
       const _stopDrain = () => {
