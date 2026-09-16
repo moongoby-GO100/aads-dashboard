@@ -256,6 +256,11 @@ export default function LlmRegistryWorkspacePanel() {
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
   const [chatRegistryModels, setChatRegistryModels] = useState<LlmRegistryModel[]>([]);
   const [chatModelConfigs, setChatModelConfigs] = useState<ChatModelConfigRow[]>([]);
+  // 모델 179개를 항상 다 그려 10,530px 이었다. 순서를 바꾸는 일은 보통 상위
+  // 몇 개에서 일어나므로 검색 + 20개씩으로 줄인다. 순서 이동은 원본 배열의
+  // index 로 해야 하므로 필터된 목록에도 원본 index 를 달고 다닌다.
+  const [modelQuery, setModelQuery] = useState("");
+  const [modelLimit, setModelLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -449,6 +454,16 @@ export default function LlmRegistryWorkspacePanel() {
     });
   }, []);
 
+  const visibleChatModels = useMemo(() => {
+    const q = modelQuery.trim().toLowerCase();
+    const withIndex = chatModelConfigs.map((item, index) => ({ item, index }));
+    const matched = q
+      ? withIndex.filter(({ item }) =>
+          `${item.display_name} ${item.provider} ${item.preference_key}`.toLowerCase().includes(q))
+      : withIndex;
+    return { matched, shown: matched.slice(0, modelLimit) };
+  }, [chatModelConfigs, modelQuery, modelLimit]);
+
   const saveChatModelPreferences = useCallback(async () => {
     setSavingPrefs(true);
     try {
@@ -570,6 +585,7 @@ export default function LlmRegistryWorkspacePanel() {
               </div>
             </button>
 
+            {expandedProviders[provider.provider] && (
             <div className="px-4 pb-4 space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div className="rounded-lg p-3" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
@@ -739,6 +755,7 @@ export default function LlmRegistryWorkspacePanel() {
                 </div>
               )}
             </div>
+            )}
           </div>
         ))}
       </div>
@@ -762,7 +779,7 @@ export default function LlmRegistryWorkspacePanel() {
         </div>
 
         <div className="space-y-2">
-          {chatModelConfigs.map((item, index) => (
+          {visibleChatModels.shown.map(({ item, index }) => (
             <div key={item.preference_key} className="rounded-lg px-3 py-3 flex items-center gap-3 flex-wrap" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <span className="text-xs font-bold w-6 text-center" style={{ color: item.preference_key === "mixture" ? "var(--accent)" : "var(--text-secondary)" }}>
                 {item.preference_key === "mixture" ? "A" : index}
@@ -826,6 +843,16 @@ export default function LlmRegistryWorkspacePanel() {
             </div>
           ))}
         </div>
+
+        {visibleChatModels.shown.length < visibleChatModels.matched.length && (
+          <button
+            onClick={() => setModelLimit((n) => n + 20)}
+            className="w-full mt-3 py-2 rounded-lg text-sm"
+            style={{ border: "1px dashed var(--border)", color: "var(--accent)", background: "transparent" }}
+          >
+            더 보기 ({visibleChatModels.matched.length - visibleChatModels.shown.length}개 남음)
+          </button>
+        )}
       </div>
 
     </div>
