@@ -1,0 +1,65 @@
+#!/bin/bash
+# aads-dashboard commit-msg
+#
+# 정본은 scripts/hooks/commit-msg, 설치본은 .git/hooks/commit-msg 이다.
+# 고친 뒤 반드시: cp scripts/hooks/{pre-commit,commit-msg} .git/hooks/
+set -u
+COMMIT_MSG=$(cat "$1")
+
+# ── 무의미한 제목 거부 ───────────────────────────────────────────
+if echo "$COMMIT_MSG" | grep -qxE '(and|Claude Code|update|fix|test|wip|.)'; then
+  echo "ERROR: 무의미 커밋 메시지 거부. 형식: feat(영역): 설명"
+  exit 1
+fi
+
+# ── 동일 제목 연속 커밋 차단 (R-DEDUP) ───────────────────────────
+#
+# 2026-09-16, 이 저장소에서 실제로 터졌다.
+#   6a5eb60  AADS-VIZ-MERMAID-001: Mermaid 렌더러 도입 ...  (정상)
+#   3bd80d0  AADS-VIZ-MERMAID-001: Mermaid 렌더러 도입 ...  (12분 뒤, 손상)
+# 뒤쪽은 턴이 재실행되며 같은 패치를 이미 패치된 파일에 한 번 더 얹은 것이고,
+# import 2중 선언과 JSX 파손으로 컴파일 불가 상태가 원격 main 에 올라갔다.
+# 되돌린 커밋이 7d6db08 이다. **같은 제목이 유일한 사전 신호였다.**
+# 이 저장소에는 훅이 하나도 없어 아무 저항 없이 통과했다 — 그래서 이 파일이 생겼다.
+SUBJECT=$(grep -v '^#' "$1" | sed '/^$/d' | head -1)
+PARENT_ARGS=$(ps -o args= -p $PPID 2>/dev/null | head -1)
+case "$SUBJECT" in
+  Merge\ *|Revert\ *) SUBJECT="" ;;   # 병합·되돌리기는 제목 재사용이 정상
+  Chat-Finalize*)     SUBJECT="" ;;   # 자동 커밋은 제목이 구조적으로 겹친다
+esac
+if [ -n "$SUBJECT" ] \
+   && [ "${ALLOW_DUP_COMMIT:-}" != "1" ] \
+   && [[ "$PARENT_ARGS" != *--amend* ]]; then
+  DUP_SHA=$(git log --since='3 days ago' --max-count=30 --format='%h%x09%s' 2>/dev/null \
+            | awk -F'\t' -v s="$SUBJECT" '$2 == s {print $1; exit}')
+  if [ -n "$DUP_SHA" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "[BLOCKED] 최근 3일 안에 같은 제목의 커밋이 이미 있습니다"
+    echo "  기존: $DUP_SHA  $(git log -1 --format=%s "$DUP_SHA" 2>/dev/null)"
+    echo "  이번: $SUBJECT"
+    echo ""
+    echo "  같은 패치를 두 번 얹는 중은 아닌지 먼저 확인하세요:"
+    echo "    git show $DUP_SHA --stat"
+    echo "    git diff --cached --stat"
+    echo "  이미 적용된 수정이면 커밋할 것이 없습니다(2026-09-16 7d6db08 사례)."
+    echo ""
+    echo "  이어지는 별개 작업이면 제목을 구분하거나:"
+    echo "    ALLOW_DUP_COMMIT=1 git commit -m \"...\""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 1
+  fi
+fi
+
+# ── pre-commit 통과 서명 검증 (--no-verify 우회 탐지) ────────────
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+if [ ! -f "$GIT_DIR/HOOK_VERIFIED" ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "[BLOCKED] pre-commit 서명 없음 — --no-verify 우회로 판단됩니다 (R-COMMIT)"
+  echo "  차단 원인을 고친 뒤 정상 커밋하세요."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 1
+fi
+
+exit 0
