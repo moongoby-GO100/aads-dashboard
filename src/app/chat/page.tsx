@@ -634,7 +634,9 @@ function isUserInterruptMessage(message: ChatMessage): boolean {
     message.intent === "interrupt_queued" ||
     message.intent === "interrupt_applied" ||
     message.intent === "interrupt_completed" ||
-    message.intent === "recovered_interrupt"
+    message.intent === "recovered_interrupt" ||
+    message.intent === "interrupt_cancelled" ||
+    message.intent === "interrupt_expired"
   ) return true;
   // An interrupt the server has not classified yet is still a 추가 지시 bubble to
   // the reader.  Leaving these out is why roughly half of them showed no status
@@ -697,6 +699,24 @@ function interruptStatusBadge(
       border: "rgba(8,145,178,0.24)",
     };
   }
+  if (message.intent === "interrupt_cancelled") {
+    return {
+      label: "취소됨",
+      color: "#6b7280",
+      bg: "rgba(107,114,128,0.10)",
+      border: "rgba(107,114,128,0.24)",
+    };
+  }
+  if (message.intent === "interrupt_expired") {
+    // 30분 창을 넘겨 수거 대상에서 내려온 지시. 조용히 사라지면
+    // 보낸 사람은 반영된 줄 안다.
+    return {
+      label: "만료됨 — 미반영",
+      color: "#f59e0b",
+      bg: "rgba(245,158,11,0.10)",
+      border: "rgba(245,158,11,0.26)",
+    };
+  }
   if (unresolved) {
     // 조용한 큐는 신뢰를 잃는다. 어느 응답도 먹지 않았다는 사실을 드러내고,
     // 옆의 버튼으로 곧바로 다시 보낼 수 있게 한다.
@@ -721,11 +741,13 @@ function interruptStatusBadge(
  * (chat_service `_fetch_persisted_interrupts`). 같은 execution_id 를 가진
  * 응답 버블이 그 지시를 먹은 응답이다 — 새 컬럼도, 별도 조회도 필요 없다.
  */
+type InterruptRef = { id: string; text: string };
+
 function buildInterruptIndex(
   messages: ChatMessage[],
   opts: { streamingSessionActive: boolean; now: number },
-): { appliedByExecution: Map<string, string[]>; unresolvedIds: Set<string> } {
-  const appliedByExecution = new Map<string, string[]>();
+): { appliedByExecution: Map<string, InterruptRef[]>; unresolvedIds: Set<string> } {
+  const appliedByExecution = new Map<string, InterruptRef[]>();
   const unresolvedIds = new Set<string>();
   for (const m of messages) {
     if (!isUserInterruptMessage(m)) continue;
@@ -738,12 +760,19 @@ function buildInterruptIndex(
     if (landed) {
       const execId = String(m.execution_id || "");
       if (execId) {
+        const ref: InterruptRef = {
+          id: m.id,
+          text: normalizeQueuedInterruptDisplayContent(String(m.content || "")),
+        };
         const bucket = appliedByExecution.get(execId);
-        if (bucket) bucket.push(m.id);
-        else appliedByExecution.set(execId, [m.id]);
+        if (bucket) bucket.push(ref);
+        else appliedByExecution.set(execId, [ref]);
       }
       continue;
     }
+    // 취소·만료된 지시는 '미반영'이 아니다. 무른 것이므로 다시 보내라고
+    // 권하면 안 된다 — 취소한 지시에 빨간 재전송 배지가 뜨는 꼴이 된다.
+    if (intent === "interrupt_cancelled" || intent === "interrupt_expired") continue;
     // 스트림이 도는 동안의 대기는 정상이다. 오탐으로 재전송을 부추기면
     // 같은 지시가 두 번 들어간다.
     if (opts.streamingSessionActive) continue;
@@ -2585,8 +2614,8 @@ interface MessageItemProps {
   onViewportTarget?: (element: HTMLElement) => void;
   screenSize: ScreenSize;
   mobileFontPx: number;
-  /** 이 응답 버블이 반영한 추가 지시 메시지 id 들 (assistant 전용) */
-  appliedInterruptIds?: string[];
+  /** 이 응답 버블이 반영한 추가 지시 (assistant 전용) */
+  appliedInterrupts?: InterruptRef[];
   /** 어느 응답도 먹지 않은 추가 지시 (user 전용) */
   interruptUnresolved?: boolean;
   onJumpToMessage?: (messageId: string) => void;
@@ -2603,8 +2632,9 @@ const MessageItem = memo(function MessageItem({
   onRequestToolHydration,
   onViewportTarget,
   screenSize, mobileFontPx,
-  appliedInterruptIds, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
+  appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
 }: MessageItemProps) {
+  const [interruptListOpen, setInterruptListOpen] = useState(false);
   const isMobileMessage = screenSize === "mobile";
   const mobileReadableText = isMobileMessage ? `${mobileFontPx}px` : "14px";
   const mobileReadableLineHeight = isMobileMessage ? "1.78" : "1.6";
@@ -2856,6 +2886,42 @@ const MessageItem = memo(function MessageItem({
             maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
             ↩ {replyTarget.content.slice(0, 100)}{replyTarget.content.length > 100 ? "..." : ""}
+          </div>
+        )}
+        {/* 반영된 추가지시 — 답을 읽기 전에 몇 건이 들어갔는지 먼저 보여준다.
+            원문 버블은 시간순 자리에 그대로 두고 참조만 올린다(PRD 2.3 2안). */}
+        {msg.role === "assistant" && appliedInterrupts && appliedInterrupts.length > 0 && (
+          <div style={{ marginBottom: "6px", marginLeft: "4px" }}>
+            <button
+              type="button"
+              title="이 응답이 반영한 추가지시 목록"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInterruptListOpen((v) => !v); }}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "4px",
+                padding: "2px 8px", borderRadius: "10px",
+                fontSize: "11px", fontWeight: 700, cursor: "pointer",
+                background: "rgba(37,99,235,0.10)", color: "#2563eb",
+                border: "1px solid rgba(37,99,235,0.24)",
+              }}
+            >↳ 반영된 추가지시 {appliedInterrupts.length}건 {interruptListOpen ? "\u25b2" : "\u25bc"}</button>
+            {interruptListOpen && (
+              <div style={{ marginTop: "4px", display: "flex", flexDirection: "column", gap: "3px" }}>
+                {appliedInterrupts.map((ref, i) => (
+                  <button
+                    key={ref.id}
+                    type="button"
+                    title="원문 지시로 이동"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJumpToMessage?.(ref.id); }}
+                    style={{
+                      textAlign: "left", padding: "3px 8px", borderRadius: "8px",
+                      fontSize: "11px", cursor: onJumpToMessage ? "pointer" : "default",
+                      background: "rgba(37,99,235,0.05)", color: "var(--ct-text2)",
+                      border: "1px solid rgba(37,99,235,0.16)",
+                    }}
+                  >{i + 1}. {ref.text.slice(0, 120)}{ref.text.length > 120 ? "\u2026" : ""}</button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {/* 출처 배지: Pipeline Runner / Agent / System */}
@@ -3524,26 +3590,6 @@ const MessageItem = memo(function MessageItem({
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-              {appliedInterruptIds && appliedInterruptIds.length > 0 && (
-                <button
-                  type="button"
-                  title="이 응답이 반영한 추가 지시로 이동합니다"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onJumpToMessage?.(appliedInterruptIds[0]); }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "3px",
-                    padding: "1px 6px",
-                    borderRadius: "8px",
-                    fontSize: "10px",
-                    fontWeight: 700,
-                    cursor: onJumpToMessage ? "pointer" : "default",
-                    background: "rgba(37,99,235,0.10)",
-                    color: "#2563eb",
-                    border: "1px solid rgba(37,99,235,0.24)",
-                  }}
-                >↳ 추가지시 {appliedInterruptIds.length}건 반영</button>
-              )}
               {placeholderStatus ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 600, background: placeholderStatus.bg, color: placeholderStatus.color, border: `1px solid ${placeholderStatus.border}` }}>{placeholderStatus.label}</span>
               ) : !isContinuedMessage(msg) && (msg.model_used === "interrupted" || msg.intent === "interrupted_partial" || (msg.intent === "interruption_notice" && (msg.content || "").length > 50)) ? (
@@ -9810,6 +9856,44 @@ export default function ChatPage() {
     }
   }
 
+  // 취소는 화면에서 지우는 일이 아니라 접수를 무르는 일이다.
+  // 2026-09-16 이전의 "✕ 취소" 는 로컬 카운터만 지웠고, 서버 행과
+  // 프로세스 큐는 그대로 남아 취소한 지시가 답변에 그대로 들어갔다.
+  const cancelQueuedInterrupts = useCallback(async () => {
+    const sid = activeSessionObjRef.current?.id;
+    if (!sid) {
+      msgQueueRef.current = [];
+      setQueueCount(0);
+      return;
+    }
+    try {
+      const res = await chatApi<{ cancelled: number; already_applied: number }>(
+        `/chat/sessions/${sid}/interrupt/cancel`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      msgQueueRef.current = [];
+      setQueueCount(0);
+      setYellowWarning(
+        res.already_applied > 0
+          ? `추가지시 ${res.cancelled}건 취소 — ${res.already_applied}건은 이미 반영되어 취소할 수 없습니다.`
+          : `추가지시 ${res.cancelled}건을 취소했습니다.`,
+      );
+      void chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
+        `/chat/messages?session_id=${sid}&limit=10&include_streaming=true`
+      )
+        .then((result) => {
+          const fresh = surfaceDbSavedStreamingPlaceholders(result.messages || [], { keepEmpty: true });
+          setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+        })
+        .catch(() => {});
+    } catch (e) {
+      console.warn("interrupt cancel failed:", e);
+      setYellowWarning("추가지시 취소에 실패했습니다 — 서버 큐에 그대로 남아 있을 수 있습니다.");
+    }
+    if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+    yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 7000);
+  }, []);
+
   // ── Keyboard (useCallback으로 안정화 → ChatInput memo 유효화, IME 깨짐 방지) ──
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 한글 IME 조합 중이면 키 이벤트 무시 (깨짐 방지)
@@ -9818,8 +9902,8 @@ export default function ChatPage() {
     // Ctrl+Z: 마지막 큐 메시지 취소
     if (e.ctrlKey && e.key === "z" && queueCountRef.current > 0) {
       e.preventDefault();
-      const removed = msgQueueRef.current.pop();
-      setQueueCount(msgQueueRef.current.length);
+      const removed = msgQueueRef.current[msgQueueRef.current.length - 1];
+      void cancelQueuedInterrupts();
       if (removed) { setInput(removed); chatInputRef.current?.setValue(removed); }
       return;
     }
@@ -9827,7 +9911,7 @@ export default function ChatPage() {
       e.preventDefault();
       setArtifactMode((m) => (m === "full" ? "mini" : m === "mini" ? "hidden" : "full"));
     }
-  }, [sendMessage]);
+  }, [sendMessage, cancelQueuedInterrupts]);
 
   // ── Context menu ──
   function onSessionContextMenu(e: React.MouseEvent, session: ChatSession) {
@@ -12056,7 +12140,7 @@ export default function ChatPage() {
                     onViewportTarget={scrollMessageElementIntoView}
                     screenSize={screenSize}
                     mobileFontPx={mobileChatFontPx}
-                    appliedInterruptIds={
+                    appliedInterrupts={
                       msg.role === "assistant" && msg.execution_id
                         ? interruptIndex.appliedByExecution.get(String(msg.execution_id))
                         : undefined
@@ -13585,7 +13669,7 @@ export default function ChatPage() {
                     📋 대기 {queueCount}건: {(msgQueueRef.current[0] || "").slice(0, 20)}{(msgQueueRef.current[0] || "").length > 20 ? "..." : ""}
                   </span>
                   <button
-                    onClick={() => { msgQueueRef.current = []; setQueueCount(0); setYellowWarning(null); }}
+                    onClick={() => { void cancelQueuedInterrupts(); }}
                     style={{
                       padding: "2px 8px", fontSize: "11px", fontWeight: 600,
                       background: "#f59e0b", color: "#fff", border: "none", borderRadius: "6px",
