@@ -10476,6 +10476,9 @@ export default function ChatPage() {
         if (isHiddenSystemChatMessage(m)) return false;
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") {
+          // 되살리는 것은 사용자의 추가지시 버블뿐이다. 같은 intent 로 저장된
+          // 어시스턴트 중단 알림 6건(2026-09-16 실측)까지 풀면 잡음이 돌아온다.
+          if (!isUserInterruptMessage(m)) return false;
           const body = normalizeQueuedInterruptDisplayContent(String(m.content || "")).slice(0, 40).trim();
           if (!body || carriedInterruptText.includes(body)) return false;
         }
