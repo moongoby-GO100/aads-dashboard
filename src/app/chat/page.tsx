@@ -4985,6 +4985,9 @@ export default function ChatPage() {
   const lastInterruptedAiIdRef = useRef<string>("");   // 중단 알림 발생한 AI 메시지 ID — 동일 메시지 이중 알림 차단
   const lastChatStatusAlertRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const ackedCompletionTokenBySessionRef = useRef<Map<string, string>>(new Map());
+  // 서버가 마지막 조회에서 "생성 중" 이라고 했는지. SSE 가 끊겨 로컬 플래그가
+  // 꺼져도 이 값이 켜져 있으면 유휴 간격으로 떨어뜨리지 않는다.
+  const serverSaidStreamingRef = useRef(false);
   const lastKnownMsgIdRef = useRef<string | null>(null);  // PERF: 폴링 최적화 — streaming-status의 last_message_id 변경 감지
   const lastKnownMessageRevisionRef = useRef<string | null>(null);  // DB 저장 메시지/placeholder 변경 감지
   const completedExecutionKeysRef = useRef<Set<string>>(new Set());
@@ -6897,7 +6900,13 @@ export default function ChatPage() {
       if (!_waitingBg && !_streaming) {
         // 유휴 + 화면에 안 보임 → 조회하지 않는다.
         if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-        if (tickCount % IDLE_STATUS_POLL_TICKS !== 0) return;
+        // 직전 조회에서 서버가 "생성 중" 이라고 했으면 유휴로 보지 않는다.
+        //
+        // SSE 가 끊기면 로컬 플래그 둘이 다 꺼지는데, 그렇다고 턴이 끝난 것은
+        // 아니다. 그 상태로 유휴 간격(19.5초)에 떨어지면 서버가 5초마다 쌓는
+        // 내용이 화면에 20초씩 늦게 나타난다. 서버가 아직 돌고 있다고 말한
+        // 뒤에는 빠른 주기를 유지해 끊김을 사용자에게 넘기지 않는다.
+        if (!serverSaidStreamingRef.current && tickCount % IDLE_STATUS_POLL_TICKS !== 0) return;
       }
       // ── just_completed 감지: streaming-status 폴링 (스트리밍 중에도 항상 체크) ──
       let ss: StreamingStatusPayload | null = null;
@@ -6918,11 +6927,21 @@ export default function ChatPage() {
         if (ss.execution_id && !statusAlreadySettled) currentExecutionIdRef.current = ss.execution_id;
         if (ss.partial_content) {
           setBgPartialContent(ss.partial_content);
-          // Invisible Recovery: streaming=true + waitingBg=true → partial_content를 streamBuf에 주입 (타이핑 효과)
-          if (_streaming && _waitingBg) {
+          // 판정 기준은 **서버가 방금 알려준 사실**이지, 이 틱을 시작할 때 읽은
+          // 로컬 플래그가 아니다.
+          //
+          // 2026-09-16. SSE 가 끊기면 _streaming·_waitingBg 가 둘 다 false 가
+          // 되는데, 서버는 그대로 생성 중이고 5초마다 내용을 쌓는다. 그런데 이
+          // 조건이 그 둘을 보는 바람에, 서버가 is_streaming=true 와 함께
+          // partial_content 를 돌려준 바로 그 틱에서 화면을 갱신하지 않았다.
+          // 플래그는 아래에서 켜지므로 **다음 틱까지 기다려야** 보였고,
+          // 그 사이 폴링은 유휴 간격(19.5초)이라 최대 20초 넘게 빈 화면이었다.
+          // 대표님 지적: "시간이 지나도 중간중간 내용이 출력되어야하는데 안된다".
+          if (ss.is_streaming || (_streaming && _waitingBg)) {
             setStreamBuf(ss.partial_content);
           }
         }
+        serverSaidStreamingRef.current = Boolean(ss.is_streaming && !statusAlreadySettled);
         if (ss.is_streaming && !statusAlreadySettled) {
           const streamingStatus = ss;
           streamingSessionRef.current = sid;
