@@ -78,24 +78,7 @@ interface ProviderTimelineItem {
   created_at: string;
 }
 
-interface ChatModelPreference {
-  preference_key?: string;
-  provider?: string;
-  model_id: string;
-  display_order: number;
-  is_hidden: boolean;
-  is_favorite: boolean;
-  is_pinned: boolean;
-  updated_at?: string | null;
-  updated_by?: string | null;
-}
 
-interface ChatModelConfigRow extends ChatModelPreference {
-  preference_key: string;
-  display_name: string;
-  provider: string;
-  cost_label: string;
-}
 
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "#d4a017",
@@ -140,42 +123,9 @@ function formatDiscoveryMode(provider: LlmModelProviderSummary): string {
   return "템플릿 대기";
 }
 
-function compareChatModelRows(a: ChatModelConfigRow, b: ChatModelConfigRow): number {
-  if (a.model_id === "mixture") return -1;
-  if (b.model_id === "mixture") return 1;
-  if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
-  if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1;
-  if (a.display_order !== b.display_order) return a.display_order - b.display_order;
-  if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
-  return a.display_name.localeCompare(b.display_name);
-}
 
-function buildChatPreferenceKey(provider: string | undefined, modelId: string): string {
-  const normalizedModel = (modelId || "").trim();
-  if (!normalizedModel || normalizedModel === "mixture" || normalizedModel === "auto") return "mixture";
-  const normalizedProvider = (provider || "legacy").trim().toLowerCase();
-  return `${normalizedProvider}:${normalizedModel}`;
-}
 
-function buildChatPreferenceMap(preferences: ChatModelPreference[]): Map<string, ChatModelPreference> {
-  const preferenceMap = new Map<string, ChatModelPreference>();
-  for (const item of preferences) {
-    const key = item.preference_key || buildChatPreferenceKey(item.provider, item.model_id);
-    preferenceMap.set(key, item);
-    if (!item.preference_key && item.model_id) {
-      preferenceMap.set(item.model_id, item);
-    }
-  }
-  return preferenceMap;
-}
 
-function normalizeChatModelRows(rows: ChatModelConfigRow[]): ChatModelConfigRow[] {
-  const sorted = [...rows].sort(compareChatModelRows);
-  return sorted.map((row, index) => ({
-    ...row,
-    display_order: row.preference_key === "mixture" ? 0 : (index + 1) * 10,
-  }));
-}
 
 function buildTimelineLabel(item: ProviderTimelineItem): string {
   const details = item.details || {};
@@ -205,47 +155,6 @@ function buildTimelineSubtext(item: ProviderTimelineItem): string {
   return actor;
 }
 
-function buildChatModelConfigs(
-  models: LlmRegistryModel[],
-  preferences: ChatModelPreference[],
-): ChatModelConfigRow[] {
-  const preferenceMap = buildChatPreferenceMap(preferences);
-  const modelIdCounts = models.reduce((acc, model) => {
-    acc.set(model.model_id, (acc.get(model.model_id) || 0) + 1);
-    return acc;
-  }, new Map<string, number>());
-  const mixturePref = preferenceMap.get("mixture");
-  const baseRows: ChatModelConfigRow[] = [
-    {
-      preference_key: "mixture",
-      model_id: "mixture",
-      display_name: "자동 라우팅 (혼합)",
-      provider: "auto",
-      cost_label: "자동",
-      display_order: mixturePref?.display_order ?? 0,
-      is_hidden: mixturePref?.is_hidden ?? false,
-      is_favorite: mixturePref?.is_favorite ?? false,
-      is_pinned: mixturePref?.is_pinned ?? true,
-    },
-    ...models.map((model, index) => {
-      const preferenceKey = buildChatPreferenceKey(model.provider, model.model_id);
-      const legacyPref = modelIdCounts.get(model.model_id) === 1 ? preferenceMap.get(model.model_id) : undefined;
-      const pref = preferenceMap.get(preferenceKey) || legacyPref;
-      return {
-        preference_key: preferenceKey,
-        model_id: model.model_id,
-        display_name: model.display_name || model.model_id,
-        provider: model.provider,
-        cost_label: formatCostLabel(model),
-        display_order: pref?.display_order ?? (index + 2) * 10,
-        is_hidden: pref?.is_hidden ?? false,
-        is_favorite: pref?.is_favorite ?? false,
-        is_pinned: pref?.is_pinned ?? false,
-      };
-    }),
-  ];
-  return normalizeChatModelRows(baseRows);
-}
 
 export default function LlmRegistryWorkspacePanel() {
   const [keys, setKeys] = useState<LlmKey[]>([]);
@@ -254,16 +163,8 @@ export default function LlmRegistryWorkspacePanel() {
   const [providerTimeline, setProviderTimeline] = useState<Record<string, ProviderTimelineItem[]>>({});
   const [providerLoading, setProviderLoading] = useState<Record<string, boolean>>({});
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
-  const [chatRegistryModels, setChatRegistryModels] = useState<LlmRegistryModel[]>([]);
-  const [chatModelConfigs, setChatModelConfigs] = useState<ChatModelConfigRow[]>([]);
-  // 모델 179개를 항상 다 그려 10,530px 이었다. 순서를 바꾸는 일은 보통 상위
-  // 몇 개에서 일어나므로 검색 + 20개씩으로 줄인다. 순서 이동은 원본 배열의
-  // index 로 해야 하므로 필터된 목록에도 원본 index 를 달고 다닌다.
-  const [modelQuery, setModelQuery] = useState("");
-  const [modelLimit, setModelLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [savingPrefs, setSavingPrefs] = useState(false);
   const [msg, setMsg] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -299,26 +200,16 @@ export default function LlmRegistryWorkspacePanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [keysRes, summaryRes, preferencesRes, modelsRes] = await Promise.allSettled([
+      const [keysRes, summaryRes] = await Promise.allSettled([
         api.getLlmKeys(),
         api.getLlmModelSummary(),
-        api.getChatModelPreferences(),
-        api.getLlmModels({ active_only: true }),
       ]);
       const normalizedKeys =
         keysRes.status === "fulfilled" && Array.isArray(keysRes.value) ? keysRes.value : [];
       const summaryValue = summaryRes.status === "fulfilled" ? summaryRes.value : null;
-      const activeModels =
-        modelsRes.status === "fulfilled" && Array.isArray(modelsRes.value.models) ? modelsRes.value.models : [];
-      const preferences =
-        preferencesRes.status === "fulfilled" && Array.isArray(preferencesRes.value.preferences)
-          ? preferencesRes.value.preferences
-          : [];
       setKeys(normalizedKeys);
       setSummary(summaryValue);
-      setChatRegistryModels(activeModels);
-      setChatModelConfigs(buildChatModelConfigs(activeModels, preferences));
-      const hasFailure = [keysRes, summaryRes, preferencesRes, modelsRes].some((result) => result.status === "rejected");
+      const hasFailure = [keysRes, summaryRes].some((result) => result.status === "rejected");
       setMsg(hasFailure ? "일부 LLM 운영 데이터 로드 실패" : "");
     } catch {
       setMsg("LLM 운영 화면 로드 실패");
@@ -431,61 +322,9 @@ export default function LlmRegistryWorkspacePanel() {
     }
   }, [flash, load, reloadExpandedProviders]);
 
-  const moveChatModel = useCallback((index: number, dir: -1 | 1) => {
-    setChatModelConfigs((prev) => {
-      const next = [...prev];
-      if (next[index]?.preference_key === "mixture") return prev;
-      const target = index + dir;
-      if (target <= 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next.map((item, idx) => ({
-        ...item,
-        display_order: item.preference_key === "mixture" ? 0 : (idx + 1) * 10,
-      }));
-    });
-  }, []);
 
-  const toggleChatModelFlag = useCallback((preferenceKey: string, field: "is_hidden" | "is_favorite" | "is_pinned") => {
-    setChatModelConfigs((prev) => {
-      const next = prev.map((item) =>
-        item.preference_key === preferenceKey ? { ...item, [field]: !item[field] } : item
-      );
-      return normalizeChatModelRows(next);
-    });
-  }, []);
 
-  const visibleChatModels = useMemo(() => {
-    const q = modelQuery.trim().toLowerCase();
-    const withIndex = chatModelConfigs.map((item, index) => ({ item, index }));
-    const matched = q
-      ? withIndex.filter(({ item }) =>
-          `${item.display_name} ${item.provider} ${item.preference_key}`.toLowerCase().includes(q))
-      : withIndex;
-    return { matched, shown: matched.slice(0, modelLimit) };
-  }, [chatModelConfigs, modelQuery, modelLimit]);
 
-  const saveChatModelPreferences = useCallback(async () => {
-    setSavingPrefs(true);
-    try {
-      const payload = chatModelConfigs.map((item, index) => ({
-        preference_key: item.preference_key,
-        provider: item.provider,
-        model_id: item.model_id,
-        display_order: item.preference_key === "mixture" ? 0 : (index + 1) * 10,
-        is_hidden: item.is_hidden,
-        is_favorite: item.is_favorite,
-        is_pinned: item.is_pinned,
-      }));
-      const res = await api.updateChatModelPreferences(payload);
-      const preferences = Array.isArray(res.preferences) ? res.preferences : [];
-      setChatModelConfigs(buildChatModelConfigs(chatRegistryModels, preferences));
-      flash("채팅 모델 노출 설정 저장 완료");
-    } catch {
-      flash("채팅 모델 노출 설정 저장 실패");
-    } finally {
-      setSavingPrefs(false);
-    }
-  }, [chatModelConfigs, chatRegistryModels, flash]);
 
   if (loading) {
     return <p className="text-sm p-4" style={{ color: "var(--text-secondary)" }}>로딩 중...</p>;
@@ -758,101 +597,6 @@ export default function LlmRegistryWorkspacePanel() {
             )}
           </div>
         ))}
-      </div>
-
-      <div className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>채팅창 모델 노출 순서</h3>
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              채팅창 selector의 노출 순서, 즐겨찾기, 상단 고정, 숨김 여부를 설정합니다.
-            </p>
-          </div>
-          <button
-            onClick={() => void saveChatModelPreferences()}
-            disabled={savingPrefs}
-            className="px-4 py-2 rounded-lg text-sm font-bold"
-            style={{ background: "var(--accent)", color: "#fff", opacity: savingPrefs ? 0.6 : 1 }}
-          >
-            {savingPrefs ? "저장 중..." : "채팅 모델 설정 저장"}
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {visibleChatModels.shown.map(({ item, index }) => (
-            <div key={item.preference_key} className="rounded-lg px-3 py-3 flex items-center gap-3 flex-wrap" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-              <span className="text-xs font-bold w-6 text-center" style={{ color: item.preference_key === "mixture" ? "var(--accent)" : "var(--text-secondary)" }}>
-                {item.preference_key === "mixture" ? "A" : index}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {item.is_pinned ? "📌 " : item.is_favorite ? "★ " : ""}{item.display_name}
-                  </span>
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-                    {item.provider}
-                  </span>
-                  <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>{item.preference_key}</span>
-                  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{item.cost_label}</span>
-                  {item.is_hidden && (
-                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(239,68,68,0.12)", color: "var(--danger)" }}>
-                      hidden
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => moveChatModel(index, -1)}
-                  disabled={item.preference_key === "mixture" || index <= 1}
-                  className="px-2 py-1 rounded text-xs disabled:opacity-30"
-                  style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                >
-                  ▲
-                </button>
-                <button
-                  onClick={() => moveChatModel(index, 1)}
-                  disabled={item.preference_key === "mixture" || index === chatModelConfigs.length - 1}
-                  className="px-2 py-1 rounded text-xs disabled:opacity-30"
-                  style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                >
-                  ▼
-                </button>
-                <button
-                  onClick={() => toggleChatModelFlag(item.preference_key, "is_pinned")}
-                  className="px-2 py-1 rounded text-xs"
-                  style={{ background: item.is_pinned ? "rgba(14,165,233,0.16)" : "var(--bg-primary)", color: item.is_pinned ? "#0ea5e9" : "var(--text-primary)" }}
-                >
-                  상단 고정
-                </button>
-                <button
-                  onClick={() => toggleChatModelFlag(item.preference_key, "is_favorite")}
-                  className="px-2 py-1 rounded text-xs"
-                  style={{ background: item.is_favorite ? "rgba(245,158,11,0.16)" : "var(--bg-primary)", color: item.is_favorite ? "#f59e0b" : "var(--text-primary)" }}
-                >
-                  즐겨찾기
-                </button>
-                <button
-                  onClick={() => toggleChatModelFlag(item.preference_key, "is_hidden")}
-                  className="px-2 py-1 rounded text-xs"
-                  style={{ background: item.is_hidden ? "rgba(239,68,68,0.16)" : "var(--bg-primary)", color: item.is_hidden ? "var(--danger)" : "var(--text-primary)" }}
-                >
-                  {item.is_hidden ? "숨김 해제" : "숨김"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {visibleChatModels.shown.length < visibleChatModels.matched.length && (
-          <button
-            onClick={() => setModelLimit((n) => n + 20)}
-            className="w-full mt-3 py-2 rounded-lg text-sm"
-            style={{ border: "1px dashed var(--border)", color: "var(--accent)", background: "transparent" }}
-          >
-            더 보기 ({visibleChatModels.matched.length - visibleChatModels.shown.length}개 남음)
-          </button>
-        )}
       </div>
 
     </div>

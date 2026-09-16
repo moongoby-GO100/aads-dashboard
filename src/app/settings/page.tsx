@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Header from "@/components/Header";
 import DatabaseOverviewPanel from "@/components/settings/DatabaseOverviewPanel";
+import ChatModelOrderPanel from "@/components/settings/ChatModelOrderPanel";
 import LlmAccountCard from "@/components/settings/LlmAccountCard";
 import LlmRegistryWorkspacePanel from "@/components/settings/LlmRegistryWorkspacePanel";
 import ModelSettingsPanel from "@/components/settings/ModelSettingsPanel";
@@ -827,6 +828,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [modelSubTab, setModelSubTab] = useState(0);
+  const [llmSubTab, setLlmSubTab] = useState(0);
 
   useEffect(() => {
     api.getHealth()
@@ -839,7 +841,10 @@ export default function SettingsPage() {
     v === undefined ? "var(--text-secondary)" : v ? "var(--success)" : "var(--danger)";
 
   const TABS = ["모델 설정", "LLM 관리", "시스템"];
-  const MODEL_SUB_TABS = ["러너 모델", "지시서 생성", "모델 라우팅"];
+  // 채팅창 노출 순서는 "어떤 모델이 등록돼 있나"(레지스트리)가 아니라 "채팅창에
+  // 무엇을 어떤 순서로 띄울까"(정책)라서 모델 설정 쪽이 맞다.
+  const MODEL_SUB_TABS = ["러너 모델", "지시서 생성", "모델 라우팅", "채팅창 노출 순서"];
+  const LLM_SUB_TABS = ["LLM 계정", "모델 레지스트리"];
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
@@ -920,29 +925,60 @@ export default function SettingsPage() {
                   <ModelSettingsPanel />
                 </section>
               )}
+              {modelSubTab === 3 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>채팅창 모델 노출 순서</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    채팅창 selector의 노출 순서, 즐겨찾기, 상단 고정, 숨김 여부를 설정합니다.
+                  </p>
+                  <ChatModelOrderPanel />
+                </section>
+              )}
             </>
           )}
 
-          {/* Tab 1: LLM 관리 */}
+          {/* Tab 1: LLM 관리 — 하위탭 2개 */}
           {activeTab === 1 && (
             <>
+              <div className="flex gap-2 flex-wrap">
+                {LLM_SUB_TABS.map((label, i) => (
+                  <button
+                    key={label}
+                    onClick={() => setLlmSubTab(i)}
+                    className="px-4 py-1.5 text-xs font-semibold rounded-full transition-colors"
+                    style={{
+                      background: llmSubTab === i ? "var(--accent)" : "var(--bg-hover)",
+                      color: llmSubTab === i ? "#fff" : "var(--text-secondary)",
+                      border: llmSubTab === i ? "1px solid var(--accent)" : "1px solid var(--border)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {/* 카드 4장(레지스트리·코덱스 사용량·로그인 상태·Claude 계정)을 한 장으로 합쳤다.
                   넷이 같은 키를 각각 다시 그리면서 탭 하나가 25,680px 이 됐다.
                   설계: aads-docs/docs/PRD-SETTINGS-UNIFIED-ACCOUNT-CARD-v1.0.md */}
-              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-                <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM 계정</h2>
-                <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-                  등록·자격증명·사용량·주계정을 한 줄에서 봅니다. 위 요약을 누르면 그 내용만 보여줍니다.
-                </p>
-                <LlmAccountCard />
-              </section>
-              <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-                <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 레지스트리</h2>
-                <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-                  실행 가능 모델 집합, 동기화 상태, 채팅창 노출 순서를 관리합니다.
-                </p>
-                <LlmRegistryWorkspacePanel />
-              </section>
+              {llmSubTab === 0 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>LLM 계정</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    등록·자격증명·사용량·주계정을 한 줄에서 봅니다. 위 요약을 누르면 그 내용만 보여줍니다.
+                  </p>
+                  <LlmAccountCard />
+                </section>
+              )}
+              {llmSubTab === 1 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 레지스트리</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    provider별 실행 가능 모델 집합과 동기화 상태를 관리합니다.
+                  </p>
+                  <LlmRegistryWorkspacePanel />
+                </section>
+              )}
             </>
           )}
 
