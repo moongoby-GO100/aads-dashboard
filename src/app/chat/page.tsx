@@ -636,6 +636,8 @@ function isUserInterruptMessage(message: ChatMessage): boolean {
     message.intent === "interrupt_completed" ||
     message.intent === "recovered_interrupt" ||
     message.intent === "interrupt_cancelled" ||
+    message.intent === "interrupt_needs_confirm" ||
+    message.intent === "interrupt_confirmed" ||
     message.intent === "interrupt_expired"
   ) return true;
   // An interrupt the server has not classified yet is still a 추가 지시 bubble to
@@ -707,8 +709,26 @@ function interruptStatusBadge(
       border: "rgba(107,114,128,0.24)",
     };
   }
+  if (message.intent === "interrupt_needs_confirm") {
+    // 30분을 넘겼다. 자동으로 얹으면 사고이고(어제 08:56 의 "배포해" 가
+    // 오늘 답변에 끼어드는 일), 조용히 버리면 지시가 사라진다. 사람이 고른다.
+    return {
+      label: "미반영 — 지금 반영할까요?",
+      color: "#b45309",
+      bg: "rgba(180,83,9,0.12)",
+      border: "rgba(180,83,9,0.30)",
+    };
+  }
+  if (message.intent === "interrupt_confirmed") {
+    return {
+      label: "다음 응답에 반영 예정",
+      color: "#0891b2",
+      bg: "rgba(8,145,178,0.10)",
+      border: "rgba(8,145,178,0.24)",
+    };
+  }
   if (message.intent === "interrupt_expired") {
-    // 30분 창을 넘겨 수거 대상에서 내려온 지시. 조용히 사라지면
+    // 24시간 창을 넘겨 수거 대상에서 내려온 지시. 조용히 사라지면
     // 보낸 사람은 반영된 줄 안다.
     return {
       label: "만료됨 — 미반영",
@@ -2620,6 +2640,12 @@ interface MessageItemProps {
   interruptUnresolved?: boolean;
   onJumpToMessage?: (messageId: string) => void;
   onResendInterrupt?: (msg: ChatMessage) => void;
+  /** 30분을 넘긴 대기 지시를 다음 응답에 반영 */
+  onApplyPendingInterrupt?: (messageId: string) => void;
+  /** 대기 지시를 무름 */
+  onCancelPendingInterrupt?: (messageId: string) => void;
+  /** 잘못 보낸 지시 회수 — 실행 중단 + 대화에서 내림 */
+  onRetractMessage?: (messageId: string) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -2633,6 +2659,7 @@ const MessageItem = memo(function MessageItem({
   onViewportTarget,
   screenSize, mobileFontPx,
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
+  onApplyPendingInterrupt, onCancelPendingInterrupt, onRetractMessage,
 }: MessageItemProps) {
   const [interruptListOpen, setInterruptListOpen] = useState(false);
   const [interruptListOpenBottom, setInterruptListOpenBottom] = useState(false);
@@ -3527,6 +3554,44 @@ const MessageItem = memo(function MessageItem({
                   border: "1px solid rgba(220,38,38,0.28)",
                 }}
               >↻ 다시 보내기</button>
+            )}
+            {msg.intent === "interrupt_needs_confirm" && onApplyPendingInterrupt && (
+              <>
+                <button
+                  type="button"
+                  title="이 지시를 다음 응답에 반영합니다"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onApplyPendingInterrupt(msg.id); }}
+                  style={{
+                    padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 700,
+                    cursor: "pointer", background: "rgba(8,145,178,0.10)", color: "#0891b2",
+                    border: "1px solid rgba(8,145,178,0.30)",
+                  }}
+                >지금 반영</button>
+                {onCancelPendingInterrupt && (
+                  <button
+                    type="button"
+                    title="이 지시를 무릅니다"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCancelPendingInterrupt(msg.id); }}
+                    style={{
+                      padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 700,
+                      cursor: "pointer", background: "rgba(107,114,128,0.10)", color: "#6b7280",
+                      border: "1px solid rgba(107,114,128,0.26)",
+                    }}
+                  >취소</button>
+                )}
+              </>
+            )}
+            {onRetractMessage && (
+              <button
+                type="button"
+                title="잘못 보낸 지시를 회수합니다 — 진행 중인 응답을 멈추고 대화에서 내립니다"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRetractMessage(msg.id); }}
+                style={{
+                  padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: 700,
+                  cursor: "pointer", background: "transparent", color: "var(--ct-text2)",
+                  border: "1px solid var(--ct-border)",
+                }}
+              >↩ 회수</button>
             )}
             {msg.edited_at && <span style={{ color: "var(--ct-accent)" }}>(수정됨) </span>}
             {new Date(msg.created_at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })}
@@ -9926,6 +9991,101 @@ export default function ChatPage() {
     yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 7000);
   }, []);
 
+  // 30분을 넘겨 대기 중인 지시를 "다음 응답에 반영" 으로 올린다.
+  // 서버가 여기서 턴을 시작하지는 않는다 — 하루 지난 "배포해" 를 서버가
+  // 스스로 실행하는 것과, 사람이 보고 고른 것을 다음 대화에 얹는 것은
+  // 다른 일이다.
+  const applyPendingInterrupt = useCallback(async (messageId: string) => {
+    const sid = activeSessionObjRef.current?.id;
+    if (!sid) return;
+    try {
+      const res = await chatApi<{ confirmed: number }>(
+        `/chat/sessions/${sid}/interrupt/apply`,
+        { method: "POST", body: JSON.stringify({ message_ids: [messageId] }) },
+      );
+      setYellowWarning(
+        res.confirmed > 0
+          ? "다음 응답에 반영됩니다. 이어서 지시를 보내시면 함께 처리됩니다."
+          : "이미 처리된 지시입니다.",
+      );
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId ? { ...m, intent: "interrupt_confirmed" } : m
+      ));
+    } catch (e) {
+      console.warn("interrupt apply failed:", e);
+      setYellowWarning("반영 요청에 실패했습니다.");
+    }
+    if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+    yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 7000);
+  }, []);
+
+  // 건별 취소. 전체 취소(cancelQueuedInterrupts)와 같은 엔드포인트를 쓰되
+  // message_ids 를 지정한다 — 한 건만 무르려다 전부 날리는 일이 없게.
+  const cancelOnePendingInterrupt = useCallback(async (messageId: string) => {
+    const sid = activeSessionObjRef.current?.id;
+    if (!sid) return;
+    try {
+      const res = await chatApi<{ cancelled: number; already_applied: number }>(
+        `/chat/sessions/${sid}/interrupt/cancel`,
+        { method: "POST", body: JSON.stringify({ message_ids: [messageId] }) },
+      );
+      setYellowWarning(
+        res.cancelled > 0 ? "지시를 무렀습니다." : "이미 반영되어 무를 수 없습니다.",
+      );
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId && res.cancelled > 0
+          ? { ...m, intent: "interrupt_cancelled" } : m
+      ));
+    } catch (e) {
+      console.warn("interrupt cancel(one) failed:", e);
+      setYellowWarning("취소에 실패했습니다.");
+    }
+    if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+    yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 7000);
+  }, []);
+
+  // 잘못 보낸 지시를 회수한다. 삭제와 다르다 — 삭제는 행만 지우고 진행 중인
+  // 실행은 그대로 둬, 지운 뒤에도 그 턴이 계속 돌며 도구를 더 실행한다.
+  // 회수는 실행 중단 · 소프트 삭제 · 딸린 추가지시 취소 · 모델 기억(CLI
+  // resume) 차단을 함께 한다.
+  const retractMessage = useCallback(async (messageId: string) => {
+    if (!window.confirm(
+      "이 지시를 회수할까요?\n\n" +
+      "진행 중인 응답을 멈추고, 지시와 답변을 대화에서 내립니다.\n" +
+      "이미 실행된 작업(배포·파일 수정 등)은 되돌아가지 않습니다."
+    )) return;
+    try {
+      const res = await chatApi<{
+        hidden_messages: number;
+        stopped_executions: number;
+        cancelled_interrupts: number;
+        tools_already_run: string[];
+      }>(`/chat/messages/${messageId}/retract`, { method: "POST" });
+
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      // 이미 실행된 도구는 되돌지 않는다. 숨기면 회수된 줄 안다.
+      const ran = res.tools_already_run || [];
+      setYellowWarning(
+        ran.length > 0
+          ? `회수했습니다 (응답 ${res.stopped_executions}건 중단). 다만 이미 실행된 작업이 있습니다 — ${ran.slice(0, 5).join(", ")}${ran.length > 5 ? " 외" : ""}. 이것은 되돌아가지 않습니다.`
+          : `회수했습니다. 응답 ${res.stopped_executions}건 중단, 대기 지시 ${res.cancelled_interrupts}건 함께 취소.`,
+      );
+      void chatApi<{ messages: ChatMessage[] }>(
+        `/chat/messages?session_id=${activeSessionObjRef.current?.id}&limit=30&include_streaming=true`
+      )
+        .then((result) => {
+          const fresh = surfaceDbSavedStreamingPlaceholders(result.messages || [], { keepEmpty: true });
+          setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
+        })
+        .catch(() => {});
+    } catch (e) {
+      console.warn("retract failed:", e);
+      setYellowWarning("회수에 실패했습니다.");
+    }
+    if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+    yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 12000);
+  }, []);
+
   // ── Keyboard (useCallback으로 안정화 → ChatInput memo 유효화, IME 깨짐 방지) ──
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 한글 IME 조합 중이면 키 이벤트 무시 (깨짐 방지)
@@ -12193,6 +12353,9 @@ export default function ChatPage() {
                     interruptUnresolved={interruptIndex.unresolvedIds.has(msg.id)}
                     onJumpToMessage={jumpToMessage}
                     onResendInterrupt={resendInterrupt}
+                    onApplyPendingInterrupt={applyPendingInterrupt}
+                    onCancelPendingInterrupt={cancelOnePendingInterrupt}
+                    onRetractMessage={retractMessage}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
