@@ -495,6 +495,20 @@ export default function UsageBar() {
     });
   };
 
+  /** 접기·펴기 버튼은 하나다. 예전에는 접힘용(오른쪽 끝)과 펼침용(왼쪽 첫
+   *  자리)이 따로 있어서, 누를 때마다 버튼이 줄 반대편으로 건너뛰었다 —
+   *  한 번 더 누르려면 눈으로 다시 찾아야 했다(2026-09-17 대표님 지적).
+   *  두 화면 모두 같은 자리(줄 맨 앞)에 두고 화살표만 바꾼다. */
+  const renderToggle = () => (
+    <button type="button" onClick={toggle} title={collapsed ? "펼치기" : "접기"}
+      aria-expanded={!collapsed} aria-label={collapsed ? "사용량 바 펼치기" : "사용량 바 접기"}
+      style={{ border: "none", background: "transparent", color: "var(--ct-text3, #999)",
+               cursor: "pointer", fontSize: "11px", padding: "0 2px", lineHeight: "16px",
+               flexShrink: 0 }}>
+      {collapsed ? "▸" : "▾"}
+    </button>
+  );
+
   const summaryChip = (acc: OverviewAccount | null, kind: string) => {
     if (!acc) return null;
     // 한 줄에 다 들어가야 한다. 도메인과 괄호 주석은 떼고 계정 이름만 남긴다 —
@@ -522,6 +536,7 @@ export default function UsageBar() {
         padding: "3px 14px", borderBottom: "1px solid var(--ct-border)",
         background: "var(--ct-sb)", fontSize: "10px",
       }}>
+        {renderToggle()}
         {!overview ? (
           <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>사용량 확인 중…</span>
         ) : (
@@ -549,11 +564,6 @@ export default function UsageBar() {
             )}
           </>
         )}
-        <button type="button" onClick={toggle} title="펼치기"
-          style={{ marginLeft: "auto", border: "none", background: "transparent",
-                   color: "var(--ct-text3, #999)", cursor: "pointer", fontSize: "11px" }}>
-          ▸
-        </button>
       </div>
     );
   }
@@ -564,11 +574,7 @@ export default function UsageBar() {
       padding: "3px 14px", borderBottom: "1px solid var(--ct-border)",
       background: "var(--ct-sb)", fontSize: "10px",
     }}>
-      <button type="button" onClick={toggle} title="접기"
-        style={{ border: "none", background: "transparent", color: "var(--ct-text3, #999)",
-                 cursor: "pointer", fontSize: "11px" }}>
-        ▾
-      </button>
+      {renderToggle()}
       {relay && (
         <span
           data-relay-capacity="true"
