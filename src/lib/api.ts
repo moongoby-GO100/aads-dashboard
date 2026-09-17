@@ -1,3 +1,121 @@
+// AADS-OHVIS-CONSOLE: 오비스 창(/ohvis) — GET /ohvis/console/summary 한 번으로
+// 화면 다섯 칸을 채운다. 백엔드 app/api/ohvis_console.py 의 SECTION_KEYS 와 짝이다.
+export interface OhvisConsoleMessage {
+  id: string;
+  session_id: string | null;
+  title: string;
+  status: string;
+  task_type: string;
+  judgement: string;
+  result_summary: string;
+  step_count: number;
+  cost_usd: number;
+  created_at: string | null;
+  completed_at: string | null;
+  reported_at: string | null;
+}
+export interface OhvisConsoleRun {
+  id: string;
+  recipe_name: string;
+  domain: string;
+  recipe_version: number;
+  status: string;
+  llm_calls: number;
+  error: string;
+  failed_step_seq: number | null;
+  blocked_step_seq: number | null;
+  blocked_risk: string;
+  duration_ms: number;
+  triggered_by: string;
+  task_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+export interface OhvisConsoleStep {
+  seq: number;
+  phase: string;
+  action: string;
+  risk: string;
+  status: string;
+  attempts: number;
+  duration_ms: number;
+  llm_calls: number;
+  error: string;
+  url: string;
+  has_screenshot: boolean;
+  approval_id: string | null;
+  created_at: string | null;
+}
+export interface OhvisConsoleFrame {
+  task_id: string;
+  frame_url: string;
+  media_type: string;
+  width: number | null;
+  height: number | null;
+  has_image: boolean;
+  current_url: string;
+  page_title: string;
+  current_step: string;
+  captured_at: string | null;
+  updated_at: string | null;
+}
+export interface OhvisConsoleApproval {
+  id: string;
+  run_id: string | null;
+  step_seq: number | null;
+  action: string;
+  risk: string;
+  risk_level: string;
+  status: string;
+  summary: string;
+  requested_by: string;
+  requested_at: string | null;
+  expires_at: string | null;
+  requires_confirmation: boolean;
+  confirm_text: string;
+}
+export interface OhvisConsoleLoop {
+  id: number;
+  name: string;
+  loop_type: string;
+  project: string;
+  status: string;
+  enabled: boolean;
+  failed: boolean;
+  interval_seconds: number | null;
+  current_iteration: number;
+  max_iterations: number | null;
+  consecutive_failures: number;
+  last_success: boolean | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string | null;
+}
+export interface OhvisConsoleReport {
+  id: string;
+  title: string;
+  status: string;
+  summary: string;
+  cost_usd: number;
+  completed_at: string | null;
+  reported_at: string | null;
+}
+export interface OhvisConsoleSummary {
+  generated_at: string;
+  session_id: string | null;
+  conversation: { session_id: string | null; count: number; messages: OhvisConsoleMessage[]; quick_commands: string[] };
+  live: {
+    is_live: boolean;
+    run: OhvisConsoleRun | null;
+    frame: OhvisConsoleFrame | null;
+    timeline: OhvisConsoleStep[];
+    kpis: { llm_calls: number; steps: number; approvals: number; blocked: number };
+  };
+  approvals: { count: number; items: OhvisConsoleApproval[] };
+  schedules: { count: number; items: OhvisConsoleLoop[] };
+  reports: { count: number; items: OhvisConsoleReport[] };
+}
+
 // T-072: Flat API response types
 export interface DirectiveItem { task_id: string; title: string; project: string; status: string; error_type: string | null; started_at: string; completed_at: string | null; duration_seconds: number | null; created_at: string; file_path: string; }
 export interface DirectivesResponse { status: string; total: number; running: number; completed: number; error: number; error_breakdown: Record<string, number>; project_breakdown: Record<string, number>; summary: Record<string, number>; items: DirectiveItem[]; directives: DirectiveItem[]; }
@@ -1095,4 +1213,26 @@ export const api = {
   getLlmopsEvalResult: (experimentId: string) => request<any>(`/ohvis/llmops/evals/${experimentId}`),
   postLlmopsFeedback: (traceId: string, rating: number, comment?: string) =>
     request<any>("/ohvis/llmops/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trace_id: traceId, rating, comment: comment || "" }) }),
+  // AADS-OHVIS-CONSOLE: 오비스 창. 지시 전송은 기존 POST /ohvis/tasks 를 그대로
+  // 쓰고(같은 뜻의 엔드포인트를 새로 만들지 않는다), 승인 결정은 work_recipe
+  // approval 계약에 위임하는 콘솔 라우트로 보낸다.
+  getOhvisConsoleSummary: (params?: { session_id?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.session_id) q.set("session_id", params.session_id);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return request<OhvisConsoleSummary>(`/ohvis/console/summary${q.size ? `?${q.toString()}` : ""}`);
+  },
+  decideOhvisConsoleApproval: (
+    approvalId: string,
+    data: { decision: "approve" | "reject"; confirm_text?: string; reason?: string },
+  ) =>
+    request<{ status: string; approval: OhvisConsoleApproval }>(
+      `/ohvis/console/approvals/${encodeURIComponent(approvalId)}/decision`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  createOhvisTask: (data: { session_id: string; title: string; task_type?: string; steps?: Array<Record<string, unknown>> }) =>
+    request<{ id: string; session_id: string; title: string; status: string; created_at: string }>(
+      "/ohvis/tasks",
+      { method: "POST", body: JSON.stringify(data) },
+    ),
 };
