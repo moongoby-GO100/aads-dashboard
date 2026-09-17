@@ -12492,6 +12492,7 @@ export default function ChatPage() {
                        title={`${isLead ? "주도 목표 — 이 창이 취합하고 판정합니다" : "담당 목표 — 맡은 몫을 진행합니다"}\n${g.title}${g.dispatch_note ? `\n막힘: ${g.dispatch_note}` : ""}`}
                        onClick={() => setPanelGoalId(open ? null : g.goal_id)}
                        style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 260,
+                                flexShrink: 0,
                                 padding: isLead ? "4px 11px" : "3px 9px", borderRadius: 999,
                                 border: `${isLead ? 2 : 1}px solid ${c}`,
                                 background: open ? "rgba(37,99,235,.10)" : isLead ? "rgba(217,119,6,.08)" : "var(--ct-card)",
@@ -12517,9 +12518,25 @@ export default function ChatPage() {
                         사라진다 — 2026-09-17 대표님 지적("목표 리스트가 버튼
                         나오는 라인보다 커서 확인이 안되고 숨겨진다").
                         버튼은 바깥 오른쪽에 고정해 항상 보이게 한다. */}
-                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap",
+                    <div style={{ flex: 1, minWidth: 0, display: "flex",
+                                  // 접힌 상태는 **버튼과 같은 한 줄**이다.
+                                  //
+                                  // 줄바꿈을 허용하면 칩이 늘어날수록 띠가 버튼
+                                  // 줄보다 높아지고, 그 높이를 62px 로 자르면
+                                  // 넘친 칩이 보이지 않는 안쪽 스크롤에 숨는다.
+                                  // 스크롤바가 없으니 더 있다는 것조차 모른다
+                                  // — 2026-09-17 대표님 지적("목표 리스트가
+                                  // 버튼 나오는 라인보다 커서 확인이 안되고
+                                  // 숨겨진다").
+                                  //
+                                  // 접혔을 때는 가로로 민다. 높이가 한 줄로
+                                  // 고정되므로 띠가 버튼 줄을 넘을 수 없다.
+                                  // 펼쳤을 때만 줄을 바꾼다.
+                                  flexWrap: goalStripOpen ? "wrap" : "nowrap",
                                   gap: 6, alignItems: "center",
-                                  maxHeight: goalStripOpen ? 132 : 62, overflowY: "auto" }}>
+                                  maxHeight: goalStripOpen ? 132 : undefined,
+                                  overflowX: goalStripOpen ? "hidden" : "auto",
+                                  overflowY: goalStripOpen ? "auto" : "hidden" }}>
                       {lead.map((g) => chip(g, true))}
                       {shown.map((g) => chip(g, false))}
                     </div>
