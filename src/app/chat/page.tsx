@@ -12455,11 +12455,10 @@ export default function ChatPage() {
               position: "sticky", top: 0, zIndex: 5,
               margin: "0 0 8px", padding: "6px 0",
               background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
-              display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center",
-              maxHeight: goalStripOpen ? 132 : 62, overflowY: "auto",
+              display: "flex", flexWrap: "nowrap", gap: 6, alignItems: "flex-start",
             }}>
               {goalsHalted && (
-                <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626", flexShrink: 0, whiteSpace: "nowrap" }}>
                   전체 정지 중 — 조사만 가능합니다
                 </span>
               )}
@@ -12513,23 +12512,37 @@ export default function ChatPage() {
                 };
                 return (
                   <>
-                    {lead.map((g) => chip(g, true))}
-                    {shown.map((g) => chip(g, false))}
-                    {hidden > 0 && (
-                      <button type="button" onClick={() => setGoalStripOpen(true)}
-                        title={member.filter((g) => !shown.includes(g)).map((g) => g.title).join("\n")}
-                        style={{ padding: "3px 9px", borderRadius: 999, border: "1px dashed var(--ct-border)",
-                                 background: "transparent", color: "var(--ct-text2)",
-                                 fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                        담당 목표 +{hidden}
-                      </button>
-                    )}
-                    {goalStripOpen && member.length > VISIBLE_MEMBERS && (
-                      <button type="button" onClick={() => setGoalStripOpen(false)}
-                        style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
-                                 color: "var(--ct-text2)", fontSize: 11, cursor: "pointer" }}>
-                        접기
-                      </button>
+                    {/* 칩만 스크롤한다. 펼침/접기 버튼을 스크롤 영역 안에 두면
+                        칩이 늘어날수록 마지막 줄로 밀려 잘린 높이 밖으로
+                        사라진다 — 2026-09-17 대표님 지적("목표 리스트가 버튼
+                        나오는 라인보다 커서 확인이 안되고 숨겨진다").
+                        버튼은 바깥 오른쪽에 고정해 항상 보이게 한다. */}
+                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap",
+                                  gap: 6, alignItems: "center",
+                                  maxHeight: goalStripOpen ? 132 : 62, overflowY: "auto" }}>
+                      {lead.map((g) => chip(g, true))}
+                      {shown.map((g) => chip(g, false))}
+                    </div>
+                    {(hidden > 0 || (goalStripOpen && member.length > VISIBLE_MEMBERS)) && (
+                      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                        {hidden > 0 && (
+                          <button type="button" onClick={() => setGoalStripOpen(true)}
+                            title={member.filter((g) => !shown.includes(g)).map((g) => g.title).join("\n")}
+                            style={{ padding: "3px 9px", borderRadius: 999, border: "1px dashed var(--ct-border)",
+                                     background: "transparent", color: "var(--ct-text2)",
+                                     fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                            담당 목표 +{hidden}
+                          </button>
+                        )}
+                        {goalStripOpen && member.length > VISIBLE_MEMBERS && (
+                          <button type="button" onClick={() => setGoalStripOpen(false)}
+                            style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
+                                     color: "var(--ct-text2)", fontSize: 11, cursor: "pointer",
+                                     whiteSpace: "nowrap" }}>
+                            접기
+                          </button>
+                        )}
+                      </div>
                     )}
                   </>
                 );
