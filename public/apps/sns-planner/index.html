@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SNS 플래너</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #5d6a78;
+      --line: #d8e0e7;
+      --brand: #0b6b63;
+      --brand-dark: #084f49;
+      --blue: #2563eb;
+      --red: #c83d3d;
+      --amber: #a96912;
+      --green: #16835c;
+      --violet: #5b4ab6;
+      --shadow: 0 8px 24px rgba(24, 39, 58, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+    }
+
+    header {
+      background: #132326;
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .topbar {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 760; }
+
+    .subtitle { color: rgba(255, 255, 255, 0.74); font-size: 13px; margin-top: 5px; }
+
+    main { max-width: 1480px; margin: 0 auto; padding: 20px 22px 36px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      margin-bottom: 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .notice { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; line-height: 1.5; }
+
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+    input[type="text"], input[type="date"], input[type="number"], select, textarea {
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 9px;
+      min-height: 34px;
+    }
+
+    textarea { min-height: 62px; resize: vertical; }
+
+    button {
+      font: inherit;
+      font-weight: 600;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      min-height: 34px;
+    }
+
+    button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    button.primary:hover { background: var(--brand-dark); }
+    button.danger { color: var(--red); border-color: #e7c4c4; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+    .status.error { color: var(--red); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 8px; text-align: left; vertical-align: middle; }
+    th { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+    tbody tr:hover { background: #f8fafb; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .tag {
+      display: inline-block;
+      font-size: 11.5px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 2px 9px;
+      border: 1px solid transparent;
+    }
+    .tag.scale { background: #eaf3ff; color: var(--blue); border-color: #cfe2ff; }
+    .tag.suggest { background: #eef7f1; color: var(--green); border-color: #cfe9da; }
+    .tag.organic { background: #f4f0fb; color: var(--violet); border-color: #ded4f3; }
+    .tag.p0 { background: #fdecec; color: var(--red); border-color: #f5cfcf; }
+    .tag.p1 { background: #fdf3e3; color: var(--amber); border-color: #f2e0bd; }
+    .tag.p2 { background: #eef1f4; color: var(--muted); border-color: var(--line); }
+
+    .week { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+    .week-head {
+      background: #f7f9fa;
+      padding: 8px 12px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .slot {
+      display: grid;
+      grid-template-columns: 116px 120px 1fr 96px;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid #eef2f4;
+    }
+    .slot:last-child { border-bottom: 0; }
+    .slot .date { font-size: 12.5px; font-weight: 700; }
+    .slot .date span { display: block; font-weight: 500; color: var(--muted); font-size: 11.5px; }
+    .slot .done { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+
+    .checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      background: #fff;
+    }
+    .check-item.done { background: #f3f8f5; color: var(--muted); text-decoration: line-through; }
+    .check-item button { border: 0; background: transparent; color: var(--red); padding: 0 2px; min-height: 0; }
+
+    .weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+    .weekday-picker label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 9px;
+      font-size: 12.5px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+
+    @media (max-width: 720px) {
+      .slot { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>SNS 플래너</h1>
+        <div class="subtitle">에이블리 광고분석기의 판정 결과를 SNS 주제로 가져와 4주 업로드 일정과 촬영 체크리스트를 관리합니다. 입력값은 이 브라우저에 저장됩니다.</div>
+      </div>
+      <div class="row">
+        <button id="saveBtn" class="primary" type="button">저장</button>
+        <button id="exportBtn" type="button">일정 CSV</button>
+        <button id="resetBtn" class="danger" type="button">초기화</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1. 광고분석기 연동</h2>
+      <p class="notice">
+        같은 브라우저에서 <strong>에이블리 광고분석</strong>을 한 번 실행하면 판정 결과가 저장되고, 아래 버튼으로 주제 풀에 끌어올 수 있습니다.
+        광고를 못 붙이는 상품을 오가닉으로 끌어올리는 것이 SNS의 본래 역할이므로 <strong>광고 제안</strong> 판정을 기본으로 가져옵니다.
+      </p>
+      <div class="row">
+        <button id="loadSnapshotBtn" class="primary" type="button">분석 결과 불러오기</button>
+        <div class="weekday-picker">
+          <label><input type="checkbox" id="pickSuggest" checked> 광고 제안</label>
+          <label><input type="checkbox" id="pickScale"> 증액</label>
+          <label><input type="checkbox" id="pickOrganic"> 오가닉 매출</label>
+        </div>
+        <button id="importBtn" type="button" disabled>선택 판정을 주제 풀에 추가</button>
+      </div>
+      <div id="snapshotStatus" class="status">아직 불러오지 않았습니다.</div>
+      <div id="snapshotTableWrap"></div>
+    </section>
+
+    <section class="panel">
+      <h2>2. 주제 풀</h2>
+      <p class="notice">촬영·업로드할 주제를 모아 둡니다. 일정 슬롯은 여기 등록된 주제 중에서 고릅니다.</p>
+      <div class="row">
+        <div class="field" style="flex:2; min-width:240px;">
+          <label for="topicTitle">주제</label>
+          <input type="text" id="topicTitle" placeholder="예: 시크블랙 골지 반팔 잘록핏 착장">
+        </div>
+        <div class="field">
+          <label for="topicCode">자체상품코드</label>
+          <input type="text" id="topicCode" placeholder="예: ns1282k64">
+        </div>
+        <div class="field">
+          <label for="topicFormat">형식</label>
+          <select id="topicFormat">
+            <option value="릴스">릴스</option>
+            <option value="피드">피드</option>
+            <option value="캐러셀">캐러셀</option>
+            <option value="스토리">스토리</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="topicPriority">우선순위</label>
+          <select id="topicPriority">
+            <option value="P0">P0</option>
+            <option value="P1" selected>P1</option>
+            <option value="P2">P2</option>
+          </select>
+        </div>
+        <button id="addTopicBtn" class="primary" type="button">주제 추가</button>
+      </div>
+      <div id="topicTableWrap" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>3. 4주 업로드 일정</h2>
+      <p class="notice">시작일과 요일을 정하면 4주치 슬롯이 만들어집니다. 업로드를 마치면 완료에 체크하십시오.</p>
+      <div class="row">
+        <div class="field">
+          <label for="startDate">시작일(주 시작)</label>
+          <input type="date" id="startDate">
+        </div>
+        <div class="field">
+          <label for="weekCount">주 수</label>
+          <input type="number" id="weekCount" min="1" max="8" value="4">
+        </div>
+        <div class="field" style="flex:1; min-width:280px;">
+          <label>업로드 요일</label>
+          <div class="weekday-picker" id="weekdayPicker"></div>
+        </div>
+        <button id="rebuildBtn" type="button">일정 다시 만들기</button>
+      </div>
+      <div id="calendarWrap" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>4. 촬영 체크리스트</h2>
+      <p class="notice">몰아찍기 전에 확인할 항목입니다. 항목을 추가하거나 지울 수 있습니다.</p>
+      <div class="row">
+        <div class="field" style="flex:1; min-width:280px;">
+          <label for="checkInput">항목 추가</label>
+          <input type="text" id="checkInput" placeholder="예: 프로필 링크 신상으로 교체">
+        </div>
+        <button id="addCheckBtn" type="button">추가</button>
+        <button id="resetCheckBtn" type="button">기본 항목 복원</button>
+      </div>
+      <div id="checklistWrap" class="checklist" style="margin-top:12px;"></div>
+    </section>
+
+    <div id="globalStatus" class="status"></div>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "ohvis:sns-planner:v1";
+    const SNAPSHOT_KEY = "ohvis:ably-ad-analyzer:action-snapshot:v1";
+    const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+    const DEFAULT_WEEKDAYS = [1, 3, 5, 0];
+    const DEFAULT_CHECKLIST = [
+      "촬영 상품 픽업 · 검수",
+      "모델 · 착장 조합 확정",
+      "배경 · 조명 세팅",
+      "릴스 훅 3초 구성안 작성",
+      "상세컷 3장 이상 확보",
+      "캡션 · 해시태그 초안",
+      "프로필 링크 신상으로 교체",
+      "업로드 24시간 후 저장수 · 공유수 기록"
+    ];
+
+    const state = {
+      topics: [],
+      startDate: "",
+      weekCount: 4,
+      weekdays: DEFAULT_WEEKDAYS.slice(),
+      entries: {},
+      checklist: [],
+      savedAt: ""
+    };
+
+    let snapshot = null;
+    let saveTimer = null;
+
+    function uid() {
+      return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function escapeHtml(value) {
+      return String(value === null || value === undefined ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function pad(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function toISO(date) {
+      return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+    }
+
+    function parseISO(text) {
+      const parts = String(text || "").split("-");
+      if (parts.length !== 3) return null;
+      const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function addDays(date, days) {
+      const next = new Date(date.getTime());
+      next.setDate(next.getDate() + days);
+      return next;
+    }
+
+    function nextMonday() {
+      const today = new Date();
+      const diff = (8 - today.getDay()) % 7 || 7;
+      return addDays(today, diff);
+    }
+
+    function setStatus(id, message, isError) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      node.textContent = message;
+      node.className = isError ? "status error" : "status";
+    }
+
+    function priorityTag(priority) {
+      const cls = priority === "P0" ? "p0" : priority === "P2" ? "p2" : "p1";
+      return '<span class="tag ' + cls + '">' + escapeHtml(priority) + "</span>";
+    }
+
+    function actionTag(action) {
+      const cls = action === "증액" ? "scale" : action === "오가닉 매출" ? "organic" : "suggest";
+      return '<span class="tag ' + cls + '">' + escapeHtml(action) + "</span>";
+    }
+
+    function load() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        if (saved && typeof saved === "object") {
+          state.topics = Array.isArray(saved.topics) ? saved.topics : [];
+          state.startDate = saved.startDate || "";
+          state.weekCount = Number(saved.weekCount) > 0 ? Number(saved.weekCount) : 4;
+          state.weekdays = Array.isArray(saved.weekdays) && saved.weekdays.length ? saved.weekdays : DEFAULT_WEEKDAYS.slice();
+          state.entries = saved.entries && typeof saved.entries === "object" ? saved.entries : {};
+          state.checklist = Array.isArray(saved.checklist) ? saved.checklist : [];
+          state.savedAt = saved.savedAt || "";
+        }
+      } catch (error) {
+        console.warn("Failed to load planner state", error);
+      }
+      if (!state.startDate) state.startDate = toISO(nextMonday());
+      if (!state.checklist.length) state.checklist = DEFAULT_CHECKLIST.map((label) => ({ id: uid(), label, done: false }));
+    }
+
+    function save(showStatus) {
+      state.savedAt = new Date().toLocaleString("ko-KR", { hour12: false });
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (showStatus) setStatus("globalStatus", "저장 완료: " + state.savedAt, false);
+      } catch (error) {
+        setStatus("globalStatus", "저장 실패: " + (error.message || error), true);
+      }
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => save(false), 400);
+    }
+
+    function readInputs() {
+      state.startDate = document.getElementById("startDate").value || toISO(nextMonday());
+      const weeks = Number(document.getElementById("weekCount").value || 4);
+      state.weekCount = Math.min(8, Math.max(1, weeks));
+      state.weekdays = Array.from(document.querySelectorAll("#weekdayPicker input:checked")).map((node) => Number(node.value));
+      if (!state.weekdays.length) state.weekdays = DEFAULT_WEEKDAYS.slice();
+    }
+
+    function buildSlotDates() {
+      const start = parseISO(state.startDate);
+      if (!start) return [];
+      const weeks = [];
+      for (let week = 0; week < state.weekCount; week += 1) {
+        const weekStart = addDays(start, week * 7);
+        const dates = [];
+        for (let offset = 0; offset < 7; offset += 1) {
+          const day = addDays(weekStart, offset);
+          if (state.weekdays.indexOf(day.getDay()) >= 0) dates.push(day);
+        }
+        weeks.push({ index: week + 1, start: weekStart, dates: dates });
+      }
+      return weeks;
+    }
+
+    function renderWeekdayPicker() {
+      document.getElementById("weekdayPicker").innerHTML = WEEKDAY_LABELS.map((label, index) => {
+        const checked = state.weekdays.indexOf(index) >= 0 ? " checked" : "";
+        return '<label><input type="checkbox" value="' + index + '"' + checked + "> " + label + "</label>";
+      }).join("");
+      document.querySelectorAll("#weekdayPicker input").forEach((node) => {
+        node.addEventListener("change", () => {
+          readInputs();
+          renderCalendar();
+          scheduleSave();
+        });
+      });
+    }
+
+    function renderTopics() {
+      const wrap = document.getElementById("topicTableWrap");
+      if (!state.topics.length) {
+        wrap.innerHTML = '<div class="empty">등록된 주제가 없습니다. 위에서 직접 추가하거나 광고분석기에서 불러오십시오.</div>';
+        return;
+      }
+      const rows = state.topics.map((topic) => {
+        const used = Object.keys(state.entries).filter((key) => {
+          const entry = state.entries[key];
+          return entry && entry.topicId === topic.id;
+        }).length;
+        return "<tr>" +
+          "<td>" + priorityTag(topic.priority) + "</td>" +
+          "<td>" + escapeHtml(topic.title) + "</td>" +
+          "<td>" + escapeHtml(topic.code || "-") + "</td>" +
+          "<td>" + escapeHtml(topic.format) + "</td>" +
+          "<td>" + escapeHtml(topic.source || "직접 입력") + "</td>" +
+          '<td class="num">' + used + "회</td>" +
+          '<td><button type="button" class="danger" data-remove-topic="' + topic.id + '">삭제</button></td>' +
+          "</tr>";
+      }).join("");
+      wrap.innerHTML = "<table><thead><tr>" +
+        "<th>우선</th><th>주제</th><th>상품코드</th><th>형식</th><th>출처</th><th>배정</th><th></th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table>";
+      wrap.querySelectorAll("[data-remove-topic]").forEach((node) => {
+        node.addEventListener("click", () => removeTopic(node.getAttribute("data-remove-topic")));
+      });
+    }
+
+    function topicOptions(selectedId) {
+      const options = ['<option value="">— 주제 선택 —</option>'];
+      state.topics.forEach((topic) => {
+        const selected = topic.id === selectedId ? " selected" : "";
+        options.push('<option value="' + topic.id + '"' + selected + ">" + escapeHtml(topic.priority + " · " + topic.title) + "</option>");
+      });
+      return options.join("");
+    }
+
+    function renderCalendar() {
+      const wrap = document.getElementById("calendarWrap");
+      const weeks = buildSlotDates();
+      if (!weeks.length) {
+        wrap.innerHTML = '<div class="empty">시작일을 지정하십시오.</div>';
+        return;
+      }
+      wrap.innerHTML = weeks.map((week) => {
+        const doneCount = week.dates.filter((date) => {
+          const entry = state.entries[toISO(date)];
+          return entry && entry.done;
+        }).length;
+        const slots = week.dates.map((date) => {
+          const key = toISO(date);
+          const entry = state.entries[key] || {};
+          const formats = ["릴스", "피드", "캐러셀", "스토리"].map((format) => {
+            const selected = (entry.format || "릴스") === format ? " selected" : "";
+            return '<option value="' + format + '"' + selected + ">" + format + "</option>";
+          }).join("");
+          return '<div class="slot">' +
+            '<div class="date">' + escapeHtml(key) + "<span>" + WEEKDAY_LABELS[date.getDay()] + "요일</span></div>" +
+            '<select data-slot-format="' + key + '">' + formats + "</select>" +
+            '<select data-slot-topic="' + key + '">' + topicOptions(entry.topicId) + "</select>" +
+            '<label class="done"><input type="checkbox" data-slot-done="' + key + '"' + (entry.done ? " checked" : "") + "> 완료</label>" +
+            "</div>";
+        }).join("");
+        return '<div class="week">' +
+          '<div class="week-head"><span>' + week.index + "주차 · " + escapeHtml(toISO(week.start)) + " 시작</span>" +
+          "<span>업로드 " + week.dates.length + "건 · 완료 " + doneCount + "건</span></div>" +
+          slots + "</div>";
+      }).join("");
+
+      wrap.querySelectorAll("[data-slot-topic]").forEach((node) => {
+        node.addEventListener("change", () => {
+          updateEntry(node.getAttribute("data-slot-topic"), { topicId: node.value });
+          renderTopics();
+        });
+      });
+      wrap.querySelectorAll("[data-slot-format]").forEach((node) => {
+        node.addEventListener("change", () => updateEntry(node.getAttribute("data-slot-format"), { format: node.value }));
+      });
+      wrap.querySelectorAll("[data-slot-done]").forEach((node) => {
+        node.addEventListener("change", () => {
+          updateEntry(node.getAttribute("data-slot-done"), { done: node.checked });
+          renderCalendar();
+        });
+      });
+    }
+
+    function updateEntry(key, patch) {
+      const current = state.entries[key] || { topicId: "", format: "릴스", done: false };
+      state.entries[key] = Object.assign({}, current, patch);
+      scheduleSave();
+    }
+
+    function renderChecklist() {
+      const wrap = document.getElementById("checklistWrap");
+      if (!state.checklist.length) {
+        wrap.innerHTML = '<div class="empty">항목이 없습니다.</div>';
+        return;
+      }
+      wrap.innerHTML = state.checklist.map((item) => {
+        return '<div class="check-item' + (item.done ? " done" : "") + '">' +
+          '<input type="checkbox" data-check="' + item.id + '"' + (item.done ? " checked" : "") + ">" +
+          '<span style="flex:1">' + escapeHtml(item.label) + "</span>" +
+          '<button type="button" data-remove-check="' + item.id + '">×</button>' +
+          "</div>";
+      }).join("");
+      wrap.querySelectorAll("[data-check]").forEach((node) => {
+        node.addEventListener("change", () => {
+          const id = node.getAttribute("data-check");
+          const item = state.checklist.filter((entry) => entry.id === id)[0];
+          if (item) item.done = node.checked;
+          renderChecklist();
+          scheduleSave();
+        });
+      });
+      wrap.querySelectorAll("[data-remove-check]").forEach((node) => {
+        node.addEventListener("click", () => {
+          const id = node.getAttribute("data-remove-check");
+          state.checklist = state.checklist.filter((entry) => entry.id !== id);
+          renderChecklist();
+          scheduleSave();
+        });
+      });
+    }
+
+    function addTopic() {
+      const title = document.getElementById("topicTitle").value.trim();
+      if (!title) {
+        setStatus("globalStatus", "주제를 입력하십시오.", true);
+        return;
+      }
+      state.topics.push({
+        id: uid(),
+        title: title,
+        code: document.getElementById("topicCode").value.trim(),
+        format: document.getElementById("topicFormat").value,
+        priority: document.getElementById("topicPriority").value,
+        source: "직접 입력"
+      });
+      document.getElementById("topicTitle").value = "";
+      document.getElementById("topicCode").value = "";
+      renderTopics();
+      renderCalendar();
+      save(true);
+    }
+
+    function removeTopic(id) {
+      state.topics = state.topics.filter((topic) => topic.id !== id);
+      Object.keys(state.entries).forEach((key) => {
+        if (state.entries[key] && state.entries[key].topicId === id) state.entries[key].topicId = "";
+      });
+      renderTopics();
+      renderCalendar();
+      save(true);
+    }
+
+    function loadSnapshot() {
+      try {
+        snapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null");
+      } catch (error) {
+        snapshot = null;
+      }
+      const wrap = document.getElementById("snapshotTableWrap");
+      if (!snapshot || !Array.isArray(snapshot.rows) || !snapshot.rows.length) {
+        wrap.innerHTML = "";
+        document.getElementById("importBtn").disabled = true;
+        setStatus("snapshotStatus", "저장된 분석 결과가 없습니다. 같은 브라우저에서 에이블리 광고분석을 한 번 실행하십시오.", true);
+        return;
+      }
+      const period = snapshot.period ? snapshot.period.start + "~" + snapshot.period.end : "기간 불명";
+      const targets = snapshot.rows.filter((row) => ["광고 제안", "증액", "오가닉 매출"].indexOf(row.action) >= 0);
+      document.getElementById("importBtn").disabled = targets.length === 0;
+      setStatus("snapshotStatus", "분석 기준 " + period + " · 전체 " + snapshot.rows.length + "개 중 SNS 후보 " + targets.length + "개", false);
+      if (!targets.length) {
+        wrap.innerHTML = '<div class="empty">광고 제안 · 증액 · 오가닉 매출 판정 상품이 없습니다.</div>';
+        return;
+      }
+      const rows = targets.map((row) => "<tr>" +
+        "<td>" + actionTag(row.action) + "</td>" +
+        "<td>" + escapeHtml(row.code) + "</td>" +
+        "<td>" + escapeHtml(row.name || "-") + "</td>" +
+        '<td class="num">' + Number(row.totalSales || 0).toLocaleString("ko-KR") + "원</td>" +
+        '<td class="num">' + Number(row.organicOrderCount || row.orderCount || 0).toLocaleString("ko-KR") + "건</td>" +
+        "</tr>").join("");
+      wrap.innerHTML = '<table style="margin-top:12px;"><thead><tr>' +
+        "<th>판정</th><th>자체상품코드</th><th>상품명</th><th>전체매출</th><th>주문</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table>";
+    }
+
+    function importFromSnapshot() {
+      if (!snapshot || !Array.isArray(snapshot.rows)) return;
+      const allowed = [];
+      if (document.getElementById("pickSuggest").checked) allowed.push("광고 제안");
+      if (document.getElementById("pickScale").checked) allowed.push("증액");
+      if (document.getElementById("pickOrganic").checked) allowed.push("오가닉 매출");
+      if (!allowed.length) {
+        setStatus("snapshotStatus", "가져올 판정을 하나 이상 선택하십시오.", true);
+        return;
+      }
+      const existing = {};
+      state.topics.forEach((topic) => {
+        existing[(topic.code || "") + "|" + (topic.source || "")] = true;
+      });
+      let added = 0;
+      snapshot.rows.forEach((row) => {
+        if (allowed.indexOf(row.action) < 0) return;
+        const source = "광고분석 " + row.action;
+        const key = (row.code || "") + "|" + source;
+        if (existing[key]) return;
+        existing[key] = true;
+        const label = row.name ? row.name + " (" + row.code + ")" : row.code;
+        let preset;
+        if (row.action === "오가닉 매출") {
+          preset = { format: "피드", priority: "P1", suffix: "데일리 착장 컷" };
+        } else if (row.action === "증액") {
+          preset = { format: "릴스", priority: "P0", suffix: "베스트 후킹컷" };
+        } else {
+          preset = { format: "릴스", priority: "P0", suffix: "오가닉 반응 밀어주기" };
+        }
+        state.topics.push({
+          id: uid(),
+          title: label + " — " + preset.suffix,
+          code: row.code || "",
+          format: preset.format,
+          priority: preset.priority,
+          source: source
+        });
+        added += 1;
+      });
+      renderTopics();
+      renderCalendar();
+      save(false);
+      setStatus("snapshotStatus", added ? added + "개 주제를 추가했습니다." : "새로 추가할 주제가 없습니다. (이미 등록됨)", added === 0);
+    }
+
+    function exportCsv() {
+      const weeks = buildSlotDates();
+      const lines = ["주차,날짜,요일,형식,주제,자체상품코드,출처,완료"];
+      weeks.forEach((week) => {
+        week.dates.forEach((date) => {
+          const key = toISO(date);
+          const entry = state.entries[key] || {};
+          const topic = state.topics.filter((item) => item.id === entry.topicId)[0];
+          const cells = [
+            week.index + "주차",
+            key,
+            WEEKDAY_LABELS[date.getDay()],
+            entry.format || "릴스",
+            topic ? topic.title : "",
+            topic ? topic.code : "",
+            topic ? topic.source : "",
+            entry.done ? "완료" : "예정"
+          ];
+          lines.push(cells.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(","));
+        });
+      });
+      const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "sns-plan-" + state.startDate + ".csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setStatus("globalStatus", "일정 CSV를 내보냈습니다.", false);
+    }
+
+    function resetAll() {
+      if (!window.confirm("주제 풀, 일정, 체크리스트를 모두 지웁니다. 진행할까요?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state.topics = [];
+      state.entries = {};
+      state.checklist = DEFAULT_CHECKLIST.map((label) => ({ id: uid(), label: label, done: false }));
+      state.startDate = toISO(nextMonday());
+      state.weekCount = 4;
+      state.weekdays = DEFAULT_WEEKDAYS.slice();
+      applyStateToInputs();
+      renderAll();
+      setStatus("globalStatus", "초기화했습니다.", false);
+    }
+
+    function applyStateToInputs() {
+      document.getElementById("startDate").value = state.startDate;
+      document.getElementById("weekCount").value = state.weekCount;
+      renderWeekdayPicker();
+    }
+
+    function renderAll() {
+      renderTopics();
+      renderCalendar();
+      renderChecklist();
+    }
+
+    function init() {
+      load();
+      applyStateToInputs();
+      renderAll();
+      loadSnapshot();
+      if (state.savedAt) setStatus("globalStatus", "마지막 저장: " + state.savedAt, false);
+
+      document.getElementById("addTopicBtn").addEventListener("click", addTopic);
+      document.getElementById("loadSnapshotBtn").addEventListener("click", loadSnapshot);
+      document.getElementById("importBtn").addEventListener("click", importFromSnapshot);
+      document.getElementById("saveBtn").addEventListener("click", () => save(true));
+      document.getElementById("exportBtn").addEventListener("click", exportCsv);
+      document.getElementById("resetBtn").addEventListener("click", resetAll);
+      document.getElementById("rebuildBtn").addEventListener("click", () => {
+        readInputs();
+        renderCalendar();
+        save(true);
+      });
+      document.getElementById("resetCheckBtn").addEventListener("click", () => {
+        state.checklist = DEFAULT_CHECKLIST.map((label) => ({ id: uid(), label: label, done: false }));
+        renderChecklist();
+        save(true);
+      });
+      document.getElementById("addCheckBtn").addEventListener("click", () => {
+        const input = document.getElementById("checkInput");
+        const label = input.value.trim();
+        if (!label) return;
+        state.checklist.push({ id: uid(), label: label, done: false });
+        input.value = "";
+        renderChecklist();
+        save(true);
+      });
+      document.getElementById("startDate").addEventListener("change", () => {
+        readInputs();
+        renderCalendar();
+        scheduleSave();
+      });
+      document.getElementById("weekCount").addEventListener("change", () => {
+        readInputs();
+        renderCalendar();
+        scheduleSave();
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

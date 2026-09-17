@@ -2826,3 +2826,20 @@
 - Production completion still requires an immutable dashboard blue/green release, authenticated
   `/chat` evidence or the documented API fallback, same-digest standby sync, and five-minute P0/P1
   monitoring. Roll back by routing both dashboard slots to the prior `0286ea04e76c` image.
+
+## 2026-09-17 KST - SNS 플래너 탭 추가 (오비스 마케팅)
+
+- CEO 승인 카드 "오비스에 SNS 플래너 탭 추가"에 따라 `/marketing/sns` 페이지와 정적 앱
+  `public/apps/sns-planner/index.html` 을 추가했다. 에이블리 광고분석 옆에 같은 iframe 패턴으로 붙였고,
+  사이드바 항목은 `src/lib/navigation.ts` 에 `adminOnly` 로 등록했다.
+- 구성은 네 구역이다. ①광고분석기 연동 ②주제 풀 ③4주 업로드 일정 ④촬영 체크리스트.
+  주제·일정 슬롯·체크 상태는 서버가 아니라 `localStorage` 키 `ohvis:sns-planner:v1` 에 저장한다.
+  계정별 서버 저장이 아니므로 브라우저를 바꾸면 값이 따라가지 않는다.
+- 연동 방식: 광고분석기(`public/apps/ably-ad-analyzer/index.html`)가 분석을 끝낼 때마다
+  `publishSnsSnapshot()` 으로 판정 스냅샷을 `ohvis:ably-ad-analyzer:action-snapshot:v1` 에 저장하고,
+  SNS 플래너가 같은 오리진에서 그것을 읽는다. 기본 가져오기 대상은 `광고 제안` 판정이고
+  `증액`·`오가닉 매출` 은 선택 항목이다. 같은 (코드, 판정) 조합은 중복 추가되지 않는다.
+- 검증: 두 HTML 의 인라인 스크립트 `vm.Script` 문법 검사 통과, 4주/16슬롯 생성 검증 통과,
+  스냅샷→주제 변환 검증 통과(기본 1건 / 전체 3건 / 중복가드 1건), `src/app/marketing/sns/page.tsx`
+  와 `src/lib/navigation.ts` ESLint 0 오류.
+- 되돌리기: 이 커밋을 revert 한 뒤 `bash deploy.sh` 재실행.

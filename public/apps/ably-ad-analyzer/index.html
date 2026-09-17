@@ -627,12 +627,41 @@
         renderSummary();
         renderBars();
         renderTable();
+        publishSnsSnapshot();
         document.getElementById("exportCsvBtn").disabled = false;
         document.getElementById("copyBtn").disabled = false;
         setStatus(`${formatDate(period.start)}~${formatDate(period.end)} 기준 ${state.rows.length}개 상품 분석 완료 · ${state.dataQuality.join(" · ")}`, false);
       } catch (error) {
         console.error(error);
         setStatus(error.message || "분석에 실패했습니다.", true);
+      }
+    }
+
+    const SNS_SNAPSHOT_KEY = "ohvis:ably-ad-analyzer:action-snapshot:v1";
+
+    function publishSnsSnapshot() {
+      try {
+        const snapshot = {
+          savedAt: new Date().toISOString(),
+          period: state.period
+            ? { start: formatDate(state.period.start), end: formatDate(state.period.end), days: state.period.days }
+            : null,
+          rows: state.rows.map((row) => ({
+            code: row.code,
+            name: row.name || "",
+            action: row.action,
+            hasActiveAd: !!row.hasActiveAd,
+            totalSales: Math.round(row.totalSales || 0),
+            orderCount: row.orderCount || 0,
+            organicOrderCount: row.organicOrderCount || 0,
+            adCost: Math.round(row.adCost || 0),
+            adRoas: Math.round(row.adRoas || 0),
+            finalProfit: Math.round(row.finalProfit || 0)
+          }))
+        };
+        localStorage.setItem(SNS_SNAPSHOT_KEY, JSON.stringify(snapshot));
+      } catch (error) {
+        console.warn("Failed to publish SNS snapshot", error);
       }
     }
 
