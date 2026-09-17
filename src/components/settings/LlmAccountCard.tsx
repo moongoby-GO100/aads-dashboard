@@ -51,6 +51,20 @@ type Overview = {
 
 type Chip = "action" | "codex" | "anthropic" | "subscription" | "apikey" | "all";
 
+/** 주계정을 누가 정하는가.
+ *  manual — 대표님이 고른 계정
+ *  auto   — 한도 남은 계정 중 갱신이 이른 것부터 (곧 리셋될 한도를 먼저 태운다) */
+type PrimaryState = {
+  providers: Record<string, {
+    mode: "auto" | "manual";
+    primary: string;
+    accounts: Array<{ key_name: string; label: string; has_quota: boolean;
+                      headroom_pct: number | null; resets_at: string | null }>;
+  }>;
+};
+
+const PROVIDER_LABEL: Record<string, string> = { anthropic: "Claude", codex: "Codex" };
+
 /** 구독 계정 표의 열 정의. 헤더와 각 행이 같은 값을 써야 열이 어긋나지 않는다.
  *  펼침 · provider · 계정 · 순위 · 상태 · 사용량 · 액션 */
 const COLS = "14px 68px minmax(160px,1fr) 34px 76px 200px 152px";
@@ -96,6 +110,7 @@ export default function LlmAccountCard() {
   const [showAdd, setShowAdd] = useState(false);
   const [msg, setMsg] = useState("");
   const [current, setCurrent] = useState<number | null>(null);
+  const [primaryInfo, setPrimaryInfo] = useState<PrimaryState | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -107,6 +122,9 @@ export default function LlmAccountCard() {
       .then((r) => r.json())
       .then((r) => setCurrent(r?.current_account ?? null))
       .catch(() => {/* 주계정 표시만 비운다 */});
+    (api as any).getAccountPrimary()
+      .then((r: PrimaryState) => setPrimaryInfo(r))
+      .catch(() => {/* 토글만 비운다 */});
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -116,14 +134,28 @@ export default function LlmAccountCard() {
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 4000); };
 
-  const setPrimary = async (slot: string | null) => {
-    if (!slot) return;
-    const res = await fetch("/api/v1/ops/claude-account/switch", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account: Number(slot.replace("slot", "")) }),
-    }).then((r) => r.json()).catch(() => ({ ok: false, detail: "요청 실패" }));
-    flash(res.ok ? `주계정을 ${slot}로 전환했습니다` : res.detail || "전환 실패");
-    if (res.ok) load();
+  /** 주계정 수동 지정. 클로드·코덱스 모두 같은 경로를 쓴다 — 선택 경로가
+   *  전부 llm_api_keys.priority 를 보므로 그것을 바꾸는 것이 전환의 본체다. */
+  const makePrimary = async (provider: string, keyName: string, label: string) => {
+    const res = await (api as any).setAccountPrimary({ provider, mode: "manual", key_name: keyName })
+      .catch((e: unknown) => ({ ok: false, detail: e instanceof Error ? e.message : "요청 실패" }));
+    flash(res?.ok ? `주계정을 ${label}(으)로 바꿨습니다 — 수동 고정` : res?.detail || "전환 실패");
+    if (res?.ok) load();
+  };
+
+  const setMode = async (provider: string, mode: "auto" | "manual") => {
+    if (mode === "manual") {
+      const cur = primaryInfo?.providers?.[provider];
+      if (!cur?.primary) return;
+      await makePrimary(provider, cur.primary, cur.accounts.find((a) => a.key_name === cur.primary)?.label || cur.primary);
+      return;
+    }
+    const res = await (api as any).setAccountPrimary({ provider, mode: "auto" })
+      .catch((e: unknown) => ({ ok: false, detail: e instanceof Error ? e.message : "요청 실패" }));
+    flash(res?.ok
+      ? `${PROVIDER_LABEL[provider] ?? provider} 자동 — 곧 리셋될 한도부터 씁니다`
+      : res?.detail || "전환 실패");
+    if (res?.ok) load();
   };
 
   const rows = useMemo(() => {
@@ -178,6 +210,49 @@ export default function LlmAccountCard() {
         </span>
       </div>
 
+      {/* 주계정 — provider 마다 한 줄. 자동은 "곧 리셋될 한도부터 태운다" 규칙을
+          2분 조정기가 돌린다. 수동은 지금 1순위인 계정을 그대로 잠근다. */}
+      {primaryInfo && (
+        <div className="rounded-lg" style={{ border: "1px solid var(--border)", overflowX: "auto" }}>
+          {Object.entries(primaryInfo.providers).map(([provider, p]) => {
+            const acc = p.accounts.find((a) => a.key_name === p.primary);
+            return (
+              <div key={provider} className="px-3 py-2 text-xs" style={{
+                display: "grid", gridTemplateColumns: "72px 128px minmax(160px,1fr) 180px",
+                gap: 12, alignItems: "center", borderBottom: "1px solid var(--border)",
+              }}>
+                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {PROVIDER_LABEL[provider] ?? provider}
+                </span>
+                <span className="flex gap-1">
+                  {(["auto", "manual"] as const).map((m) => (
+                    <button key={m} onClick={() => void setMode(provider, m)}
+                      className="px-2 py-1 rounded font-semibold"
+                      style={{
+                        background: p.mode === m ? "var(--accent, #2563eb)" : "transparent",
+                        color: p.mode === m ? "#fff" : "var(--text-secondary)",
+                        border: `1px solid ${p.mode === m ? "var(--accent, #2563eb)" : "var(--border)"}`,
+                      }}>
+                      {m === "auto" ? "자동" : "수동"}
+                    </button>
+                  ))}
+                </span>
+                <span className="truncate" style={{ color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>{" "}
+                  <span style={{ color: "var(--text-primary)" }}>{acc?.label || p.primary || "-"}</span>
+                  {acc && !acc.has_quota && <span style={{ color: "#dc2626" }}> · 한도 없음</span>}
+                </span>
+                <span className="truncate" style={{ color: "var(--text-secondary)" }}>
+                  {p.mode === "auto"
+                    ? "곧 리셋될 한도부터 사용"
+                    : acc?.resets_at ? `${kst(acc.resets_at)} 갱신` : "고정"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {!s.bindings_available && (
         <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(0,0,0,0.04)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
           ◌ 계정 상태 확인 불가 — 릴레이 응답 없음. 등록 정보는 표시하고 상태·사용량 열은 비웁니다.
@@ -218,7 +293,13 @@ export default function LlmAccountCard() {
           ) : rows.map((a) => {
             const open = openRow === a.key_name;
             const color = STATE_COLOR[a.state];
-            const isPrimary = a.slot && current !== null && a.slot === `slot${current}`;
+            // 주계정 판정은 provider 를 가리지 않고 key_name 으로 한다.
+            // 예전에는 슬롯이 있는 클로드만 표시·전환이 됐고, 코덱스는 어느
+            // 계정이 쓰이는지 화면에서 알 수 없었다(2026-09-17 대표님 지적).
+            const primaryKey = primaryInfo?.providers?.[a.provider]?.primary;
+            const isPrimary = primaryKey
+              ? a.key_name === primaryKey
+              : Boolean(a.slot && current !== null && a.slot === `slot${current}`);
             return (
               <div key={a.key_name} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="px-3 py-2" style={{
@@ -260,8 +341,9 @@ export default function LlmAccountCard() {
                     )}
                   </span>
                   <span className="flex gap-1 justify-end">
-                    {a.slot && !a.needs_login && !isPrimary && (
-                      <button onClick={() => setPrimary(a.slot)} className="text-xs px-2 py-1 rounded"
+                    {!a.needs_login && !isPrimary && (
+                      <button onClick={() => void makePrimary(a.provider, a.key_name, a.label || a.key_name)}
+                        className="text-xs px-2 py-1 rounded whitespace-nowrap"
                         style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>주계정</button>
                     )}
                     <button onClick={() => a.login_target && setLoginTarget(a.login_target)}

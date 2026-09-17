@@ -428,6 +428,10 @@ export const api = {
   getOpsCostSummary: () => request<any>("/ops/cost/summary"),
   getOpsAccountUsage: () => request<any>("/ops/account-usage"),
   getOpsCodexUsage: () => request<any>("/ops/codex-usage"),
+  // 주계정 — provider(anthropic/codex) 별 자동·수동 + 현재 주계정
+  getAccountPrimary: () => request<any>("/ops/account-primary"),
+  setAccountPrimary: (body: { provider: string; mode: string; key_name?: string }) =>
+    request<any>("/ops/account-primary", { method: "POST", body: JSON.stringify(body) }),
   // 회사별 계정(슬롯) 배정 — 설정 화면의 "회사별 계정" 표
   getCompanySlots: () => request<any>("/ops/oauth-slot-projects"),
   setCompanySlot: (projectKey: string, slot: string | null) =>
