@@ -3786,7 +3786,12 @@ const MessageItem = memo(function MessageItem({
               🟡 승인 필요 {bubbleApprovals!.length}건 — 누르시면 이어서 진행합니다
             </div>
             {bubbleApprovals!.map((a) => (
-              <div key={a.id} style={{ padding: "7px 0", borderTop: "1px solid rgba(234,179,8,.22)" }}>
+              <div
+                key={a.id}
+                data-approval-id={a.id}
+                tabIndex={-1}
+                style={{ padding: "7px 0", borderTop: "1px solid rgba(234,179,8,.22)", scrollMarginTop: 96 }}
+              >
                 <div style={{
                   fontSize: 12, color: "var(--ct-text2)", lineHeight: 1.55,
                   whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -4411,6 +4416,10 @@ export default function ChatPage() {
   // 상태다 — 사용자가 찾아가야 하는 자리에 두면 안 된다.
   // 닫으면 사라지지 않고 하단 카드 + 플로팅 배지로 남아 다시 열 수 있다.
   const [dismissedApprovalIds, setDismissedApprovalIds] = useState<string[]>([]);
+  // 우측 승인 배지를 반복해서 누르면 대기 카드들을 오래된 순서로 순회한다.
+  // 팝업을 다시 여는 대신 원래 맥락(응답 버블)으로 보내야 무엇을 승인하는지
+  // 보고 결정할 수 있다.
+  const approvalJumpCursorRef = useRef(0);
   // 결정 직후 서버 기록을 당겨오기 위한 신호.
   const [approvalDecisionTick, setApprovalDecisionTick] = useState(0);
   const approvalAlertedRef = useRef<Set<string>>(new Set<string>());
@@ -4446,7 +4455,6 @@ export default function ChatPage() {
   const closeApprovalPopup = useCallback(() => {
     setDismissedApprovalIds(approvals.map((a) => a.id));
   }, [approvals]);
-  const reopenApprovalPopup = useCallback(() => setDismissedApprovalIds([]), []);
 
   useEffect(() => {
     if (popupApprovals.length === 0) return;
@@ -4851,6 +4859,38 @@ export default function ChatPage() {
   const scrollMessageElementIntoView = useCallback((element: HTMLElement) => {
     chatViewportController.scrollElementIntoView(element);
   }, [chatViewportController]);
+  const jumpToPendingApproval = useCallback(() => {
+    if (typeof document === "undefined" || approvals.length === 0) return;
+    const start = approvalJumpCursorRef.current % approvals.length;
+    for (let offset = 0; offset < approvals.length; offset += 1) {
+      const index = (start + offset) % approvals.length;
+      const approval = approvals[index];
+      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-approval-id]"))
+        .find((element) => element.dataset.approvalId === approval.id);
+      const sourceBubble = approval.source_message_id
+        ? document.querySelector<HTMLElement>(`[data-message-id="${approval.source_message_id}"]`)
+        : null;
+      const target = card || sourceBubble;
+      if (!target) continue;
+
+      approvalJumpCursorRef.current = (index + 1) % approvals.length;
+      scrollMessageElementIntoView(target);
+      target.focus({ preventScroll: true });
+      const previousOutline = target.style.outline;
+      const previousBoxShadow = target.style.boxShadow;
+      target.style.outline = "3px solid rgba(214,53,59,.82)";
+      target.style.boxShadow = "0 0 0 6px rgba(214,53,59,.16)";
+      window.setTimeout(() => {
+        target.style.outline = previousOutline;
+        target.style.boxShadow = previousBoxShadow;
+      }, 1800);
+      return;
+    }
+
+    // 연결 정보가 없는 구형 승인도 하단 카드에는 항상 표시된다.
+    // DOM 갱신 직후라 아직 카드가 없으면 하단으로 이동해 사용자가 찾을 수 있게 한다.
+    if (messagesEndRef.current) scrollMessageElementIntoView(messagesEndRef.current);
+  }, [approvals, scrollMessageElementIntoView]);
   const scrollToMessagesBottom = useCallback((force = false) => {
     chatViewportController.requestBottom(force, force ? "user-send" : "message-commit");
   }, [chatViewportController]);
@@ -12976,11 +13016,13 @@ export default function ChatPage() {
             document.body,
           )}
 
-          {/* 팝업을 닫아도 승인이 남아 있으면 배지로 계속 보인다 — 누르면 다시 열린다. */}
+          {/* 팝업을 닫아도 승인이 남아 있으면 배지로 계속 보인다.
+              누를 때마다 해당 승인 버블로 이동해 맥락을 읽고 결정할 수 있다. */}
           {approvals.length > 0 && popupApprovals.length === 0 && typeof document !== "undefined" && createPortal(
             <button
-              onClick={reopenApprovalPopup}
-              title="승인 대기 항목 다시 보기"
+              onClick={jumpToPendingApproval}
+              title="미승인 버블로 이동 · 반복 클릭하면 다음 항목으로 이동"
+              aria-label={`승인 대기 ${approvals.length}건 · 미승인 버블로 이동`}
               style={{
                 position: "fixed", right: 16,
                 bottom: screenSize === "mobile" ? 104 : 118,
@@ -13046,9 +13088,14 @@ export default function ChatPage() {
                 </div>
               )}
               {bottomApprovals.map((a) => (
-                <div key={a.id} style={{
-                  padding: "8px 0", borderTop: "1px solid rgba(214,53,59,.2)",
-                }}>
+                <div
+                  key={a.id}
+                  data-approval-id={a.id}
+                  tabIndex={-1}
+                  style={{
+                    padding: "8px 0", borderTop: "1px solid rgba(214,53,59,.2)", scrollMarginTop: 96,
+                  }}
+                >
                   <div style={{ fontSize: 12, color: "var(--ct-text)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                     {a.risk !== "critical" ? (
                       <input
