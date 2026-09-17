@@ -65,6 +65,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/ops/servers", label: "Servers", icon: "🖥️", adminOnly: true, group: "운영·서버" },
   { href: "/ops/memory", label: "메모리", icon: "🧠", adminOnly: true, group: "운영·서버" },
   { href: "/ops/pc-agents", label: "PC Agent", icon: "💻", adminOnly: true, group: "운영·서버" },
+  { href: "/ohvis", label: "오비스 창", icon: "🤖", adminOnly: true, group: "자동화", pageTitle: "오비스 창" },
   { href: "/browser-tasks", label: "브라우저 실행", icon: "🌐", adminOnly: true, group: "자동화" },
   { href: "/authenticated-collector", label: "로그인 수집 허브", icon: "🔐", adminOnly: true, group: "자동화" },
   { href: "/agent-vault", label: "Agent Vault", icon: "🔐", adminOnly: true, group: "자동화" },
