@@ -551,6 +551,20 @@ export default function UsageBar() {
                 {primaryInfo.providers?.anthropic?.mode === "auto" ? "자동" : "수동"}
               </span>
             )}
+            {/* 릴레이 여유는 접었을 때 더 급한 정보다 — 대기가 걸리는 순간을
+                알아야 하는데, 펼쳐야만 보이면 막힌 뒤에 확인하게 된다
+                (2026-09-17 대표님 지적). */}
+            {relay && (
+              <span data-relay-capacity="true" title={relayTitle}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "4px",
+                             whiteSpace: "nowrap", fontSize: "10px", color: "var(--ct-text2)" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: relayColor }} />
+                <strong style={{ color: relayColor }}>
+                  Relay {relay.status === "ok" ? `${relay.used}/${relay.max_concurrent}` : "확인 중"}
+                </strong>
+                {relay.status === "ok" && <span>여유 {relay.available}</span>}
+              </span>
+            )}
             {tightRemain <= 20 && tightest && (
               <span style={{ fontSize: "10px", color: tightRemain <= 10 ? "#ef4444" : "#f59e0b", whiteSpace: "nowrap" }}>
                 ⚠ {windowName(tightest.w.window_minutes)} {tightRemain.toFixed(0)}% 남음
@@ -822,6 +836,26 @@ export default function UsageBar() {
           >
             {"🟣"} {short}{isPrimary ? " ●" : ""}
           </button>
+        );
+      })}
+      {/* 계정별 사용량. 릴레이의 /codex-usage 는 limit_id(codex_bengalfox 등)로만
+          답해서 어느 계정 값인지 이어 붙일 수 없었다 — 그래서 주계정을 펼쳐도
+          사용량이 비어 보였다(2026-09-17 대표님 지적). 계정에 귀속된 값은
+          codex_usage_snapshots 기반의 account-primary 쪽이므로 그것을 쓴다. */}
+      {(primaryInfo?.providers?.codex?.accounts ?? []).map((acc) => {
+        if (acc.headroom_pct == null) return null;
+        const short = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
+        return (
+          <MiniBar
+            key={`codex-usage-${acc.key_name}`}
+            pct={100 - acc.headroom_pct}
+            width={34}
+            label={short.slice(0, 8)}
+            detail={`${short} 주간 잔량 ${acc.headroom_pct.toFixed(0)}%${
+              acc.resets_at
+                ? ` · ${new Date(acc.resets_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 갱신`
+                : ""}`}
+          />
         );
       })}
       {cxAll.map((cx, i) => {
