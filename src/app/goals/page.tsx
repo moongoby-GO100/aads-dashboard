@@ -174,6 +174,10 @@ export default function GoalsPage() {
   const [pick, setPick] = useState<Candidate | null>(null);
   const [roleKey, setRoleKey] = useState("");
   const [asLead, setAsLead] = useState(false);
+  // 목록에 없는 창은 주소를 그대로 붙여넣어 붙인다. 실패는 그 자리에 남긴다 —
+  // 조용히 닫히면 붙은 줄 아신다 (2026-09-17 대표님 지시).
+  const [linkDraft, setLinkDraft] = useState("");
+  const [addErr, setAddErr] = useState("");
 
   const reloadBoard = useCallback(async (gid: string) => {
     try { setBoard(await api.getGoalBoard(gid)); } catch { /* 조회 실패가 화면을 막지 않는다 */ }
@@ -283,25 +287,29 @@ export default function GoalsPage() {
 
   const openAdd = useCallback(async (lead: boolean) => {
     if (!selectedId) return;
-    setAsLead(lead); setPick(null); setRoleKey(""); setAddOpen(true);
+    setAsLead(lead); setPick(null); setRoleKey(""); setLinkDraft(""); setAddErr(""); setAddOpen(true);
     try { setCandidates((await api.getGoalCandidates(selectedId)).candidates || []); }
     catch { setCandidates([]); }
   }, [selectedId]);
 
   const submitAdd = useCallback(async () => {
-    if (!selectedId || !pick) return;
-    setOwnerBusy(pick.session_id);
+    const link = linkDraft.trim();
+    if (!selectedId || (!pick && !link)) return;
+    setAddErr("");
+    setOwnerBusy(pick?.session_id || "link");
     try {
       const r = await api.addGoalOwner(selectedId, {
-        session_id: pick.session_id,
+        ...(pick ? { session_id: pick.session_id } : { session_ref: link }),
         role_key: roleKey.trim() || undefined,
         as_lead: asLead,
       });
       if (r?.warning) window.alert(r.warning);
       setAddOpen(false);
       await reloadBoard(selectedId);
+    } catch (e) {
+      setAddErr(e instanceof Error ? e.message : "붙이지 못했습니다");
     } finally { setOwnerBusy(null); }
-  }, [selectedId, pick, roleKey, asLead, reloadBoard]);
+  }, [selectedId, pick, linkDraft, roleKey, asLead, reloadBoard]);
 
   const graph = useMemo(() => detail ? buildGraph(detail) : { nodes: [], edges: [] }, [detail]);
   const counts = useMemo(() => ({
@@ -356,7 +364,7 @@ export default function GoalsPage() {
             })}
           </section>
 
-          <section style={{ minHeight: 720, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden" }}>
+          <section style={{ minHeight: 880, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden" }}>
             {!detail ? <div style={{ padding: 28, color: "var(--text-secondary)" }}>왼쪽에서 목표를 선택하십시오.</div> : <>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
@@ -428,7 +436,10 @@ export default function GoalsPage() {
                 </div>
               )}
 
-              {board && board.owners.length > 0 && (
+              {/* 담당이 0명이면 이 칸 전체가 사라져서 "+ 주도 지정" 도 같이
+                  사라졌다. 주도를 세우려면 담당이 먼저 있어야 하는 역설
+                  (2026-09-17 실측: 활성 목표 11개 중 7개가 담당 0명). 항상 낸다. */}
+              {board && (
                 <div style={{ padding: "12px 18px", borderBottom: "1px solid var(--border)" }} aria-label="담당별 현재 상태">
                   {/* 주도는 위로 뺀다. 나란히 두면 동급으로 읽히는데,
                       주도는 목표 전체를 지고 담당의 신고를 판정한다. */}
@@ -453,6 +464,12 @@ export default function GoalsPage() {
                       + 담당 추가
                     </button>
                   </div>
+                  {board.owners.length === 0 && (
+                    <div style={{ padding: "12px 13px", borderRadius: 9, border: "1px dashed var(--border)", fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                      붙어 있는 채팅창이 없습니다. 위 <b>+ 주도 지정</b> 에서 담당 채팅창 주소를
+                      그대로 붙여넣으시면 그 창이 이 목표의 주도가 됩니다.
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(268px,1fr))", gap: 8 }}>
                     {board.owners.map((o) => {
                       const c = stateColor[o.state] || "#64748b";
@@ -516,10 +533,11 @@ export default function GoalsPage() {
                   </div>
                 </div>
               )}
-              {/* 트리는 화면 높이를 따라간다. 420px 고정이면 노드가 늘수록
+              {/* 트리는 화면 높이를 따라간다. 고정 높이면 노드가 늘수록
                   fitView 가 계속 축소해 카드 글씨를 읽을 수 없다
-                  (2026-09-15 대표님 지적). 최소 480, 화면의 58%까지 쓴다. */}
-              <div style={{ height: "clamp(480px, 58vh, 760px)" }} aria-label="목표 실행 상태 그래프">
+                  (2026-09-15 대표님 지적). 58vh 로도 "너무 작게 나온다" 는
+                  말씀이 다시 나와(2026-09-17) 최소 640, 화면의 82%까지 쓴다. */}
+              <div style={{ height: "clamp(640px, 82vh, 1280px)" }} aria-label="목표 실행 상태 그래프">
                 <ReactFlow nodes={graph.nodes} edges={graph.edges} nodeTypes={nodeTypes} fitView
                   fitViewOptions={{ padding: 0.12, minZoom: 0.55, maxZoom: 1.1 }}
                   minZoom={0.4} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} elementsSelectable>
@@ -545,12 +563,13 @@ export default function GoalsPage() {
 
             <div style={{ marginTop: 13, maxHeight: 260, overflow: "auto", border: "1px solid var(--border)", borderRadius: 9 }}>
               {candidates.length === 0 && (
-                <div style={{ padding: 18, fontSize: 12, color: "var(--text-secondary)" }}>
-                  붙일 수 있는 채팅창이 없습니다. 이 워크스페이스의 창이 모두 이미 묶여 있습니다.
+                <div style={{ padding: 18, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  고를 수 있는 채팅창이 목록에 없습니다. 아래에 <b>채팅창 주소</b>를
+                  그대로 붙여넣으시면 그 창을 붙입니다.
                 </div>
               )}
               {candidates.map((cd) => (
-                <button key={cd.session_id} type="button" onClick={() => { setPick(cd); setRoleKey(cd.role_key || ""); }}
+                <button key={cd.session_id} type="button" onClick={() => { setPick(cd); setRoleKey(cd.role_key || ""); setLinkDraft(""); }}
                   style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: 0,
                            borderBottom: "1px solid var(--border)", cursor: "pointer",
                            background: pick?.session_id === cd.session_id ? "rgba(37,99,235,.10)" : "transparent" }}>
@@ -565,6 +584,16 @@ export default function GoalsPage() {
               ))}
             </div>
 
+            {/* 2026-09-17 대표님 지시 — "주도가 등록 안 되어 있으면 내가 직접
+                세션링크를 등록할 수 있게 해줘". 주소창을 그대로 받는다. */}
+            <label style={{ display: "block", marginTop: 13, fontSize: 12, color: "var(--text-secondary)" }}>
+              세션 링크 직접 입력 <span style={{ opacity: .75 }}>(목록에 없을 때 — 채팅창 주소를 그대로)</span>
+              <input value={linkDraft}
+                onChange={(e) => { setLinkDraft(e.target.value); if (e.target.value.trim()) setPick(null); }}
+                placeholder="https://aads.newtalk.kr/chat#0a1b2c3d-...."
+                style={{ display: "block", width: "100%", marginTop: 5, minHeight: 38, padding: "0 11px", borderRadius: 8, border: `1px solid ${linkDraft.trim() ? "var(--accent)" : "var(--border)"}`, background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 12.5 }} />
+            </label>
+
             <label style={{ display: "block", marginTop: 13, fontSize: 12, color: "var(--text-secondary)" }}>
               역할 키 <span style={{ opacity: .75 }}>(비우면 그 창의 기존 역할을 씁니다)</span>
               <input value={roleKey} onChange={(e) => setRoleKey(e.target.value)} placeholder="예: RiskOwner"
@@ -576,11 +605,17 @@ export default function GoalsPage() {
               이 담당을 <strong>주도</strong>로 지정
             </label>
 
+            {addErr && (
+              <div role="alert" style={{ marginTop: 11, padding: "8px 11px", borderRadius: 8, border: "1px solid #dc2626", background: "rgba(239,68,68,.07)", color: "#dc2626", fontSize: 11.5, lineHeight: 1.5 }}>
+                {addErr}
+              </div>
+            )}
+
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 17 }}>
               <button type="button" onClick={() => setAddOpen(false)}
                 style={{ minHeight: 38, padding: "0 15px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer" }}>취소</button>
-              <button type="button" disabled={!pick || ownerBusy !== null} onClick={() => void submitAdd()}
-                style={{ minHeight: 38, padding: "0 17px", borderRadius: 8, border: 0, background: pick ? "var(--accent)" : "var(--border)", color: "white", fontWeight: 700, cursor: pick ? "pointer" : "not-allowed" }}>
+              <button type="button" disabled={(!pick && !linkDraft.trim()) || ownerBusy !== null} onClick={() => void submitAdd()}
+                style={{ minHeight: 38, padding: "0 17px", borderRadius: 8, border: 0, background: (pick || linkDraft.trim()) ? "var(--accent)" : "var(--border)", color: "white", fontWeight: 700, cursor: (pick || linkDraft.trim()) ? "pointer" : "not-allowed" }}>
                 붙이기
               </button>
             </div>
@@ -588,7 +623,7 @@ export default function GoalsPage() {
         </div>
       )}
 
-      <style jsx global>{`@media (max-width: 850px){.goal-layout{grid-template-columns:1fr!important}.goal-layout>section:last-child{min-height:520px!important}}`}</style>
+      <style jsx global>{`@media (max-width: 850px){.goal-layout{grid-template-columns:1fr!important}.goal-layout>section:last-child{min-height:660px!important}}`}</style>
     </div>
   );
 }
