@@ -4427,19 +4427,39 @@ export default function ChatPage() {
   // 붙일 자리를 모르는 카드(source_message_id 없음)는 지금까지처럼
   // 팝업·하단 카드로 간다 — 아무 버블에나 붙이면 회장님이 다른 답변의
   // 제안을 승인하시게 된다.
+  // 붙을 버블이 **지금 화면에 그려지는 것**일 때만 인라인으로 돌린다.
+  //
+  // 2026-09-18 실측. 지워진 메시지·숨김 메시지·러너 진행 묶음에 붙은
+  // 카드는 인라인으로도 안 뜨고, source_message_id 가 있다는 이유로
+  // 팝업·하단 카드에서도 빠져 **어느 화면에도 없었다**(48시간 11장).
+  // 붙을 자리가 없으면 못 붙이는 것이 아니라 **팝업으로 되돌려야** 한다.
+  const attachableMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      // 러너 진행은 한 줄로 접히므로(runnerGroup) 카드가 붙을 자리가 없다.
+      if (isRunnerChatMessage(m)) continue;
+      if (m.id) ids.add(m.id);
+    }
+    return ids;
+  }, [messages]);
   const approvalsByMessage = useMemo(() => {
     const m = new Map<string, typeof approvals>();
     for (const a of approvals) {
       const mid = a.source_message_id || "";
-      if (!mid) continue;
+      if (!mid || !attachableMessageIds.has(mid)) continue;
       const cur = m.get(mid);
       if (cur) cur.push(a); else m.set(mid, [a]);
     }
     return m;
-  }, [approvals]);
+  }, [approvals, attachableMessageIds]);
   const inlineApprovalIds = useMemo(
-    () => new Set(approvals.filter((a) => a.source_message_id).map((a) => a.id)),
-    [approvals],
+    () => new Set(
+      approvals
+        .filter((a) => a.source_message_id && attachableMessageIds.has(a.source_message_id))
+        .map((a) => a.id),
+    ),
+    [approvals, attachableMessageIds],
   );
   // 버블에 이미 붙은 카드는 팝업으로 또 띄우지 않는다. 같은 것을 두 군데서
   // 물으면 회장님이 두 번 누르셔야 하는 것처럼 보인다.
