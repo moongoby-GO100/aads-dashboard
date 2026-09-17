@@ -989,7 +989,9 @@ export const api = {
   // 담당 붙이기 — **세션을 만들지 않는다.** 이미 있는 창을 붙일 뿐이다.
   getGoalCandidates: (goalId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/candidates`),
-  addGoalOwner: (goalId: string, body: { session_id: string; role_key?: string; as_lead?: boolean }) =>
+  // 주도가 없는 목표는 후보 목록이 비어 붙일 길이 없었다. 대표님이 채팅창
+  // 주소를 그대로 붙여넣으실 수 있게 session_ref 를 함께 받는다 (2026-09-17).
+  addGoalOwner: (goalId: string, body: { session_id?: string; session_ref?: string; role_key?: string; as_lead?: boolean }) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners`,
       { method: "POST", body: JSON.stringify(body) }),
   // 이미 붙어 있는 담당을 주도로 바꾼다. 붙일 때만 정할 수 있어서

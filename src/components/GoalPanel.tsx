@@ -147,7 +147,9 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
 
   return (
     <aside aria-label="목표 진행" style={{
-      width: "min(420px, 92vw)", flexShrink: 0, borderLeft: "1px solid var(--border)",
+      // 420px 에서는 마일스톤 제목이 두세 줄로 접혀 목록이 읽히지 않는다
+      // (2026-09-17 대표님 "마일스톤 표시 화면이 너무 작게 나온다").
+      width: "min(520px, 94vw)", flexShrink: 0, borderLeft: "1px solid var(--border)",
       background: "var(--bg-card)", display: "flex", flexDirection: "column", height: "100%",
     }}>
       <header style={{ padding: "13px 15px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
