@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Header from "@/components/Header";
 import DatabaseOverviewPanel from "@/components/settings/DatabaseOverviewPanel";
 import ChatModelOrderPanel from "@/components/settings/ChatModelOrderPanel";
+import CompanySlotPanel from "@/components/settings/CompanySlotPanel";
 import LlmAccountCard from "@/components/settings/LlmAccountCard";
 import LlmRegistryWorkspacePanel from "@/components/settings/LlmRegistryWorkspacePanel";
 import ModelSettingsPanel from "@/components/settings/ModelSettingsPanel";
@@ -844,7 +845,7 @@ export default function SettingsPage() {
   // 채팅창 노출 순서는 "어떤 모델이 등록돼 있나"(레지스트리)가 아니라 "채팅창에
   // 무엇을 어떤 순서로 띄울까"(정책)라서 모델 설정 쪽이 맞다.
   const MODEL_SUB_TABS = ["러너 모델", "지시서 생성", "모델 라우팅", "채팅창 노출 순서"];
-  const LLM_SUB_TABS = ["LLM 계정", "모델 레지스트리"];
+  const LLM_SUB_TABS = ["LLM 계정", "회사별 계정", "모델 레지스트리"];
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
@@ -971,6 +972,15 @@ export default function SettingsPage() {
                 </section>
               )}
               {llmSubTab === 1 && (
+                <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>회사별 계정</h2>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
+                    회사(워크스페이스)마다 먼저 쓸 Claude 계정을 지정합니다. 고르는 즉시 저장됩니다.
+                  </p>
+                  <CompanySlotPanel />
+                </section>
+              )}
+              {llmSubTab === 2 && (
                 <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
                   <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 레지스트리</h2>
                   <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>

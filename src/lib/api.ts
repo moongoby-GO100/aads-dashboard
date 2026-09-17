@@ -428,6 +428,13 @@ export const api = {
   getOpsCostSummary: () => request<any>("/ops/cost/summary"),
   getOpsAccountUsage: () => request<any>("/ops/account-usage"),
   getOpsCodexUsage: () => request<any>("/ops/codex-usage"),
+  // 회사별 계정(슬롯) 배정 — 설정 화면의 "회사별 계정" 표
+  getCompanySlots: () => request<any>("/ops/oauth-slot-projects"),
+  setCompanySlot: (projectKey: string, slot: string | null) =>
+    request<any>(`/ops/oauth-slot-projects/${encodeURIComponent(projectKey)}`, {
+      method: "PUT",
+      body: JSON.stringify({ slot }),
+    }),
   getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
   getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
 
