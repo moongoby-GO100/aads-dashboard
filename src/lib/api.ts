@@ -1213,9 +1213,11 @@ export const api = {
   getLlmopsEvalResult: (experimentId: string) => request<any>(`/ohvis/llmops/evals/${experimentId}`),
   postLlmopsFeedback: (traceId: string, rating: number, comment?: string) =>
     request<any>("/ohvis/llmops/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trace_id: traceId, rating, comment: comment || "" }) }),
-  // AADS-OHVIS-CONSOLE: 오비스 창. 지시 전송은 기존 POST /ohvis/tasks 를 그대로
-  // 쓰고(같은 뜻의 엔드포인트를 새로 만들지 않는다), 승인 결정은 work_recipe
-  // approval 계약에 위임하는 콘솔 라우트로 보낸다.
+  // AADS-OHVIS-CONSOLE: 오비스 창. 지시 전송은 POST /ohvis/console/command 로만
+  // 한다 — 그 경로만 기록(ohvis_tasks)과 실행(trigger_ai_reaction)을 같이 건다.
+  // 2026-09-18 이전에는 POST /ohvis/tasks 를 직접 불렀고, 그 경로는 INSERT 만
+  // 하고 소비하는 워커가 없어서 보낸 지시가 pending 으로 굳었다. 승인 결정은
+  // work_recipe approval 계약에 위임하는 콘솔 라우트로 보낸다.
   getOhvisConsoleSummary: (params?: { session_id?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.session_id) q.set("session_id", params.session_id);
@@ -1230,6 +1232,20 @@ export const api = {
       `/ohvis/console/approvals/${encodeURIComponent(approvalId)}/decision`,
       { method: "POST", body: JSON.stringify(data) },
     ),
+  // session_id 는 참고값이다 — 서버가 테넌트 소유 세션으로 다시 고른다.
+  runOhvisConsoleCommand: (data: { title: string; session_id?: string }) =>
+    request<{ task_id: string; session_id: string; status: string }>(
+      "/ohvis/console/command",
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  /**
+   * @deprecated — 기록 전용. 실행은 runOhvisConsoleCommand 를 쓸 것.
+   *
+   * 이 경로(POST /ohvis/tasks)는 행을 INSERT 만 하고 pending 을 소비하는 워커가
+   * 없다. 오비스 창의 "보내기" 가 이것을 부르던 동안 지시가 영원히 pending 으로
+   * 굳었다(2026-09-18). 시그니처는 다른 호출자를 위해 그대로 남겨 두지만
+   * 서버 쪽에 내부 관리자 게이트가 붙어 있으므로 일반 화면에서는 401/403 이다.
+   */
   createOhvisTask: (data: { session_id: string; title: string; task_type?: string; steps?: Array<Record<string, unknown>> }) =>
     request<{ id: string; session_id: string; title: string; status: string; created_at: string }>(
       "/ohvis/tasks",
