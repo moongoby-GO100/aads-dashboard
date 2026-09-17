@@ -46,6 +46,17 @@ type CodexLimit = {
   secondary?: { used_percent?: number; window_minutes?: number; resets_in_sec?: number; resets_at_iso?: string };
 };
 
+/** 주계정 상태. CLI 가 실제로 어느 계정으로 도는지는 이것이 정답이다 —
+ *  token_labels 의 priority 를 훑어 짐작하던 값과 달리 서버가 직접 말해 준다. */
+type PrimaryAccount = {
+  key_name: string; label: string; priority: number; is_active: boolean;
+  has_quota: boolean; headroom_pct: number | null;
+  resets_at: string | null; rate_limited_until: string | null;
+};
+type PrimaryState = {
+  providers: Record<string, { mode: "auto" | "manual"; primary: string; accounts: PrimaryAccount[] }>;
+};
+
 type CodexData = {
   ok?: boolean;
   plan_type?: string;
@@ -174,6 +185,7 @@ export default function UsageBar() {
   // 나머지(릴레이 진단·프로젝트 배정·게이트)는 펼쳤을 때와 설정 화면에 있다.
   const [collapsed, setCollapsed] = useState(true);
   const [overview, setOverview] = useState<{ accounts: OverviewAccount[] } | null>(null);
+  const [primaryInfo, setPrimaryInfo] = useState<PrimaryState | null>(null);
   const [claude, setClaude] = useState<UsageData | null>(null);
   const [codex, setCodex] = useState<CodexData | null>(null);
   const [relay, setRelay] = useState<RelayCapacity | null>(null);
@@ -187,12 +199,18 @@ export default function UsageBar() {
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
     try {
-      const [usageRes, codexRes] = await Promise.allSettled([
+      const [usageRes, codexRes, primaryRes] = await Promise.allSettled([
         fetch(`${BASE}/ops/usage-stats`, { headers }).then((r) => r.json()),
         fetch(`${BASE}/ops/codex-usage`, { headers }).then((r) => r.json()),
+        fetch(`${BASE}/ops/account-primary`, { headers }).then((r) => r.json()),
       ]);
       if (usageRes.status === "fulfilled") setClaude(usageRes.value);
       if (codexRes.status === "fulfilled") setCodex(codexRes.value);
+      // 서버가 아직 이 API 를 모르는 배포 창에서는 조용히 넘어간다 —
+      // 주계정 칩만 안 뜨고 나머지 막대는 그대로 보인다.
+      if (primaryRes.status === "fulfilled" && primaryRes.value?.providers) {
+        setPrimaryInfo(primaryRes.value);
+      }
       setError(false);
     } catch {
       setError(true);
@@ -204,9 +222,11 @@ export default function UsageBar() {
 
   // 계정 전환은 상단 칩에서 바로 한다. 하단에 따로 토글을 두면 사용률을 보고도
   // 다른 곳으로 내려가 눌러야 해서, 어느 계정이 여유 있는지 모른 채 바꾸게 된다.
-  const switchPrimary = useCallback(async (keyName: string, label: string, exhausted: boolean) => {
+  const switchPrimary = useCallback(async (
+    provider: string, keyName: string, label: string, exhausted: boolean,
+  ) => {
     if (!keyName || switching) return;
-    if (exhausted && !window.confirm(`${label} 계정도 주간 한도를 모두 썼습니다. 그래도 1순위로 바꿀까요?`)) return;
+    if (exhausted && !window.confirm(`${label} 계정도 한도를 모두 썼습니다. 그래도 주계정으로 바꿀까요?`)) return;
     const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
     const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") : null;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -214,9 +234,11 @@ export default function UsageBar() {
     setSwitching(keyName);
     setSwitchError(null);
     try {
-      const res = await fetch(`${BASE}/settings/auth-keys`, {
+      // 클로드·코덱스가 같은 경로를 쓴다. 선택 경로가 전부
+      // llm_api_keys.priority 를 보므로 그것을 바꾸는 것이 전환의 본체다.
+      const res = await fetch(`${BASE}/ops/account-primary`, {
         method: "POST", credentials: "include", headers,
-        body: JSON.stringify({ primary: keyName }),
+        body: JSON.stringify({ provider, mode: "manual", key_name: keyName }),
       });
       if (!res.ok) {
         // 옛 구현은 실패를 통째로 삼켜서 버튼이 그냥 안 먹는 것처럼 보였다.
@@ -404,9 +426,15 @@ export default function UsageBar() {
   const slots = claude?.claude_slots ?? [];
   const tokenLabels = claude?.token_labels ?? [];
   const slotMeta = (slot: string) => tokenLabels.find((t) => String(t.slot ?? "") === slot);
-  // priority 1 이 릴레이가 먼저 고르는 계정이다.
-  const activeSlot = tokenLabels.reduce<string | null>(
-    (best, t) => (t.priority === 1 && t.slot ? String(t.slot) : best), null);
+  // CLI 가 실제로 어느 슬롯으로 도는가. 서버가 말해 주는 주계정을 먼저 믿고,
+  // 그 API 를 모르는 배포 창에서만 예전처럼 priority 1 을 훑어 짐작한다.
+  // (짐작은 슬롯 4 처럼 priority 가 0 이거나 순번이 밀린 계정에서 틀린다)
+  const primaryClaudeKey = primaryInfo?.providers?.anthropic?.primary ?? "";
+  const activeSlot = (primaryClaudeKey
+    ? tokenLabels.find((t) => t.key_name === primaryClaudeKey)?.slot ?? null
+    : null)
+    ?? tokenLabels.reduce<string | null>(
+      (best, t) => (t.priority === 1 && t.slot ? String(t.slot) : best), null);
   const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
   const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
   const relayMetrics = relay ? Object.values(relay.acquire_metrics ?? {}) : [];
@@ -498,8 +526,16 @@ export default function UsageBar() {
           <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>사용량 확인 중…</span>
         ) : (
           <>
-            {summaryChip(curClaude, "클로드")}
+            {/* 접힌 줄에서도 CLI 가 어느 계정으로 도는지 먼저 읽히게 한다.
+                모드(자동/수동)까지 붙여야 계정이 저절로 바뀐 것처럼 안 보인다. */}
+            {summaryChip(curClaude, activeSlot ? `CLI 슬롯${activeSlot}` : "CLI 슬롯")}
             {summaryChip(curCodex, "코덱스")}
+            {primaryInfo && (
+              <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)", whiteSpace: "nowrap" }}
+                    title={"자동: 한도 남은 계정 중 곧 리셋될 것부터 씁니다\n수동: 고른 계정을 고정합니다"}>
+                {primaryInfo.providers?.anthropic?.mode === "auto" ? "자동" : "수동"}
+              </span>
+            )}
             {tightRemain <= 20 && tightest && (
               <span style={{ fontSize: "10px", color: tightRemain <= 10 ? "#ef4444" : "#f59e0b", whiteSpace: "nowrap" }}>
                 ⚠ {windowName(tightest.w.window_minutes)} {tightRemain.toFixed(0)}% 남음
@@ -584,7 +620,7 @@ export default function UsageBar() {
               <button
                 type="button"
                 disabled={lastResort || isActive || !keyName || switching !== null}
-                onClick={() => void switchPrimary(keyName, name, exhausted)}
+                onClick={() => void switchPrimary("anthropic", keyName, name, exhausted)}
                 title={[
                   lastResort
                     ? "\uCD5C\uD6C4 \uC218\uB2E8 \uACC4\uC815 \u2014 \uC2AC\uB86F 1\u00B72 \uAC00 \uBAA8\uB450 \uBD88\uAC00\uB2A5\uD560 \uB54C\uB9CC \uC4F0\uC785\uB2C8\uB2E4. 1\uC21C\uC704\uB85C \uC9C0\uC815\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."
@@ -749,6 +785,39 @@ export default function UsageBar() {
           \uACC4\uC815 \uC804\uD658 \uC2E4\uD328
         </span>
       )}
+      {/* 코덱스 계정 칩. 여기에는 지금 쓰는 계정 하나만 막대로 나오고 나머지
+          계정은 화면 어디에도 없었다 — 어느 계정이 남아 있는지 모른 채
+          한도가 끊겼다(2026-09-17 대표님 지적). 클로드 슬롯 칩과 같은 방식으로
+          전부 띄우고, 눌러서 주계정을 바꾼다. */}
+      {(primaryInfo?.providers?.codex?.accounts ?? []).map((acc) => {
+        const isPrimary = primaryInfo?.providers?.codex?.primary === acc.key_name;
+        const short = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
+        const auto = primaryInfo?.providers?.codex?.mode === "auto";
+        return (
+          <button
+            key={`codex-acct-${acc.key_name}`}
+            type="button"
+            disabled={isPrimary || switching !== null || auto}
+            onClick={() => void switchPrimary("codex", acc.key_name, short, !acc.has_quota)}
+            title={[
+              isPrimary ? "현재 주계정" : auto ? "자동 모드 — 규칙이 정합니다" : `클릭하면 ${short} 을(를) 주계정으로`,
+              acc.has_quota ? "" : "한도 소진",
+              acc.resets_at ? `${new Date(acc.resets_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 갱신` : "",
+            ].filter(Boolean).join("\n")}
+            style={{
+              fontSize: "10px", fontWeight: 700, whiteSpace: "nowrap",
+              padding: "1px 7px", borderRadius: "9px", marginLeft: "4px",
+              border: `1px solid ${isPrimary ? "#22c55e88" : "var(--ct-border)"}`,
+              background: isPrimary ? "#22c55e18" : "transparent",
+              color: acc.has_quota ? "var(--ct-text2)" : "var(--ct-text3, #999)",
+              opacity: switching === acc.key_name ? 0.5 : acc.has_quota || isPrimary ? 1 : 0.6,
+              cursor: isPrimary || auto || switching !== null ? "default" : "pointer",
+            }}
+          >
+            {"🟣"} {short}{isPrimary ? " ●" : ""}
+          </button>
+        );
+      })}
       {cxAll.map((cx, i) => {
         const cname = cx.limit_id && cx.limit_id !== "codex" ? `Codex:${cx.limit_id.replace(/^codex_/, "")}` : "Codex";
         return (
