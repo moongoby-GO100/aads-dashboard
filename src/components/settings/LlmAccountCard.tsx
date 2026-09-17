@@ -51,6 +51,11 @@ type Overview = {
 
 type Chip = "action" | "codex" | "anthropic" | "subscription" | "apikey" | "all";
 
+/** 구독 계정 표의 열 정의. 헤더와 각 행이 같은 값을 써야 열이 어긋나지 않는다.
+ *  펼침 · provider · 계정 · 순위 · 상태 · 사용량 · 액션 */
+const COLS = "14px 68px minmax(160px,1fr) 34px 76px 200px 152px";
+const COLS_MIN_WIDTH = 860;
+
 const KST = "Asia/Seoul";
 const kst = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: KST, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-";
@@ -183,9 +188,29 @@ export default function LlmAccountCard() {
       {showAdd && <AddKeyForm onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); load(); }}
                               onLogin={(t) => { setShowAdd(false); setLoginTarget(t); }} />}
 
-      {/* 구독 계정 — 행 하나에 등록·상태·사용량·액션이 전부 있다 */}
+      {/* 구독 계정 — 행 하나에 등록·상태·사용량·액션이 전부 있다.
+          열은 grid 로 고정한다. flex + flex-wrap 이었을 때는 라벨 길이와
+          사용량 창 개수(코덱스 1개·클로드 2개)에 따라 열이 제각각 밀려서
+          우선순위·상태 숫자가 행마다 다른 x 좌표에 찍혔다. 좁은 화면에서는
+          줄을 흘리지 말고 카드를 가로로 굴린다 — 표는 열이 맞아야 읽힌다. */}
       {effectiveChip !== "apikey" && (
-        <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+        <div className="rounded-lg" style={{ border: "1px solid var(--border)", overflowX: "auto" }}>
+          <div style={{ minWidth: COLS_MIN_WIDTH }}>
+          {rows.length > 0 && (
+            <div className="px-3 py-1.5 text-xs" style={{
+              display: "grid", gridTemplateColumns: COLS, gap: 12, alignItems: "center",
+              background: "var(--bg-subtle, rgba(0,0,0,0.02))",
+              borderBottom: "1px solid var(--border)", color: "var(--text-secondary)",
+            }}>
+              <span />
+              <span>provider</span>
+              <span>계정</span>
+              <span style={{ textAlign: "right" }}>순위</span>
+              <span>상태</span>
+              <span>사용량 (잔량)</span>
+              <span style={{ textAlign: "right" }}>액션</span>
+            </div>
+          )}
           {rows.length === 0 ? (
             <p className="text-xs px-3 py-4" style={{ color: "var(--text-secondary)" }}>
               {effectiveChip === "action" ? "조치가 필요한 계정이 없습니다." : "표시할 계정이 없습니다."}
@@ -196,21 +221,23 @@ export default function LlmAccountCard() {
             const isPrimary = a.slot && current !== null && a.slot === `slot${current}`;
             return (
               <div key={a.key_name} style={{ borderBottom: "1px solid var(--border)" }}>
-                <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+                <div className="px-3 py-2" style={{
+                  display: "grid", gridTemplateColumns: COLS, gap: 12, alignItems: "start",
+                }}>
                   <button onClick={() => setOpenRow(open ? null : a.key_name)}
-                    className="text-xs shrink-0" style={{ color: "var(--text-secondary)", width: 12 }}>{open ? "▾" : "▸"}</button>
-                  <span className="text-xs font-mono shrink-0" style={{ color: "var(--text-secondary)", width: 68 }}>{a.provider}</span>
-                  <span className="text-xs font-semibold min-w-0 flex-1 truncate" style={{ color: "var(--text-primary)" }}>
+                    className="text-xs text-left" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{open ? "▾" : "▸"}</button>
+                  <span className="text-xs font-mono truncate" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{a.provider}</span>
+                  <span className="text-xs font-semibold min-w-0 truncate" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
                     {a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
                     <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{a.label || "-"}</span>
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
-                  <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)", width: 26 }}>p{a.priority}</span>
-                  <span className="text-xs font-semibold shrink-0" style={{ color, width: 72 }}>{STATE_TEXT[a.state]}</span>
+                  <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>p{a.priority}</span>
+                  <span className="text-xs font-semibold truncate" style={{ color, lineHeight: "20px" }}>{STATE_TEXT[a.state]}</span>
                   {/* 창 구성이 provider 마다 다르다. 코덱스는 주간 하나,
                       클로드는 5시간 + 주간이다. window_minutes 로 이름을 정하고
                       'primary/secondary' 라는 순서에 기대지 않는다. */}
-                  <span className="shrink-0 space-y-0.5" style={{ width: 186 }}>
+                  <span className="space-y-0.5" style={{ minWidth: 0 }}>
                     {/* 숫자는 **잔량**이다. 채팅창 상단과 같은 방향으로 맞춘다 —
                         한쪽은 사용량, 한쪽은 잔량이면 같은 계정의 같은 창이
                         97% 와 3% 로 보인다(2026-09-16 실측). 막대는 사용량만큼
@@ -232,7 +259,7 @@ export default function LlmAccountCard() {
                       <span className="block text-xs" style={{ color: "#dc2626" }}>{kst(a.rate_limited_until)} 복귀</span>
                     )}
                   </span>
-                  <span className="flex gap-1 shrink-0">
+                  <span className="flex gap-1 justify-end">
                     {a.slot && !a.needs_login && !isPrimary && (
                       <button onClick={() => setPrimary(a.slot)} className="text-xs px-2 py-1 rounded"
                         style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>주계정</button>
@@ -264,6 +291,7 @@ export default function LlmAccountCard() {
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
@@ -284,15 +312,22 @@ export default function LlmAccountCard() {
                   </span>
                   {p.usable < p.key_count && <span className="text-xs shrink-0" style={{ color: "#d97706" }}>⚠ {p.key_count - p.usable}</span>}
                 </button>
+                {/* 키 행도 열을 고정한다. flex + ml-auto 였을 때는 key_name
+                    길이에 따라 라벨·값·상태가 행마다 다른 자리에 섰다. */}
                 {open && (
                   <div className="px-3 pb-2 space-y-1">
                     {p.keys.map((k) => (
-                      <div key={k.id} className="flex items-center gap-3 text-xs py-1" style={{ color: "var(--text-secondary)" }}>
-                        <span style={{ width: 26 }}>p{k.priority}</span>
-                        <span className="font-mono" style={{ color: "var(--text-primary)" }}>{k.key_name}</span>
-                        <span>{k.label || "-"}</span>
-                        <span className="ml-auto font-mono">{k.masked_value}</span>
-                        <span style={{ color: STATE_COLOR[k.state] }}>{STATE_TEXT[k.state]}</span>
+                      <div key={k.id} className="text-xs py-1" style={{
+                        color: "var(--text-secondary)",
+                        display: "grid",
+                        gridTemplateColumns: "34px 220px minmax(120px,1fr) 180px 76px",
+                        gap: 12, alignItems: "center",
+                      }}>
+                        <span className="tabular-nums" style={{ textAlign: "right" }}>p{k.priority}</span>
+                        <span className="font-mono truncate" style={{ color: "var(--text-primary)" }}>{k.key_name}</span>
+                        <span className="truncate">{k.label || "-"}</span>
+                        <span className="font-mono truncate">{k.masked_value}</span>
+                        <span className="truncate" style={{ color: STATE_COLOR[k.state] }}>{STATE_TEXT[k.state]}</span>
                       </div>
                     ))}
                   </div>

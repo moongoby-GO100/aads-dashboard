@@ -119,31 +119,38 @@ export default function CompanySlotPanel() {
       {msg && <p className="text-xs" style={{ color: "var(--accent)" }}>{msg}</p>}
       {err && <p className="text-xs" style={{ color: "#ef4444" }}>{err}</p>}
 
-      <div className="space-y-1.5">
+      {/* 열을 grid 로 고정한다. 회사 이름 길이가 제각각이라 flex 로 두면
+          드롭다운이 행마다 다른 자리에 서서 표가 들쑥날쑥해진다. */}
+      <div className="space-y-1.5" style={{ minWidth: 560 }}>
         {shown.map((row) => (
           <div
             key={row.project_key}
-            className="rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap"
-            style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
+            className="rounded-lg px-3 py-2"
+            style={{
+              background: "var(--bg-secondary)", border: "1px solid var(--border)",
+              display: "grid", gridTemplateColumns: "104px minmax(120px,1fr) 56px 210px",
+              gap: 12, alignItems: "center",
+            }}
           >
-            <span className="text-xs font-mono px-1.5 py-0.5 rounded"
-                  style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded truncate"
+                  style={{ background: "var(--bg-primary)", color: "var(--text-secondary)", textAlign: "center" }}>
               {row.project_key}
             </span>
-            <span className="text-sm flex-1 min-w-0 truncate" style={{ color: "var(--text-primary)" }}>
+            <span className="text-sm min-w-0 truncate" style={{ color: "var(--text-primary)" }}>
               {row.name}
             </span>
-            {row.slot && (
-              <span className="text-xs px-1.5 py-0.5 rounded"
-                    style={{ background: "var(--accent)", color: "#fff" }}>
-                배정됨
-              </span>
-            )}
+            <span className="text-xs px-1.5 py-0.5 rounded" style={{
+              background: row.slot ? "var(--accent)" : "transparent",
+              color: row.slot ? "#fff" : "transparent",
+              textAlign: "center",
+            }}>
+              배정됨
+            </span>
             <select
               value={row.slot ?? AUTO}
               disabled={saving === row.project_key}
               onChange={(e) => void assign(row, e.target.value)}
-              className="text-xs rounded px-2 py-1.5 min-w-[190px]"
+              className="text-xs rounded px-2 py-1.5 w-full"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
             >
               <option value={AUTO}>자동 (배정 없음)</option>
