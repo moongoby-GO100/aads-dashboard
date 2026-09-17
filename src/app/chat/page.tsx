@@ -827,6 +827,90 @@ function isHiddenSystemChatMessage(message: ChatMessage): boolean {
   );
 }
 
+/** 러너 진행 구간을 한 줄로 접어 보여준다.
+ *
+ * 2026-09-17 실측: 최근 7일 러너 메시지 525건(21개 세션)이 숨김률 100% 였다.
+ * 세션 9fa305c5 에서 대표님이 08:14 에 지시한 뒤 32분 동안 화면에 보인 것은
+ * 본인 메시지 하나뿐이었고, 그동안 AI 리뷰 경고(1,209자)·작업 완료
+ * 보고(3,888자)·배포 시작이 전부 숨겨져 있었다. 대표님은 그것을 "응답을
+ * 못한다" 로 보셨다.
+ *
+ * 전부 펼치면 대화가 러너 로그로 덮이므로 접어서 보여주고, 누르면 펼친다.
+ */
+function RunnerProgressGroup({
+  head, rest, expanded, onToggle,
+}: {
+  head: ChatMessage;
+  rest: ChatMessage[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const all = [head, ...rest];
+  const count = all.length;
+  // 요약은 마지막 것으로 쓴다 — 읽는 사람이 궁금한 것은 "지금 어디까지" 다.
+  const summarize = (m: ChatMessage) =>
+    String(m.content || "")
+      .replace(/^[^\p{L}\p{N}]*/u, "")
+      .replace(/\[(Pipeline )?Runner\]\s*/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 72);
+  const last = summarize(all[count - 1]);
+  const at = all[count - 1].created_at
+    ? new Date(all[count - 1].created_at as string).toLocaleTimeString("ko-KR", {
+        timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
+      })
+    : "";
+
+  return (
+    <div style={{ margin: "6px 0" }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        title={expanded ? "러너 진행 접기" : "러너 진행 펼치기"}
+        style={{
+          display: "flex", alignItems: "center", gap: "8px", width: "100%",
+          textAlign: "left", padding: "6px 10px", borderRadius: "10px",
+          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.24)",
+          color: "var(--ct-text2)", fontSize: "12px", cursor: "pointer",
+        }}
+      >
+        <span style={{ fontSize: "13px" }}>🤖</span>
+        <span style={{ fontWeight: 700, color: "#b45309", whiteSpace: "nowrap" }}>
+          러너 진행 {count}건
+        </span>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {last}
+        </span>
+        {at && <span style={{ opacity: 0.7, whiteSpace: "nowrap" }}>{at}</span>}
+        <span style={{ opacity: 0.6 }}>{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <div style={{
+          marginTop: "4px", padding: "8px 12px", borderRadius: "10px",
+          background: "var(--ct-bg2)", border: "1px solid var(--ct-border)",
+          display: "flex", flexDirection: "column", gap: "8px",
+        }}>
+          {all.map((m) => (
+            <div key={m.id} style={{ fontSize: "12px", lineHeight: 1.6 }}>
+              <div style={{ opacity: 0.6, fontSize: "11px", marginBottom: "2px" }}>
+                {m.created_at
+                  ? new Date(m.created_at).toLocaleTimeString("ko-KR", {
+                      timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit",
+                    })
+                  : ""}
+              </div>
+              <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {String(m.content || "").slice(0, 4000)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 class ChatErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
@@ -4160,6 +4244,12 @@ export default function ChatPage() {
   // 않는다 — 에이전트가 자기 요청을 스스로 승인하면 게이트가 무의미하다.
   const [approvals, setApprovals] = useState<Array<{
     id: string; tool: string; summary: string; at: string; risk?: string;
+    // 2026-09-17 CEO 지시 — "승인건은 승인 또는 추가지시 버튼 반영해서
+    // 적용할수 있음 좋겠다 ... 응답 버블에 반영하는걸로".
+    //
+    // 어느 답변이 올린 제안인지 서버가 알려준다. 있으면 그 버블 아래에
+    // 붙이고, 없으면 지금까지처럼 팝업·하단 카드로만 띄운다.
+    gate_source?: string; source_message_id?: string | null;
   }>>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
   // 여러 건을 한 번에 처리하는 체크박스 선택 — critical 등급은 실수 방지를
@@ -4205,7 +4295,10 @@ export default function ChatPage() {
     try {
       // 이 페이지의 관례대로 chatApi 를 쓴다 — 같은 GET 이 겹치면 합쳐진다.
       const r = await chatApi<{
-        pending?: Array<{ id: string; tool: string; summary: string; at: string; risk?: string }>;
+        pending?: Array<{
+          id: string; tool: string; summary: string; at: string; risk?: string;
+          gate_source?: string; source_message_id?: string | null;
+        }>;
       }>(`/approvals/pending?session_id=${encodeURIComponent(sid)}`);
       setApprovals(r.pending || []);
     } catch {
@@ -10641,7 +10734,7 @@ export default function ChatPage() {
     if (!hasMobileComposerContext) setShowMobileComposerContext(false);
   }, [hasMobileComposerContext]);
 
-  type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[] };
+  type DisplayItem = { msg: ChatMessage; idx: number; hiddenMsgs?: ChatMessage[]; runnerGroup?: boolean };
   const displayData = useMemo(() => {
     // "[이전 추가 지시]" 로 다음 턴에 실려 나간 원문들. recovered_interrupt 버블을
     // 감출지는 이 실림 여부로만 판단한다 — 실리지 않았는데 감추면 그 지시는 화면에서
@@ -10652,6 +10745,11 @@ export default function ChatPage() {
       .join("\n");
     const sortedAll = [...messages]
       .filter(m => {
+        // 러너 진행은 길이와 무관하게 통과시킨다. isHiddenSystemChatMessage 는
+        // 50자 이하 어시스턴트를 잡아내는데, "🚀 [Pipeline Runner] 배포 시작:
+        // runner-a553c01f"(42자) 같은 핵심 진행이 그 선 아래에 있다. 아래에서
+        // 연속 구간을 한 줄로 접으므로 잡음이 되지 않는다.
+        if (isRunnerChatMessage(m)) return true;
         if (isHiddenSystemChatMessage(m)) return false;
         if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") {
@@ -10688,6 +10786,16 @@ export default function ChatPage() {
           i = j;
           continue;
         }
+      }
+      // 러너 진행 메시지는 연속 구간을 한 덩어리로 묶는다. 한 작업이
+      // 시작·리뷰·완료·배포로 네댓 건을 남기므로, 묶지 않으면 대화가 러너
+      // 로그로 덮인다.
+      if (isRunnerChatMessage(msg)) {
+        let j = i + 1;
+        while (j < sorted.length && isRunnerChatMessage(sorted[j])) j++;
+        display.push({ msg, idx: i, hiddenMsgs: sorted.slice(i + 1, j), runnerGroup: true });
+        i = j;
+        continue;
       }
       if (msg.role === "assistant" && msg.intent !== "rate_limited") {
         const baseContent = normalizedMessageContent(msg);
@@ -12278,8 +12386,26 @@ export default function ChatPage() {
               features: chatRuntimeRef.current.snapshot.features,
             });
             const historyActionsLocked = !chatCapabilities.canReplaceResponse;
-            return display.map(({ msg, idx, hiddenMsgs }) => {
+            return display.map(({ msg, idx, hiddenMsgs, runnerGroup }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
+              // 러너 진행은 한 줄로 접는다. 접지 않고 다 펼치면 대화가 러너
+              // 로그로 덮이고, 아예 감추면 러너가 32분을 일하는 동안 화면이
+              // 죽어 있다(2026-09-17 세션 9fa305c5 실측).
+              if (runnerGroup) {
+                return (
+                  <RunnerProgressGroup
+                    key={msg.render_key || msg.id || idx}
+                    head={msg}
+                    rest={hiddenMsgs || []}
+                    expanded={isExpanded}
+                    onToggle={() => setExpandedDupeGroups((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(msg.id)) next.delete(msg.id); else next.add(msg.id);
+                      return next;
+                    })}
+                  />
+                );
+              }
               const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
               const hasLiveStatusHint = msg.intent === "streaming_placeholder" && isLiveStreamStatusHint(toolStatus);
               const keepStreamingBubbleLive = hasActiveReplyState || hasLiveStatusHint;
