@@ -83,7 +83,7 @@ function hasFoodBizRecipeAccess(user: AuthUser) {
   const isActive = tenantStatus === "active" && membershipStatus === "active";
   const hasStaffRole = ["owner", "admin", "member"].includes(role);
 
-  // FB 매장비서 로그인 사용자는 운영관리 앱의 `/auth/me` 토큰 검증을 통과하면
+  // FB 오비서 로그인 사용자는 운영관리 앱의 `/auth/me` 토큰 검증을 통과하면
   // 레시피 열람을 허용한다. tenant metadata가 누락된 기존 FB 계정은 여기서 막지 않는다.
   return (isFoodBizTenant && isActive && hasStaffRole) || hasValidLogin;
 }
