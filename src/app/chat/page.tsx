@@ -808,6 +808,10 @@ function isRunnerChatMessage(message: ChatMessage): boolean {
   return message.role === "assistant" && (
     message.intent === "pipeline_runner" ||
     message.intent === "runner_notification" ||
+    // AI 리뷰 결과도 러너 진행이다. 2026-09-17 실측: 20분 침묵의 내용물이
+    // 정확히 이것이었다 — 리뷰가 REQUEST_CHANGES 를 두 번 내고 그때마다
+    // 고쳐 올리는 중이었다. 이것을 닫아 두면 "왜 오래 걸리나" 가 안 보인다.
+    message.intent === "ai_review_warning" ||
     head.includes("[Pipeline Runner]") ||
     head.includes("[Runner]") ||
     (head.startsWith("Step ") && head.includes("runner-")) ||
@@ -856,6 +860,12 @@ function RunnerProgressGroup({
       .trim()
       .slice(0, 72);
   const last = summarize(all[count - 1]);
+  // 리뷰 재요청 횟수를 앞에 세운다. "왜 오래 걸리나" 에 바로 답하는 숫자다 —
+  // 2026-09-17 세션 9fa305c5 의 20분 침묵은 REQUEST_CHANGES 2회였다.
+  const reviewRetries = all.filter(
+    (m) => m.intent === "ai_review_warning" ||
+      String(m.content || "").includes("REQUEST_CHANGES")
+  ).length;
   const at = all[count - 1].created_at
     ? new Date(all[count - 1].created_at as string).toLocaleTimeString("ko-KR", {
         timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit",
@@ -879,6 +889,15 @@ function RunnerProgressGroup({
         <span style={{ fontWeight: 700, color: "#b45309", whiteSpace: "nowrap" }}>
           러너 진행 {count}건
         </span>
+        {reviewRetries > 0 && (
+          <span style={{
+            whiteSpace: "nowrap", fontWeight: 700, color: "#dc2626",
+            background: "rgba(220,38,38,0.10)", border: "1px solid rgba(220,38,38,0.26)",
+            borderRadius: "8px", padding: "0 6px", fontSize: "11px",
+          }}>
+            리뷰 재요청 {reviewRetries}회
+          </span>
+        )}
         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {last}
         </span>
@@ -2730,6 +2749,15 @@ interface MessageItemProps {
   onCancelPendingInterrupt?: (messageId: string) => void;
   /** 잘못 보낸 지시 회수 — 실행 중단 + 대화에서 내림 */
   onRetractMessage?: (messageId: string) => void;
+  /** 이 답변이 올린 승인 대기 — 버블 아래에 승인/추가지시 버튼으로 붙는다 */
+  bubbleApprovals?: Array<{
+    id: string; tool: string; summary: string; at: string; risk?: string;
+    gate_source?: string; source_message_id?: string | null;
+  }>;
+  approvalBusyId?: string | null;
+  onDecideApproval?: (id: string, decision: "approved" | "rejected", scope?: ApprovalScope) => void;
+  /** 승인 대신 말로 고쳐 주실 때 — 카드는 대기 상태로 남는다 */
+  onExtraInstruction?: (text: string) => void;
 }
 
 const MessageItem = memo(function MessageItem({
@@ -2744,7 +2772,10 @@ const MessageItem = memo(function MessageItem({
   screenSize, mobileFontPx,
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
   onApplyPendingInterrupt, onCancelPendingInterrupt, onRetractMessage,
+  bubbleApprovals, approvalBusyId, onDecideApproval, onExtraInstruction,
 }: MessageItemProps) {
+  const [extraOpen, setExtraOpen] = useState(false);
+  const [extraText, setExtraText] = useState("");
   const [interruptListOpen, setInterruptListOpen] = useState(false);
   const [interruptListOpenBottom, setInterruptListOpenBottom] = useState(false);
   // 같은 요약줄을 버블 위아래 두 곳에 건다. 긴 보고에서는 상단 줄이 화면 밖으로
@@ -3738,6 +3769,115 @@ const MessageItem = memo(function MessageItem({
         )}
         {/* 하단에도 같은 요약줄 — 응답을 끝까지 읽은 자리에서 바로 확인한다. */}
         {renderAppliedInterrupts("bottom")}
+        {/* 이 답변이 올린 승인 대기 — 표를 읽은 자리에서 바로 결정하신다.
+            2026-09-17 CEO 지시. 그전에는 화면 구석 팝업으로만 떠서, 어느
+            제안에 대한 승인인지 표와 대조해야 알 수 있었다.
+
+            critical 은 인라인 버튼을 만들지 않는다. 버블 안에서 습관적으로
+            누르시는 순간 게이트가 무력해진다 — 주문·자금 경로는 팝업에서
+            개별 승인만 받는다. */}
+        {msg.role === "assistant" && (bubbleApprovals?.length ?? 0) > 0 && (
+          <div style={{
+            marginTop: 10, padding: "10px 12px", borderRadius: 10,
+            background: "rgba(234,179,8,.07)", border: "1px solid rgba(234,179,8,.34)",
+            borderLeft: "4px solid #eab308",
+          }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ct-text)", marginBottom: 6 }}>
+              🟡 승인 필요 {bubbleApprovals!.length}건 — 누르시면 이어서 진행합니다
+            </div>
+            {bubbleApprovals!.map((a) => (
+              <div key={a.id} style={{ padding: "7px 0", borderTop: "1px solid rgba(234,179,8,.22)" }}>
+                <div style={{
+                  fontSize: 12, color: "var(--ct-text2)", lineHeight: 1.55,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  maxHeight: 132, overflowY: "auto", marginBottom: 8,
+                }}>{a.summary}</div>
+                {a.risk === "critical" ? (
+                  <div style={{ fontSize: 11.5, color: "#f87171", fontWeight: 600 }}>
+                    ⛔ 주문·자금 등급입니다 — 실수 방지를 위해 승인 팝업에서 개별로만 받습니다.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                    {approvalScopesFor(a.risk).map((sc, i) => (
+                      <button
+                        key={sc}
+                        onClick={() => onDecideApproval?.(a.id, "approved", sc)}
+                        disabled={approvalBusyId === a.id}
+                        title={APPROVAL_GRANTS[sc].hint}
+                        style={{
+                          minHeight: 36, padding: "6px 14px", borderRadius: 8,
+                          fontSize: 12.5, fontWeight: 700,
+                          border: i === 0 ? "none" : "1px solid #16a34a",
+                          background: i === 0 ? "#16a34a" : "transparent",
+                          color: i === 0 ? "#fff" : "#16a34a",
+                          cursor: approvalBusyId === a.id ? "default" : "pointer",
+                          opacity: approvalBusyId === a.id ? .6 : 1,
+                        }}
+                      >
+                        {i === 0 && approvalBusyId === a.id ? "처리 중..." : APPROVAL_GRANTS[sc].label}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setExtraOpen((v) => !v)}
+                      style={{
+                        minHeight: 36, padding: "6px 14px", borderRadius: 8,
+                        fontSize: 12.5, fontWeight: 600,
+                        border: "1px solid #38bdf8", background: "transparent", color: "#38bdf8",
+                        cursor: "pointer",
+                      }}
+                    >추가지시</button>
+                    <button
+                      onClick={() => onDecideApproval?.(a.id, "rejected")}
+                      disabled={approvalBusyId === a.id}
+                      style={{
+                        minHeight: 36, padding: "6px 14px", borderRadius: 8,
+                        fontSize: 12.5, fontWeight: 600,
+                        border: "1px solid var(--ct-border)", background: "transparent",
+                        color: "var(--ct-text2)",
+                        cursor: approvalBusyId === a.id ? "default" : "pointer",
+                        opacity: approvalBusyId === a.id ? .6 : 1,
+                      }}
+                    >거절</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {extraOpen && (
+              <div style={{ marginTop: 9, display: "flex", gap: 7, flexWrap: "wrap" }}>
+                <textarea
+                  value={extraText}
+                  onChange={(e) => setExtraText(e.target.value)}
+                  placeholder="이대로 말고 이렇게 해라 — 적어 주시면 지금 진행 중인 답변에 반영됩니다."
+                  rows={2}
+                  style={{
+                    flex: "1 1 240px", minWidth: 0, padding: "7px 9px", borderRadius: 8,
+                    fontSize: 12.5, lineHeight: 1.5, resize: "vertical",
+                    border: "1px solid var(--ct-border)", background: "var(--ct-bg)",
+                    color: "var(--ct-text)",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const t = extraText.trim();
+                    if (!t) return;
+                    onExtraInstruction?.(t);
+                    setExtraText("");
+                    setExtraOpen(false);
+                  }}
+                  disabled={!extraText.trim()}
+                  style={{
+                    minHeight: 36, padding: "6px 16px", borderRadius: 8,
+                    fontSize: 12.5, fontWeight: 700, border: "none",
+                    background: "#38bdf8", color: "#04293a",
+                    cursor: extraText.trim() ? "pointer" : "default",
+                    opacity: extraText.trim() ? 1 : .5,
+                  }}
+                >보내기</button>
+              </div>
+            )}
+            {/* 추가지시는 거절이 아니다. 카드는 대기 상태로 남는다. */}
+          </div>
+        )}
         {msg.role === "assistant" && (
           <div
             data-message-actions="assistant"
@@ -4274,9 +4414,34 @@ export default function ChatPage() {
   // 결정 직후 서버 기록을 당겨오기 위한 신호.
   const [approvalDecisionTick, setApprovalDecisionTick] = useState(0);
   const approvalAlertedRef = useRef<Set<string>>(new Set<string>());
+  // 어느 답변 아래에 붙일지 서버가 알려준 것만 버블에 붙인다.
+  // 붙일 자리를 모르는 카드(source_message_id 없음)는 지금까지처럼
+  // 팝업·하단 카드로 간다 — 아무 버블에나 붙이면 회장님이 다른 답변의
+  // 제안을 승인하시게 된다.
+  const approvalsByMessage = useMemo(() => {
+    const m = new Map<string, typeof approvals>();
+    for (const a of approvals) {
+      const mid = a.source_message_id || "";
+      if (!mid) continue;
+      const cur = m.get(mid);
+      if (cur) cur.push(a); else m.set(mid, [a]);
+    }
+    return m;
+  }, [approvals]);
+  const inlineApprovalIds = useMemo(
+    () => new Set(approvals.filter((a) => a.source_message_id).map((a) => a.id)),
+    [approvals],
+  );
+  // 버블에 이미 붙은 카드는 팝업으로 또 띄우지 않는다. 같은 것을 두 군데서
+  // 물으면 회장님이 두 번 누르셔야 하는 것처럼 보인다.
   const popupApprovals = useMemo(
-    () => approvals.filter((a) => !dismissedApprovalIds.includes(a.id)),
-    [approvals, dismissedApprovalIds],
+    () => approvals.filter((a) => !dismissedApprovalIds.includes(a.id) && !inlineApprovalIds.has(a.id)),
+    [approvals, dismissedApprovalIds, inlineApprovalIds],
+  );
+  // 대화 하단 묶음 카드도 같은 이유로 제외한다.
+  const bottomApprovals = useMemo(
+    () => approvals.filter((a) => !inlineApprovalIds.has(a.id)),
+    [approvals, inlineApprovalIds],
   );
   const closeApprovalPopup = useCallback(() => {
     setDismissedApprovalIds(approvals.map((a) => a.id));
@@ -10751,7 +10916,6 @@ export default function ChatPage() {
         // 연속 구간을 한 줄로 접으므로 잡음이 되지 않는다.
         if (isRunnerChatMessage(m)) return true;
         if (isHiddenSystemChatMessage(m)) return false;
-        if (m.intent === "ai_review_warning") return false;
         if (m.intent === "recovered_interrupt") {
           // 되살리는 것은 사용자의 추가지시 버블뿐이다. 같은 intent 로 저장된
           // 어시스턴트 중단 알림 6건(2026-09-16 실측)까지 풀면 잡음이 돌아온다.
@@ -12482,6 +12646,10 @@ export default function ChatPage() {
                     onApplyPendingInterrupt={applyPendingInterrupt}
                     onCancelPendingInterrupt={cancelOnePendingInterrupt}
                     onRetractMessage={retractMessage}
+                    bubbleApprovals={approvalsByMessage.get(msg.id)}
+                    approvalBusyId={approvalBusy}
+                    onDecideApproval={(id, decision, scope) => void decideApproval(id, decision, scope)}
+                    onExtraInstruction={(text) => { void sendMessage(text); }}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px", marginBottom: "4px", paddingRight: "4px" }}>
@@ -12797,14 +12965,14 @@ export default function ChatPage() {
             document.body,
           )}
 
-          {approvals.length > 0 && (
+          {bottomApprovals.length > 0 && (
             <div style={{
               margin: "2px 0 14px", padding: "12px 14px", borderRadius: 10,
               background: "rgba(214,53,59,.08)", border: "1px solid rgba(214,53,59,.35)",
               borderLeft: "4px solid #D6353B",
             }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ct-text)", marginBottom: 2 }}>
-                승인 대기 {approvals.length}건 — 실행이 막혀 있습니다
+                승인 대기 {bottomApprovals.length}건 — 실행이 막혀 있습니다
               </div>
               <div style={{ fontSize: 11.5, color: "var(--ct-text2)", marginBottom: 10, lineHeight: 1.6 }}>
                 이 답변을 만들다가 <b>보호 게이트에 막힌 작업</b>입니다.
@@ -12812,7 +12980,7 @@ export default function ChatPage() {
                 <b>같은 대상</b> 20회/2시간, <b>이 대화 동안</b> 50회/4시간,{" "}
                 <b>이 프로젝트 동안</b> 100회/8시간이며 전부 자동 만료됩니다.
               </div>
-              {approvals.filter((a) => a.risk !== "critical").length >= 2 && (
+              {bottomApprovals.filter((a) => a.risk !== "critical").length >= 2 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", padding: "6px 0 8px" }}>
                   <span style={{ fontSize: 11.5, color: "var(--ct-text2)" }}>선택 {selectedApprovalIds.size}건</span>
                   <button
@@ -12847,7 +13015,7 @@ export default function ChatPage() {
                   >선택 일괄 거부</button>
                 </div>
               )}
-              {approvals.map((a) => (
+              {bottomApprovals.map((a) => (
                 <div key={a.id} style={{
                   padding: "8px 0", borderTop: "1px solid rgba(214,53,59,.2)",
                 }}>
