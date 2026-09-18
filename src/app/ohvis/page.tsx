@@ -293,16 +293,24 @@ export default function OhvisConsolePage() {
 
   const sendCommand = async (text: string) => {
     const title = text.trim();
-    if (!title || !activeSessionId || sending) return;
+    if (!title || sending) return;
+    if (!activeSessionId) {
+      // 조용히 return 하면 버튼이 고장 난 것과 구분되지 않는다.
+      setError("붙을 채팅 세션이 없습니다. 채팅에서 대화를 하나 연 뒤 다시 보내주세요.");
+      return;
+    }
     setSending(true);
     setError(null);
     try {
-      // 기존 생성 엔드포인트(POST /ohvis/tasks)를 그대로 쓴다.
-      await api.createOhvisTask({ session_id: activeSessionId, title, task_type: "ceo_directive" });
+      // 실행까지 거는 경로는 이것 하나다. POST /ohvis/tasks 는 기록만 하고
+      // 끝나서 지시가 pending 으로 굳었다 (2026-09-18).
+      await api.runOhvisConsoleCommand({ session_id: activeSessionId, title });
       setCommand("");
       await refresh();
     } catch (e) {
-      setError(String(e));
+      // 서버가 준 detail 을 그대로 보여준다 — no_chat_session /
+      // ai_reaction_dispatch_failed 를 화면에서 구분할 수 있어야 한다.
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSending(false);
     }
