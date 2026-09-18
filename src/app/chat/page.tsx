@@ -4463,8 +4463,23 @@ export default function ChatPage() {
   );
   // 버블에 이미 붙은 카드는 팝업으로 또 띄우지 않는다. 같은 것을 두 군데서
   // 물으면 회장님이 두 번 누르셔야 하는 것처럼 보인다.
+  // 한 번 팝업에 띄운 카드는 인라인이 뒤늦게 붙어도 팝업에서 빼지 않는다.
+  // 2026-09-18 회장님 지적 — "승인팝업이 잠깐 나오고 사라진다. 누를 틈이
+  // 없어". 카드가 먼저 도착하고 그 답변 버블이 몇 초 뒤에 그려지면
+  // attachableMessageIds 가 그때서야 채워지고, inlineApprovalIds 가 카드를
+  // 가져가면서 팝업이 통째로 닫힌다. 누르시려던 손이 갈 곳을 잃는다.
+  // 그래서 이미 띄운 것은 결정하시거나 닫으실 때까지 그대로 둔다.
+  const popupStickyRef = useRef<Set<string>>(new Set<string>());
   const popupApprovals = useMemo(
-    () => approvals.filter((a) => !dismissedApprovalIds.includes(a.id) && !inlineApprovalIds.has(a.id)),
+    () => approvals.filter((a) => {
+      if (dismissedApprovalIds.includes(a.id)) return false;
+      // 이미 띄운 카드 — 인라인이 붙었더라도 유지한다.
+      if (popupStickyRef.current.has(a.id)) return true;
+      // 처음부터 붙을 버블이 화면에 있던 카드는 인라인에 맡긴다.
+      if (inlineApprovalIds.has(a.id)) return false;
+      popupStickyRef.current.add(a.id);
+      return true;
+    }),
     [approvals, dismissedApprovalIds, inlineApprovalIds],
   );
   // 대화 하단 묶음 카드도 같은 이유로 제외한다.
