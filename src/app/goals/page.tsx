@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -145,6 +145,16 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const detailRef = useRef<HTMLElement | null>(null);
+
+  const selectGoal = useCallback((goalId: string) => {
+    setSelectedId(goalId);
+    if (!window.matchMedia("(max-width: 850px)").matches) return;
+    window.requestAnimationFrame(() => {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      detailRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
   const loadGoals = useCallback(async () => {
     setLoading(true);
@@ -362,7 +372,7 @@ export default function GoalsPage() {
               const id = goal.goal_id || goal.id || "";
               const pct = normalizeProgress(goal.progress);
               const color = statusColor[goal.status] || "#64748b";
-              return <button key={id} onClick={() => setSelectedId(id)} style={{ padding: 14, textAlign: "left", borderRadius: 12, border: `2px solid ${selectedId === id ? color : "var(--border)"}`, background: "var(--bg-card)", cursor: "pointer", minHeight: 112 }}>
+              return <button key={id} onClick={() => selectGoal(id)} style={{ padding: 14, textAlign: "left", borderRadius: 12, border: `2px solid ${selectedId === id ? color : "var(--border)"}`, background: "var(--bg-card)", cursor: "pointer", minHeight: 112 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 800, color }}>{goal.project} · {goal.priority}</span><span style={{ fontSize: 11, color }}>{goal.status}</span></div>
                 <div style={{ marginTop: 7, fontSize: 14, fontWeight: 750, color: "var(--text-primary)", lineHeight: 1.35 }}>{goal.title}</div>
                 <div style={{ marginTop: 10, height: 7, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color }} /></div>
@@ -371,7 +381,7 @@ export default function GoalsPage() {
             })}
           </section>
 
-          <section style={{ minHeight: 880, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden" }}>
+          <section ref={detailRef} tabIndex={-1} style={{ minHeight: 880, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden", scrollMarginTop: 12 }}>
             {!detail ? <div style={{ padding: 28, color: "var(--text-secondary)" }}>왼쪽에서 목표를 선택하십시오.</div> : <>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
