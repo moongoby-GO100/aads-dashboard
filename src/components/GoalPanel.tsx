@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
+import { GoalWorkHierarchy } from "@/components/GoalWorkHierarchy";
 
 type Milestone = {
   id: string; title: string; status: string; sequence_order: number;
@@ -254,6 +255,13 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
                 <span style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{lead.state}</span>
               </div>
             </button>
+          )}
+
+          {board && (
+            <GoalWorkHierarchy
+              goalId={goalId}
+              actorSessionId={typeof window !== "undefined" ? window.location.hash.replace(/^#/, "").split(/[?&]/)[0] : ""}
+            />
           )}
 
           {board && total === 0 && (

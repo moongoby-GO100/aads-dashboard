@@ -152,6 +152,83 @@ export interface GoalDetail extends GoalSummary {
   milestones_completed: number;
   milestones: GoalMilestone[];
 }
+export interface GoalWorkItem {
+  id: string;
+  goal_id: string;
+  milestone_id: string;
+  parent_id?: string | null;
+  type: "epic" | "story" | "task";
+  title: string;
+  description?: string | null;
+  status: string;
+  priority: string;
+  progress: number;
+  version: number;
+  assignment_id?: string | null;
+  last_error?: string | null;
+  pending_approval_count: number;
+  evidence?: { count: number; verified_count: number };
+  dependencies?: Array<{ work_item_id: string; type: string }>;
+  children: GoalWorkItem[];
+}
+export interface GoalWorkTree {
+  goal_id: string;
+  project: string;
+  version: number;
+  last_error?: string | null;
+  pending_approval_count: number;
+  items: GoalWorkItem[];
+}
+export interface GoalGovernance {
+  goal_id: string;
+  project: string;
+  version: number;
+  assignments: Array<{
+    id: string;
+    role_key: string;
+    session_id: string;
+    session_title?: string | null;
+  }>;
+  policy?: { id?: string; policy_hash?: string; mode: string; effective_at?: string | null; fail_closed?: boolean };
+  feature?: { enabled: boolean; flag: string };
+}
+export interface GoalApprovalGrant {
+  id: string;
+  status: string;
+  principal_session_id: string;
+  assignment_id: string;
+  milestone_id?: string | null;
+  epic_id?: string | null;
+  story_id?: string | null;
+  actions: string[];
+  tool_groups: string[];
+  max_risk_tier: string;
+  environments: string[];
+  max_executions: number;
+  used_executions: number;
+  remaining_uses: number;
+  valid_from: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  revoked_reason?: string | null;
+  policy_version?: string | null;
+  last_used_at?: string | null;
+}
+export interface WorkItemApprovalPreview {
+  tenant_id: string;
+  project: string;
+  version: number;
+  last_error?: string | null;
+  pending_approval_count: number;
+  approval?: {
+    id: string;
+    state: string;
+    risk_tier: string;
+    patch_hash: string;
+    base_version: number;
+    approval_request_id?: string | null;
+  } | null;
+}
 export interface HandoverEntry {
   id: string;
   project_key: string;
@@ -1101,6 +1178,24 @@ export const api = {
     request<GoalSummary[]>(`/goals${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   getGoalStatus: (goalId: string) =>
     request<GoalDetail>(`/goals/${encodeURIComponent(goalId)}/status`),
+  getGoalWorkTree: (goalId: string) =>
+    request<GoalWorkTree>(`/goals/${encodeURIComponent(goalId)}/tree?include=evidence,approvals,dependencies`),
+  getGoalGovernance: (goalId: string) =>
+    request<GoalGovernance>(`/goals/${encodeURIComponent(goalId)}/governance`),
+  getGoalApprovalGrants: (goalId: string, actorSessionId: string) =>
+    request<GoalApprovalGrant[]>(`/goals/${encodeURIComponent(goalId)}/auto-approval-grants`, {
+      headers: { "X-Chat-Session-ID": actorSessionId },
+    }),
+  getWorkItemApprovalPreview: (itemId: string, actorSessionId: string) =>
+    request<WorkItemApprovalPreview>(`/work-items/${encodeURIComponent(itemId)}/approval-preview`, {
+      headers: { "X-Chat-Session-ID": actorSessionId },
+    }),
+  revokeGoalApprovalGrant: (grantId: string, reason: string, actorSessionId: string) =>
+    request<any>(`/auto-approval-grants/${encodeURIComponent(grantId)}/revoke`, {
+      method: "POST",
+      headers: { "X-Chat-Session-ID": actorSessionId },
+      body: JSON.stringify({ reason }),
+    }),
   // 담당별 현재 상태. 창을 하나씩 열지 않아도 되게.
   getGoalBoard: (goalId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/board`),
