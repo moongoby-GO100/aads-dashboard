@@ -1,5 +1,11 @@
 # AADS Dashboard Handover
 
+## 2026-09-19 18:35 KST — 목표 문서 최신본·버전 이력 UI
+
+- `/goals`와 채팅 우측 `GoalPanel`에서 현재 문서를 `최신 vX.Y.Z`로 표시하고, 이전 버전은 접힌 이력에서 별도 열람하도록 했다. API 구버전 롤백 중에는 version 필드가 없어도 기존 링크가 그대로 표시된다.
+- 검증: TypeScript typecheck와 대상 ESLint가 통과했다. 이 기록 시점에는 production build, 브라우저 E2E, commit/push/deploy 전이다.
+- 롤백: 이 UI 커밋만 revert하고 이전 immutable dashboard 이미지로 blue/green 전환한다. 백엔드 문서 원장 데이터에는 영향이 없다.
+
 ## 2026-09-13 — Chat modernization WP06 streaming renderer integration (isolated / not deployed)
 
 - Clean `origin/main=c9ceb2d` worktree에서 기존 `planMarkdownRender` 정책을 운영 `MarkdownBlock`과 라이브 assistant bubble에 연결했다.

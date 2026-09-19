@@ -34,14 +34,20 @@ type Candidate = {
   session_id: string; title: string; role_key: string;
   message_count: number; has_prompt: boolean;
 };
-type GoalDoc = { kind: string; doc_path: string; title: string | null };
+type GoalDoc = {
+  id: number; kind: string; doc_path: string; title: string | null;
+  document_key: string; version: string; status: string; is_latest: boolean;
+  change_summary?: string | null; version_count: number;
+};
 type Board = {
   halted: boolean; owners: BoardOwner[]; has_lead?: boolean;
-  documents?: GoalDoc[]; has_design?: boolean; missing_design?: string[];
+  documents?: GoalDoc[]; document_history?: GoalDoc[]; has_document_history?: boolean;
+  has_design?: boolean; missing_design?: string[];
 };
 
 const docLabel: Record<string, string> = {
-  plan: "📋 기획서", prd: "📐 PRD", report: "📊 리포트", reference: "🔗 참고",
+  plan: "📋 기획서", prd: "📐 PRD", design: "🛠 설계서", architecture: "🏗 아키텍처",
+  contract: "📜 계약", prototype: "🧪 목업", report: "📊 리포트", reference: "🔗 참고",
 };
 const docMissingLabel: Record<string, string> = { plan: "기획서", prd: "PRD" };
 
@@ -417,7 +423,7 @@ export default function GoalsPage() {
                   {board.documents && board.documents.length > 0 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {board.documents.map((d) => (
-                        <a key={d.doc_path} href={buildGoalDocHref(d.doc_path) || undefined}
+                        <a key={d.id || d.doc_path} href={buildGoalDocHref(d.doc_path) || undefined}
                            target="_blank" rel="noopener noreferrer"
                            title={d.doc_path}
                            style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", textDecoration: "none" }}>
@@ -425,10 +431,32 @@ export default function GoalsPage() {
                           <span style={{ marginLeft: 6, color: "var(--text-secondary)" }}>
                             {d.title || d.doc_path.split("/").pop()}
                           </span>
+                          {d.version && (
+                            <span style={{ marginLeft: 6, color: "#16a34a", fontWeight: 700 }}>
+                              최신 v{d.version}
+                            </span>
+                          )}
                         </a>
                       ))}
                     </div>
                   ) : null}
+                  {board.has_document_history && board.document_history && (
+                    <details style={{ marginTop: 8 }}>
+                      <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--text-secondary)" }}>
+                        이전 문서 버전 보기
+                      </summary>
+                      <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {board.document_history.filter((d) => !d.is_latest).map((d) => (
+                          <a key={d.id || d.doc_path} href={buildGoalDocHref(d.doc_path) || undefined}
+                             target="_blank" rel="noopener noreferrer"
+                             title={d.change_summary || d.doc_path}
+                             style={{ fontSize: 11, padding: "3px 8px", borderRadius: 7, border: "1px solid var(--border)", color: "var(--text-secondary)", textDecoration: "none" }}>
+                            {docLabel[d.kind] || "🔗 문서"} v{d.version} · {d.title || d.doc_path.split("/").pop()}
+                          </a>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                   {board.missing_design && board.missing_design.length > 0 && (
                     <div style={{ marginTop: board.documents?.length ? 7 : 0, fontSize: 11.5, color: "#d97706" }}>
                       ⚠ {board.missing_design.map((k) => docMissingLabel[k] || k).join("와 ")} 없음 — 먼저 쓰십시오
