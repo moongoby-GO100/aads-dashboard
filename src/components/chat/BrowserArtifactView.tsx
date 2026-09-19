@@ -35,6 +35,7 @@ type ArtifactStatus = {
   current_url?: string;
   execution_actor?: "Browser" | "Windows PC" | "Human" | "대기";
   current_step?: string;
+  progress_percent?: number | null;
   learning_state?: "learned" | "reused" | "rediscover" | "approval_required" | "idle";
   freshness_status?: "CURRENT" | "STALE" | "CONFLICT" | "UNAVAILABLE" | "NOT_APPLICABLE";
   evidence_count?: number;
@@ -116,7 +117,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
       const response = await api.getBrowserTaskLiveFrame(selected.id, {
         event_limit: 20,
         capture,
-      }) as { frame?: LiveFrame | null; events?: BrowserEvent[]; artifact_status?: ArtifactStatus };
+      }) as { frame?: LiveFrame | null; events?: BrowserEvent[]; artifact_status?: ArtifactStatus | null };
       setFrame(response.frame || null);
       setEvents(Array.isArray(response.events) ? response.events : []);
       setArtifactStatus(response.artifact_status || null);
@@ -276,8 +277,16 @@ export default function BrowserArtifactView({ sessionId }: Props) {
 
       <div style={{ border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden" }}>
         <div style={{ padding: "9px 11px", background: "var(--ct-card)", borderBottom: "1px solid var(--ct-border)", fontSize: 12 }}>
-          <strong>{selected?.current_step || "대기 중"}</strong>
-          <div style={{ marginTop: 4, color: "var(--ct-text2)", fontSize: 11, overflowWrap: "anywhere" }}>{artifactStatus?.execution_actor || frameSource(frame)} · {artifactStatus?.current_url || frame?.current_url || selected?.target_url || "작업 없음"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <strong style={{ flex: 1 }}>{artifactStatus?.current_step || selected?.current_step || "대기 중"}</strong>
+            {typeof artifactStatus?.progress_percent === "number" && <span aria-label={`진행률 ${artifactStatus.progress_percent}%`}>{artifactStatus.progress_percent}%</span>}
+          </div>
+          <div style={{ marginTop: 4, color: "var(--ct-text2)", fontSize: 11 }}>{artifactStatus?.execution_actor || frameSource(frame)} · {artifactStatus?.current_url || frame?.current_url || selected?.target_url || "작업 없음"}</div>
+          {typeof artifactStatus?.progress_percent === "number" && (
+            <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={artifactStatus.progress_percent} style={{ height: 5, marginTop: 8, overflow: "hidden", borderRadius: 999, background: "var(--ct-border)" }}>
+              <div style={{ width: `${artifactStatus.progress_percent}%`, height: "100%", background: "var(--ct-accent)" }} />
+            </div>
+          )}
         </div>
         <div style={{ maxHeight: 240, overflowY: "auto" }}>
           {events.map((event) => (
