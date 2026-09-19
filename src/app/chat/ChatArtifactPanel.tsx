@@ -409,7 +409,7 @@ function projectOverviewElapsed(startedAt: string | null | undefined, nowMs: num
   return formatDurationText((nowMs - startMs) / 1000);
 }
 
-const ALL_PROJECTS: readonly string[] = ["AADS", "FOOD", "GO100", "KIS", "SF", "NTV2", "NAS"];
+const ALL_PROJECTS: readonly string[] = ["AADS", "FOOD", "GO100", "KIS", "SF", "NTV2", "NAS", "ACCT"];
 
 function DeployStatusCard({
   status,
