@@ -149,7 +149,7 @@ export type ArtifactMode = "wide" | "full" | "mini" | "hidden";
 // report 는 `chat_artifacts`(대화 안에서 만들어진 것), files 는
 // `write_remote_file` 로 디스크에 쓴 것이다. 2026-09-14 대표님 지적:
 // "보고서로 저장된 파일명 리스트가 안나오더라".
-export type ArtifactTab = "directive" | "report" | "files" | "code" | "chart" | "agenda" | "tasks" | "log" | "deploy" | "dialog" | "html_preview";
+export type ArtifactTab = "directive" | "report" | "files" | "code" | "chart" | "agenda" | "tasks" | "browser" | "log" | "deploy" | "dialog" | "html_preview";
 export type ScreenSize = "desktop" | "tablet" | "mobile";
 
 // Theme CSS variables

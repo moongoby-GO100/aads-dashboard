@@ -3,6 +3,7 @@ import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import RunnerHostStatus from "./RunnerHostStatus";
+import BrowserArtifactView from "@/components/chat/BrowserArtifactView";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import MermaidDiagram from "@/components/MermaidDiagram";
@@ -1641,10 +1642,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
                     { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                     { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                    { key: "browser" as ArtifactTab, icon: "🌐", label: "브라우저" },
                   ]
                 ).filter((tab) => {
                   if (tab.key === "files") return true;
-                  if (tab.key === "tasks" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda" || tab.key === "directive") return true;
+                  if (tab.key === "tasks" || tab.key === "browser" || tab.key === "log" || tab.key === "deploy" || tab.key === "agenda" || tab.key === "directive") return true;
                   return artifactTab === tab.key || (artifactCounts[tab.key] ?? 0) > 0;
                 }).map((tab) => (
                   <button
@@ -1701,7 +1703,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
             </div>
 
             {/* 검색/필터 영역 */}
-            {artifactTab !== "tasks" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && artifactTab !== "directive" && (
+            {artifactTab !== "tasks" && artifactTab !== "browser" && artifactTab !== "log" && artifactTab !== "agenda" && artifactTab !== "dialog" && artifactTab !== "directive" && (
               <div style={{
                 padding: "6px 10px",
                 borderBottom: "1px solid var(--ct-border)",
@@ -1852,6 +1854,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                   <RunnerHostStatus emphasis="running" />
                   <ArtifactTaskMonitor sessionId={activeSession?.id} />
                 </div>
+              ) : artifactTab === "browser" ? (
+                <BrowserArtifactView sessionId={activeSession?.id || sessionId} />
               ) : artifactTab === "deploy" ? (
                 <DeployStatusCard
                   status={deployStatus}
@@ -2938,6 +2942,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 { key: "html_preview" as ArtifactTab, icon: "🖼️", label: "미리보기" },
                 { key: "chart" as ArtifactTab, icon: "📊", label: "차트" },
                 { key: "tasks" as ArtifactTab, icon: "⚡", label: "작업" },
+                { key: "browser" as ArtifactTab, icon: "🌐", label: "브라우저" },
               ]
             ).map((tab) => (
               <button
