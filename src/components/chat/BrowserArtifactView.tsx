@@ -31,6 +31,19 @@ type LiveFrame = {
   metadata?: Record<string, unknown>;
 };
 
+type ArtifactStatus = {
+  current_url?: string;
+  execution_actor?: "Browser" | "Windows PC" | "Human" | "대기";
+  current_step?: string;
+  learning_state?: "learned" | "reused" | "rediscover" | "approval_required" | "idle";
+  freshness_status?: "CURRENT" | "STALE" | "CONFLICT" | "UNAVAILABLE" | "NOT_APPLICABLE";
+  evidence_count?: number;
+  approval_required?: boolean;
+  last_error?: string;
+  retry_action?: Record<string, unknown> | null;
+  can_retry?: boolean;
+};
+
 type Props = { sessionId?: string };
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
@@ -71,6 +84,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [frame, setFrame] = useState<LiveFrame | null>(null);
   const [events, setEvents] = useState<BrowserEvent[]>([]);
+  const [artifactStatus, setArtifactStatus] = useState<ArtifactStatus | null>(null);
   const [targetUrl, setTargetUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -95,15 +109,17 @@ export default function BrowserArtifactView({ sessionId }: Props) {
     if (!selected?.id) {
       setFrame(null);
       setEvents([]);
+      setArtifactStatus(null);
       return;
     }
     try {
       const response = await api.getBrowserTaskLiveFrame(selected.id, {
         event_limit: 20,
         capture,
-      }) as { frame?: LiveFrame | null; events?: BrowserEvent[] };
+      }) as { frame?: LiveFrame | null; events?: BrowserEvent[]; artifact_status?: ArtifactStatus };
       setFrame(response.frame || null);
       setEvents(Array.isArray(response.events) ? response.events : []);
+      setArtifactStatus(response.artifact_status || null);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -121,10 +137,40 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   }, [selected, selectedId]);
 
   useEffect(() => {
+    if (!sessionId || typeof window === "undefined") return;
+    const restored = window.localStorage.getItem(`smart-browser-task:${sessionId}`);
+    if (restored && visibleTasks.some((task) => task.id === restored)) setSelectedId(restored);
+  }, [sessionId, visibleTasks]);
+
+  useEffect(() => {
+    if (!sessionId || !selectedId || typeof window === "undefined") return;
+    window.localStorage.setItem(`smart-browser-task:${sessionId}`, selectedId);
+  }, [selectedId, sessionId]);
+
+  useEffect(() => {
     void loadLive(false);
     const timer = window.setInterval(() => void loadLive(false), 3000);
-    return () => window.clearInterval(timer);
+    const onVisible = () => { if (document.visibilityState === "visible") void loadLive(false); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [loadLive]);
+
+  const retryTask = async () => {
+    if (!selected?.id || !artifactStatus?.can_retry) return;
+    setBusy(true);
+    try {
+      await api.retryBrowserTask(selected.id);
+      await Promise.all([loadTasks(), loadLive(false)]);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const createTask = async () => {
     const url = targetUrl.trim();
@@ -166,7 +212,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
             placeholder="https://... 주소를 입력하세요"
             style={{ flex: 1, minWidth: 0, border: "1px solid var(--ct-border)", borderRadius: 7, padding: "8px 9px", background: "var(--ct-input)", color: "var(--ct-text)", fontSize: 12 }}
           />
-          <button disabled={busy || !targetUrl.trim()} onClick={() => void createTask()} style={{ border: 0, borderRadius: 7, padding: "8px 10px", background: "var(--ct-accent)", color: "#fff", cursor: busy ? "wait" : "pointer", opacity: busy || !targetUrl.trim() ? 0.55 : 1 }}>
+          <button disabled={busy || !targetUrl.trim()} onClick={() => void createTask()} style={{ minHeight: 44, border: 0, borderRadius: 7, padding: "8px 10px", background: "var(--ct-accent)", color: "#fff", cursor: busy ? "wait" : "pointer", opacity: busy || !targetUrl.trim() ? 0.55 : 1 }}>
             열기
           </button>
         </div>
@@ -177,8 +223,41 @@ export default function BrowserArtifactView({ sessionId }: Props) {
 
       {error && <div role="alert" style={{ padding: 9, borderRadius: 8, background: "rgba(239,68,68,.12)", color: "#ef4444", fontSize: 12 }}>{error}</div>}
 
+      {selected && (
+        <section aria-label="스마트 브라우저 실행 상태" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 }}>
+          {[
+            ["실행 주체", artifactStatus?.execution_actor || frameSource(frame)],
+            ["학습 상태", ({ learned: "처음 학습", reused: "검증된 흐름 재사용", rediscover: "구조 다시 찾는 중", approval_required: "승인 필요", idle: "학습 대기" } as Record<string, string>)[artifactStatus?.learning_state || "idle"]],
+            ["사실 최신성", ({ CURRENT: "최신 확인", STALE: "기한 만료", CONFLICT: "값 불일치", UNAVAILABLE: "재확인 실패", NOT_APPLICABLE: "변동 사실 없음" } as Record<string, string>)[artifactStatus?.freshness_status || "NOT_APPLICABLE"]],
+            ["근거", `${artifactStatus?.evidence_count || 0}건`],
+          ].map(([label, value]) => (
+            <div key={label} style={{ minWidth: 0, border: "1px solid var(--ct-border)", borderRadius: 8, padding: "9px 10px", background: "var(--ct-card)" }}>
+              <div style={{ color: "var(--ct-text2)", fontSize: 10 }}>{label}</div>
+              <strong style={{ display: "block", marginTop: 3, fontSize: 12, overflowWrap: "anywhere" }}>{value}</strong>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {artifactStatus?.approval_required && (
+        <div role="status" style={{ padding: 10, borderRadius: 8, background: "rgba(245,158,11,.13)", color: "#d97706", fontSize: 12 }}>
+          사용자 승인 또는 로그인이 필요합니다. 승인 화면에서 처리하면 현재 단계부터 이어집니다.
+        </div>
+      )}
+
+      {artifactStatus?.last_error && (
+        <div role="alert" style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, background: "rgba(239,68,68,.12)", color: "#ef4444", fontSize: 12 }}>
+          <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{artifactStatus.last_error}</span>
+          {artifactStatus.can_retry && (
+            <button onClick={() => void retryTask()} disabled={busy} style={{ minHeight: 44, minWidth: 72, border: 0, borderRadius: 8, background: "#ef4444", color: "#fff", fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
+              다시 시도
+            </button>
+          )}
+        </div>
+      )}
+
       {visibleTasks.length > 0 && (
-        <select value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)} style={{ width: "100%", border: "1px solid var(--ct-border)", borderRadius: 7, padding: 8, background: "var(--ct-input)", color: "var(--ct-text)", fontSize: 12 }}>
+        <select value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)} style={{ width: "100%", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 7, padding: 8, background: "var(--ct-input)", color: "var(--ct-text)", fontSize: 12 }}>
           {visibleTasks.map((task) => <option key={task.id} value={task.id}>{task.status} · {task.current_step || task.target_url}</option>)}
         </select>
       )}
@@ -190,15 +269,15 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         ) : (
           <span style={{ color: "#94a3b8", fontSize: 12 }}>브라우저 작업을 시작하면 현재 화면이 여기에 표시됩니다.</span>
         )}
-        <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ position: "absolute", right: 8, top: 8, border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "5px 7px", background: "rgba(15,23,42,.82)", color: "#e2e8f0", fontSize: 10, cursor: selected ? "pointer" : "not-allowed" }}>
-          화면 새로고침
-        </button>
+          <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ position: "absolute", right: 8, top: 8, minHeight: 44, border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 10px", background: "rgba(15,23,42,.82)", color: "#e2e8f0", fontSize: 11, cursor: selected ? "pointer" : "not-allowed" }}>
+            화면 새로고침
+          </button>
       </div>
 
       <div style={{ border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden" }}>
         <div style={{ padding: "9px 11px", background: "var(--ct-card)", borderBottom: "1px solid var(--ct-border)", fontSize: 12 }}>
           <strong>{selected?.current_step || "대기 중"}</strong>
-          <div style={{ marginTop: 4, color: "var(--ct-text2)", fontSize: 11 }}>{frameSource(frame)} · {frame?.current_url || selected?.target_url || "작업 없음"}</div>
+          <div style={{ marginTop: 4, color: "var(--ct-text2)", fontSize: 11, overflowWrap: "anywhere" }}>{artifactStatus?.execution_actor || frameSource(frame)} · {artifactStatus?.current_url || frame?.current_url || selected?.target_url || "작업 없음"}</div>
         </div>
         <div style={{ maxHeight: 240, overflowY: "auto" }}>
           {events.map((event) => (

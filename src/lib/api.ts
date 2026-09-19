@@ -1058,6 +1058,8 @@ export const api = {
     request<unknown>("/browser-tasks/access-check", { method: "POST", body: JSON.stringify(data) }),
   updateBrowserTaskStatus: (taskId: string, data: { status: string; current_step?: string; result?: Record<string, unknown>; error?: string }) =>
     request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/status`, { method: "PATCH", body: JSON.stringify(data) }),
+  retryBrowserTask: (taskId: string) =>
+    request<unknown>(`/browser-tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST" }),
   getBrowserTaskEvents: (taskId: string, params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
