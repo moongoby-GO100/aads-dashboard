@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { syncTokenCookieFromStorage } from "@/lib/auth";
 import { resolveRouteTitle } from "@/lib/navigation";
 import { CHAT_SESSION_TITLE_EVENT, type ChatSessionTitleEventDetail } from "@/lib/pageTitleEvents";
+import { SESSION_ATTENTION_EVENT, type SessionAttentionCounts } from "@/lib/sessionAttention";
 
 const APP_SUFFIX = "AADS";
 const CHAT_SUFFIX = "AADS Chat";
@@ -46,6 +47,37 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
     if (disabled || typeof document === "undefined") return;
     let abortController: AbortController | null = null;
     let titleRequestId = 0;
+    let attention: SessionAttentionCounts = { workingCount: 0, completedUnreadCount: 0 };
+    let baseTitle = formatDocumentTitle(resolveRouteTitle(pathname));
+    const faviconLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'));
+    const originalFavicons = faviconLinks.map((link) => ({ link, href: link.href }));
+
+    const applyFavicon = () => {
+      if (attention.workingCount === 0 && attention.completedUnreadCount === 0) {
+        originalFavicons.forEach(({ link, href }) => { link.href = href; });
+        return;
+      }
+      const color = attention.workingCount > 0 ? "#22c55e" : "#38bdf8";
+      const glyph = attention.workingCount > 0 ? "▶" : "✓";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="43" text-anchor="middle" font-size="34" font-family="Arial" fill="white">${glyph}</text></svg>`;
+      const href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      faviconLinks.forEach((link) => { link.href = href; });
+    };
+
+    const renderTitle = () => {
+      const states = [
+        attention.workingCount > 0 ? `작업중 ${attention.workingCount}` : "",
+        attention.completedUnreadCount > 0 ? `완료 ${attention.completedUnreadCount}` : "",
+      ].filter(Boolean);
+      const prefix = states.length > 0 ? `[${states.join(" · ")}] ` : "";
+      document.title = `${prefix}${baseTitle}`;
+      applyFavicon();
+    };
+
+    const setBaseTitle = (title: string, suffix = APP_SUFFIX) => {
+      baseTitle = formatDocumentTitle(title, suffix);
+      renderTitle();
+    };
 
     const cancelPendingSessionLookup = () => {
       titleRequestId += 1;
@@ -58,13 +90,13 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
 
       if (pathname === "/chat") {
         const sessionId = currentChatSessionId();
-        document.title = formatDocumentTitle("AI Chat", CHAT_SUFFIX);
+        setBaseTitle("AI Chat", CHAT_SUFFIX);
         if (!sessionId) return;
         const requestId = titleRequestId;
         abortController = new AbortController();
         fetchChatSessionTitle(sessionId, abortController.signal)
           .then((title) => {
-            if (title && requestId === titleRequestId) document.title = formatDocumentTitle(title, CHAT_SUFFIX);
+            if (title && requestId === titleRequestId) setBaseTitle(title, CHAT_SUFFIX);
           })
           .catch(() => {
             // Keep the route-level title if session lookup fails.
@@ -72,7 +104,7 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
         return;
       }
 
-      document.title = formatDocumentTitle(resolveRouteTitle(pathname));
+      setBaseTitle(resolveRouteTitle(pathname));
     };
 
     const handleChatSessionTitleChange = (event: Event) => {
@@ -81,18 +113,28 @@ export default function PageTitleManager({ disabled = false }: { disabled?: bool
       if (!detail || detail.sessionId !== currentChatSessionId()) return;
       cancelPendingSessionLookup();
       const nextTitle = detail.deleted ? "AI Chat" : detail.title || "AI Chat";
-      document.title = formatDocumentTitle(nextTitle, CHAT_SUFFIX);
+      setBaseTitle(nextTitle, CHAT_SUFFIX);
+    };
+
+    const handleSessionAttentionChange = (event: Event) => {
+      const detail = (event as CustomEvent<SessionAttentionCounts>).detail;
+      if (!detail) return;
+      attention = detail;
+      renderTitle();
     };
 
     applyTitle();
     window.addEventListener("hashchange", applyTitle);
     window.addEventListener("popstate", applyTitle);
     window.addEventListener(CHAT_SESSION_TITLE_EVENT, handleChatSessionTitleChange);
+    window.addEventListener(SESSION_ATTENTION_EVENT, handleSessionAttentionChange);
     return () => {
       window.removeEventListener("hashchange", applyTitle);
       window.removeEventListener("popstate", applyTitle);
       window.removeEventListener(CHAT_SESSION_TITLE_EVENT, handleChatSessionTitleChange);
+      window.removeEventListener(SESSION_ATTENTION_EVENT, handleSessionAttentionChange);
       if (abortController) abortController.abort();
+      originalFavicons.forEach(({ link, href }) => { link.href = href; });
     };
   }, [disabled, pathname]);
 

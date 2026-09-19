@@ -1,7 +1,9 @@
 "use client";
-import { memo, RefObject, type CSSProperties } from "react";
+import { memo, RefObject, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { syncTokenCookieFromStorage } from "@/lib/auth";
+import { emitSessionAttentionChange } from "@/lib/sessionAttention";
+import { chatApi } from "./api";
 import type { Workspace, ChatSession, Theme, ScreenSize } from "./types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -17,6 +19,31 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ACTIVE_SESSION_WINDOW_MS = 90 * 1000;
 const RECENT_SESSION_WINDOW_MS = 10 * 60 * 1000;
+
+type SessionAttentionItem = {
+  session_id: string;
+  workspace_id: string;
+  workspace_name: string;
+  workspace_icon?: string | null;
+  project_key?: string | null;
+  title?: string | null;
+  role_key?: string | null;
+  current_model?: string | null;
+  message_count: number;
+  pinned: boolean;
+  tags: string[];
+  state: "working" | "completed_unread";
+  execution_id?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SessionAttentionSummary = {
+  items: SessionAttentionItem[];
+  working_count: number;
+  completed_unread_count: number;
+};
 
 function getWorkspaceDefaultRole(workspace?: Workspace): string {
   const value = String(workspace?.settings?.default_role_key || "");
@@ -120,6 +147,95 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
   } = props;
 
   const showLeftSidebar = screenSize === "desktop" ? leftOpen : mobileOverlay === "sidebar";
+  const [attention, setAttention] = useState<SessionAttentionSummary>({
+    items: [],
+    working_count: 0,
+    completed_unread_count: 0,
+  });
+
+  const publishAttention = useCallback((next: SessionAttentionSummary) => {
+    setAttention(next);
+    emitSessionAttentionChange({
+      workingCount: next.working_count,
+      completedUnreadCount: next.completed_unread_count,
+    });
+  }, []);
+
+  const refreshAttention = useCallback(async () => {
+    try {
+      const next = await chatApi<SessionAttentionSummary>("/chat/session-attention");
+      publishAttention(next);
+    } catch {
+      // 기존 표시를 유지한다. 인증 만료는 공통 API 처리기가 로그인 복구로 보낸다.
+    }
+  }, [publishAttention]);
+
+  useEffect(() => {
+    const initialRefresh = window.setTimeout(() => void refreshAttention(), 0);
+    const timer = window.setInterval(() => void refreshAttention(), 15_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshAttention();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      emitSessionAttentionChange({ workingCount: 0, completedUnreadCount: 0 });
+    };
+  }, [refreshAttention]);
+
+  const acknowledgeAttention = useCallback(async (item: SessionAttentionItem) => {
+    if (item.state !== "completed_unread") return;
+    const remaining = attention.items.filter((candidate) => candidate.session_id !== item.session_id);
+    publishAttention({
+      items: remaining,
+      working_count: remaining.filter((candidate) => candidate.state === "working").length,
+      completed_unread_count: remaining.filter((candidate) => candidate.state === "completed_unread").length,
+    });
+    try {
+      await chatApi(`/chat/session-attention/${encodeURIComponent(item.session_id)}/acknowledge`, {
+        method: "POST",
+      });
+    } catch {
+      void refreshAttention();
+    }
+  }, [attention.items, publishAttention, refreshAttention]);
+
+  const selectAttentionSession = useCallback((item: SessionAttentionItem) => {
+    isInitialLoadRef.current = true;
+    onSessionSelect({
+      id: item.session_id,
+      workspace_id: item.workspace_id,
+      title: item.title || "새 대화",
+      current_model: item.current_model || "",
+      role_key: item.role_key,
+      current_execution_id: item.state === "working" ? item.execution_id : null,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      pinned: item.pinned,
+      tags: item.tags || [],
+      message_count: item.message_count || 0,
+    });
+    void acknowledgeAttention(item);
+    if (screenSize !== "desktop") setMobileOverlay(null);
+  }, [acknowledgeAttention, isInitialLoadRef, onSessionSelect, screenSize, setMobileOverlay]);
+
+  const attentionGroups = useMemo(() => {
+    const groups = new Map<string, { name: string; icon: string; items: SessionAttentionItem[] }>();
+    for (const item of attention.items) {
+      const current = groups.get(item.workspace_id) || {
+        name: item.project_key || item.workspace_name,
+        icon: item.workspace_icon || "📁",
+        items: [],
+      };
+      current.items.push(item);
+      groups.set(item.workspace_id, current);
+    }
+    return Array.from(groups.entries());
+  }, [attention.items]);
 
   return (
     <div
@@ -283,6 +399,103 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
 
           {/* Workspace + Sessions */}
           <div style={{ flex: 1, overflowY: "auto", contain: "content", padding: "0 8px" }}>
+            {attention.items.length > 0 && (
+              <section
+                aria-label="확인이 필요한 작업 세션"
+                style={{
+                  margin: "2px 0 10px",
+                  padding: "8px",
+                  border: "1px solid var(--ct-border)",
+                  borderRadius: "9px",
+                  background: "var(--ct-card)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                  <strong style={{ flex: 1, fontSize: "12px", color: "var(--ct-text)" }}>작업 세션</strong>
+                  {attention.working_count > 0 && (
+                    <span style={{ fontSize: "10px", color: "#22c55e" }}>작업중 {attention.working_count}</span>
+                  )}
+                  {attention.completed_unread_count > 0 && (
+                    <span style={{ fontSize: "10px", color: "#38bdf8" }}>완료 {attention.completed_unread_count}</span>
+                  )}
+                </div>
+                {attentionGroups.map(([workspaceId, group]) => (
+                  <div key={workspaceId} style={{ marginTop: "7px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--ct-text2)", margin: "0 3px 3px" }}>
+                      {group.icon} {group.name}
+                    </div>
+                    {group.items.map((item) => {
+                      const working = item.state === "working";
+                      return (
+                        <div
+                          key={item.session_id}
+                          style={{ display: "flex", alignItems: "center", gap: "4px", minHeight: "44px" }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectAttentionSession(item)}
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              minHeight: "40px",
+                              padding: "5px 7px",
+                              border: "none",
+                              borderRadius: "6px",
+                              background: activeSession?.id === item.session_id ? "var(--ct-accent)" : "var(--ct-hover)",
+                              color: activeSession?.id === item.session_id ? "#fff" : "var(--ct-text)",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "5px", minWidth: 0 }}>
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  width: "8px",
+                                  height: "8px",
+                                  borderRadius: "50%",
+                                  flexShrink: 0,
+                                  background: working ? "#22c55e" : "#38bdf8",
+                                  boxShadow: working ? "0 0 0 4px #22c55e30" : "none",
+                                }}
+                              />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "11px" }}>
+                                {item.title || "새 대화"}
+                              </span>
+                            </div>
+                            <div style={{ marginTop: "2px", fontSize: "9px", color: activeSession?.id === item.session_id ? "#fff" : working ? "#22c55e" : "#38bdf8" }}>
+                              {working ? "작업중" : "완료 · 확인 필요"}
+                            </div>
+                          </button>
+                          {!working && (
+                            <button
+                              type="button"
+                              title="확인 완료로 표시"
+                              aria-label={`${item.title || "새 대화"} 확인 완료`}
+                              onClick={() => void acknowledgeAttention(item)}
+                              style={{
+                                width: "40px",
+                                minWidth: "40px",
+                                height: "40px",
+                                border: "1px solid var(--ct-border)",
+                                borderRadius: "6px",
+                                background: "transparent",
+                                color: "#38bdf8",
+                                cursor: "pointer",
+                                fontSize: "15px",
+                              }}
+                            >
+                              ✓
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </section>
+            )}
             {workspaces.map((ws) => (
               <div key={ws.id} style={{ marginBottom: "4px" }}>
                 {/* Workspace header */}
