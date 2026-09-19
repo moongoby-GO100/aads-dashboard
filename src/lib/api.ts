@@ -165,9 +165,32 @@ export interface GoalWorkItem {
   progress: number;
   version: number;
   assignment_id?: string | null;
+  milestone_title?: string | null;
+  milestone_sequence?: number | null;
   last_error?: string | null;
   pending_approval_count: number;
-  evidence?: { count: number; verified_count: number };
+  evidence?: {
+    count: number;
+    verified_count: number;
+    items?: Array<{
+      id: string;
+      evidence_type: string;
+      uri: string;
+      criterion_key?: string | null;
+      verified: boolean;
+      created_at: string;
+    }>;
+  };
+  recovery?: {
+    change_set_id: string;
+    change_set_state: string;
+    outbox_id?: string | null;
+    delivery_state?: string | null;
+    attempts?: number | null;
+    available_at?: string | null;
+    last_error?: string | null;
+    can_retry: boolean;
+  } | null;
   dependencies?: Array<{ work_item_id: string; type: string }>;
   children: GoalWorkItem[];
 }
@@ -220,12 +243,22 @@ export interface WorkItemApprovalPreview {
   version: number;
   last_error?: string | null;
   pending_approval_count: number;
+  current?: Record<string, unknown>;
   approval?: {
     id: string;
     state: string;
     risk_tier: string;
     patch_hash: string;
+    patch?: Array<Record<string, unknown>>;
     base_version: number;
+    target_version?: number | null;
+    action?: string | null;
+    rationale?: string | null;
+    expected_effect?: string | null;
+    rollback_plan?: string | null;
+    environment?: string | null;
+    risk_factors?: string[];
+    last_error?: string | null;
     approval_request_id?: string | null;
   } | null;
 }
@@ -1189,6 +1222,12 @@ export const api = {
   getWorkItemApprovalPreview: (itemId: string, actorSessionId: string) =>
     request<WorkItemApprovalPreview>(`/work-items/${encodeURIComponent(itemId)}/approval-preview`, {
       headers: { "X-Chat-Session-ID": actorSessionId },
+    }),
+  retryWorkItemDelivery: (itemId: string, reason: string, actorSessionId: string) =>
+    request<any>(`/work-items/${encodeURIComponent(itemId)}/retry-delivery`, {
+      method: "POST",
+      headers: { "X-Chat-Session-ID": actorSessionId },
+      body: JSON.stringify({ reason }),
     }),
   revokeGoalApprovalGrant: (grantId: string, reason: string, actorSessionId: string) =>
     request<any>(`/auto-approval-grants/${encodeURIComponent(grantId)}/revoke`, {

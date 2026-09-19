@@ -11,12 +11,30 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "#64748b", draft: "#64748b",
 };
 
-function ItemCard({ item, previews, depth = 0 }: {
-  item: GoalWorkItem; previews: Record<string, WorkItemApprovalPreview | null>; depth?: number;
+function ItemCard({ item, previews, actorSessionId, onChanged, depth = 0 }: {
+  item: GoalWorkItem;
+  previews: Record<string, WorkItemApprovalPreview | null>;
+  actorSessionId?: string | null;
+  onChanged: () => Promise<void>;
+  depth?: number;
 }) {
   const color = STATUS_COLOR[item.status] || "#64748b";
   const evidence = item.evidence;
   const approval = previews[item.id]?.approval;
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState("");
+  const retryDelivery = useCallback(async () => {
+    if (!actorSessionId || !item.recovery?.can_retry || retrying) return;
+    const reason = window.prompt("실패한 전달을 다시 시도하는 이유를 적어 주십시오.")?.trim();
+    if (!reason) return;
+    setRetrying(true); setRetryError("");
+    try {
+      await api.retryWorkItemDelivery(item.id, reason, actorSessionId);
+      await onChanged();
+    } catch (cause) {
+      setRetryError(cause instanceof Error ? cause.message : "재시도 요청에 실패했습니다.");
+    } finally { setRetrying(false); }
+  }, [actorSessionId, item.id, item.recovery?.can_retry, onChanged, retrying]);
   return (
     <div style={{ marginLeft: depth ? 18 : 0, marginTop: 8 }}>
       <div style={{ border: "1px solid var(--border)", borderLeft: `4px solid ${color}`, borderRadius: 10,
@@ -27,6 +45,7 @@ function ItemCard({ item, previews, depth = 0 }: {
           <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5 }}>
+          {item.milestone_title && <span>마일스톤 {item.milestone_sequence ?? "—"} · {item.milestone_title}</span>}
           <span>진행 {Number(item.progress || 0).toFixed(0)}%</span>
           <span>버전 {item.version}</span>
           {evidence && <span>근거 {evidence.verified_count}/{evidence.count}</span>}
@@ -34,16 +53,48 @@ function ItemCard({ item, previews, depth = 0 }: {
           {(item.dependencies?.length || 0) > 0 && <span>의존 {item.dependencies?.length}</span>}
         </div>
         {item.last_error && <div role="alert" style={{ marginTop: 7, color: "#dc2626", fontSize: 11 }}>마지막 오류 · {item.last_error}</div>}
+        {evidence?.items?.length ? <details style={{ marginTop: 7 }}>
+          <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-secondary)", fontSize: 10.5, fontWeight: 800 }}>
+            최근 검증 근거 {evidence.items.length}건 보기
+          </summary>
+          <div style={{ display: "grid", gap: 5 }}>
+            {evidence.items.map((entry) => <a key={entry.id} href={entry.uri} target="_blank" rel="noreferrer"
+              style={{ color: entry.verified ? "#16a34a" : "#d97706", fontSize: 10.5, overflowWrap: "anywhere" }}>
+              {entry.verified ? "검증됨" : "미검증"} · {entry.criterion_key || entry.evidence_type} · {entry.uri}
+            </a>)}
+          </div>
+        </details> : null}
         {approval && <div style={{ marginTop: 8, padding: "8px 9px", borderRadius: 8, border: "1px solid #d97706", background: "rgba(217,119,6,.07)" }}>
           <div style={{ color: "#d97706", fontSize: 11, fontWeight: 800 }}>승인 검토 · 위험 {approval.risk_tier || "미분류"}</div>
           <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5, lineHeight: 1.5 }}>
-            상태 {approval.state || "pending"} · 기준 버전 {approval.base_version ?? "—"}<br />
-            변경 해시 {approval.patch_hash || "미제공"}<br />
-            영향·권장안·비권장 사유·롤백은 승인 상세에 없으면 실행 전 다시 확인합니다.
+            상태 {approval.state || "pending"} · 기준 {approval.base_version ?? "—"} → 목표 {approval.target_version ?? "—"}<br />
+            환경 {approval.environment || "미지정"} · 변경 해시 {approval.patch_hash || "미제공"}<br />
+            사유 {approval.rationale || "미기재"}<br />
+            예상 영향 {approval.expected_effect || "미기재"}<br />
+            롤백 {approval.rollback_plan || "미기재"}
           </div>
+          {approval.patch?.length ? <pre style={{ margin: "7px 0 0", padding: 7, borderRadius: 6, overflowX: "auto", background: "var(--bg-card)", color: "var(--text-primary)", fontSize: 9.5 }}>
+            {JSON.stringify(approval.patch, null, 2)}
+          </pre> : null}
+        </div>}
+        {item.recovery && <div style={{ marginTop: 8, padding: "8px 9px", borderRadius: 8, border: "1px solid #dc2626", background: "rgba(220,38,38,.06)" }}>
+          <div style={{ color: "#dc2626", fontSize: 11, fontWeight: 800 }}>전달 복구 필요 · {item.recovery.delivery_state || item.recovery.change_set_state}</div>
+          <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5, lineHeight: 1.5 }}>
+            시도 {item.recovery.attempts ?? 0}회 · {item.recovery.last_error || "오류 내용 없음"}
+          </div>
+          {item.recovery.can_retry && <button type="button" onClick={() => void retryDelivery()}
+            disabled={!actorSessionId || retrying}
+            title={!actorSessionId ? "담당 세션을 선택해야 재시도할 수 있습니다." : undefined}
+            style={{ marginTop: 7, minHeight: 44, padding: "0 13px", borderRadius: 8, border: 0,
+                     background: actorSessionId ? "#dc2626" : "#94a3b8", color: "white", fontWeight: 800,
+                     cursor: actorSessionId && !retrying ? "pointer" : "not-allowed" }}>
+            {retrying ? "재시도 요청 중" : "실패한 전달 재시도"}
+          </button>}
+          {retryError && <div role="alert" style={{ marginTop: 6, color: "#dc2626", fontSize: 10.5 }}>{retryError}</div>}
         </div>}
       </div>
-      {item.children?.map((child) => <ItemCard key={child.id} item={child} previews={previews} depth={depth + 1} />)}
+      {item.children?.map((child) => <ItemCard key={child.id} item={child} previews={previews}
+        actorSessionId={actorSessionId} onChanged={onChanged} depth={depth + 1} />)}
     </div>
   );
 }
@@ -144,7 +195,8 @@ export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; 
       {!error && tree && tree.items.length === 0 && <div style={{ marginTop: 10, padding: 12, border: "1px dashed var(--border)", borderRadius: 9, color: "var(--text-secondary)", fontSize: 11.5 }}>
         등록된 Epic이 없습니다. 업무 계층 API에서 Epic을 생성하면 Story와 Task가 이곳에 이어집니다.
       </div>}
-      {!error && tree?.items.map((item) => <ItemCard key={item.id} item={item} previews={previews} />)}
+      {!error && tree?.items.map((item) => <ItemCard key={item.id} item={item} previews={previews}
+        actorSessionId={selectedActor} onChanged={load} />)}
       {!error && (
         <details style={{ marginTop: 12 }}>
           <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-primary)", fontSize: 12, fontWeight: 800 }}>
