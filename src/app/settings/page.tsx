@@ -975,7 +975,7 @@ export default function SettingsPage() {
                 <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
                   <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>회사별 계정</h2>
                   <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-                    회사(워크스페이스)마다 먼저 쓸 Claude 계정을 지정합니다. 고르는 즉시 저장됩니다.
+                    회사(워크스페이스)마다 먼저 쓸 Claude·Codex 구독 계정을 지정합니다. 고르는 즉시 저장됩니다.
                   </p>
                   <CompanySlotPanel />
                 </section>

@@ -20,11 +20,16 @@ import { api } from "@/lib/api";
 interface CompanyRow {
   project_key: string;
   name: string;
-  slot: string;
+  slot?: string;
+  assignments?: Partial<Record<SubscriptionProvider, string>>;
 }
+
+type SubscriptionProvider = "anthropic" | "codex";
 
 interface AccountRow {
   slot: string;
+  provider: SubscriptionProvider;
+  account: string;
   label: string;
   key_name: string;
   priority: number;
@@ -57,22 +62,28 @@ export default function CompanySlotPanel() {
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 4000); };
 
-  const assign = async (row: CompanyRow, slot: string) => {
-    setSaving(row.project_key);
-    const previous = row.slot;
+  const assign = async (row: CompanyRow, provider: SubscriptionProvider, account: string) => {
+    const savingKey = `${row.project_key}:${provider}`;
+    setSaving(savingKey);
+    const previous = row.assignments?.[provider] ?? (provider === "anthropic" ? row.slot ?? "" : "");
     // 낙관적 반영 — 실패하면 되돌린다. 표가 길어 스크롤이 움직이면 어디를
     // 바꿨는지 놓친다.
     setCompanies((prev) => prev.map((c) =>
-      c.project_key === row.project_key ? { ...c, slot } : c));
+      c.project_key === row.project_key
+        ? { ...c, assignments: { ...(c.assignments ?? {}), [provider]: account } }
+        : c));
     try {
-      await api.setCompanySlot(row.project_key, slot || null);
-      const label = accounts.find((a) => a.slot === slot)?.label;
-      flash(slot
-        ? `${row.project_key} → ${label ?? `슬롯 ${slot}`} 배정했습니다`
-        : `${row.project_key} 배정을 해제했습니다 (자동 순서)`);
+      await api.setCompanySlot(row.project_key, provider, account || null);
+      const label = accounts.find((a) => a.provider === provider && a.account === account)?.label;
+      const providerLabel = provider === "anthropic" ? "Claude" : "Codex";
+      flash(account
+        ? `${row.project_key} → ${providerLabel} ${label ?? account} 배정했습니다`
+        : `${row.project_key} ${providerLabel} 배정을 해제했습니다 (자동 순서)`);
     } catch (e) {
       setCompanies((prev) => prev.map((c) =>
-        c.project_key === row.project_key ? { ...c, slot: previous } : c));
+        c.project_key === row.project_key
+          ? { ...c, assignments: { ...(c.assignments ?? {}), [provider]: previous } }
+          : c));
       setErr(e instanceof Error ? e.message : "저장 실패");
     } finally {
       setSaving("");
@@ -86,14 +97,22 @@ export default function CompanySlotPanel() {
       c.project_key.includes(q) || (c.name || "").toUpperCase().includes(q));
   }, [companies, query]);
 
-  const assignedCount = companies.filter((c) => c.slot).length;
+  const accountGroups = useMemo(() => ({
+    anthropic: accounts.filter((a) => a.provider === "anthropic"),
+    codex: accounts.filter((a) => a.provider === "codex"),
+  }), [accounts]);
+
+  const assignedCount = companies.reduce((count, company) => (
+    count + (company.assignments?.anthropic || company.slot ? 1 : 0)
+      + (company.assignments?.codex ? 1 : 0)
+  ), 0);
 
   return (
     <div className="space-y-3">
       <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-        회사마다 먼저 쓸 Claude 계정을 정합니다. <b>우선이지 전용이 아닙니다</b> —
+        회사마다 먼저 쓸 Claude·Codex 구독 계정을 각각 정합니다. <b>우선이지 전용이 아닙니다</b> —
         배정한 계정이 한도에 걸리면 배정 없는 계정으로 내려갑니다.
-        <span className="ml-1">자동은 우선순위 순서(현재 {accounts.map((a) => a.label).join(" → ") || "-"})입니다.</span>
+        <span className="ml-1">자동은 각 provider의 계정 우선순위 순서입니다.</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -121,14 +140,13 @@ export default function CompanySlotPanel() {
 
       {/* 열을 grid 로 고정한다. 회사 이름 길이가 제각각이라 flex 로 두면
           드롭다운이 행마다 다른 자리에 서서 표가 들쑥날쑥해진다. */}
-      <div className="space-y-1.5" style={{ minWidth: 560 }}>
+      <div className="space-y-1.5">
         {shown.map((row) => (
           <div
             key={row.project_key}
-            className="rounded-lg px-3 py-2"
+            className="rounded-lg px-3 py-2 grid grid-cols-1 md:grid-cols-[104px_minmax(120px,1fr)_56px_210px_230px]"
             style={{
               background: "var(--bg-secondary)", border: "1px solid var(--border)",
-              display: "grid", gridTemplateColumns: "104px minmax(120px,1fr) 56px 210px",
               gap: 12, alignItems: "center",
             }}
           >
@@ -140,24 +158,41 @@ export default function CompanySlotPanel() {
               {row.name}
             </span>
             <span className="text-xs px-1.5 py-0.5 rounded" style={{
-              background: row.slot ? "var(--accent)" : "transparent",
-              color: row.slot ? "#fff" : "transparent",
+              background: (row.assignments?.anthropic || row.slot || row.assignments?.codex) ? "var(--accent)" : "transparent",
+              color: (row.assignments?.anthropic || row.slot || row.assignments?.codex) ? "#fff" : "transparent",
               textAlign: "center",
             }}>
               배정됨
             </span>
             <select
-              value={row.slot ?? AUTO}
-              disabled={saving === row.project_key}
-              onChange={(e) => void assign(row, e.target.value)}
+              aria-label={`${row.project_key} Claude 계정`}
+              value={row.assignments?.anthropic ?? row.slot ?? AUTO}
+              disabled={saving === `${row.project_key}:anthropic`}
+              onChange={(e) => void assign(row, "anthropic", e.target.value)}
               className="text-xs rounded px-2 py-1.5 w-full"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
             >
-              <option value={AUTO}>자동 (배정 없음)</option>
-              {accounts.map((a) => (
-                <option key={a.slot} value={a.slot}>
+              <option value={AUTO}>Claude 자동 (배정 없음)</option>
+              {accountGroups.anthropic.map((a) => (
+                <option key={a.account} value={a.account}>
                   슬롯 {a.slot} · {a.label}
                   {a.last_resort ? " (최후 수단)" : ""}
+                  {a.rate_limited ? " · 한도정지" : ""}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={`${row.project_key} Codex 계정`}
+              value={row.assignments?.codex ?? AUTO}
+              disabled={saving === `${row.project_key}:codex`}
+              onChange={(e) => void assign(row, "codex", e.target.value)}
+              className="text-xs rounded px-2 py-1.5 w-full"
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            >
+              <option value={AUTO}>Codex 자동 (배정 없음)</option>
+              {accountGroups.codex.map((a) => (
+                <option key={a.account} value={a.account}>
+                  {a.label}
                   {a.rate_limited ? " · 한도정지" : ""}
                 </option>
               ))}

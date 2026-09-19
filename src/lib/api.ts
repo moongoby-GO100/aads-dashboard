@@ -629,10 +629,10 @@ export const api = {
     request<any>("/ops/account-primary", { method: "POST", body: JSON.stringify(body) }),
   // 회사별 계정(슬롯) 배정 — 설정 화면의 "회사별 계정" 표
   getCompanySlots: () => request<any>("/ops/oauth-slot-projects"),
-  setCompanySlot: (projectKey: string, slot: string | null) =>
+  setCompanySlot: (projectKey: string, provider: "anthropic" | "codex", account: string | null) =>
     request<any>(`/ops/oauth-slot-projects/${encodeURIComponent(projectKey)}`, {
       method: "PUT",
-      body: JSON.stringify({ slot }),
+      body: JSON.stringify({ provider, account }),
     }),
   getOpsEnvHistory: (serverId: number | string) => request<any>(`/ops/env-history/${serverId}`),
   getOpsBridgeLog: (limit = 30) => request<any>(`/ops/bridge-log?limit=${limit}`),
