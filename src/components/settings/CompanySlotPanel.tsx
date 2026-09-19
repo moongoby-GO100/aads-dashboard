@@ -35,9 +35,27 @@ interface AccountRow {
   priority: number;
   last_resort: boolean;
   rate_limited: boolean;
+  rate_limited_until?: string | null;
 }
 
 const AUTO = "";
+const KST = "Asia/Seoul";
+
+const kst = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleString("ko-KR", {
+    timeZone: KST,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }) : "";
+
+const limitLabel = (account: AccountRow) => {
+  if (!account.rate_limited) return "";
+  return account.rate_limited_until
+    ? ` · 한도정지(${kst(account.rate_limited_until)} 복귀)`
+    : " · 한도정지";
+};
 
 export default function CompanySlotPanel() {
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
@@ -177,7 +195,7 @@ export default function CompanySlotPanel() {
                 <option key={a.account} value={a.account}>
                   슬롯 {a.slot} · {a.label}
                   {a.last_resort ? " (최후 수단)" : ""}
-                  {a.rate_limited ? " · 한도정지" : ""}
+                  {limitLabel(a)}
                 </option>
               ))}
             </select>
@@ -193,7 +211,7 @@ export default function CompanySlotPanel() {
               {accountGroups.codex.map((a) => (
                 <option key={a.account} value={a.account}>
                   {a.label}
-                  {a.rate_limited ? " · 한도정지" : ""}
+                  {limitLabel(a)}
                 </option>
               ))}
             </select>
