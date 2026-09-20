@@ -183,8 +183,13 @@ export default function LlmAccountCard() {
   if (!data) return null;
 
   const s = data.summary;
+  const actionAccounts = data.accounts.filter((a) => a.state === "needs_login" || a.state === "rate_limited");
+  const codexActionCount = actionAccounts.filter((a) => a.provider === "codex").length;
+  const actionChipLabel = s.action_required > 0
+    ? `${codexActionCount > 0 ? "조치 필요" : "Claude 조치 필요"} ${s.action_required}`
+    : "";
   const chips: Array<{ id: Chip; label: string; danger?: boolean; warn?: boolean }> = [
-    ...(s.action_required > 0 ? [{ id: "action" as Chip, label: `⚠ 조치 필요 ${s.action_required}`, warn: true }] : []),
+    ...(s.action_required > 0 ? [{ id: "action" as Chip, label: actionChipLabel, warn: true }] : []),
     { id: "codex", label: `코덱스 ${s.codex.usable}/${s.codex.total}`, danger: s.codex.usable === 0 && s.codex.total > 0 },
     { id: "anthropic", label: `클로드 ${s.anthropic.usable}/${s.anthropic.total}`, danger: s.anthropic.usable === 0 && s.anthropic.total > 0 },
     { id: "subscription", label: `구독 ${s.subscription_total}` },
@@ -225,6 +230,15 @@ export default function LlmAccountCard() {
           color: "var(--text-primary)",
         }}>
           Codex는 사용 가능합니다. 일부 계정만 한도정지이며 자동 모드에서는 사용 가능한 주계정으로 우회합니다.
+        </div>
+      )}
+      {s.codex.total > 0 && s.codex.usable === s.codex.total && s.action_required > 0 && codexActionCount === 0 && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{
+          background: "rgba(22,163,74,0.08)",
+          border: "1px solid rgba(22,163,74,0.35)",
+          color: "var(--text-primary)",
+        }}>
+          Codex는 정상입니다. 표시된 조치 필요 항목은 Claude 계정 상태입니다.
         </div>
       )}
 
