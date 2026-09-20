@@ -485,7 +485,26 @@ export default function UsageBar() {
     .flatMap((a) => (a ? a.windows.map((w) => ({ acc: a, w })) : []))
     .sort((x, y) => (100 - x.w.used_percent) - (100 - y.w.used_percent))[0];
   const tightRemain = tightest ? 100 - tightest.w.used_percent : 100;
-  const stopped = ovAccounts.filter((a) => a.state === "rate_limited");
+  // 공급자를 합쳐 "정지 N" 으로 표시하면 Codex 한 계정만 막힌 경우에도
+  // Claude·Codex 전체가 멈춘 것처럼 읽힌다. 설정 화면과 같은 판정으로
+  // provider 별 가용 여부와 한도정지 계정 수를 함께 보여 준다.
+  const limitStatuses = ([
+    { provider: "codex", label: "코덱스" },
+    { provider: "anthropic", label: "클로드" },
+  ] as const).flatMap(({ provider, label }) => {
+    const accounts = ovAccounts.filter((a) => a.provider === provider);
+    const stoppedAccounts = accounts.filter((a) => a.state === "rate_limited");
+    if (stoppedAccounts.length === 0) return [];
+    const usable = accounts.some((a) => a.state === "ok");
+    return [{
+      provider,
+      text: `${label} ${usable ? "사용 가능" : "사용 불가"} · 정지 ${stoppedAccounts.length}`,
+      color: usable ? "#d97706" : "#ef4444",
+      title: stoppedAccounts
+        .map((a) => `${a.label}: ${a.rate_limited_until ?? "복귀 시각 미확인"}`)
+        .join(" / "),
+    }];
+  });
 
   const toggle = () => {
     setCollapsed((prev) => {
@@ -570,12 +589,14 @@ export default function UsageBar() {
                 ⚠ {windowName(tightest.w.window_minutes)} {tightRemain.toFixed(0)}% 남음
               </span>
             )}
-            {stopped.length > 0 && (
-              <span style={{ fontSize: "10px", color: "#ef4444", whiteSpace: "nowrap" }}
-                    title={stopped.map((a) => `${a.label}: ${a.rate_limited_until ?? ""}`).join(" / ")}>
-                ⛔ 정지 {stopped.length}
+            {limitStatuses.map((status) => (
+              <span key={`limit-status-${status.provider}`}
+                    data-usage-provider-status={status.provider}
+                    style={{ fontSize: "10px", color: status.color, whiteSpace: "nowrap" }}
+                    title={status.title}>
+                {status.text}
               </span>
-            )}
+            ))}
           </>
         )}
       </div>
