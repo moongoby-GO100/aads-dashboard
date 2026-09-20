@@ -129,8 +129,16 @@ export default function LlmAccountCard() {
 
   useEffect(() => { load(); }, [load]);
 
-  // 조치가 필요하면 그 칩이 선택된 채 열린다. 화면을 열면 문제만 보이게 한다.
-  const effectiveChip: Chip = chip ?? (data && data.summary.action_required > 0 ? "action" : "subscription");
+  const hasBlockingAction = Boolean(data && (
+    data.accounts.some((a) => a.state === "needs_login")
+    || (data.summary.codex.total > 0 && data.summary.codex.usable === 0)
+    || (data.summary.anthropic.total > 0 && data.summary.anthropic.usable === 0)
+  ));
+
+  // 로그인 필요나 provider 전체 장애면 조치 필터를 먼저 연다. 사용 가능한 대체
+  // 계정이 있는데 한 계정만 한도정지인 경우에는 전체 장애처럼 보이지 않게
+  // 구독 전체를 먼저 보여준다.
+  const effectiveChip: Chip = chip ?? (hasBlockingAction ? "action" : "subscription");
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 4000); };
 
@@ -209,6 +217,16 @@ export default function LlmAccountCard() {
             style={{ background: "var(--accent, #2563eb)", color: "#fff" }}>+ 키 추가</button>
         </span>
       </div>
+
+      {s.codex.total > 0 && s.codex.usable > 0 && s.codex.usable < s.codex.total && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{
+          background: "rgba(217,119,6,0.08)",
+          border: "1px solid rgba(217,119,6,0.35)",
+          color: "var(--text-primary)",
+        }}>
+          Codex는 사용 가능합니다. 일부 계정만 한도정지이며 자동 모드에서는 사용 가능한 주계정으로 우회합니다.
+        </div>
+      )}
 
       {/* 주계정 — provider 마다 한 줄. 자동은 "곧 리셋될 한도부터 태운다" 규칙을
           2분 조정기가 돌린다. 수동은 지금 1순위인 계정을 그대로 잠근다. */}
