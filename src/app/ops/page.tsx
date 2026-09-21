@@ -119,6 +119,16 @@ interface DeployQueueItem {
   estimated_remaining_ms?: number | null;
   duration_ms?: number | null;
   bg_sync_status?: string;
+  waiting_reason_code?: string | null;
+  waiting_reason?: string | null;
+  bottleneck_phase?: string | null;
+  bottleneck_label?: string | null;
+  approval_required?: boolean;
+  last_error?: string | null;
+  automatic_recovery_state?: string;
+  retry?: { allowed?: boolean; method?: string; path?: string | null };
+  approval?: { required?: boolean; method?: string; path?: string | null };
+  rollback?: { state?: string; label?: string; automatic?: boolean; plan?: string | null };
 }
 
 interface DeployComponentItem extends DeployQueueItem {
@@ -176,6 +186,8 @@ interface DeployObservabilityStatus {
   degraded_reasons?: string[];
   active_deployments?: DeployQueueItem[];
   queued_deployments?: DeployQueueItem[];
+  recent_deployments?: DeployQueueItem[];
+  deployment_control_items?: DeployQueueItem[];
   project_deployments?: DeployComponentItem[];
   component_deployments?: DeployComponentItem[];
   recent_durations_per_project?: DeployDurationItem[];
@@ -508,6 +520,8 @@ export default function OpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("-");
+  const [controlBusy, setControlBusy] = useState<string | null>(null);
+  const [controlMessage, setControlMessage] = useState<string | null>(null);
 
   // Filters for lifecycle table
   const [filterProject, setFilterProject] = useState("all");
@@ -584,6 +598,25 @@ export default function OpsPage() {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
+  const runDeployControl = useCallback(async (item: DeployQueueItem, action: "approve" | "retry") => {
+    if (item.id == null) return;
+    const actionLabel = action === "approve" ? "승인" : "재시도";
+    if (!window.confirm(`${deployTargetLabel(item)} 배포를 ${actionLabel}하시겠습니까?`)) return;
+    const busyKey = `${action}-${item.id}`;
+    setControlBusy(busyKey);
+    setControlMessage(null);
+    try {
+      if (action === "approve") await api.approveOpsDeploy(item.id);
+      else await api.retryOpsDeploy(item.id);
+      setControlMessage(`${deployTargetLabel(item)} ${actionLabel} 요청을 반영했습니다.`);
+      await fetchAll();
+    } catch (controlError) {
+      setControlMessage(`${actionLabel} 실패: ${String(controlError)}`);
+    } finally {
+      setControlBusy(null);
+    }
+  }, [fetchAll]);
+
   // Lifecycle table filter
   const projects = Array.from(new Set(lifecycle.map((l) => l.project).filter(Boolean)));
   const filteredLifecycle = lifecycle.filter((l) => {
@@ -619,6 +652,12 @@ export default function OpsPage() {
   const dashboardCandidateSlot: DeploymentSlot | null = dashboardActiveSlot === "blue" ? "green" : dashboardActiveSlot === "green" ? "blue" : null;
   const activeDeployments = deployStatus?.active_deployments || [];
   const queuedDeployments = deployStatus?.queued_deployments || [];
+  const deploymentControlItems = deployStatus?.deployment_control_items || [
+    ...activeDeployments,
+    ...queuedDeployments,
+    ...(deployStatus?.recent_deployments || []).filter((item) => ["failed", "blocked", "error", "success_partial"].includes(item.status || "")).slice(0, 4),
+  ];
+  const approvalRequiredCount = deploymentControlItems.filter((item) => item.approval_required).length;
   const staleSignals = deployStatus?.stale_zombie_signals || [];
   const recentDurations = deployStatus?.recent_durations_per_project || [];
   const componentDeployments = deployStatus?.component_deployments || [];
@@ -831,6 +870,7 @@ export default function OpsPage() {
               { label: "다음 배포", value: deployReadinessLabel, tone: deployReady ? "ready" : "blocked" },
               { label: "진행중", value: `${activeDeployments.length}건`, tone: activeDeployments.length ? "running" : "success" },
               { label: "대기", value: `${queuedDeployments.length}건`, tone: queuedDeployments.length ? "queued" : "success" },
+              { label: "승인 필요", value: `${approvalRequiredCount}건`, tone: approvalRequiredCount ? "blocked" : "success" },
               { label: "재조정", value: `${staleSignals.length}건`, tone: staleSignals.length ? "error" : "success" },
             ].map((item) => {
               const color = deployTone(item.tone);
@@ -847,32 +887,49 @@ export default function OpsPage() {
               제한 수집: {(deployStatus.degraded_reasons || []).join(", ") || "unknown"}
             </div>
           )}
-          {(activeDeployments.length > 0 || queuedDeployments.length > 0) && (
-            <div style={{ overflowX: "auto", marginBottom: 14 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                    {["대상", "상태", "Phase", "SHA", "Runner", "대기순서", "예상잔여"].map((h) => (
-                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...activeDeployments, ...queuedDeployments].slice(0, 10).map((item, i) => (
-                    <tr key={`${item.runner_job_id || item.id || i}-${i}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "6px 8px", fontWeight: 700, whiteSpace: "nowrap" }}>{deployTargetLabel(item)}</td>
-                      <td style={{ padding: "6px 8px", color: deployTone(item.status), whiteSpace: "nowrap" }}>{item.status || "-"}</td>
-                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{item.phase || "-"}</td>
-                      <td style={{ padding: "6px 8px", fontFamily: "monospace", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.release_sha || "-"}</td>
-                      <td style={{ padding: "6px 8px", fontFamily: "monospace", whiteSpace: "nowrap" }}>{item.runner_job_id || "-"}</td>
-                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{item.queue_position ?? "-"}</td>
-                      <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{formatMillis(item.estimated_remaining_ms)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {controlMessage && (
+            <div role="status" style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12, color: "var(--text-primary)", overflowWrap: "anywhere" }}>
+              {controlMessage}
             </div>
           )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 10, marginBottom: 14 }}>
+            {deploymentControlItems.length === 0 ? (
+              <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>진행·대기·복구 대상 배포가 없습니다.</div>
+            ) : deploymentControlItems.slice(0, 12).map((item, i) => {
+              const retryBusy = controlBusy === `retry-${item.id}`;
+              const approvalBusy = controlBusy === `approve-${item.id}`;
+              return (
+                <article key={`${item.runner_job_id || item.id || i}-${i}`} style={{ background: "var(--bg-hover)", border: `1px solid ${item.last_error ? "var(--danger)" : "var(--border)"}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 13, color: "var(--text-primary)" }}>{deployTargetLabel(item)}</strong>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: deployTone(item.status), border: `1px solid ${deployTone(item.status)}`, borderRadius: 999, padding: "3px 8px" }}>{item.status || "-"}</span>
+                  </div>
+                  <div style={{ display: "grid", gap: 6, marginTop: 10, fontSize: 12 }}>
+                    <div><span style={{ color: "var(--text-secondary)" }}>병목 phase · </span><span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{item.bottleneck_label || item.phase || "-"}</span></div>
+                    <div style={{ color: "var(--text-primary)", overflowWrap: "anywhere" }}><span style={{ color: "var(--text-secondary)" }}>대기 이유 · </span>{item.waiting_reason || "대기 없음"}</div>
+                    <div style={{ color: item.last_error ? "var(--danger)" : "var(--text-secondary)", overflowWrap: "anywhere" }}><span style={{ color: "var(--text-secondary)" }}>마지막 오류 · </span>{item.last_error || "없음"}</div>
+                    <div style={{ color: "var(--text-primary)", overflowWrap: "anywhere" }}><span style={{ color: "var(--text-secondary)" }}>자동복구 · </span>{item.automatic_recovery_state || "-"}</div>
+                    <div style={{ color: "var(--text-primary)", overflowWrap: "anywhere" }}><span style={{ color: "var(--text-secondary)" }}>롤백 · </span>{item.rollback?.label || "상태 미수집"}</div>
+                    <div style={{ color: "var(--text-secondary)", fontFamily: "monospace", overflowWrap: "anywhere" }}>{item.release_sha || item.runner_job_id || "-"}</div>
+                  </div>
+                  {(item.approval?.required || item.retry?.allowed) && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                      {item.approval?.required && item.id != null && (
+                        <button type="button" disabled={Boolean(controlBusy)} onClick={() => runDeployControl(item, "approve")} style={{ minHeight: 44, flex: "1 1 120px", border: "none", borderRadius: 8, background: "var(--accent)", color: "white", fontWeight: 700, cursor: controlBusy ? "wait" : "pointer" }}>
+                          {approvalBusy ? "승인 반영 중..." : "배포 승인"}
+                        </button>
+                      )}
+                      {item.retry?.allowed && item.id != null && (
+                        <button type="button" disabled={Boolean(controlBusy)} onClick={() => runDeployControl(item, "retry")} style={{ minHeight: 44, flex: "1 1 120px", border: "1px solid var(--warning)", borderRadius: 8, background: "transparent", color: "var(--warning)", fontWeight: 700, cursor: controlBusy ? "wait" : "pointer" }}>
+                          {retryBusy ? "재시도 등록 중..." : "재시도"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
           {componentDeployments.length > 0 && (
             <div style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, minWidth: 0, marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>컴포넌트별 최신 배포</div>

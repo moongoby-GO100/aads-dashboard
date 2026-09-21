@@ -721,6 +721,16 @@ export const api = {
   getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
   getOpsFullHealth: () => request<any>("/ops/full-health"),
   getOpsCommonDeployStatus: () => request<any>("/ops/deploy/status"),
+  approveOpsDeploy: (runId: number, actor = "ops-dashboard") =>
+    request<any>(`/ops/deploy/${runId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ actor, reason: "approved from deployment control", auto_start: true }),
+    }),
+  retryOpsDeploy: (runId: number, actor = "ops-dashboard") =>
+    request<any>(`/ops/deploy/${runId}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ actor, reason: "retried from deployment control", auto_start: true }),
+    }),
 
   // AADS-169: Claude Bot Status + Process Control
   getClaudeProcesses: (limit = 5) => request<any>(`/ops/claude-processes?limit=${limit}`),
