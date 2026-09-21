@@ -163,6 +163,9 @@ interface DeployObservabilityStatus {
   degraded_reasons?: string[];
   active_deployments?: DeployQueueItem[];
   queued_deployments?: DeployQueueItem[];
+  runner_queue?: DeployQueueItem[];
+  approval_queue?: DeployQueueItem[];
+  review_hold_queue?: DeployQueueItem[];
   recent_completed_deployments?: DeployQueueItem[];
   recent_deployments?: DeployQueueItem[];
   recent_durations_per_project?: DeployDurationItem[];
@@ -253,6 +256,8 @@ function deployTone(status: string | undefined | null): string {
       return "#22c55e";
     case "queued":
     case "awaiting_approval":
+    case "pending_ceo_approval":
+    case "review_hold":
     case "verifying":
     case "syncing_standby":
     case "unknown":
@@ -281,6 +286,8 @@ function deployStatusLabel(status: string | null | undefined): string {
   switch ((status || "unknown").toLowerCase()) {
     case "queued": return "대기";
     case "awaiting_approval": return "승인 대기";
+    case "pending_ceo_approval": return "CEO 승인 대기";
+    case "review_hold": return "리뷰 보류";
     case "running":
     case "verifying":
     case "syncing_standby": return "진행 중";
@@ -432,6 +439,9 @@ function DeployStatusCard({
 
   const active = byProject(status?.active_deployments || []);
   const queued = byProject(status?.queued_deployments || []);
+  const runnerQueue = byProject(status?.runner_queue || []);
+  const approvalQueue = byProject(status?.approval_queue || []);
+  const reviewHoldQueue = byProject(status?.review_hold_queue || []);
   const history = byProject(
     status?.recent_deployments?.length
       ? status.recent_deployments
@@ -463,7 +473,15 @@ function DeployStatusCard({
     { label: "현재 Phase", value: current?.phase || "-", tone: deployTone(currentStatus || current?.phase) },
     { label: "경과시간", value: current ? deployElapsed(current, nowMs) : "-", tone: "var(--ct-text)" },
     { label: "예상잔여", value: estimatedRemaining, tone: "var(--ct-text)" },
-    { label: "대기건", value: `${queued.length}건`, tone: queued.length ? "#f59e0b" : "#22c55e" },
+    { label: "배포 대기", value: `${queued.length}건`, tone: queued.length ? "#f59e0b" : "#22c55e" },
+    { label: "승인 대기", value: `${approvalQueue.length}건`, tone: approvalQueue.length ? "#f59e0b" : "#22c55e" },
+    { label: "리뷰 보류", value: `${reviewHoldQueue.length}건`, tone: reviewHoldQueue.length ? "#f59e0b" : "#22c55e" },
+    { label: "러너 대기", value: `${runnerQueue.length}건`, tone: runnerQueue.length ? "#f59e0b" : "#22c55e" },
+  ];
+  const preDeployStages = [
+    { key: "approval", label: "승인 대기", items: approvalQueue },
+    { key: "review", label: "리뷰 보류", items: reviewHoldQueue },
+    { key: "runner", label: "러너 대기", items: runnerQueue },
   ];
 
   return (
@@ -747,6 +765,32 @@ function DeployStatusCard({
           textAlign: "center",
         }}>
           진행 중인 배포가 없습니다
+        </div>
+      )}
+
+      {preDeployStages.some((stage) => stage.items.length > 0) && (
+        <div style={{ background: "var(--ct-card)", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "10px 11px" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--ct-text)", marginBottom: 8 }}>배포 전 작업 단계</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 7 }}>
+            {preDeployStages.map((stage) => (
+              <div key={stage.key} style={{ border: "1px solid var(--ct-border)", borderRadius: 7, padding: "8px 9px", minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "var(--ct-text)" }}>{stage.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: stage.items.length ? "#f59e0b" : "#22c55e" }}>{stage.items.length}</span>
+                </div>
+                {stage.items.length === 0 ? (
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)" }}>없음</div>
+                ) : stage.items.slice(0, 3).map((item, index) => (
+                  <div key={`${stage.key}-${item.runner_job_id || index}`} style={{ fontSize: 10, color: "var(--ct-text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: index ? 4 : 0 }} title={item.runner_job_id || item.project || ""}>
+                    {item.project || "-"} · {item.runner_job_id || deployStatusLabel(item.status)}
+                  </div>
+                ))}
+                {stage.items.length > 3 && (
+                  <div style={{ fontSize: 10, color: "var(--ct-text2)", marginTop: 4 }}>외 {stage.items.length - 3}건</div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
