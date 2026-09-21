@@ -680,9 +680,9 @@ export default function OpsPage() {
       <Header title="운영 현황 대시보드" />
       <div style={{ padding: "24px 16px", maxWidth: 1200, margin: "0 auto" }}>
         {/* Page Title */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>📊 운영 현황 대시보드</h2>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>최근 갱신: {lastUpdated}</span>
             <button
               onClick={fetchAll}

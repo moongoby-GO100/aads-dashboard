@@ -61,34 +61,34 @@ export default function Header({ title }: { title: string }) {
     "bg-gray-400";
 
   return (
-    <header className="bg-white border-b border-gray-200 pr-6 pl-12 md:pl-0 py-3 flex items-center justify-between">
-      <h2 className="text-sm md:text-base font-semibold text-gray-800">{title}</h2>
-      <div className="flex items-center gap-4">
+    <header className="bg-white border-b border-gray-200 px-4 pl-12 md:pl-0 md:pr-6 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <h2 className="w-full sm:w-auto text-sm md:text-base font-semibold text-gray-800 leading-5">{title}</h2>
+      <div className="w-full sm:w-auto flex flex-wrap items-center gap-x-3 gap-y-2 sm:justify-end">
         <a
           href="/chat"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+          className="shrink-0 whitespace-nowrap text-sm font-semibold px-3 py-1.5 rounded-lg"
           style={{ background: "#6C63FF", color: "#fff", textDecoration: "none" }}
         >
           💬 AI Chat
         </a>
         <a
           href="/ops/mobile-agent"
-          className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+          className="shrink-0 whitespace-nowrap text-sm font-semibold px-3 py-1.5 rounded-lg"
           style={{ background: "#111827", color: "#fff", textDecoration: "none" }}
         >
           📱 Android 설치
         </a>
-        <div className="flex items-center gap-1.5" title={`Pipeline: ${pipelineStatus}`}>
+        <div className="shrink-0 flex items-center gap-1.5" title={`Pipeline: ${pipelineStatus}`}>
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
           <span className="text-xs text-gray-500">{pipelineStatus}</span>
         </div>
-        <span className="text-sm text-gray-500">{health}</span>
+        <span className="shrink-0 whitespace-nowrap text-sm text-gray-500">{health}</span>
         <button
           type="button"
           onClick={handleLogout}
-          className="text-sm text-gray-600 hover:text-gray-900 underline"
+          className="shrink-0 whitespace-nowrap text-sm text-gray-600 hover:text-gray-900 underline"
         >
           로그아웃
         </button>
