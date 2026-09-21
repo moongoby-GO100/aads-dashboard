@@ -319,6 +319,19 @@ function isTerminalDeployStatus(status: string | null | undefined): boolean {
   return ["completed", "success", "failed", "error", "blocked", "superseded", "cancelled"].includes((status || "").toLowerCase());
 }
 
+// error_summary 를 화면에 노출할 상태 목록.
+// 2026-09-21 이전 표시조건은 failed/error 둘뿐이어서, 사유가 저장돼 있는
+// blocked(137) / superseded(143) / cancelled·success_partial(19) 총 298건이
+// 배포탭에서 통째로 가려져 있었다. API 는 모든 상태의 error_summary 를 이미 내려준다.
+function showsDeployReason(status: string | null | undefined): boolean {
+  return ["failed", "error", "blocked", "superseded", "cancelled", "success_partial", "stalled", "mismatch"].includes((status || "").toLowerCase());
+}
+
+// 실패(빨강)와 비실패 종료(주황)를 색으로 구분한다. superseded 는 오류가 아니라 대체다.
+function deployReasonColor(status: string | null | undefined): string {
+  return ["failed", "error", "blocked", "mismatch"].includes((status || "").toLowerCase()) ? "#ef4444" : "#f59e0b";
+}
+
 function deployStartedAt(item: DeployQueueItem): string | null {
   return item.started_at || item.requested_at || item.created_at || item.phase_started_at || item.updated_at || null;
 }
@@ -931,8 +944,8 @@ function DeployStatusCard({
                     {durationLabel && ` (총 ${durationLabel})`}
                   </div>
                   <DeployChangeSummary item={item} />
-                  {item.error_summary && ["failed","error"].includes((itemStatus||"").toLowerCase()) && (
-                    <div style={{fontSize:10,color:"#ef4444",marginTop:4,overflowWrap:"anywhere"}}>
+                  {item.error_summary && showsDeployReason(itemStatus) && (
+                    <div style={{fontSize:10,color:deployReasonColor(itemStatus),marginTop:4,overflowWrap:"anywhere"}}>
                       ⚠️ {item.error_summary}
                     </div>
                   )}
