@@ -26,6 +26,7 @@ type Account = {
   key_name: string; provider: string; label: string; priority: number;
   is_active: boolean; kind: "subscription"; masked_value: string; slot: string | null;
   state: State; bound: boolean; needs_login: boolean; login_in_progress: boolean;
+  binding_mismatch?: boolean; actual_account?: string | null;
   login_target: string | null; subscription: string | null;
   rate_limited_until: string | null; used_percent: number | null; resets_at: string | null;
   snapshot_age_hours: number | null; ok_72h: number; limit_72h: number; notes: string | null;
@@ -346,7 +347,9 @@ export default function LlmAccountCard() {
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
                   <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>p{a.priority}</span>
-                  <span className="text-xs font-semibold truncate" style={{ color, lineHeight: "20px" }}>{STATE_TEXT[a.state]}</span>
+                  <span className="text-xs font-semibold truncate" style={{ color, lineHeight: "20px" }}>
+                    {a.binding_mismatch ? "계정 불일치" : STATE_TEXT[a.state]}
+                  </span>
                   {/* 창 구성이 provider 마다 다르다. 코덱스는 주간 하나,
                       클로드는 5시간 + 주간이다. window_minutes 로 이름을 정하고
                       'primary/secondary' 라는 순서에 기대지 않는다. */}
@@ -391,6 +394,11 @@ export default function LlmAccountCard() {
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
                     <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
+                    {a.binding_mismatch && (
+                      <div style={{ color: "#d97706" }}>
+                        등록 계정 {a.label || "-"}과 실제 로그인 {a.actual_account || "확인 불가"}이 다릅니다. 올바른 계정으로 다시 로그인해야 합니다.
+                      </div>
+                    )}
                     <div>
                       최근 72h 성공 {a.ok_72h} · 한도실패 {a.limit_72h}
                       {a.snapshot_age_hours !== null && (
