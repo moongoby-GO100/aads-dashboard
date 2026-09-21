@@ -13,6 +13,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
@@ -58,8 +59,17 @@ function evidenceText(ev: Milestone["evidence"]): string {
   const parts: string[] = [];
   if (o.summary) parts.push(String(o.summary));
   if (o.numbers) parts.push(JSON.stringify(o.numbers));
-  if (Array.isArray(o.refs) && o.refs.length) parts.push(o.refs.join(", "));
   return parts.join("\n");
+}
+
+function evidenceRefs(ev: Milestone["evidence"]): string[] {
+  if (!ev) return [];
+  const o = typeof ev === "string" ? (() => { try { return JSON.parse(ev); } catch { return {}; } })() : ev;
+  return Array.isArray(o.refs) ? o.refs.map(String).filter(Boolean) : [];
+}
+
+function isScreenEvidence(ref: string): boolean {
+  return /^https?:\/\/[^\s]+\.(?:png|jpe?g|webp)(?:\?[^\s]*)?$/i.test(ref);
 }
 
 export function GoalPanel({ goalId, onClose, onOpenSession }: {
@@ -280,6 +290,8 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
           {board?.milestones.map((m) => {
             const mk = MARK[m.status] || MARK.pending;
             const ev = evidenceText(m.evidence);
+            const refs = evidenceRefs(m.evidence);
+            const showEvidence = (m.status === "review" || m.status === "completed") && (ev || refs.length > 0);
             return (
               <div key={m.id} style={{ marginBottom: 9, padding: "9px 11px", borderRadius: 9, border: "1px solid var(--border)", borderLeft: `3px solid ${mk.color}`, background: "var(--bg-primary)" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
@@ -296,16 +308,31 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
                   </div>
                 )}
 
-                {m.status === "review" && ev && (
+                {showEvidence && (
                   <div style={{ marginTop: 7, padding: "7px 9px", borderRadius: 7, background: "rgba(124,58,237,.08)" }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, color: "#7c3aed" }}>신고한 근거</div>
-                    <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-primary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev}</div>
-                    <div style={{ marginTop: 7, display: "flex", gap: 6 }}>
-                      <button type="button" disabled={busy === m.id} onClick={() => void judge(m, true)}
-                        style={{ minHeight: 29, padding: "0 11px", fontSize: 11.5, borderRadius: 6, border: 0, background: "#16a34a", color: "white", fontWeight: 700, cursor: "pointer" }}>승인</button>
-                      <button type="button" disabled={busy === m.id} onClick={() => void judge(m, false)}
-                        style={{ minHeight: 29, padding: "0 11px", fontSize: 11.5, borderRadius: 6, border: "1px solid #dc2626", background: "transparent", color: "#dc2626", fontWeight: 700, cursor: "pointer" }}>반려</button>
-                    </div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: "#7c3aed" }}>{m.status === "review" ? "확인할 근거" : "완료 근거"}</div>
+                    {ev && <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-primary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev}</div>}
+                    {refs.length > 0 && (
+                      <div style={{ marginTop: 7, display: "grid", gap: 6 }}>
+                        {refs.map((ref) => /^https?:\/\//i.test(ref) ? (
+                          <a key={ref} href={ref} target="_blank" rel="noopener noreferrer"
+                            style={{ display: "block", color: "var(--accent)", fontSize: 11, overflowWrap: "anywhere" }}>
+                            {isScreenEvidence(ref) && <Image src={ref} alt="마일스톤 화면 증거" loading="lazy"
+                              width={460} height={190} unoptimized
+                              style={{ display: "block", width: "100%", height: "auto", maxHeight: 190, objectFit: "contain", marginBottom: 4, borderRadius: 6, border: "1px solid var(--border)" }} />}
+                            화면 근거 열기
+                          </a>
+                        ) : <div key={ref} style={{ fontSize: 10.5, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>{ref}</div>)}
+                      </div>
+                    )}
+                    {m.status === "review" && (
+                      <div style={{ marginTop: 7, display: "flex", gap: 6 }}>
+                        <button type="button" disabled={busy === m.id} onClick={() => void judge(m, true)}
+                          style={{ minHeight: 29, padding: "0 11px", fontSize: 11.5, borderRadius: 6, border: 0, background: "#16a34a", color: "white", fontWeight: 700, cursor: "pointer" }}>승인</button>
+                        <button type="button" disabled={busy === m.id} onClick={() => void judge(m, false)}
+                          style={{ minHeight: 29, padding: "0 11px", fontSize: 11.5, borderRadius: 6, border: "1px solid #dc2626", background: "transparent", color: "#dc2626", fontWeight: 700, cursor: "pointer" }}>반려</button>
+                      </div>
+                    )}
                   </div>
                 )}
 
