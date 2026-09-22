@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   api,
   type OhvisConsoleApproval,
@@ -27,6 +28,7 @@ import {
 
 const POLL_LIVE_MS = 3000;
 const POLL_IDLE_MS = 15000;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
 // 목업 팔레트. 하드코딩이 아니라 CEO 승인 디자인의 값이다.
 const C = {
@@ -57,6 +59,22 @@ const EMPTY_SCHEDULES = "등록된 자동실행이 없습니다.";
 const EMPTY_TIMELINE = "실행 기록이 없습니다.";
 
 type MobileTab = "chat" | "live" | "right";
+type LiveLane = "server" | "pc";
+
+interface LiveAgent {
+  agent_id: string;
+  agent_name?: string;
+  hostname?: string;
+  status?: string;
+  is_online?: boolean;
+  capabilities?: string[];
+}
+
+function websocketUrl(path: string, token: string): string {
+  const base = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "");
+  const separator = path.includes("?") ? "&" : "?";
+  return `${base}${path}${token ? `${separator}access_token=${encodeURIComponent(token)}` : ""}`;
+}
 
 /**
  * `?session_id=` 만 읽는다. 없으면 **서버가** 이 테넌트의 실재하는 채팅 세션을
@@ -183,12 +201,47 @@ export default function OhvisConsolePage() {
   const [deciding, setDeciding] = useState(false);
   const [decideError, setDecideError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("live");
+  const [liveLane, setLiveLane] = useState<LiveLane>("server");
+  const [streamStatus, setStreamStatus] = useState("대기");
+  const [streamSize, setStreamSize] = useState({ width: 1366, height: 768 });
+  const [inputText, setInputText] = useState("");
+  const [secretInput, setSecretInput] = useState(false);
+  const [recordingId, setRecordingId] = useState("");
+  const [recordedSteps, setRecordedSteps] = useState(0);
+  const [registrationId, setRegistrationId] = useState("");
+  const [recordingBusy, setRecordingBusy] = useState(false);
+  const [agents, setAgents] = useState<LiveAgent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
 
   const isMobile = useIsMobile();
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
+  const frameImageRef = useRef<HTMLImageElement | null>(null);
+  const serverWsRef = useRef<WebSocket | null>(null);
+  const pcWsRef = useRef<WebSocket | null>(null);
+  const recordingIdRef = useRef("");
 
   useEffect(() => setSessionId(requestedSessionId()), []);
+  useEffect(() => {
+    recordingIdRef.current = recordingId;
+  }, [recordingId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.getPCAgents();
+        if (cancelled) return;
+        const items = (Array.isArray(data) ? data : data?.agents || []) as LiveAgent[];
+        const online = items.filter((item) => item.is_online === true || item.status === "online");
+        setAgents(online);
+        setSelectedAgentId((current) => current || online[0]?.agent_id || "");
+      } catch {
+        if (!cancelled) setAgents([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const isLive = Boolean(summary?.live.is_live);
 
@@ -227,6 +280,7 @@ export default function OhvisConsolePage() {
   const frame: OhvisConsoleFrame | null = summary?.live.frame ?? null;
   const frameKey = frame ? `${frame.task_id}:${frame.captured_at ?? ""}` : "";
   useEffect(() => {
+    if (liveLane !== "server") return;
     if (!frame) {
       setFrameSrc("");
       return;
@@ -266,10 +320,96 @@ export default function OhvisConsolePage() {
     };
     // frameKey 가 바뀔 때만 다시 받는다 — 같은 프레임을 3초마다 재다운로드하지 않는다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameKey]);
+  }, [frameKey, liveLane]);
+
+  useEffect(() => {
+    if (liveLane !== "server" || !frame?.task_id) {
+      serverWsRef.current?.close();
+      serverWsRef.current = null;
+      return;
+    }
+    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
+    const ws = new WebSocket(websocketUrl(`/browser-tasks/${encodeURIComponent(frame.task_id)}/live-stream`, token));
+    serverWsRef.current = ws;
+    setStreamStatus("서버 브라우저 연결 중");
+    ws.onopen = () => setStreamStatus("서버 브라우저 실시간");
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(String(event.data || "{}"));
+        if (message.type === "ready") {
+          setStreamSize({ width: Number(message.width) || 1366, height: Number(message.height) || 768 });
+          setStreamStatus("서버 브라우저 실시간");
+          return;
+        }
+        if (message.type === "frame" && message.frame) {
+          setFrameSrc(`data:${message.media_type || "image/jpeg"};base64,${message.frame}`);
+          setStreamSize({ width: Number(message.width) || 1366, height: Number(message.height) || 768 });
+          return;
+        }
+        if (message.type === "control_ack") {
+          const step = message.result?.recipe_step as Record<string, unknown> | null;
+          const activeRecording = recordingIdRef.current;
+          if (activeRecording && step) {
+            void api.recordOhvisRecipeStep(activeRecording, step).then((saved) => {
+              setRecordedSteps(saved.step_count || 0);
+            }).catch((reason) => setError(`레시피 단계 기록 실패: ${String(reason)}`));
+          }
+          return;
+        }
+        if (message.type === "control_error" || message.type === "error") {
+          setError(`브라우저 조작 실패: ${message.error || "unknown"}`);
+        }
+      } catch {
+        setError("브라우저 스트림 메시지를 해석하지 못했습니다.");
+      }
+    };
+    ws.onerror = () => setStreamStatus("서버 브라우저 연결 오류");
+    ws.onclose = () => {
+      if (serverWsRef.current === ws) serverWsRef.current = null;
+      setStreamStatus("서버 브라우저 연결 종료");
+    };
+    return () => {
+      if (serverWsRef.current === ws) serverWsRef.current = null;
+      ws.close();
+    };
+  }, [frame?.task_id, liveLane]);
+
+  useEffect(() => {
+    if (liveLane !== "pc" || !selectedAgentId) {
+      pcWsRef.current?.close();
+      pcWsRef.current = null;
+      return;
+    }
+    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
+    const ws = new WebSocket(websocketUrl(`/pc-agent/stream/${encodeURIComponent(selectedAgentId)}`, token));
+    pcWsRef.current = ws;
+    setStreamStatus("PC 브라우저 연결 중");
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ fps: 5, quality: 70, scale: 0.65 }));
+      setStreamStatus("PC 화면 실시간");
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(String(event.data || "{}"));
+        if (message.frame) setFrameSrc(`data:image/jpeg;base64,${message.frame}`);
+      } catch { /* non-frame agent messages are ignored */ }
+    };
+    ws.onerror = () => setStreamStatus("PC 화면 연결 오류");
+    ws.onclose = () => {
+      if (pcWsRef.current === ws) pcWsRef.current = null;
+      setStreamStatus("PC 화면 연결 종료");
+    };
+    return () => {
+      if (pcWsRef.current === ws) pcWsRef.current = null;
+      ws.close();
+    };
+  }, [liveLane, selectedAgentId]);
 
   const messages: OhvisConsoleMessage[] = summary?.conversation.messages ?? [];
-  const timeline: OhvisConsoleStep[] = summary?.live.timeline ?? [];
+  const timeline: OhvisConsoleStep[] = useMemo(
+    () => summary?.live.timeline ?? [],
+    [summary?.live.timeline],
+  );
   const approvals: OhvisConsoleApproval[] = summary?.approvals.items ?? [];
   const loops: OhvisConsoleLoop[] = summary?.schedules.items ?? [];
   const reports: OhvisConsoleReport[] = summary?.reports.items ?? [];
@@ -290,6 +430,92 @@ export default function OhvisConsolePage() {
     const stepUrl = [...timeline].reverse().find((step) => step.url)?.url;
     return frame?.current_url || stepUrl || "about:blank";
   }, [frame, timeline]);
+
+  const sendServerControl = (payload: Record<string, unknown>) => {
+    const ws = serverWsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setError("서버 브라우저 실시간 연결이 열려 있지 않습니다.");
+      return false;
+    }
+    ws.send(JSON.stringify({ type: "control", ...payload }));
+    return true;
+  };
+
+  const clickLiveFrame = (event: React.MouseEvent<HTMLImageElement>) => {
+    if (liveLane !== "server") return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = ((event.clientX - rect.left) / rect.width) * streamSize.width;
+    const y = ((event.clientY - rect.top) / rect.height) * streamSize.height;
+    sendServerControl({ action: "click", x, y });
+  };
+
+  const typeIntoBrowser = () => {
+    if (!inputText) return;
+    if (sendServerControl({ action: "type", text: inputText, secret: secretInput, replace: true })) {
+      setInputText("");
+    }
+  };
+
+  const startRecipeRecording = async () => {
+    if (recordingBusy || recordingId) return;
+    setRecordingBusy(true);
+    setError(null);
+    try {
+      const parsed = new URL(address);
+      const started = await api.startOhvisRecipeRecording({
+        name: `${parsed.hostname} 사용자 보조 경로`,
+        domain: parsed.hostname,
+      });
+      setRecordingId(started.recording_id);
+      recordingIdRef.current = started.recording_id;
+      const first = await api.recordOhvisRecipeStep(started.recording_id, {
+        action: "navigate",
+        url: address,
+        risk: "READ",
+        description: "사용자 보조 시작 페이지",
+      });
+      setRecordedSteps(first.step_count || 1);
+      setRegistrationId("");
+    } catch (reason) {
+      setError(`레시피 학습 시작 실패: ${String(reason)}`);
+    } finally {
+      setRecordingBusy(false);
+    }
+  };
+
+  const finishRecipeRecording = async () => {
+    if (recordingBusy || !recordingId) return;
+    setRecordingBusy(true);
+    setError(null);
+    try {
+      const result = await api.finishOhvisRecipeRecording(recordingId);
+      const id = String(result.registration?.id || result.registration?.registration_id || "");
+      setRegistrationId(id);
+      setRecordingId("");
+      recordingIdRef.current = "";
+      setStreamStatus(id ? "레시피 승인 대기" : "레시피 기록 완료");
+    } catch (reason) {
+      setError(`레시피 승인 요청 실패: ${String(reason)}`);
+    } finally {
+      setRecordingBusy(false);
+    }
+  };
+
+  const approveRecipeRegistration = async () => {
+    if (recordingBusy || !registrationId) return;
+    setRecordingBusy(true);
+    setError(null);
+    try {
+      await api.decideOhvisRecipeRegistration(registrationId, "approve", "대표님 화면 조작 경로 확인 후 승인");
+      setStreamStatus("레시피 v1 승인 완료");
+      setRegistrationId("");
+    } catch (reason) {
+      setError(`레시피 승인 실패: ${String(reason)}`);
+    } finally {
+      setRecordingBusy(false);
+    }
+  };
 
   const sendCommand = async (text: string) => {
     const title = text.trim();
@@ -376,12 +602,12 @@ export default function OhvisConsolePage() {
         }}
       >
         <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>🤖 오비스 창</span>
-        <a href="/browser-tasks" style={{ color: C.muted, textDecoration: "none", fontSize: 13, padding: "4px 10px", borderRadius: 5 }}>
+        <Link href="/browser-tasks" style={{ color: C.muted, textDecoration: "none", fontSize: 13, padding: "4px 10px", borderRadius: 5 }}>
           🌐 브라우저 실행
-        </a>
-        <a href="/chat" style={{ color: C.muted, textDecoration: "none", fontSize: 13, padding: "4px 10px", borderRadius: 5 }}>
+        </Link>
+        <Link href="/chat" style={{ color: C.muted, textDecoration: "none", fontSize: 13, padding: "4px 10px", borderRadius: 5 }}>
           💬 AI Chat
-        </a>
+        </Link>
         <span
           style={{
             marginLeft: "auto",
@@ -595,6 +821,40 @@ export default function OhvisConsolePage() {
                   flexShrink: 0,
                 }}
               />
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }} aria-label="브라우저 실행 위치">
+                {(["server", "pc"] as LiveLane[]).map((lane) => (
+                  <button
+                    key={lane}
+                    type="button"
+                    onClick={() => setLiveLane(lane)}
+                    style={{
+                      minHeight: 34,
+                      padding: "4px 10px",
+                      borderRadius: 6,
+                      border: `1px solid ${liveLane === lane ? C.accent : C.borderSoft}`,
+                      background: liveLane === lane ? "#1e3a8a" : C.bg,
+                      color: liveLane === lane ? "#dbeafe" : C.muted,
+                      fontSize: 11,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {lane === "server" ? "서버 브라우저" : "PC 브라우저"}
+                  </button>
+                ))}
+              </div>
+              {liveLane === "pc" && (
+                <select
+                  aria-label="PC Agent 선택"
+                  value={selectedAgentId}
+                  onChange={(event) => setSelectedAgentId(event.target.value)}
+                  style={{ minHeight: 34, maxWidth: 180, background: C.bg, color: C.text, border: `1px solid ${C.borderSoft}`, borderRadius: 6 }}
+                >
+                  {agents.length === 0 && <option value="">온라인 PC 없음</option>}
+                  {agents.map((agent) => (
+                    <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name || agent.hostname || agent.agent_id}</option>
+                  ))}
+                </select>
+              )}
               <span
                 style={{
                   flex: 1,
@@ -613,6 +873,7 @@ export default function OhvisConsolePage() {
               >
                 {address}
               </span>
+              <span style={{ color: streamStatus.includes("오류") ? C.blk : C.ok, fontSize: 11, whiteSpace: "nowrap" }}>{streamStatus}</span>
               <div style={{ display: "flex", gap: 6 }}>
                 {([["LLM", kpis.llm_calls], ["단계", kpis.steps], ["승인", kpis.approvals], ["차단", kpis.blocked]] as Array<[string, number]>).map(
                   ([label, value]) => (
@@ -634,7 +895,13 @@ export default function OhvisConsolePage() {
                     </div>
                   )}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={frameSrc} alt="오비스 라이브 화면" style={{ display: "block", width: "100%", height: "auto" }} />
+                  <img
+                    ref={frameImageRef}
+                    src={frameSrc}
+                    alt={liveLane === "server" ? "서버 브라우저 실시간 화면" : "PC 브라우저 실시간 화면"}
+                    onClick={clickLiveFrame}
+                    style={{ display: "block", width: "100%", height: "auto", cursor: liveLane === "server" ? "crosshair" : "default" }}
+                  />
                 </>
               ) : (
                 <div
@@ -653,6 +920,38 @@ export default function OhvisConsolePage() {
                   <div style={{ fontSize: 30 }}>🖥️</div>
                   {EMPTY_SCREEN}
                 </div>
+              )}
+            </div>
+
+            <div style={{ padding: "8px 10px", background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+              {liveLane === "server" ? (
+                <>
+                  <span style={{ fontSize: 11, color: C.muted }}>화면 클릭 후 입력</span>
+                  <input
+                    value={inputText}
+                    onChange={(event) => setInputText(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") typeIntoBrowser(); }}
+                    placeholder="선택한 입력칸에 넣을 값"
+                    type={secretInput ? "password" : "text"}
+                    autoComplete="off"
+                    style={{ flex: "1 1 180px", minHeight: 36, minWidth: 130, background: C.bg, color: C.text, border: `1px solid ${C.borderSoft}`, borderRadius: 6, padding: "0 9px" }}
+                  />
+                  <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: C.muted }}>
+                    <input type="checkbox" checked={secretInput} onChange={(event) => setSecretInput(event.target.checked)} /> 비밀값
+                  </label>
+                  <button type="button" onClick={typeIntoBrowser} disabled={!inputText} style={{ minHeight: 36, border: 0, borderRadius: 6, padding: "0 12px", background: C.accent, color: "white", fontWeight: 700 }}>입력</button>
+                  <button type="button" onClick={() => sendServerControl({ action: "press", key: "Enter" })} style={{ minHeight: 36, border: `1px solid ${C.borderSoft}`, borderRadius: 6, padding: "0 10px", background: C.bg, color: C.text }}>Enter</button>
+                  {!recordingId ? (
+                    <button type="button" onClick={startRecipeRecording} disabled={recordingBusy || address === "about:blank"} style={{ minHeight: 36, border: `1px solid ${C.ok}`, borderRadius: 6, padding: "0 10px", background: "#052e1b", color: "#6ee7b7", fontWeight: 700 }}>학습 시작</button>
+                  ) : (
+                    <button type="button" onClick={finishRecipeRecording} disabled={recordingBusy} style={{ minHeight: 36, border: `1px solid ${C.warn}`, borderRadius: 6, padding: "0 10px", background: "#3b2000", color: "#fbbf24", fontWeight: 700 }}>기록 종료 · {recordedSteps}단계</button>
+                  )}
+                  {registrationId && (
+                    <button type="button" onClick={approveRecipeRegistration} disabled={recordingBusy} style={{ minHeight: 36, border: 0, borderRadius: 6, padding: "0 12px", background: C.ok, color: "#052e1b", fontWeight: 800 }}>레시피 v1 승인</button>
+                  )}
+                </>
+              ) : (
+                <span style={{ fontSize: 11, color: C.muted }}>PC Agent 화면 스트림입니다. 브라우저 전용 CDP 좌표 업링크는 현재 호환성 실측 대상입니다.</span>
               )}
             </div>
 

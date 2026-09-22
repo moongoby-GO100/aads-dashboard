@@ -1384,6 +1384,26 @@ export const api = {
       "/ohvis/console/command",
       { method: "POST", body: JSON.stringify(data) },
     ),
+  startOhvisRecipeRecording: (data: { name: string; domain: string }) =>
+    request<{ recording_id: string; name: string; domain: string; step_count: number }>(
+      "/ohvis/recipes/recording",
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  recordOhvisRecipeStep: (recordingId: string, payload: Record<string, unknown>) =>
+    request<{ recording_id: string; step: Record<string, unknown> | null; step_count: number }>(
+      `/ohvis/recipes/recording/${encodeURIComponent(recordingId)}/steps`,
+      { method: "POST", body: JSON.stringify({ payload, succeeded: true }) },
+    ),
+  finishOhvisRecipeRecording: (recordingId: string) =>
+    request<{ status: string; registration: Record<string, unknown> }>(
+      `/ohvis/recipes/recording/${encodeURIComponent(recordingId)}/finish`,
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+  decideOhvisRecipeRegistration: (registrationId: string, decision: "approve" | "reject", reason = "") =>
+    request<{ status: string; registration: Record<string, unknown> }>(
+      `/ohvis/recipes/registrations/${encodeURIComponent(registrationId)}/decision`,
+      { method: "POST", body: JSON.stringify({ decision, reason }) },
+    ),
   /**
    * @deprecated — 기록 전용. 실행은 runOhvisConsoleCommand 를 쓸 것.
    *
