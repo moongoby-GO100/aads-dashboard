@@ -731,6 +731,10 @@ else
     fi
 fi
 
+# 공개 문서 동기화 — public/.exports-publish 목록만 /exports/ 무인증 경로로 복사한다.
+# 루트 경로 HTML 은 로그인 가드에 걸려 307 이므로 이 복사가 없으면 대표님 링크가 404 난다(2026-09-22).
+bash "${STATE_DIR}/scripts/publish_public_docs.sh" "${STATE_DIR}/public" || log "WARN: 공개 문서 동기화 실패 (배포는 유지)"
+
 record_deploy_phase p0p1_monitoring
 if ! monitor_post_cutover "$POST_CUTOVER_STARTED_AT"; then
     log "FAIL: 배포 후 P0/P1 모니터링 실패 — release certification 중단"
