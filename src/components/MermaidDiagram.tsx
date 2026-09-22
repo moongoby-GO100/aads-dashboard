@@ -39,8 +39,18 @@ export default function MermaidDiagram({
     // render 실패 시 mermaid 가 이 id 로 body 에 잔여 DOM 을 남긴다. 회수하려면 id 를 알고 있어야 한다.
     const renderId = `aag-mermaid-${Math.random().toString(36).slice(2, 10)}`;
 
+    const removeScratchNodes = () => {
+      for (const id of [renderId, `d${renderId}`]) {
+        const node = document.getElementById(id);
+        // mermaid.render()가 반환한 SVG도 renderId를 가진다. host에 삽입한
+        // 최종 SVG까지 지우면 state는 ok인데 화면은 빈 영역으로 남는다.
+        if (node && !hostRef.current?.contains(node)) node.remove();
+      }
+    };
+
     setState("loading");
     setErrorMessage("");
+    if (hostRef.current) hostRef.current.innerHTML = "";
 
     (async () => {
       try {
@@ -61,16 +71,14 @@ export default function MermaidDiagram({
         setErrorMessage(e instanceof Error ? e.message : String(e));
         setState("failed");
       } finally {
-        // 성공/실패 무관하게 body 잔여물을 치운다.
-        document.getElementById(renderId)?.remove();
-        document.getElementById(`d${renderId}`)?.remove();
+        // 성공/실패 무관하게 body 잔여물만 치운다. host의 최종 SVG는 보존한다.
+        removeScratchNodes();
       }
     })();
 
     return () => {
       cancelled = true;
-      document.getElementById(renderId)?.remove();
-      document.getElementById(`d${renderId}`)?.remove();
+      removeScratchNodes();
     };
   }, [chart]);
 

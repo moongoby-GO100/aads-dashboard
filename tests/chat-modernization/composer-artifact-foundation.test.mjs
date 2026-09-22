@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadSource } from "./source-loader.mjs";
+import { loadSource, source } from "./source-loader.mjs";
 
 const draftModule = loadSource("src/features/chat/composer/draftStore.ts");
 const keyboardModule = loadSource("src/features/chat/composer/keyboardPolicy.ts");
@@ -140,6 +140,18 @@ test("T24: hidden artifact panels are lazy and stale request tokens fail closed"
   assert.equal(guard.accepts(requestB, scopeB, "artifact-b"), true);
   guard.invalidate();
   assert.equal(guard.accepts(requestB, scopeB, "artifact-b"), false);
+});
+
+test("M3: Mermaid cleanup preserves the rendered SVG and removes only scratch DOM", () => {
+  const mermaidSource = source("src/components/MermaidDiagram.tsx");
+
+  assert.match(mermaidSource, /const removeScratchNodes = \(\) =>/);
+  assert.match(mermaidSource, /!hostRef\.current\?\.contains\(node\)/);
+  assert.doesNotMatch(
+    mermaidSource,
+    /document\.getElementById\(renderId\)\?\.remove\(\)/,
+    "unconditional cleanup deletes Mermaid's final SVG because it reuses renderId",
+  );
 });
 
 test("T23: requested selection is immutable and actual fallback usage remains ledger-scoped", () => {
