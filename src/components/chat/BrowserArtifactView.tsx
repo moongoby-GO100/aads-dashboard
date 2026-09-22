@@ -65,7 +65,7 @@ const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 function frameSource(frame: LiveFrame | null): string {
   const source = frame?.metadata?.source;
   if (source === "self_hosted_playwright") return "서버 Playwright";
-  if (source === "pc_agent_browser_screenshot") return "PC Agent";
+  if (source === "pc_agent_browser_screenshot") return "PC 브라우저";
   return "화면 대기";
 }
 
@@ -106,6 +106,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   currentSession.current = sessionId;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pcNavigation, setPcNavigation] = useState({ url: "", key: 0, session: sessionId });
   const [lane, setLane] = useState<LiveBrowserLane>("server");
   const [agents, setAgents] = useState<LiveAgent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -260,6 +261,13 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const createTask = async (presetUrl?: string) => {
     const url = (presetUrl || targetUrl).trim();
     if (!url) return;
+    if (lane === "pc") {
+      try { if (!["https:", "http:"].includes(new URL(url).protocol)) throw new Error(); }
+      catch { setError("http 또는 https 주소를 입력하세요."); return; }
+      if (!sessionId || !selectedAgentId) { setError("채팅과 온라인 PC를 먼저 선택하세요."); return; }
+      setError(""); setPcNavigation((previous) => ({ url, key: previous.key + 1, session: sessionId }));
+      return;
+    }
     setBusy(true);
     try {
       const response = await api.createBrowserTask({
@@ -298,14 +306,27 @@ export default function BrowserArtifactView({ sessionId }: Props) {
           <span style={{ fontSize: 11, color: "var(--ct-text2)" }}>진행 {running} · 전체 {visibleTasks.length}</span>
           <a href="/browser-tasks" target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--ct-accent)" }}>전체 화면 ↗</a>
         </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }} aria-label="브라우저 실행 위치">
+        {(["server", "pc"] as LiveBrowserLane[]).map((value) => (
+          <button aria-pressed={lane === value} key={value} type="button" onClick={() => setLane(value)} disabled={value === "pc" && (agents.length === 0 || !sessionId)} style={{ minHeight: 44, border: `1px solid ${lane === value ? "var(--ct-accent)" : "var(--ct-border)"}`, borderRadius: 8, padding: "0 12px", background: lane === value ? "rgba(37,99,235,.16)" : "var(--ct-card)", color: "var(--ct-text)", opacity: value === "pc" && (agents.length === 0 || !sessionId) ? 0.5 : 1 }}>
+            {value === "server" ? "서버 Playwright" : "PC 브라우저"}
+          </button>
+        ))}
+        {lane === "pc" && (
+          <select aria-label="PC Agent 선택" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={{ minHeight: 44, flex: "1 1 160px", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "0 9px", background: "var(--ct-input)", color: "var(--ct-text)" }}>
+            {agents.length === 0 && <option value="">온라인 PC 없음</option>}
+            {agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name || agent.hostname || agent.agent_id}</option>)}
+          </select>
+        )}
+      </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
           <button type="button" disabled={busy} onClick={() => void createTask(COUPANGEATS_URL)} style={{ minHeight: 44, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--ct-accent)", background: "var(--ct-card)", color: "var(--ct-text)" }}>쿠팡이츠 열기</button>
-          <select aria-label="서버 접속 경로" value={egressPolicy} onChange={(event) => setEgressPolicy(event.target.value as "direct" | "cafe24" | "auto")} style={{ minHeight: 44, flex: "1 1 160px", background: "var(--ct-input)", color: "var(--ct-text)", border: "1px solid var(--ct-border)", borderRadius: 8 }}>
+          {lane === "server" && <select aria-label="서버 접속 경로" value={egressPolicy} onChange={(event) => setEgressPolicy(event.target.value as "direct" | "cafe24" | "auto")} style={{ minHeight: 44, flex: "1 1 160px", background: "var(--ct-input)", color: "var(--ct-text)", border: "1px solid var(--ct-border)", borderRadius: 8 }}>
             <option value="auto">자동 · 쿠팡이츠는 한국 경유</option>
             <option value="direct">기본 연결</option>
             <option value="cafe24">한국 · Cafe24</option>
-          </select>
-          <span style={{ width: "100%", fontSize: 11, color: "var(--ct-text2)" }}>접속 경로는 새로 여는 서버 작업에 적용됩니다. PC 화면은 PC의 네트워크를 사용합니다.</span>
+          </select>}
+          <span style={{ width: "100%", fontSize: 11, color: "var(--ct-text2)" }}>{lane === "pc" ? "선택한 PC의 네트워크로 접속합니다. 로그인은 이 채팅 전용 브라우저에 보존됩니다." : "접속 경로는 새로 여는 서버 작업에 적용됩니다."}</span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <input
@@ -321,16 +342,16 @@ export default function BrowserArtifactView({ sessionId }: Props) {
           </button>
         </div>
         <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.5, color: "var(--ct-text2)" }}>
-          서버 Playwright를 먼저 사용합니다. 인증서·로컬 앱처럼 PC 환경이 꼭 필요할 때만 Windows 오비스로 전환하고, 전환 이유를 단계 기록에 표시합니다.
+          {lane === "pc" ? "주소를 열고 화면의 입력칸을 클릭하세요. 입력·Enter·스크롤은 이 채팅의 탭에만 전달됩니다." : "일반 웹 작업은 서버 브라우저에서, PC 환경이 필요한 작업은 PC 브라우저에서 진행하세요."}
         </div>
       </div>
 
       {error && <div role="alert" style={{ padding: 9, borderRadius: 8, background: "rgba(239,68,68,.12)", color: "#ef4444", fontSize: 12 }}>{error}</div>}
 
-      {selected && (
+      {lane === "server" && selected && (
         <section aria-label="스마트 브라우저 실행 상태" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 }}>
           {[
-            ["접속 경로", lane === "pc" ? "PC 네트워크" : selected.egress_effective === "cafe24" ? (liveConnection === "live" ? "한국 · Cafe24 연결됨" : "한국 · Cafe24 연결 대기") : selected.egress_effective === "unavailable" ? "한국 경유 사용 불가" : "기본 연결"],
+            ["접속 경로", selected.egress_effective === "cafe24" ? (liveConnection === "live" ? "한국 · Cafe24 연결됨" : "한국 · Cafe24 연결 대기") : selected.egress_effective === "unavailable" ? "한국 경유 사용 불가" : "기본 연결"],
             ["실행 주체", artifactStatus?.execution_actor || frameSource(frame)],
             ["학습 상태", ({ learned: "처음 학습", reused: "검증된 흐름 재사용", rediscover: "구조 다시 찾는 중", approval_required: "승인 필요", idle: "학습 대기" } as Record<string, string>)[artifactStatus?.learning_state || "idle"]],
             ["사실 최신성", ({ CURRENT: "최신 확인", STALE: "기한 만료", CONFLICT: "값 불일치", UNAVAILABLE: "재확인 실패", NOT_APPLICABLE: "변동 사실 없음" } as Record<string, string>)[artifactStatus?.freshness_status || "NOT_APPLICABLE"]],
@@ -344,13 +365,13 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         </section>
       )}
 
-      {artifactStatus?.approval_required && (
+      {lane === "server" && artifactStatus?.approval_required && (
         <div role="status" style={{ padding: 10, borderRadius: 8, background: "rgba(245,158,11,.13)", color: "#d97706", fontSize: 12 }}>
           사용자 승인 또는 로그인이 필요합니다. 승인 화면에서 처리하면 현재 단계부터 이어집니다.
         </div>
       )}
 
-      {artifactStatus?.last_error && (
+      {lane === "server" && artifactStatus?.last_error && (
         <div role="alert" style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, background: "rgba(239,68,68,.12)", color: "#ef4444", fontSize: 12 }}>
           <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{artifactStatus.last_error}</span>
           {artifactStatus.can_retry && (
@@ -361,32 +382,22 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         </div>
       )}
 
-      {visibleTasks.length > 0 && (
+      {lane === "server" && visibleTasks.length > 0 && (
         <select value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)} style={{ width: "100%", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 7, padding: 8, background: "var(--ct-input)", color: "var(--ct-text)", fontSize: 12 }}>
           {visibleTasks.map((task) => <option key={task.id} value={task.id}>{task.status} · {task.current_step || task.target_url}</option>)}
         </select>
       )}
 
-      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }} aria-label="브라우저 실행 위치">
-        {(["server", "pc"] as LiveBrowserLane[]).map((value) => (
-          <button aria-pressed={lane === value} key={value} type="button" onClick={() => setLane(value)} disabled={value === "pc" && agents.length === 0} style={{ minHeight: 44, border: `1px solid ${lane === value ? "var(--ct-accent)" : "var(--ct-border)"}`, borderRadius: 8, padding: "0 12px", background: lane === value ? "rgba(37,99,235,.16)" : "var(--ct-card)", color: "var(--ct-text)", opacity: value === "pc" && agents.length === 0 ? 0.5 : 1 }}>
-            {value === "server" ? "서버 Playwright" : "PC Agent"}
-          </button>
-        ))}
-        {lane === "pc" && (
-          <select aria-label="PC Agent 선택" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={{ minHeight: 44, flex: "1 1 160px", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "0 9px", background: "var(--ct-input)", color: "var(--ct-text)" }}>
-            {agents.length === 0 && <option value="">온라인 PC 없음</option>}
-            {agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name || agent.hostname || agent.agent_id}</option>)}
-          </select>
-        )}
-      </div>
+
 
       <LiveBrowserStage
-        key={`${sessionId}:${lane}:${selected?.id}:${selectedAgentId}`}
+        key={`${sessionId}:${lane}:${lane === "server" ? selected?.id : pcNavigation.key}:${selectedAgentId}`}
         lane={lane}
-        taskId={selected?.id}
+        taskId={lane === "server" ? selected?.id : undefined}
+        chatSessionId={sessionId}
+        pcUrl={pcNavigation.session === sessionId ? pcNavigation.url : ""}
         agentId={selectedAgentId}
-        interactive={Boolean((lane === "server" && selected?.id) || (lane === "pc" && selectedAgentId))}
+        interactive={Boolean((lane === "server" && selected?.id) || (lane === "pc" && sessionId && selectedAgentId))}
         fallbackSrc={lane === "server" ? imageSrc : ""}
         emptyMessage="브라우저 작업을 시작하면 현재 화면이 여기에 표시됩니다."
         onConnectionChange={setLiveConnection}
@@ -399,7 +410,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
           : <button type="button" disabled={busy || stepCount === 0} onClick={() => void finishRecording()} style={{ minHeight: 44 }}>학습 종료 · 등록 요청 ({stepCount}단계)</button>}
         {registrationId && <span role="status">레시피 등록 요청을 저장했습니다. 승인 대기 상태입니다.</span>}
       </div>}
-      {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>연결된 PC의 화면을 조작합니다. 레시피 등록은 브라우저 요소 검증이 가능한 서버 화면에서 진행하세요.</p>}
+      {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>이 채팅 전용 PC 탭을 조작합니다. 다른 채팅의 입력과 분리됩니다. PC 레시피 자동 학습은 아직 지원하지 않습니다.</p>}
 
       {liveConnection === "failed" && lane === "server" && (
         <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ alignSelf: "flex-end", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 8, padding: "7px 10px", background: "var(--ct-card)", color: "var(--ct-text)", fontSize: 11, cursor: selected ? "pointer" : "not-allowed" }}>
@@ -407,7 +418,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         </button>
       )}
 
-      <div style={{ border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden" }}>
+      {lane === "server" && <div style={{ border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden" }}>
         <div style={{ padding: "9px 11px", background: "var(--ct-card)", borderBottom: "1px solid var(--ct-border)", fontSize: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <strong style={{ flex: 1 }}>{artifactStatus?.current_step || selected?.current_step || "대기 중"}</strong>
@@ -429,7 +440,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
           ))}
           {events.length === 0 && <div style={{ padding: 14, textAlign: "center", color: "var(--ct-text2)", fontSize: 11 }}>아직 단계 기록이 없습니다.</div>}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

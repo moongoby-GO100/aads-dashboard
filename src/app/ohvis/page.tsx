@@ -785,6 +785,7 @@ export default function OhvisConsolePage() {
                 lane={liveLane}
                 taskId={frame?.task_id}
                 agentId={selectedAgentId}
+                chatSessionId={activeSessionId}
                 interactive
                 fallbackSrc={liveLane === "server" ? frameSrc : ""}
                 emptyMessage={EMPTY_SCREEN}
