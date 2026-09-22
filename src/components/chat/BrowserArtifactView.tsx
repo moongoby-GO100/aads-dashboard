@@ -270,6 +270,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         egress_policy: egressPolicy,
       }) as { task?: BrowserTask };
       if (!response.task?.id || response.task.status === "creation_failed") throw new Error("브라우저 작업을 저장하지 못했습니다.");
+      if (response.task.egress_policy !== egressPolicy) throw new Error("서버 접속 경로 업데이트가 아직 반영되지 않았습니다. 배포 후 다시 열어 주세요.");
       if (currentSession.current !== sessionId) return;
       const created = response.task;
       setTasks((previous) => [created, ...previous.filter((task) => task.id !== created.id)]);
