@@ -189,6 +189,10 @@ const previewCases: Array<{ input: string; expected: boolean }> = [
   // 패널이 그릴 수 없는 형식은 기존 다운로드 동작을 유지한다
   { input: "/api/v1/files/download?path=%2Froot%2Faads%2Freport.xlsx", expected: false },
   { input: "/reports/20260909_analysis.html", expected: true },
+  { input: "/ohvis-smartbrowser-uiux-mockup-20260922.html", expected: true },
+  { input: "https://aads.newtalk.kr/ohvis-smartbrowser-streaming-prd-20260922.html", expected: true },
+  // 임의의 public 루트 HTML까지 아티팩트 허용 범위를 넓히지 않는다.
+  { input: "/unrelated-public-page.html", expected: false },
   { input: "/reports/monthly.xlsx", expected: false },
   { input: "https://example.com/report.md", expected: false },
   { input: "", expected: false },

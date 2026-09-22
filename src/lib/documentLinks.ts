@@ -428,6 +428,9 @@ const ARTIFACT_PREVIEW_EXTS = new Set<string>([...DOCS_VIEWER_EXTS, ...INLINE_EX
 
 /** 정적으로 서빙되는 문서 경로 (nginx/Next 라우트) */
 const ARTIFACT_PREVIEW_PATH_PREFIXES = [
+  // 운영 대시보드 public 루트에 배포된 오비스 설계/목업 문서는
+  // 채팅 링크 클릭 시 새 탭 대신 우측 HTML 아티팩트 패널에서 연다.
+  "/ohvis-smartbrowser-",
   "/reports/",
   "/exports/",
   "/static/reports/",
