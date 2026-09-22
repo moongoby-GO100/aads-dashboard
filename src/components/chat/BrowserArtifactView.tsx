@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import LiveBrowserStage, { type LiveBrowserConnection, type LiveBrowserLane } from "@/components/browser/LiveBrowserStage";
 import { api } from "@/lib/api";
 
 type BrowserTask = {
@@ -47,6 +48,14 @@ type ArtifactStatus = {
 
 type Props = { sessionId?: string };
 
+type LiveAgent = {
+  agent_id: string;
+  agent_name?: string;
+  hostname?: string;
+  status?: string;
+  is_online?: boolean;
+};
+
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 function frameSource(frame: LiveFrame | null): string {
@@ -89,6 +98,15 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const [targetUrl, setTargetUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [lane, setLane] = useState<LiveBrowserLane>("server");
+  const [agents, setAgents] = useState<LiveAgent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [liveConnection, setLiveConnection] = useState<LiveBrowserConnection>("idle");
+  const recordingRef = useRef<Promise<string> | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [stepCount, setStepCount] = useState(0);
+  const [registrationId, setRegistrationId] = useState("");
+  const stepQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const visibleTasks = useMemo(() => {
     return sessionId ? tasks.filter((task) => task.session_id === sessionId) : tasks;
@@ -134,6 +152,20 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   }, [loadTasks]);
 
   useEffect(() => {
+    let cancelled = false;
+    const refresh = () => { void api.getPCAgents().then((response) => {
+      if (cancelled) return;
+      const items = (Array.isArray(response) ? response : response?.agents || []) as LiveAgent[];
+      const online = items.filter((agent) => agent.is_online === true || agent.status === "online");
+      setAgents(online);
+      setSelectedAgentId((current) => online.some((agent) => agent.agent_id === current) ? current : online[0]?.agent_id || "");
+    }).catch(() => { if (!cancelled) setAgents([]); }); };
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
   }, [selected, selectedId]);
 
@@ -150,14 +182,54 @@ export default function BrowserArtifactView({ sessionId }: Props) {
 
   useEffect(() => {
     void loadLive(false);
-    const timer = window.setInterval(() => void loadLive(false), 3000);
+    const shouldPoll = liveConnection !== "live";
+    const timer = shouldPoll ? window.setInterval(() => void loadLive(false), 3000) : undefined;
     const onVisible = () => { if (document.visibilityState === "visible") void loadLive(false); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [loadLive]);
+  }, [liveConnection, loadLive, selected?.id]);
+
+  useEffect(() => { recordingRef.current = null; setRecording(false); setStepCount(0); setRegistrationId(""); }, [sessionId, selected?.id, lane]);
+
+  const startRecording = async () => {
+    if (!selected || lane !== "server") return;
+    const domain = new URL(frame?.current_url || selected.target_url).hostname;
+    const request = api.startOhvisRecipeRecording({ name: `${domain} 채팅 브라우저 조작`, domain }).then((result) => result.recording_id);
+    recordingRef.current = request;
+    try {
+      const id = await request;
+      const saved = await api.recordOhvisRecipeStep(id, { action: "navigate", url: frame?.current_url || selected.target_url, risk: "READ", description: "학습 시작 페이지" });
+      setRecording(true); setStepCount(saved.step_count); setRegistrationId("");
+    }
+    catch (reason) { recordingRef.current = null; setError(String(reason)); }
+  };
+
+  const recordRecipeStep = useCallback((step: Record<string, unknown>) => {
+    const active = recordingRef.current;
+    if (!active) return;
+    stepQueueRef.current = stepQueueRef.current.then(async () => {
+      const saved = await api.recordOhvisRecipeStep(await active, step);
+      if (recordingRef.current === active) setStepCount(saved.step_count);
+    }).catch((reason) => setError(`레시피 단계 기록 실패: ${String(reason)}`));
+    return stepQueueRef.current;
+  }, []);
+
+  const finishRecording = async () => {
+    const active = recordingRef.current;
+    if (!active) return;
+    setBusy(true);
+    try {
+      await stepQueueRef.current;
+      const result = await api.finishOhvisRecipeRecording(await active);
+      setRegistrationId(String(result.registration.registration_id || result.registration.id || ""));
+      recordingRef.current = null;
+      setRecording(false);
+    } catch (reason) { setError(`등록 요청 실패: ${String(reason)}`); }
+    finally { setBusy(false); }
+  };
 
   const retryTask = async () => {
     if (!selected?.id || !artifactStatus?.can_retry) return;
@@ -263,17 +335,45 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         </select>
       )}
 
-      <div style={{ position: "relative", display: "grid", placeItems: "center", aspectRatio: "16 / 9", border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden", background: "#0f172a" }}>
-        {imageSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageSrc} alt="스마트 브라우저 현재 화면" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-        ) : (
-          <span style={{ color: "#94a3b8", fontSize: 12 }}>브라우저 작업을 시작하면 현재 화면이 여기에 표시됩니다.</span>
-        )}
-          <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ position: "absolute", right: 8, top: 8, minHeight: 44, border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 10px", background: "rgba(15,23,42,.82)", color: "#e2e8f0", fontSize: 11, cursor: selected ? "pointer" : "not-allowed" }}>
-            화면 새로고침
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }} aria-label="브라우저 실행 위치">
+        {(["server", "pc"] as LiveBrowserLane[]).map((value) => (
+          <button aria-pressed={lane === value} key={value} type="button" onClick={() => setLane(value)} disabled={value === "pc" && agents.length === 0} style={{ minHeight: 44, border: `1px solid ${lane === value ? "var(--ct-accent)" : "var(--ct-border)"}`, borderRadius: 8, padding: "0 12px", background: lane === value ? "rgba(37,99,235,.16)" : "var(--ct-card)", color: "var(--ct-text)", opacity: value === "pc" && agents.length === 0 ? 0.5 : 1 }}>
+            {value === "server" ? "서버 Playwright" : "PC Agent"}
           </button>
+        ))}
+        {lane === "pc" && (
+          <select aria-label="PC Agent 선택" value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={{ minHeight: 44, flex: "1 1 160px", border: "1px solid var(--ct-border)", borderRadius: 8, padding: "0 9px", background: "var(--ct-input)", color: "var(--ct-text)" }}>
+            {agents.length === 0 && <option value="">온라인 PC 없음</option>}
+            {agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name || agent.hostname || agent.agent_id}</option>)}
+          </select>
+        )}
       </div>
+
+      <LiveBrowserStage
+        key={`${sessionId}:${lane}:${selected?.id}:${selectedAgentId}`}
+        lane={lane}
+        taskId={selected?.id}
+        agentId={selectedAgentId}
+        interactive={Boolean((lane === "server" && selected?.id) || (lane === "pc" && selectedAgentId))}
+        fallbackSrc={lane === "server" ? imageSrc : ""}
+        emptyMessage="브라우저 작업을 시작하면 현재 화면이 여기에 표시됩니다."
+        onConnectionChange={setLiveConnection}
+        onControlError={(message) => setError(`브라우저 조작 실패: ${message}`)}
+        onRecipeStep={recordRecipeStep}
+      />
+
+      {lane === "server" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {!recording ? <button type="button" disabled={liveConnection !== "live"} onClick={() => void startRecording()} style={{ minHeight: 44 }}>학습 시작</button>
+          : <button type="button" disabled={busy || stepCount === 0} onClick={() => void finishRecording()} style={{ minHeight: 44 }}>학습 종료 · 등록 요청 ({stepCount}단계)</button>}
+        {registrationId && <span role="status">레시피 등록 요청을 저장했습니다. 승인 대기 상태입니다.</span>}
+      </div>}
+      {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>연결된 PC의 화면을 조작합니다. 레시피 등록은 브라우저 요소 검증이 가능한 서버 화면에서 진행하세요.</p>}
+
+      {liveConnection === "failed" && lane === "server" && (
+        <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ alignSelf: "flex-end", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 8, padding: "7px 10px", background: "var(--ct-card)", color: "var(--ct-text)", fontSize: 11, cursor: selected ? "pointer" : "not-allowed" }}>
+          스크린샷 새로고침
+        </button>
+      )}
 
       <div style={{ border: "1px solid var(--ct-border)", borderRadius: 10, overflow: "hidden" }}>
         <div style={{ padding: "9px 11px", background: "var(--ct-card)", borderBottom: "1px solid var(--ct-border)", fontSize: 12 }}>

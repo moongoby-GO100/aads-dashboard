@@ -2849,3 +2849,11 @@
   스냅샷→주제 변환 검증 통과(기본 1건 / 전체 3건 / 중복가드 1건), `src/app/marketing/sns/page.tsx`
   와 `src/lib/navigation.ts` ESLint 0 오류.
 - 되돌리기: 이 커밋을 revert 한 뒤 `bash deploy.sh` 재실행.
+
+## 2026-09-22 — Chat artifact live browser integration
+
+Recovered the five uncommitted files from the original ohvis live-control worktree without changing that worktree. `/ohvis` and the chat artifact Browser tab now share `LiveBrowserStage`: server CDP WebSocket frames and controls, PC Agent screen WebSocket and acknowledged desktop controls, server/PC selection, bounded reconnect, manual reconnect and isolated screenshot fallback. Live status requires a frame; disconnected controls are disabled. PC frames request scale 1 to keep desktop coordinates exact. Server learning has explicit start/finish and ordered successful-step recording; desktop coordinates are not misregistered as selector recipes.
+
+Validation: `npm run typecheck` passed; `npm run selftest` 8/8 passed. Playwright contract test `tests/live-browser/test_stage.py` passed against Vite harness with simulated WS/API responses: server click/type/Enter, PC command/result, recording/registration, connection failure and lane fallback isolation. `npm run test:chat` 48/49 passed: existing `src/app/chat/page.tsx` scrollTop assignment at HEAD fails viewport-controller guard; that route was not edited by this release. Vault login succeeded using server Chromium after the bridge login tool timed out twice.
+
+Release validation remains pending at commit time: production frames and controls, recipe reuse, immutable-image blue/green deployment and five-minute monitoring. Final deployment/evidence result is recorded in DB handover key `ohvis-chat-live-browser-integration`.

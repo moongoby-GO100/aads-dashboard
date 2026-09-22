@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import LiveBrowserStage, { type LiveBrowserConnection } from "@/components/browser/LiveBrowserStage";
 import {
   api,
   type OhvisConsoleApproval,
@@ -28,7 +29,6 @@ import {
 
 const POLL_LIVE_MS = 3000;
 const POLL_IDLE_MS = 15000;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
 // 목업 팔레트. 하드코딩이 아니라 CEO 승인 디자인의 값이다.
 const C = {
@@ -68,12 +68,6 @@ interface LiveAgent {
   status?: string;
   is_online?: boolean;
   capabilities?: string[];
-}
-
-function websocketUrl(path: string, token: string): string {
-  const base = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "");
-  const separator = path.includes("?") ? "&" : "?";
-  return `${base}${path}${token ? `${separator}access_token=${encodeURIComponent(token)}` : ""}`;
 }
 
 /**
@@ -203,9 +197,6 @@ export default function OhvisConsolePage() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("live");
   const [liveLane, setLiveLane] = useState<LiveLane>("server");
   const [streamStatus, setStreamStatus] = useState("대기");
-  const [streamSize, setStreamSize] = useState({ width: 1366, height: 768 });
-  const [inputText, setInputText] = useState("");
-  const [secretInput, setSecretInput] = useState(false);
   const [recordingId, setRecordingId] = useState("");
   const [recordedSteps, setRecordedSteps] = useState(0);
   const [registrationId, setRegistrationId] = useState("");
@@ -216,9 +207,6 @@ export default function OhvisConsolePage() {
   const isMobile = useIsMobile();
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
-  const frameImageRef = useRef<HTMLImageElement | null>(null);
-  const serverWsRef = useRef<WebSocket | null>(null);
-  const pcWsRef = useRef<WebSocket | null>(null);
   const recordingIdRef = useRef("");
 
   useEffect(() => setSessionId(requestedSessionId()), []);
@@ -322,89 +310,6 @@ export default function OhvisConsolePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameKey, liveLane]);
 
-  useEffect(() => {
-    if (liveLane !== "server" || !frame?.task_id) {
-      serverWsRef.current?.close();
-      serverWsRef.current = null;
-      return;
-    }
-    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
-    const ws = new WebSocket(websocketUrl(`/browser-tasks/${encodeURIComponent(frame.task_id)}/live-stream`, token));
-    serverWsRef.current = ws;
-    setStreamStatus("서버 브라우저 연결 중");
-    ws.onopen = () => setStreamStatus("서버 브라우저 실시간");
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(String(event.data || "{}"));
-        if (message.type === "ready") {
-          setStreamSize({ width: Number(message.width) || 1366, height: Number(message.height) || 768 });
-          setStreamStatus("서버 브라우저 실시간");
-          return;
-        }
-        if (message.type === "frame" && message.frame) {
-          setFrameSrc(`data:${message.media_type || "image/jpeg"};base64,${message.frame}`);
-          setStreamSize({ width: Number(message.width) || 1366, height: Number(message.height) || 768 });
-          return;
-        }
-        if (message.type === "control_ack") {
-          const step = message.result?.recipe_step as Record<string, unknown> | null;
-          const activeRecording = recordingIdRef.current;
-          if (activeRecording && step) {
-            void api.recordOhvisRecipeStep(activeRecording, step).then((saved) => {
-              setRecordedSteps(saved.step_count || 0);
-            }).catch((reason) => setError(`레시피 단계 기록 실패: ${String(reason)}`));
-          }
-          return;
-        }
-        if (message.type === "control_error" || message.type === "error") {
-          setError(`브라우저 조작 실패: ${message.error || "unknown"}`);
-        }
-      } catch {
-        setError("브라우저 스트림 메시지를 해석하지 못했습니다.");
-      }
-    };
-    ws.onerror = () => setStreamStatus("서버 브라우저 연결 오류");
-    ws.onclose = () => {
-      if (serverWsRef.current === ws) serverWsRef.current = null;
-      setStreamStatus("서버 브라우저 연결 종료");
-    };
-    return () => {
-      if (serverWsRef.current === ws) serverWsRef.current = null;
-      ws.close();
-    };
-  }, [frame?.task_id, liveLane]);
-
-  useEffect(() => {
-    if (liveLane !== "pc" || !selectedAgentId) {
-      pcWsRef.current?.close();
-      pcWsRef.current = null;
-      return;
-    }
-    const token = typeof window !== "undefined" ? localStorage.getItem("aads_token") || "" : "";
-    const ws = new WebSocket(websocketUrl(`/pc-agent/stream/${encodeURIComponent(selectedAgentId)}`, token));
-    pcWsRef.current = ws;
-    setStreamStatus("PC 브라우저 연결 중");
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ fps: 5, quality: 70, scale: 0.65 }));
-      setStreamStatus("PC 화면 실시간");
-    };
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(String(event.data || "{}"));
-        if (message.frame) setFrameSrc(`data:image/jpeg;base64,${message.frame}`);
-      } catch { /* non-frame agent messages are ignored */ }
-    };
-    ws.onerror = () => setStreamStatus("PC 화면 연결 오류");
-    ws.onclose = () => {
-      if (pcWsRef.current === ws) pcWsRef.current = null;
-      setStreamStatus("PC 화면 연결 종료");
-    };
-    return () => {
-      if (pcWsRef.current === ws) pcWsRef.current = null;
-      ws.close();
-    };
-  }, [liveLane, selectedAgentId]);
-
   const messages: OhvisConsoleMessage[] = summary?.conversation.messages ?? [];
   const timeline: OhvisConsoleStep[] = useMemo(
     () => summary?.live.timeline ?? [],
@@ -431,29 +336,19 @@ export default function OhvisConsolePage() {
     return frame?.current_url || stepUrl || "about:blank";
   }, [frame, timeline]);
 
-  const sendServerControl = (payload: Record<string, unknown>) => {
-    const ws = serverWsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      setError("서버 브라우저 실시간 연결이 열려 있지 않습니다.");
-      return false;
-    }
-    ws.send(JSON.stringify({ type: "control", ...payload }));
-    return true;
+  const handleStreamConnection = (status: LiveBrowserConnection) => {
+    const laneLabel = liveLane === "server" ? "서버 브라우저" : "PC 화면";
+    setStreamStatus(status === "live" ? `${laneLabel} 실시간` : status === "connecting" ? `${laneLabel} 연결 중` : status === "failed" ? `${laneLabel} 연결 오류` : "대기");
   };
 
-  const clickLiveFrame = (event: React.MouseEvent<HTMLImageElement>) => {
-    if (liveLane !== "server") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const x = ((event.clientX - rect.left) / rect.width) * streamSize.width;
-    const y = ((event.clientY - rect.top) / rect.height) * streamSize.height;
-    sendServerControl({ action: "click", x, y });
-  };
-
-  const typeIntoBrowser = () => {
-    if (!inputText) return;
-    if (sendServerControl({ action: "type", text: inputText, secret: secretInput, replace: true })) {
-      setInputText("");
+  const recordRecipeStep = async (step: Record<string, unknown>) => {
+    const activeRecording = recordingIdRef.current;
+    if (!activeRecording) return;
+    try {
+      const saved = await api.recordOhvisRecipeStep(activeRecording, step);
+      setRecordedSteps(saved.step_count || 0);
+    } catch (reason) {
+      setError(`레시피 단계 기록 실패: ${String(reason)}`);
     }
   };
 
@@ -885,62 +780,23 @@ export default function OhvisConsolePage() {
               </div>
             </div>
 
-            <div style={{ flex: 1, background: "#fff", color: "#111827", overflow: "auto", minHeight: 0 }}>
-              {frameSrc ? (
-                <>
-                  {(frame?.page_title || frame?.current_step) && (
-                    <div style={{ background: "#1a56db", color: "#fff", padding: "14px 20px" }}>
-                      <h2 style={{ fontSize: 17, margin: 0 }}>{frame?.page_title || "오비스 라이브"}</h2>
-                      <p style={{ fontSize: 12, opacity: 0.85, marginTop: 3 }}>{frame?.current_step || frame?.current_url}</p>
-                    </div>
-                  )}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    ref={frameImageRef}
-                    src={frameSrc}
-                    alt={liveLane === "server" ? "서버 브라우저 실시간 화면" : "PC 브라우저 실시간 화면"}
-                    onClick={clickLiveFrame}
-                    style={{ display: "block", width: "100%", height: "auto", cursor: liveLane === "server" ? "crosshair" : "default" }}
-                  />
-                </>
-              ) : (
-                <div
-                  style={{
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#94a3b8",
-                    fontSize: 14,
-                    background: "#f1f5f9",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ fontSize: 30 }}>🖥️</div>
-                  {EMPTY_SCREEN}
-                </div>
-              )}
+            <div style={{ flex: 1, background: "#0f172a", color: "#e2e8f0", overflow: "auto", minHeight: 0, padding: 10 }}>
+              <LiveBrowserStage
+                lane={liveLane}
+                taskId={frame?.task_id}
+                agentId={selectedAgentId}
+                interactive
+                fallbackSrc={liveLane === "server" ? frameSrc : ""}
+                emptyMessage={EMPTY_SCREEN}
+                onConnectionChange={handleStreamConnection}
+                onControlError={(message) => setError(`브라우저 조작 실패: ${message}`)}
+                onRecipeStep={recordRecipeStep}
+              />
             </div>
 
             <div style={{ padding: "8px 10px", background: C.card, borderTop: `1px solid ${C.border}`, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
               {liveLane === "server" ? (
                 <>
-                  <span style={{ fontSize: 11, color: C.muted }}>화면 클릭 후 입력</span>
-                  <input
-                    value={inputText}
-                    onChange={(event) => setInputText(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === "Enter") typeIntoBrowser(); }}
-                    placeholder="선택한 입력칸에 넣을 값"
-                    type={secretInput ? "password" : "text"}
-                    autoComplete="off"
-                    style={{ flex: "1 1 180px", minHeight: 36, minWidth: 130, background: C.bg, color: C.text, border: `1px solid ${C.borderSoft}`, borderRadius: 6, padding: "0 9px" }}
-                  />
-                  <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: C.muted }}>
-                    <input type="checkbox" checked={secretInput} onChange={(event) => setSecretInput(event.target.checked)} /> 비밀값
-                  </label>
-                  <button type="button" onClick={typeIntoBrowser} disabled={!inputText} style={{ minHeight: 36, border: 0, borderRadius: 6, padding: "0 12px", background: C.accent, color: "white", fontWeight: 700 }}>입력</button>
-                  <button type="button" onClick={() => sendServerControl({ action: "press", key: "Enter" })} style={{ minHeight: 36, border: `1px solid ${C.borderSoft}`, borderRadius: 6, padding: "0 10px", background: C.bg, color: C.text }}>Enter</button>
                   {!recordingId ? (
                     <button type="button" onClick={startRecipeRecording} disabled={recordingBusy || address === "about:blank"} style={{ minHeight: 36, border: `1px solid ${C.ok}`, borderRadius: 6, padding: "0 10px", background: "#052e1b", color: "#6ee7b7", fontWeight: 700 }}>학습 시작</button>
                   ) : (
@@ -951,7 +807,7 @@ export default function OhvisConsolePage() {
                   )}
                 </>
               ) : (
-                <span style={{ fontSize: 11, color: C.muted }}>PC Agent 화면 스트림입니다. 브라우저 전용 CDP 좌표 업링크는 현재 호환성 실측 대상입니다.</span>
+                <span style={{ fontSize: 11, color: C.muted }}>PC Agent 화면에서 클릭·텍스트 입력·Enter 조작을 보낼 수 있습니다.</span>
               )}
             </div>
 
