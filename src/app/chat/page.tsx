@@ -49,6 +49,7 @@ import {
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import { artifactMatchesTab, artifactTabForArtifact, isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { type ChatFollowMode } from "@/lib/chatScrollPolicy";
+import { useToolLogFollow } from "@/features/chat/viewport/useToolLogFollow";
 import {
   ChatViewportController,
   createDomChatViewportAdapter,
@@ -2921,14 +2922,11 @@ const MessageItem = memo(function MessageItem({
   // 패널이 맨 위에 멈춰 있어 방금 무엇을 했는지가 화면 밖으로 밀렸다.
   // 새 기록이 붙을 때마다 최신 줄로 따라 내려가고, 본문이 없는 동안에는
   // 패널을 더 높게 쓴다.
-  const toolLogScrollRef = useRef<HTMLDivElement | null>(null);
   const toolLogCount = streamToolLogs?.length || 0;
   const lastToolLogText = streamToolLogs?.[toolLogCount - 1]?.text || "";
-  useEffect(() => {
-    const el = toolLogScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [toolLogCount, lastToolLogText, streamToolStatus]);
+  const toolLogViewport = useToolLogFollow(
+    String(msg.id), `${toolLogCount}:${lastToolLogText}:${streamToolStatus || ""}`,
+  );
   const responseOverview = useMemo(
     () => (msg.role === "assistant" && !isVisiblyStreaming ? buildResponseOverview(msg.content || "") : null),
     [isVisiblyStreaming, msg.content, msg.role],
@@ -3268,7 +3266,7 @@ const MessageItem = memo(function MessageItem({
                 </div>
               )}
               {(streamToolLogs && streamToolLogs.length > 0 || streamToolStatus) && (
-                <div ref={toolLogScrollRef} style={{
+                <div ref={toolLogViewport.ref} onScroll={toolLogViewport.onScroll} data-testid="tool-log-viewport" style={{
                   fontSize: "12px", borderRadius: "8px",
                   background: "rgba(108,99,255,0.06)",
                   border: "1px solid rgba(108,99,255,0.2)",
@@ -3277,7 +3275,6 @@ const MessageItem = memo(function MessageItem({
                   // 본문이 아직 없으면 이 패널이 버블의 전부다. 그때는 더 높게 쓴다.
                   maxHeight: displayedStreamingContent ? "180px" : "340px",
                   overflowY: "auto" as const,
-                  scrollBehavior: "smooth" as const,
                 }}>
                   {streamToolLogs?.map((log, i) => (
                     <div key={i} style={{ marginBottom: "4px" }}>

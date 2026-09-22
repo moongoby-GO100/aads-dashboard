@@ -2857,3 +2857,9 @@ Recovered the five uncommitted files from the original ohvis live-control worktr
 Validation: `npm run typecheck` passed; `npm run selftest` 8/8 passed. Playwright contract test `tests/live-browser/test_stage.py` passed against Vite harness with simulated WS/API responses: server click/type/Enter, PC command/result, recording/registration, connection failure and lane fallback isolation. `npm run test:chat` 48/49 passed: existing `src/app/chat/page.tsx` scrollTop assignment at HEAD fails viewport-controller guard; that route was not edited by this release. Vault login succeeded using server Chromium after the bridge login tool timed out twice.
 
 Release validation remains pending at commit time: production frames and controls, recipe reuse, immutable-image blue/green deployment and five-minute monitoring. Final deployment/evidence result is recorded in DB handover key `ohvis-chat-live-browser-integration`.
+
+## 2026-09-22 — Live browser follow-up: nested log viewport
+
+Moved the tool-progress log's viewport writes out of `chat/page.tsx` into `useToolLogFollow`. The nested panel follows new logs only while at the bottom; scrolling up preserves the reader's position, and returning to the bottom resumes following. Removed smooth scrolling from this nested panel so programmatic scroll events cannot cancel following mid-animation. The surrounding chat remains owned by ChatViewportController.
+
+Validation: typecheck passed; chat regression 49/49 passed (previously 48/49). Real Chromium `tests/live-browser/test_tool_log.py` passed following, history-reading preservation, resumption, and unchanged outer-chat position. Evidence `/tmp/ohvis-followup-tool-log.png` in verification container. Production disconnect/reconnect and separate-session recipe replay are tracked in DB handover `ohvis-chat-live-browser-followup-20260922`. Commit/push, immutable blue-green release, and five-minute monitoring remain required at this point.
