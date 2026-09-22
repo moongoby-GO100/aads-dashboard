@@ -391,6 +391,7 @@ export interface AdminUsersOverviewResponse {
     last_seen_at: string | null;
   }>;
   daily: Array<{ day: string; signups: number }>;
+  pagination?: { total: number; page: number; page_size: number };
 }
 
 export interface UserApiKeyItem {
@@ -1040,11 +1041,30 @@ export const api = {
       `/auth/admin/impersonate/${encodeURIComponent(userId)}`, { method: "POST" },
     ),
 
-  getAdminUsersOverview: (params?: { days?: number; limit?: number }) => {
-    const q = new URLSearchParams();
-    if (params?.days) q.set("days", String(params.days));
-    if (params?.limit) q.set("limit", String(params.limit));
-    return request<AdminUsersOverviewResponse>(`/admin/users/overview${q.size ? `?${q.toString()}` : ""}`);
+  getAdminUsersOverview: (params?: {
+    days?: number;
+    limit?: number;
+    q?: string;
+    role?: string;
+    status?: string;
+    active_only?: boolean;
+    page?: number;
+    page_size?: number;
+    sort?: string;
+    order?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.days) qs.set("days", String(params.days));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.q) qs.set("q", params.q);
+    if (params?.role) qs.set("role", params.role);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.active_only !== undefined) qs.set("active_only", String(params.active_only));
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.page_size) qs.set("page_size", String(params.page_size));
+    if (params?.sort) qs.set("sort", params.sort);
+    if (params?.order) qs.set("order", params.order);
+    return request<AdminUsersOverviewResponse>(`/admin/users/overview${qs.size ? `?${qs.toString()}` : ""}`);
   },
   getAdminTasks: (params?: { status?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
