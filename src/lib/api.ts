@@ -1075,14 +1075,15 @@ export const api = {
   },
   getAdminTask: (jobId: string) => request<any>(`/admin/tasks/${encodeURIComponent(jobId)}`),
   getAdminTaskStats: () => request<any>("/admin/tasks/stats"),
-  getBrowserTasks: (params?: { status?: string; limit?: number }) => {
+  getBrowserTasks: (params?: { status?: string; limit?: number; session_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
+    if (params?.session_id) q.set("session_id", params.session_id);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return request<unknown>(`/browser-tasks${qs ? `?${qs}` : ""}`);
   },
-  createBrowserTask: (data: { work_key: string; target_url: string; session_id?: string; current_step?: string }) =>
+  createBrowserTask: (data: { work_key: string; target_url: string; session_id?: string; current_step?: string; egress_policy?: "direct" | "cafe24" | "auto" }) =>
     request<unknown>("/browser-tasks", { method: "POST", body: JSON.stringify(data) }),
   checkBrowserTargetAccess: (data: { work_key?: string; target_url: string }) =>
     request<unknown>("/browser-tasks/access-check", { method: "POST", body: JSON.stringify(data) }),

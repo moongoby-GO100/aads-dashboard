@@ -2863,3 +2863,9 @@ Release validation remains pending at commit time: production frames and control
 Moved the tool-progress log's viewport writes out of `chat/page.tsx` into `useToolLogFollow`. The nested panel follows new logs only while at the bottom; scrolling up preserves the reader's position, and returning to the bottom resumes following. Removed smooth scrolling from this nested panel so programmatic scroll events cannot cancel following mid-animation. The surrounding chat remains owned by ChatViewportController.
 
 Validation: typecheck passed; chat regression 49/49 passed (previously 48/49). Real Chromium `tests/live-browser/test_tool_log.py` passed following, history-reading preservation, resumption, and unchanged outer-chat position. Evidence `/tmp/ohvis-followup-tool-log.png` in verification container. Production disconnect/reconnect and separate-session recipe replay are tracked in DB handover `ohvis-chat-live-browser-followup-20260922`. Commit/push, immutable blue-green release, and five-minute monitoring remain required at this point.
+
+## 2026-09-22 Chat Cafe24 browser recovery
+- Added Coupang Eats entry, auto/direct/Korea Cafe24 selector, effective route display with a distinct PC network label in the chat browser artifact.
+- Task lists filter by current session on the API before limit; new tasks are immediately selected and preserved instead of repeatedly restoring the old localStorage selection. Ignore stale session/task responses and retain stream failures until an explicit action.
+- Validation: TypeScript and chat regression 49/49 passed before final task-selection guard; final validation rerun follows. Runtime browser probe received frames over Cafe24 IP 114.207.244.86 but Coupang Eats returned Access Denied on both routes. Login and sales recipes not certified.
+- Requires Cafe24 API release first. Deployment and production chat screenshot pending; DB handover key smartbrowser-cafe24-direct-recovery-20260922 tracks actual state.

@@ -12,6 +12,9 @@ type BrowserTask = {
   status: string;
   current_step?: string;
   updated_at?: string;
+  egress_policy?: "direct" | "cafe24" | "auto";
+  egress_effective?: string;
+  egress_reason?: string;
 };
 
 type BrowserEvent = {
@@ -56,6 +59,7 @@ type LiveAgent = {
   is_online?: boolean;
 };
 
+const COUPANGEATS_URL = "https://store.coupangeats.com/merchant/login";
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 function frameSource(frame: LiveFrame | null): string {
@@ -96,6 +100,10 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const [events, setEvents] = useState<BrowserEvent[]>([]);
   const [artifactStatus, setArtifactStatus] = useState<ArtifactStatus | null>(null);
   const [targetUrl, setTargetUrl] = useState("");
+  const [egressPolicy, setEgressPolicy] = useState<"direct" | "cafe24" | "auto">("auto");
+  const restoredSession = useRef<string | undefined>(undefined);
+  const currentSession = useRef(sessionId);
+  currentSession.current = sessionId;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lane, setLane] = useState<LiveBrowserLane>("server");
@@ -114,15 +122,18 @@ export default function BrowserArtifactView({ sessionId }: Props) {
 
   const selected = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0] || null;
 
+  const selectedTaskRef = useRef(selected?.id);
+  selectedTaskRef.current = selected?.id;
+
   const loadTasks = useCallback(async () => {
     try {
-      const response = await api.getBrowserTasks({ limit: 50 }) as { tasks?: BrowserTask[] };
+      const response = await api.getBrowserTasks({ limit: 50, session_id: sessionId }) as { tasks?: BrowserTask[] };
+      if (currentSession.current !== sessionId) return;
       setTasks(Array.isArray(response.tasks) ? response.tasks : []);
-      setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, []);
+  }, [sessionId]);
 
   const loadLive = useCallback(async (capture = false) => {
     if (!selected?.id) {
@@ -136,10 +147,10 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         event_limit: 20,
         capture,
       }) as { frame?: LiveFrame | null; events?: BrowserEvent[]; artifact_status?: ArtifactStatus | null };
+      if (selectedTaskRef.current !== selected.id) return;
       setFrame(response.frame || null);
       setEvents(Array.isArray(response.events) ? response.events : []);
       setArtifactStatus(response.artifact_status || null);
-      setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -170,7 +181,8 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   }, [selected, selectedId]);
 
   useEffect(() => {
-    if (!sessionId || typeof window === "undefined") return;
+    if (!sessionId || restoredSession.current === sessionId || !visibleTasks.length || typeof window === "undefined") return;
+    restoredSession.current = sessionId;
     const restored = window.localStorage.getItem(`smart-browser-task:${sessionId}`);
     if (restored && visibleTasks.some((task) => task.id === restored)) setSelectedId(restored);
   }, [sessionId, visibleTasks]);
@@ -245,17 +257,26 @@ export default function BrowserArtifactView({ sessionId }: Props) {
     }
   };
 
-  const createTask = async () => {
-    const url = targetUrl.trim();
+  const createTask = async (presetUrl?: string) => {
+    const url = (presetUrl || targetUrl).trim();
     if (!url) return;
     setBusy(true);
     try {
-      await api.createBrowserTask({
+      const response = await api.createBrowserTask({
         work_key: sessionId ? `chat-${sessionId.slice(0, 12)}` : "aads-ceo-browser",
         target_url: url,
         session_id: sessionId || undefined,
-        current_step: "서버 Playwright 실행 준비",
-      });
+        current_step: presetUrl === COUPANGEATS_URL ? "쿠팡이츠 로그인 화면 열기" : "서버 Playwright 실행 준비",
+        egress_policy: egressPolicy,
+      }) as { task?: BrowserTask };
+      if (!response.task?.id || response.task.status === "creation_failed") throw new Error("브라우저 작업을 저장하지 못했습니다.");
+      if (currentSession.current !== sessionId) return;
+      const created = response.task;
+      setTasks((previous) => [created, ...previous.filter((task) => task.id !== created.id)]);
+      setLane("server");
+      setSelectedId(created.id);
+      restoredSession.current = sessionId;
+      if (sessionId) window.localStorage.setItem(`smart-browser-task:${sessionId}`, response.task.id);
       setTargetUrl("");
       await loadTasks();
     } catch (reason) {
@@ -275,6 +296,15 @@ export default function BrowserArtifactView({ sessionId }: Props) {
           <strong style={{ flex: 1, fontSize: 13 }}>스마트 브라우저</strong>
           <span style={{ fontSize: 11, color: "var(--ct-text2)" }}>진행 {running} · 전체 {visibleTasks.length}</span>
           <a href="/browser-tasks" target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--ct-accent)" }}>전체 화면 ↗</a>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+          <button type="button" disabled={busy} onClick={() => void createTask(COUPANGEATS_URL)} style={{ minHeight: 44, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--ct-accent)", background: "var(--ct-card)", color: "var(--ct-text)" }}>쿠팡이츠 열기</button>
+          <select aria-label="서버 접속 경로" value={egressPolicy} onChange={(event) => setEgressPolicy(event.target.value as "direct" | "cafe24" | "auto")} style={{ minHeight: 44, flex: "1 1 160px", background: "var(--ct-input)", color: "var(--ct-text)", border: "1px solid var(--ct-border)", borderRadius: 8 }}>
+            <option value="auto">자동 · 쿠팡이츠는 한국 경유</option>
+            <option value="direct">기본 연결</option>
+            <option value="cafe24">한국 · Cafe24</option>
+          </select>
+          <span style={{ width: "100%", fontSize: 11, color: "var(--ct-text2)" }}>접속 경로는 새로 여는 서버 작업에 적용됩니다. PC 화면은 PC의 네트워크를 사용합니다.</span>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <input
@@ -299,6 +329,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
       {selected && (
         <section aria-label="스마트 브라우저 실행 상태" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 }}>
           {[
+            ["접속 경로", lane === "pc" ? "PC 네트워크" : selected.egress_effective === "cafe24" ? (liveConnection === "live" ? "한국 · Cafe24 연결됨" : "한국 · Cafe24 연결 대기") : selected.egress_effective === "unavailable" ? "한국 경유 사용 불가" : "기본 연결"],
             ["실행 주체", artifactStatus?.execution_actor || frameSource(frame)],
             ["학습 상태", ({ learned: "처음 학습", reused: "검증된 흐름 재사용", rediscover: "구조 다시 찾는 중", approval_required: "승인 필요", idle: "학습 대기" } as Record<string, string>)[artifactStatus?.learning_state || "idle"]],
             ["사실 최신성", ({ CURRENT: "최신 확인", STALE: "기한 만료", CONFLICT: "값 불일치", UNAVAILABLE: "재확인 실패", NOT_APPLICABLE: "변동 사실 없음" } as Record<string, string>)[artifactStatus?.freshness_status || "NOT_APPLICABLE"]],
