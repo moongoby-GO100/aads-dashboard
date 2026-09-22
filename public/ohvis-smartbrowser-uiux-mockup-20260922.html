@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오비스 스마트브라우저 사용흐름 + 채팅창 UI/UX 목업</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+    --text:#e8eaed; --sub:#9aa3b2; --accent:#5b8cff; --ok:#3ecf8e; --warn:#f5a623; --bad:#f2545b;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Pretendard","Malgun Gothic",sans-serif;line-height:1.5;}
+  header{padding:20px 28px;border-bottom:1px solid var(--border);}
+  header h1{margin:0 0 4px;font-size:20px;}
+  header p{margin:0;color:var(--sub);font-size:13px;}
+  main{padding:24px 28px 60px;max-width:1280px;margin:0 auto;}
+  section{margin-bottom:40px;}
+  h2{font-size:16px;border-left:3px solid var(--accent);padding-left:10px;margin:0 0 16px;}
+  .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;}
+  .badge.new{background:rgba(91,140,255,.15);color:var(--accent);}
+
+  /* ---- Flow ---- */
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;}
+  .flow .step{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px 16px;min-width:150px;flex:1 1 150px;position:relative;}
+  .flow .step .idx{font-size:11px;color:var(--sub);}
+  .flow .step .title{font-size:13px;font-weight:600;margin:4px 0 2px;}
+  .flow .step .desc{font-size:12px;color:var(--sub);}
+  .flow .arrow{display:flex;align-items:center;color:var(--sub);font-size:18px;padding:0 2px;}
+  .flow .step.ok{border-color:rgba(62,207,142,.4);}
+  .flow .step.fallback{border-color:rgba(245,166,35,.5);background:rgba(245,166,35,.06);}
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--sub);}
+  .legend span::before{content:"●";margin-right:6px;}
+  .legend .ok::before{color:var(--ok);}
+  .legend .fallback::before{color:var(--warn);}
+
+  /* ---- Chat mock layout ---- */
+  .mock-shell{display:grid;grid-template-columns:260px 1fr;gap:1px;background:var(--border);
+    border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;height:560px;}
+  .goal-panel{background:var(--panel);overflow-y:auto;padding:14px;}
+  .goal-panel h3{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px;}
+  .goal-card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;}
+  .goal-card.active{border-color:var(--accent);}
+  .goal-card .g-title{font-size:12.5px;font-weight:600;margin-bottom:4px;}
+  .goal-card .g-meta{font-size:11px;color:var(--sub);margin-bottom:8px;}
+  .status-pill{font-size:10.5px;padding:1px 7px;border-radius:999px;}
+  .status-pill.review{background:rgba(245,166,35,.15);color:var(--warn);}
+  .status-pill.progress{background:rgba(91,140,255,.15);color:var(--accent);}
+  .status-pill.done{background:rgba(62,207,142,.15);color:var(--ok);}
+  .btn-row{display:flex;gap:6px;margin-top:8px;}
+  .btn{font-size:11.5px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);
+    background:var(--panel);color:var(--text);cursor:pointer;}
+  .btn.approve{border-color:var(--ok);color:var(--ok);}
+  .btn.reject{border-color:var(--bad);color:var(--bad);}
+  .btn.ghost{color:var(--sub);}
+
+  .chat-main{background:var(--panel);display:flex;flex-direction:column;}
+  .chat-toolbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .chat-toolbar .title{font-size:13px;font-weight:600;}
+  .chat-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+  .msg{max-width:82%;padding:10px 12px;border-radius:10px;font-size:12.5px;}
+  .msg.ai{background:var(--panel2);align-self:flex-start;border:1px solid var(--border);}
+  .msg.sys{align-self:center;background:rgba(91,140,255,.08);border:1px dashed var(--accent);
+    color:var(--sub);font-size:11.5px;padding:8px 12px;text-align:center;}
+
+  .recipe-card{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg);margin-top:8px;}
+  .recipe-card .r-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;}
+  .recipe-card table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11.5px;}
+  .recipe-card th,.recipe-card td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--sub);}
+  .recipe-card td.risk-read{color:var(--ok);}
+  .thumb-row{display:flex;gap:6px;margin-top:8px;}
+  .thumb{width:56px;height:38px;border-radius:4px;background:linear-gradient(135deg,#2a2f3a,#1a1d24);
+    border:1px solid var(--border);font-size:9px;color:var(--sub);display:flex;align-items:center;justify-content:center;}
+
+  .push-toast{position:absolute;right:26px;bottom:26px;background:var(--panel2);border:1px solid var(--accent);
+    border-radius:8px;padding:10px 14px;font-size:12px;max-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  .push-toast .t-title{font-weight:600;margin-bottom:2px;}
+  .push-toast .t-sub{color:var(--sub);font-size:11px;}
+  .wrap-relative{position:relative;}
+
+  footer{padding:16px 28px;color:var(--sub);font-size:11.5px;border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header>
+  <h1>오비스 스마트브라우저 — 사용 흐름 &amp; 채팅창 UI/UX 개선 목업</h1>
+  <p>정적 HTML 목업 (실데이터 미연동) · 작성: 2026-09-22 KST · 대상: aads.newtalk.kr/chat</p>
+</header>
+
+<main>
+  <section>
+    <h2>1. 스마트브라우저 사용 흐름</h2>
+    <div class="flow">
+      <div class="step ok"><div class="idx">1</div><div class="title">레시피 등록 요청</div><div class="desc">E2E 조사로 recipe spec 생성 → registration(pending)</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="idx">2</div><div class="title">CEO 승인</div><div class="desc">채팅창 카드에서 승인/반려 (READ만 자동승인 후보)</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok"><div class="idx">3</div><div class="title">work_recipe 생성</div><div class="desc">max_risk=READ, enabled=true</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="idx">4</div><div class="title">smart_browser 실행</div><div class="desc">action=run, 서버 레인 우선 시도</div></div>
+      <div class="arrow">→</div>
+      <div class="step fallback"><div class="idx">4a</div><div class="title">차단 판정</div><div class="desc">server_ip_blocked / native_auth_required 감지</div></div>
+      <div class="arrow">→</div>
+      <div class="step fallback"><div class="idx">4b</div><div class="title">PC 레인 폴백</div><div class="desc">human_gateway → pc_agent 자동 전환, 1회 재시도</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok"><div class="idx">5</div><div class="title">학습·재사용</div><div class="desc">임베딩 유사도로 exact/vector reuse, 미스 시 재학습</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="idx">6</div><div class="title">변경감지·최신성</div><div class="desc">재방문 diff → candidate 승격 게이트</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok"><div class="idx">7</div><div class="title">결과·증거 반환</div><div class="desc">스크린샷/aria snapshot → 채팅 카드에 인라인 표시</div></div>
+    </div>
+    <div class="legend">
+      <span class="ok">정상 경로</span>
+      <span class="fallback">차단 시 자동 폴백 경로</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 채팅창 UI/UX 개선 목업 <span class="badge new">신규</span></h2>
+    <p style="color:var(--sub);font-size:12.5px;margin-top:-8px;">
+      변경 요지 — ① 목표 패널: 상태와 무관하게 최근 마일스톤은 접힘 표시로 유지(현재는 completed 되면 카드가 사라짐) ②
+      판정 대기(review) 시 승인/반려 버튼과 반려 사유 입력을 카드 내부에 노출 ③ 레시피 등록 요청은 채팅 본문에
+      표·증거 썸네일로 인라인 렌더링해 별도 페이지 이동 없이 승인 가능.
+    </p>
+    <div class="mock-shell wrap-relative">
+      <div class="goal-panel">
+        <h3>목표 / 마일스톤</h3>
+        <div class="goal-card active">
+          <div class="g-title">오비스 스마트브라우저 구현·최적화</div>
+          <div class="g-meta"><span class="status-pill progress">진행중</span> M11 · 최근 갱신 09-22 07:1x KST</div>
+        </div>
+        <div class="goal-card">
+          <div class="g-title">M11 · 읽기전용 쇼핑검색 학습→재방문 E2E</div>
+          <div class="g-meta"><span class="status-pill review">판정대기</span> 신고자=본인 · 확정 자기승인 차단됨</div>
+          <div class="btn-row">
+            <button class="btn approve">🟢 승인</button>
+            <button class="btn reject">🔴 반려</button>
+            <button class="btn ghost">화면 근거 열기</button>
+          </div>
+        </div>
+        <div class="goal-card">
+          <div class="g-title">레시피 등록 승인 화면 추가</div>
+          <div class="g-meta"><span class="status-pill progress">검수대기</span> runner-4e41ef97</div>
+        </div>
+        <h3 style="margin-top:18px;">완료됨 (접힘)</h3>
+        <div class="goal-card" style="opacity:.55;">
+          <div class="g-title">M8 자동 사이트 학습 마이그레이션</div>
+          <div class="g-meta"><span class="status-pill done">완료</span> 09-21</div>
+        </div>
+      </div>
+
+      <div class="chat-main">
+        <div class="chat-toolbar">
+          <span class="title">[CEO] 통합지시</span>
+          <span style="font-size:11px;color:var(--sub);">스트리밍 응답 중단 시에도 최종 답변 보존 · 푸시 연동</span>
+        </div>
+        <div class="chat-body">
+          <div class="msg sys">[시스템] 레시피 등록 요청 — github_aads_docs_commit_history_readonly</div>
+          <div class="msg ai">
+            오비스 E2E 조사로 아래 레시피를 등록 요청합니다. 3단계 전부 READ, 입력변수·시크릿 0건입니다.
+            <div class="recipe-card">
+              <div class="r-head"><span>registration 574ba7d0 · pending</span><span style="color:var(--ok);">max_risk: READ</span></div>
+              <table>
+                <tr><th>#</th><th>action</th><th>대상</th><th>risk</th></tr>
+                <tr><td>1</td><td>navigate</td><td>github.com/.../commits</td><td class="risk-read">READ</td></tr>
+                <tr><td>2</td><td>extract</td><td>커밋 목록 테이블</td><td class="risk-read">READ</td></tr>
+                <tr><td>3</td><td>screenshot</td><td>증거 캡처</td><td class="risk-read">READ</td></tr>
+              </table>
+              <div class="thumb-row">
+                <div class="thumb">증거1</div><div class="thumb">증거2</div><div class="thumb">증거3</div>
+              </div>
+              <div class="btn-row">
+                <button class="btn approve">승인 → work_recipe 생성</button>
+                <button class="btn reject">반려</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="push-toast">
+        <div class="t-title">✅ 응답 완료</div>
+        <div class="t-sub">M11 검증 결과가 도착했습니다. 탭을 열어 확인하세요.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  본 파일은 정적 HTML 목업이며 실제 API·DB에 연결되어 있지 않습니다. 구현 승인 시 aads-dashboard 컴포넌트로 이관합니다.
+</footer>
+</body>
+</html>

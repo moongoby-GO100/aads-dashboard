@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오비스 스마트브라우저 — 실시간 스트리밍·인터랙티브 조작·레시피 자동학습 PRD</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+    --text:#e8eaed; --sub:#9aa3b2; --accent:#5b8cff; --ok:#3ecf8e; --warn:#f5a623; --bad:#f2545b;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Pretendard","Malgun Gothic",sans-serif;line-height:1.6;}
+  header{padding:24px 28px;border-bottom:1px solid var(--border);}
+  header h1{margin:0 0 6px;font-size:21px;}
+  header .meta{display:flex;flex-wrap:wrap;gap:14px;color:var(--sub);font-size:12.5px;}
+  header .meta span b{color:var(--text);}
+  .status-badge{display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;background:rgba(245,166,35,.15);color:var(--warn);}
+  main{padding:24px 28px 70px;max-width:1080px;margin:0 auto;}
+  section{margin-bottom:34px;}
+  h2{font-size:16px;border-left:3px solid var(--accent);padding-left:10px;margin:0 0 14px;}
+  h3{font-size:13.5px;color:var(--text);margin:18px 0 8px;}
+  p{color:var(--sub);font-size:13px;margin:0 0 10px;}
+  ul{margin:0 0 10px;padding-left:20px;color:var(--sub);font-size:13px;}
+  li{margin-bottom:4px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{color:var(--sub);font-weight:600;background:var(--panel2);}
+  td{color:var(--text);}
+  td.sub{color:var(--sub);}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:999px;white-space:nowrap;}
+  .tag.done{background:rgba(62,207,142,.15);color:var(--ok);}
+  .tag.partial{background:rgba(245,166,35,.15);color:var(--warn);}
+  .tag.todo{background:rgba(242,84,91,.12);color:var(--bad);}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;}
+  .card h4{margin:0 0 6px;font-size:12.5px;color:var(--text);}
+  .card p{margin:0;font-size:12.5px;}
+  code{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px;color:#c9d1e0;}
+  .arch{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin-top:6px;}
+  .arch .box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;flex:1 1 190px;min-width:170px;}
+  .arch .box .t{font-size:12px;font-weight:600;margin-bottom:4px;}
+  .arch .box .d{font-size:11.5px;color:var(--sub);}
+  .arch .box.impl{border-color:rgba(62,207,142,.4);}
+  .arch .box.gap{border-color:rgba(245,166,35,.5);background:rgba(245,166,35,.06);}
+  .arch .arrow{display:flex;align-items:center;color:var(--sub);font-size:16px;padding:0 2px;}
+  .legend{display:flex;gap:16px;margin-top:8px;font-size:11.5px;color:var(--sub);}
+  .legend span::before{content:"●";margin-right:6px;}
+  .legend .impl::before{color:var(--ok);}
+  .legend .gap::before{color:var(--warn);}
+  .checklist{list-style:none;padding:0;margin:0;}
+  .checklist li{padding:8px 10px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text);display:flex;gap:8px;}
+  .checklist li::before{content:"☐";color:var(--sub);}
+  footer{padding:18px 28px;border-top:1px solid var(--border);color:var(--sub);font-size:11.5px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>오비스 스마트브라우저 — 실시간 스트리밍 · 인터랙티브 조작 · 레시피 자동학습 PRD <span class="status-badge">Draft v1</span></h1>
+  <div class="meta">
+    <span>문서 ID: <b>AADS-PRD-OHVIS-STREAM-01</b></span>
+    <span>작성일: <b>2026-09-22</b></span>
+    <span>작성: <b>CTO AI (오비스)</b></span>
+    <span>대상 승인자: <b>CEO moongoby</b></span>
+    <span>관련 목표: <b>오비스 스마트 브라우저 구현·최적화 (M11 계열)</b></span>
+  </div>
+</header>
+
+<main>
+
+<section>
+  <h2>1. 배경 및 문제 정의</h2>
+  <p>현재 오비스 스마트브라우저는 서버 레인(Playwright 헤드리스)과 PC 레인(PC Agent 경유) 두 실행 경로를 갖고 있으나, 화면은 <b>3초 폴링 스크린샷(읽기전용)</b>만 제공한다. AI가 화면을 분석해 클릭·입력을 결정하는 과정에서 오탐지·지연이 발생해도, 대표님이 그 시점에 직접 개입할 방법이 없다 — 개입하려면 별도 채널(PC 원격 접속)을 거쳐야 한다.</p>
+  <p>대표님 요청 요지: <i>"AI가 느리고 틀리는 경우, 내가 화면을 보면서 직접 빠르게 클릭·입력하고, 그 조작을 레시피로 남겨 다음부터는 AI가 그대로 재사용하게 해달라."</i></p>
+</section>
+
+<section>
+  <h2>2. 목표 / 비목표</h2>
+  <h3>목표</h3>
+  <ul>
+    <li>서버 레인·PC 레인 브라우저 화면을 채팅창 내에서 <b>실시간(지연 최소화)</b>으로 확인한다.</li>
+    <li>대표님이 스트리밍 프레임 위에서 <b>직접 클릭·타이핑</b>해 진행 중인 작업에 개입할 수 있다.</li>
+    <li>대표님이 수행한 조작을 <b>자동으로 단계 기록</b>하고, 승인 시 <code>work_recipes</code> 로 등록해 다음 실행부터 AI가 재사용한다.</li>
+  </ul>
+  <h3>비목표 (이번 범위 제외)</h3>
+  <ul>
+    <li>서버 레인 화면을 영상 파일로 저장·재생하는 기능 (증거 스크린샷으로 충분)</li>
+    <li>복수 대표님 동시 접속·공동 조작 (1세션 1조작자 가정)</li>
+    <li>모바일 앱에서의 프레임 조작 (데스크톱 대시보드 우선, 모바일은 조회만)</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3. 사용자 시나리오</h2>
+  <div class="card">
+    <h4>시나리오 A — 정상 자동 진행 중 개입 없음</h4>
+    <p>대표님이 레시피 실행을 승인 → 서버 레인 브라우저가 자동 진행 → 채팅창에 실시간 프레임이 흐르지만 대표님은 지켜보기만 함 → 완료 시 증거와 함께 완료 보고.</p>
+  </div>
+  <div class="card">
+    <h4>시나리오 B — 봇차단·오탐지로 AI가 막혔을 때 대표님 개입</h4>
+    <p>서버 레인이 <code>server_ip_blocked</code> 또는 반복 클릭 실패로 정체 → 채팅창 스트림 프레임 위에 "개입 필요" 배지 표시 → 대표님이 프레임을 직접 클릭·입력 → 성공 시 해당 스텝이 자동으로 <code>record_step</code> 대기열에 쌓임 → 대표님 승인 시 <code>work_recipes</code> v+1 로 등록 → 다음 실행부터 AI가 그 스텝을 재사용.</p>
+  </div>
+  <div class="card">
+    <h4>시나리오 C — PC 레인 필요 사이트(공동인증서 등)</h4>
+    <p><code>native_auth_required</code> 판정으로 PC 레인 전환 → PC Agent의 Chrome CDP 화면이 채팅창에 스트리밍 → 대표님이 PC에 설치된 인증서로 직접 인증 → 이후 스텝은 다시 AI가 자동 진행.</p>
+  </div>
+</section>
+
+<section>
+  <h2>4. 기능 요구사항</h2>
+  <table>
+    <tr><th style="width:60px;">ID</th><th>요구사항</th><th style="width:110px;">구현 상태</th><th>근거 / 비고</th></tr>
+    <tr>
+      <td>FR1</td>
+      <td>서버 레인 CDP screencast 프레임을 WebSocket으로 채팅창 패널에 스트리밍</td>
+      <td><span class="tag done">서버 구현</span></td>
+      <td class="sub">CDP <code>Page.startScreencast</code> 프레임을 WS로 전송하는 경로 구현·검증(실브라우저 CDP 테스트 통과). 프론트 렌더 연동은 별도 확인 필요.</td>
+    </tr>
+    <tr>
+      <td>FR2</td>
+      <td>대표님이 프레임 위에서 클릭·타이핑한 좌표/텍스트를 CDP Input 이벤트로 원본 브라우저에 되돌림</td>
+      <td><span class="tag done">서버 구현</span></td>
+      <td class="sub">클릭·텍스트·Enter를 동일 CDP 세션의 <code>Input.dispatchMouseEvent</code>/<code>Input.dispatchKeyEvent</code> 로 전달하는 경로 구현·검증.</td>
+    </tr>
+    <tr>
+      <td>FR3</td>
+      <td>대표님의 성공한 조작을 <code>record_step</code> 으로 자동 기록 → 승인 시 <code>work_recipes</code> v+1 생성</td>
+      <td><span class="tag done">API 존재 + 연동</span></td>
+      <td class="sub">조작 기록→승인→레시피 생성 API는 기존에 존재(오비스 E2E 레시피 등록 574ba7d0 로 검증됨). 이번 스트리밍 조작을 그 큐로 넘기는 연결부 구현.</td>
+    </tr>
+    <tr>
+      <td>FR4</td>
+      <td>PC 레인(PC Agent) 화면도 동일한 방식으로 스트리밍·조작 가능</td>
+      <td><span class="tag partial">조사 중</span></td>
+      <td class="sub">PC Agent 양방향 WebSocket과 <code>chrome_cdp</code>/<code>interactive_browser</code> capability는 선언돼 있으나(<code>pc_agent_manager.py:216</code>), 실제 screencast 업링크 연결 여부는 이번 턴 종료 후 실측 예정.</td>
+    </tr>
+    <tr>
+      <td>FR5</td>
+      <td>레시피 승인/반려 대시보드 화면 (대표님이 API 없이 화면에서 처리)</td>
+      <td><span class="tag done">구현·배포됨</span></td>
+      <td class="sub"><code>runner-4e41ef97</code> 로 구현, 재검수 통과 후 배포 완료(backend=OK).</td>
+    </tr>
+  </table>
+</section>
+
+<section>
+  <h2>5. 비기능 요구사항</h2>
+  <table>
+    <tr><th style="width:140px;">항목</th><th>요구 기준</th></tr>
+    <tr><td>지연시간</td><td class="sub">프레임 표시 지연은 체감 개입이 가능한 수준(수백 ms대)을 목표로 한다. 기존 3초 폴링 대비 현저히 개선되어야 한다. 실측 수치는 [미측정] — 배포 후 측정 필요.</td></tr>
+    <tr><td>보안</td><td class="sub">조작 스트림은 승인된 세션에서만 열리며, 시크릿 입력 필드(비밀번호 등)는 레시피 기록 시 마스킹한다. 금융·인증서 화면은 PC 레인으로만 개입(R-KEY, R-AUTH 준수).</td></tr>
+    <tr><td>감사</td><td class="sub">모든 수동 개입 스텝은 조작자(대표님) 식별과 함께 기록되어 handover/DB에 남는다.</td></tr>
+    <tr><td>무중단</td><td class="sub">스트리밍 세션이 열려 있는 동안 Blue-Green 배포는 <code>target_drain_busy</code> 로 자동 대기하며, 강제 종료하지 않는다(2026-09-22 00:31 KST 실측: 배포 #5022가 이 사유로 자동 취소·후속 배포로 대체됨 — 정상 동작).</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>6. 아키텍처 개요</h2>
+  <div class="arch">
+    <div class="box impl"><div class="t">서버 레인 브라우저</div><div class="d">Playwright Chromium + CDP<br>컨테이너 내 설치 완료</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">CDP Screencast</div><div class="d">Page.startScreencast<br>프레임 캡처</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">WebSocket 브릿지</div><div class="d">서버 ↔ 채팅창<br>프레임 송신 / 입력 이벤트 수신</div></div>
+    <div class="arrow">→</div>
+    <div class="box gap"><div class="t">채팅창 프레임 패널</div><div class="d">렌더링·클릭좌표 캡처<br>프론트 연동 확인 필요</div></div>
+  </div>
+  <div class="arch" style="margin-top:10px;">
+    <div class="box impl"><div class="t">PC Agent</div><div class="d">양방향 WS 상시 연결<br>chrome_cdp capability 선언</div></div>
+    <div class="arrow">→</div>
+    <div class="box gap"><div class="t">PC 레인 Screencast 업링크</div><div class="d">실연결 여부 조사 중(FR4)</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">동일 WebSocket 브릿지</div><div class="d">서버 레인과 같은 프레임 패널 재사용</div></div>
+  </div>
+  <div class="legend"><span class="impl">구현·검증됨</span><span class="gap">진행중 / 확인필요</span></div>
+  <h3 style="margin-top:16px;">조작 → 레시피 흐름</h3>
+  <div class="arch">
+    <div class="box impl"><div class="t">대표님 클릭·입력</div><div class="d">프레임 패널 위 직접 조작</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">CDP Input 이벤트</div><div class="d">동일 세션에 되돌림</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">record_step</div><div class="d">성공 조작 자동 기록</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">CEO 승인</div><div class="d">레시피 승인 화면(FR5)</div></div>
+    <div class="arrow">→</div>
+    <div class="box impl"><div class="t">work_recipes v+1</div><div class="d">다음 실행부터 AI 재사용</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>7. 마일스톤 / 다음 단계</h2>
+  <table>
+    <tr><th style="width:60px;">순위</th><th>다음 단계</th><th>근거</th><th style="width:90px;">선행·병렬</th><th>완료기준</th></tr>
+    <tr><td>P0 🟢자동</td><td>FR4 — PC 레인 screencast 업링크 실연결 여부 실측</td><td class="sub">코드상 capability는 선언돼 있으나 실제 프레임 수신 미검증 [미검증]</td><td>—</td><td class="sub">PC Agent로부터 프레임 1개 이상 수신 로그 확인</td></tr>
+    <tr><td>P0 🟢자동</td><td>채팅창 프레임 패널 프론트 렌더 연동 확인</td><td class="sub">서버 브릿지는 구현됐으나 프론트 표시 여부 미확인 [코드 확인 필요]</td><td>A</td><td class="sub">browser_snapshot/screenshot으로 프레임 렌더 캡처</td></tr>
+    <tr><td>P1 🟡승인</td><td>Blue-Green 배포로 운영 반영 (현재 배포 #5023 candidate_health 진행 중)</td><td class="sub">배포 #5022는 target_drain_busy로 자동 취소, #5023이 동일 변경 포함해 대체 진행 중 [DB 조회]</td><td>P0 후</td><td class="sub">candidate·green 동일 digest, health 200, 5분 감시</td></tr>
+    <tr><td>P2 🟢자동</td><td>지연시간 실측 후 본 PRD 5절에 채워넣기</td><td class="sub">현재 [미측정]</td><td>P1 후</td><td class="sub">프레임 송신~표시 지연 ms 로그</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>8. Acceptance Criteria (완료 판정 기준)</h2>
+  <ul class="checklist">
+    <li>서버 레인 실행 중 채팅창에서 실시간 프레임이 3초 폴링보다 명확히 빠르게 갱신되는 것을 화면 캡처로 확인</li>
+    <li>대표님이 프레임 위 클릭 시 원본 브라우저에서 해당 좌표 클릭이 재현되는 것을 스크린샷 전/후로 확인</li>
+    <li>수동 조작 1건 이상이 record_step → 승인 화면 → work_recipes 로 이어지는 것을 DB row로 확인</li>
+    <li>PC 레인에서도 동일 스트리밍·조작이 최소 1개 사이트에서 재현</li>
+    <li>Blue-Green 배포 후 candidate/green 동일 digest + health 200 + 5분 무오류 감시</li>
+  </ul>
+</section>
+
+</main>
+<footer>
+  본 문서는 기획 설계 초안(PRD)이며 정적 HTML로 작성되었습니다. 실제 구현·배포 상태는 DB(<code>deploy_runs</code>, <code>browser_learned_artifacts</code>)와 코드 grep 결과를 기준으로 하며, [미검증]/[조사 중]으로 표시된 항목은 후속 턴에서 실측해 갱신합니다.
+</footer>
+</body>
+</html>
