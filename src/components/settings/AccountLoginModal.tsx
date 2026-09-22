@@ -43,7 +43,14 @@ export default function AccountLoginModal(
   // 진행 상태는 서버가 안다 — 끝날 때까지 2초마다 확인한다.
   useEffect(() => {
     if (!sess?.login_id) return;
-    if (DONE.includes(sess.state)) { if (sess.state === "success") onDone(); return; }
+    if (DONE.includes(sess.state)) {
+      if (sess.state === "success") {
+        onDone();
+        const t = setTimeout(onClose, 1200);
+        return () => clearTimeout(t);
+      }
+      return;
+    }
     const t = setTimeout(() => {
       (api as any).getAccountLogin(sess.login_id)
         .then((r: LoginSession) => setSess(r))
