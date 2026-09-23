@@ -45,6 +45,7 @@ test("message visibility keeps user content and meaningful interrupted partials"
     content: "보존해야 하는 의미 있는 부분 응답입니다. ".repeat(4),
   };
   assert.equal(functions.isHiddenSystemChatMessage(partial), false);
+  assert.equal(functions.isHiddenSystemChatMessage({ ...partial, intent: "_archived_partial", content: "부분 응답" }), false);
   assert.equal(functions.hasMeaningfulDisplayContent(partial), true);
   assert.equal(functions.isInterruptedLikeMessage(partial), true);
   assert.equal(functions.isHiddenSystemChatMessage({ ...base, role: "user", intent: "system_trigger", content: "[시스템] 합성" }), true);

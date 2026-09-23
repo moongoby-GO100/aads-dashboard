@@ -822,6 +822,9 @@ function isRunnerChatMessage(message: ChatMessage): boolean {
 }
 
 function isHiddenSystemChatMessage(message: ChatMessage): boolean {
+  // A superseded answer with saved text is still part of the conversation.
+  // Short partials must survive the next DB refresh too.
+  if (message.role === "assistant" && message.intent === "_archived_partial" && hasMeaningfulDisplayContent(message)) return false;
   if (message.role === "assistant" && (message.content?.length || 0) > 50) return false;
   return (
     message.intent === "auto_reaction" ||
