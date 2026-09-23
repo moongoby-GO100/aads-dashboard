@@ -120,7 +120,7 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   h.setNow(2_000);
   h.controller.recordScroll(false);
   h.setAnchor(anchor("stable", 640));
-  h.controller.recordScroll(false);
+  h.controller.recordScroll(true);
   assertEqual(h.controller.correctContentResize(), true, "resize correction applies stable anchor");
   assertEqual(h.writes[h.writes.length - 1], "anchor:stable", "resize uses latest stable anchor");
 }
@@ -147,4 +147,23 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes.join(","), "bottom,bottom", "follow resumes once the gesture expires");
 }
 
-console.log("PASS: WP02 viewport controller T01-T05 cases");
+// T06: a passive scroll event caused by a shrinking message must not erase
+// the reading anchor, including when the browser clamps all the way to top.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 640, clientHeight: 500, scrollHeight: 2_000 });
+  h.setAnchor(anchor("reading-row", 640));
+  h.controller.recordScroll(true);
+  h.setNow(2_000);
+  h.setMetrics({ scrollTop: 0, clientHeight: 500, scrollHeight: 2_000 });
+  h.setAnchor(anchor("wrong-top-row", 0));
+  h.controller.recordScroll(false);
+  assertEqual(h.controller.correctContentResize(), true, "manual resize repairs reading position");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:reading-row", "passive scroll preserves reader anchor");
+  h.setMetrics({ scrollTop: 0, clientHeight: 500, scrollHeight: 2_000 });
+  assertEqual(h.controller.restoreUnexpectedTopReset(), true, "manual mode repairs unexpected top reset");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:reading-row", "top reset uses reader anchor");
+}
+
+console.log("PASS: WP02 viewport controller T01-T06 cases");

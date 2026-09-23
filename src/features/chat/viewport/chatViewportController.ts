@@ -270,7 +270,10 @@ export class ChatViewportController {
     const metrics = this.adapter.readMetrics();
     if (!metrics) return;
     this.nearBottom = isChatNearBottom(metrics);
-    if (!this.applying || userInitiated) {
+    // A layout shrink can emit a scroll event without user input. In manual
+    // mode that event must not replace the last position the reader chose;
+    // the resize observer needs that anchor to repair the jump.
+    if (!this.applying && (userInitiated || this.followMode !== "manual" || !this.stableAnchor)) {
       this.stableScrollTop = metrics.scrollTop;
       this.stableAnchor = this.adapter.captureAnchor();
     }
@@ -397,7 +400,7 @@ export class ChatViewportController {
   restoreUnexpectedTopReset(): boolean {
     const metrics = this.adapter.readMetrics();
     if (
-      !metrics || this.followMode === "manual" || this.gestureIsActive() || this.applying ||
+      !metrics || this.gestureIsActive() || this.applying ||
       this.stableScrollTop <= Math.max(320, metrics.clientHeight * 0.75) || metrics.scrollTop > 16
     ) return false;
     const restored = this.stableAnchor

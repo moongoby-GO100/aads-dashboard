@@ -2898,13 +2898,15 @@ const MessageItem = memo(function MessageItem({
     if (isLastAssistantMsg) wasEverLastAssistantRef.current = true;
   }, [isLastAssistantMsg]);
   useEffect(() => {
-    if (wasEverLastAssistantRef.current && !isLastAssistantMsg) return;
+    // A server refresh can change the content length while an older report is
+    // open. Never discard the reader's explicit expand/collapse choice then:
+    // collapsing the row removes its height and jumps the outer viewport up.
+    if (contentCollapseTouched || (wasEverLastAssistantRef.current && !isLastAssistantMsg)) return;
     const timeout = window.setTimeout(() => {
-      setContentCollapseTouched(false);
       setContentCollapsed(msg.role === "assistant" && msg.content.length > 800 && !isStreamingPlaceholder && !isLastAssistantMsg);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [isLastAssistantMsg, isStreamingPlaceholder, msg.content.length, msg.id, msg.role]);
+  }, [contentCollapseTouched, isLastAssistantMsg, isStreamingPlaceholder, msg.content.length, msg.id, msg.role]);
   const forceContentOpen = Boolean(isLastAssistantMsg && !isStreamingPlaceholder && msg.role === "assistant" && !contentCollapseTouched);
   const effectiveContentCollapsed = isStreamingPlaceholder || forceContentOpen ? false : contentCollapsed;
   const activeStreamingContent = isActiveStreamingPlaceholder

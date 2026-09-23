@@ -2869,3 +2869,8 @@ Validation: typecheck passed; chat regression 49/49 passed (previously 48/49). R
 - Task lists filter by current session on the API before limit; new tasks are immediately selected and preserved instead of repeatedly restoring the old localStorage selection. Ignore stale session/task responses and retain stream failures until an explicit action.
 - Validation: TypeScript and chat regression 49/49 passed before final task-selection guard; final validation rerun follows. Runtime browser probe received frames over Cafe24 IP 114.207.244.86 but Coupang Eats returned Access Denied on both routes. Login and sales recipes not certified.
 - Requires Cafe24 API release first. Deployment and production chat screenshot pending; DB handover key smartbrowser-cafe24-direct-recovery-20260922 tracks actual state.
+
+## 2026-09-23 Chat reading position
+
+- An older report that the reader explicitly expanded no longer collapses when polling changes its content length. The viewport controller retains the last user-selected anchor when a layout change emits a passive scroll event and repairs an unexpected top reset in manual reading mode.
+- Regression: viewport controller T01–T06, chat tests, and TypeScript typecheck. Dashboard lint has 29 pre-existing warnings against its 23-warning gate; this change adds no lint error. Production screen verification and release outcome are recorded in DB handover key `aads.chat.reading-scroll-20260923`.
