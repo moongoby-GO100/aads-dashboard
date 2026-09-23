@@ -14,6 +14,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   // -- 자동 라우팅 --
   { id: "mixture",                   name: "자동 라우팅 (혼합)",         provider: "auto",     cost: "자동" },
   // -- Anthropic Claude --
+  { id: "claude-opus-5-5",           name: "Claude Opus 5.5",           provider: "anthropic", cost: "$4/$20" },
   { id: "claude-opus-5",             name: "Claude Opus 5",             provider: "anthropic", cost: "$5/$25" },
   { id: "claude-opus-4-7",           name: "Claude Opus 4.7",           provider: "anthropic", cost: "$5/$25" },
   { id: "claude-opus-4-6",           name: "Claude Opus 4.6",           provider: "anthropic", cost: "$5/$25" },
@@ -134,6 +135,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$1/$4",       description: "속도 1위 · 최신 Gemini" },
   { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.60/$2.40", description: "한국어 1위 · Alibaba 최고" },
   { id: "claude-sonnet-4-6",       label: "Sonnet 4.6",        cost: "$3/$15",      description: "안정성 1위 · 도구 활용" },
+  { id: "claude-opus-5-5",         label: "Opus 5.5",          cost: "$4/$20",      description: "최신 Opus · 복잡 작업" },
   { id: "claude-opus-5",           label: "Opus 5",            cost: "$5/$25",      description: "최신 최고 · Opus 5" },
   { id: "claude-opus-4-7",         label: "Opus 4.7",          cost: "$5/$25",      description: "최고 성능 · 복잡 작업" },
   { id: "claude-opus-4-6",         label: "Opus 4.6",          cost: "$5/$25",      description: "안정 최상위 · 정밀 분석" },
@@ -367,19 +369,37 @@ interface ChatModelSelectorProps {
 
 export function ChatModelSelector({ value, onChange, compact }: ChatModelSelectorProps) {
   const [displayOptions, setDisplayOptions] = useState<ChatModelOption[]>(CHAT_MODEL_OPTIONS);
-  const loadedRef = useRef(false);
+  const valueRef = useRef(value);
 
   useEffect(() => {
-    // 한 번만 fetch — 재마운트 방지
-    if (loadedRef.current) return;
-    loadedRef.current = true;
+    valueRef.current = value;
+  }, [value]);
 
-    Promise.all([fetchRegisteredChatModels(), fetchChatPreferences()]).then(([registeredModels, prefs]) => {
-      const sourceOptions = registeredModels.length > 0 ? registeredModels : CHAT_MODEL_OPTIONS;
-      setDisplayOptions(applyPreferences(sourceOptions, prefs, value));
-    });
-    // value 는 초기 마운트 기준 스냅샷만 사용
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let mounted = true;
+    let requestId = 0;
+    const refreshModels = () => {
+      const currentRequest = ++requestId;
+      Promise.all([fetchRegisteredChatModels(), fetchChatPreferences()]).then(([registeredModels, prefs]) => {
+        if (!mounted || currentRequest !== requestId) return;
+        const sourceOptions = registeredModels.length > 0 ? registeredModels : CHAT_MODEL_OPTIONS;
+        setDisplayOptions(applyPreferences(sourceOptions, prefs, valueRef.current));
+      });
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshModels();
+    };
+
+    refreshModels();
+    window.addEventListener("focus", refreshModels);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const refreshInterval = window.setInterval(refreshWhenVisible, 60_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshModels);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, []);
 
   const selected = displayOptions.find((m) => m.id === value) ?? displayOptions[0];
