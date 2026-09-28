@@ -381,11 +381,15 @@ export default function LlmAccountCard() {
                         className="text-xs px-2 py-1 rounded whitespace-nowrap"
                         style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>주계정</button>
                     )}
-                    <button onClick={() => a.login_target && setLoginTarget(a.login_target)}
+                    <button onClick={() => {
+                      const target = a.login_target || (a.key_name === "ANTHROPIC_AUTH_TOKEN_4" ? "claude:4" : null);
+                      if (target) setLoginTarget(target);
+                      else flash(`${a.label || a.key_name}: 로그인 대상 슬롯을 확인할 수 없습니다.`);
+                    }}
                       className="text-xs px-2 py-1 rounded font-semibold"
                       style={{ border: `1px solid ${a.needs_login ? "#d97706" : "var(--border)"}`,
                                color: a.needs_login ? "#d97706" : "var(--text-primary)" }}>
-                      {a.login_in_progress ? "진행창" : a.needs_login ? "로그인" : "재로그인"}
+                      {a.login_in_progress ? "진행창" : "재로그인"}
                     </button>
                   </span>
                 </div>

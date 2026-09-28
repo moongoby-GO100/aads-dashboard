@@ -20,9 +20,9 @@ export type LoginSession = {
 const STATE_TEXT: Record<string, string> = {
   starting: "시작하는 중", awaiting_browser: "브라우저 인증 대기",
   awaiting_code: "코드 입력 대기", verifying: "확인 중",
-  success: "로그인 완료", failed: "실패", expired: "시간 초과", cancelled: "취소됨",
+  success: "로그인 완료", verification_pending: "검증 대기", failed: "실패", expired: "시간 초과", cancelled: "취소됨",
 };
-const DONE = ["success", "failed", "expired", "cancelled"];
+const DONE = ["success", "failed", "expired", "cancelled", "verification_pending"];
 
 export default function AccountLoginModal(
   { target, onClose, onDone }: { target: string; onClose: () => void; onDone: () => void },
@@ -31,6 +31,7 @@ export default function AccountLoginModal(
   const [err, setErr] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -38,7 +39,7 @@ export default function AccountLoginModal(
       .then((r: LoginSession) => { if (alive) setSess(r); })
       .catch((e: any) => { if (alive) setErr(e?.message || "로그인을 시작하지 못했습니다"); });
     return () => { alive = false; };
-  }, [target]);
+  }, [target, attempt]);
 
   // 진행 상태는 서버가 안다 — 끝날 때까지 2초마다 확인한다.
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function AccountLoginModal(
     const t = setTimeout(() => {
       (api as any).getAccountLogin(sess.login_id)
         .then((r: LoginSession) => setSess(r))
-        .catch(() => {/* 다음 주기에 다시 본다 */});
+        .catch((e: Error) => setErr(e?.message || "진행 상태를 확인하지 못했습니다"));
     }, 2000);
     return () => clearTimeout(t);
   }, [sess, onDone]);
@@ -90,6 +91,20 @@ export default function AccountLoginModal(
         </div>
 
         {err && <p className="text-xs mb-3" style={{ color: "#dc2626" }}>{err}</p>}
+        {(err || (sess && DONE.includes(sess.state) && sess.state !== "success")) && (
+          <button onClick={async () => {
+            setErr("");
+            if (sess?.state === "verification_pending") {
+              try { setSess(await (api as any).getAccountLogin(sess.login_id)); }
+              catch (e: any) { setErr(e?.message || "검증 상태를 확인하지 못했습니다"); }
+            } else {
+              setSess(null); setCode(""); setAttempt((n) => n + 1);
+            }
+          }}
+            className="text-xs px-3 py-1 mb-3 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            다시 시도
+          </button>
+        )}
         {!sess && !err && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>로그인 세션을 여는 중...</p>}
 
         {sess && (
