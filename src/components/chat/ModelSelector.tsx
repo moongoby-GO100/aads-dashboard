@@ -14,6 +14,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   // -- 자동 라우팅 --
   { id: "mixture",                   name: "자동 라우팅 (혼합)",         provider: "auto",     cost: "자동" },
   // -- Anthropic Claude --
+  { id: "claude-sonnet-5-5",         name: "Claude Sonnet 5.5",         provider: "anthropic", cost: "$2/$10" },
   { id: "claude-opus-5-5",           name: "Claude Opus 5.5",           provider: "anthropic", cost: "$4/$20" },
   { id: "claude-opus-5",             name: "Claude Opus 5",             provider: "anthropic", cost: "$5/$25" },
   { id: "claude-opus-4-7",           name: "Claude Opus 4.7",           provider: "anthropic", cost: "$5/$25" },
@@ -116,7 +117,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "minimax-m2.5",           name: "MiniMax M2.5",           provider: "minimax", cost: "변동" },
 ];
 
-export const DEFAULT_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
 
 // ─── Chat-First 모델 (AADS-172-B) ───────────────────────────────────────────
 
@@ -131,6 +132,7 @@ export interface ChatModelOption {
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "auto",                    label: "Auto",              cost: "자동",        description: "인텐트 기반 자동 라우팅" },
+  { id: "claude-sonnet-5-5",        label: "Sonnet 5.5",        cost: "$2/$10",     description: "최신 Sonnet · 일반 업무와 코딩" },
   { id: "deepseek-reasoner",       label: "DeepSeek R1",       cost: "$0.55/$2.19", description: "벤치마크 1위 · 추론 최강" },
   { id: "gemini-3.1-pro-preview",  label: "Gemini 3.1 Pro",    cost: "$1/$4",       description: "속도 1위 · 최신 Gemini" },
   { id: "qwen3-235b-thinking",     label: "Qwen3 235B Think",  cost: "$0.60/$2.40", description: "한국어 1위 · Alibaba 최고" },
@@ -181,7 +183,7 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
   { id: "antigravity-flash",       label: "Antigravity Flash",  cost: "무료",        description: "Google Pro · Gemini 3.5 Flash 경량" },
 ];
 
-export const DEFAULT_CHAT_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_CHAT_MODEL = "claude-sonnet-5-5";
 
 // ─── chat-preferences API 타입 ──────────────────────────────────────────────
 
