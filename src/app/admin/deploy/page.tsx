@@ -10,10 +10,11 @@ type DeployServerStatus = AdminDeployStatusResponse["servers"][number];
 type DeployProjectStatus = DeployServerStatus["projects"][number];
 type DeployStatus = DeployProjectStatus["status"];
 
-const EXPECTED_SERVERS: Array<{ id: string; name: string; ip: string }> = [
+const EXPECTED_SERVERS: Array<{ id: string; name: string; ip: string; health_monitored?: boolean }> = [
   { id: "contabo116", name: "contabo116 (AADS 본체)", ip: "5.104.86.116" },
   { id: "contabo14", name: "contabo14 (GO100/KIS)", ip: "5.104.86.14" },
   { id: "cafe24_114", name: "cafe24_114 (SF/NTV2/NAS)", ip: "114.207.244.86" },
+  { id: "jinah244", name: "진아실장 서버 / 회계비서", ip: "" },
 ];
 
 const SERVER_ACCENTS: Record<string, { accent: string; glow: string; muted: string }> = {
@@ -265,10 +266,10 @@ export default function AdminDeployPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
-                        {server.name}
+                        {server.id === "jinah244" ? "진아실장 서버 / 회계비서" : server.name}
                       </div>
                       <div className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                        {server.ip}
+                        {server.id === "jinah244" ? <span title={`내부 식별자: ${server.id}${server.ip ? ` · ${server.ip}` : ""}`}>서버 정보</span> : server.ip}
                       </div>
                     </div>
                     <span
@@ -282,6 +283,12 @@ export default function AdminDeployPage() {
                       {server.projects.length} services
                     </span>
                   </div>
+
+                  {server.health_monitored === false ? (
+                    <div className="mt-3 inline-flex px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(148,163,184,0.14)", color: "#cbd5e1", border: "1px solid rgba(148,163,184,0.24)" }}>
+                      헬스체크 비대상
+                    </div>
+                  ) : null}
 
                   <div className="mt-4 space-y-3">
                     {server.projects.length === 0 ? (
@@ -320,7 +327,7 @@ export default function AdminDeployPage() {
                                 </span>
                                 <div className="min-w-0">
                                   <div className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                                    {project.name}
+                                    {project.name === "ACCT" ? "회계비서" : project.name}
                                   </div>
                                   <div className="text-[11px]" style={{ color: meta.color }}>
                                     {meta.label}

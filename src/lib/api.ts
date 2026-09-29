@@ -312,12 +312,26 @@ export interface AdminDeployStatusResponse {
     id: string;
     name: string;
     ip: string;
+    health_monitored?: boolean;
     projects: Array<{
       name: string;
       status: "ok" | "error" | "unknown";
       last_commit: string | null;
       last_deploy_at: string | null;
     }>;
+  }>;
+}
+
+export interface OpsServerStatusResponse {
+  servers?: Array<{
+    server_id?: string | number;
+    id?: string;
+    name?: string;
+    display_name?: string;
+    ip?: string;
+    status?: string;
+    health_monitored?: boolean;
+    projects?: string[];
   }>;
 }
 export interface AdminSessionItem {
@@ -528,6 +542,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 const _meInflight = new Map<string, Promise<MeResponse | null>>();
 
 export const api = {
+  getOpsStatus: () => request<OpsServerStatusResponse>("/ops/status"),
   getCollectorOverview: () => request<CollectorOverview>("/authenticated-site-collector/overview"),
   getCollectorSites: (projectKey?: string) =>
     request<{ sites: CollectorSite[]; count: number }>(

@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
+import type { OpsServerStatusResponse } from "@/lib/api";
 
 interface CodexUsageLimit {
   limit_id: string;
@@ -27,6 +28,7 @@ interface ServerHealth {
   ip: string;
   role: string;
   status: "healthy" | "warning" | "critical" | "unknown";
+  health_monitored?: boolean;
   disk_pct?: number;
   disk_used?: string;
   disk_total?: string;
@@ -256,6 +258,7 @@ const WATCH_LAYERS: WatchLayer[] = [
 
 export default function ServersPage() {
   const [servers, setServers] = useState<ServerHealth[]>([]);
+  const [opsServerList, setOpsServerList] = useState<OpsServerStatusResponse["servers"]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("-");
   const [codexUsage, setCodexUsage] = useState<CodexUsage | null>(null);
@@ -264,6 +267,12 @@ export default function ServersPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    try {
+      const status = await api.getOpsStatus();
+      setOpsServerList(status.servers || []);
+    } catch {
+      setOpsServerList([]);
+    }
     const results = await Promise.all(
       SERVERS.map((s) => fetchServerHealth(s.id, s.ip, s.role))
     );
@@ -600,6 +609,27 @@ export default function ServersPage() {
             })}
           </div>
         </section>
+
+        {opsServerList?.filter((server) => String(server.server_id ?? server.id) === "jinah244").map((server) => (
+          <section key={String(server.server_id ?? server.id)} style={{ ...cardStyle, marginBottom: 24 }} aria-label="추가 서버">
+            <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>
+              {server.display_name || "진아실장 서버 / 회계비서"}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+              {server.health_monitored === false ? "헬스체크 비대상" : `상태: ${server.status || "unknown"}`}
+              <span title={`내부 식별자: ${String(server.server_id ?? server.id)}${server.ip ? ` · ${server.ip}` : ""}`} style={{ marginLeft: 8 }}>서버 정보</span>
+            </div>
+            {server.projects?.length ? (
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {server.projects.map((project) => (
+                  <span key={project} style={{ padding: "2px 8px", borderRadius: 10, background: "var(--bg-hover)", color: "var(--text-secondary)", fontSize: 11 }}>
+                    {project === "ACCT" ? "회계비서" : project}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ))}
 
         {/* ─── 섹션 2: 감시 토폴로지 ─── */}
         <section style={{ ...cardStyle, marginBottom: 24 }}>
