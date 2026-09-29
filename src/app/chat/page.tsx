@@ -813,6 +813,9 @@ function isRunnerChatMessage(message: ChatMessage): boolean {
     // 정확히 이것이었다 — 리뷰가 REQUEST_CHANGES 를 두 번 내고 그때마다
     // 고쳐 올리는 중이었다. 이것을 닫아 두면 "왜 오래 걸리나" 가 안 보인다.
     message.intent === "ai_review_warning" ||
+    // 세션 자동보고·스톨 감지. 본문이 "[Pipeline Runner 시작]"·"[Pipeline Runner 스톨 감지]"
+    // 라 아래 head 문자열 판정으로는 안 잡힌다 — 서버가 내려보내는 순간 접기를 타려면 intent 로 잡아야 한다.
+    message.intent === "pipeline_c" ||
     head.includes("[Pipeline Runner]") ||
     head.includes("[Runner]") ||
     (head.startsWith("Step ") && head.includes("runner-")) ||
