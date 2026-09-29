@@ -11114,7 +11114,16 @@ export default function ChatPage() {
       if (m.intent === "streaming_placeholder" && !hasMeaningfulDisplayContent(m)) return false;
       return true;
     })?.msg.id;
-    return { display: capped, lastAssistantId, totalCount: sortedAll.length };
+    // 고지값은 상한 상수가 아니라 실제 화면에 담긴 메시지 수다. display 항목 하나가
+    // dedup·러너 묶음으로 여러 메시지를 품으므로 hiddenMsgs 까지 센다.
+    const renderedCount = capped.reduce((n, item) => n + 1 + (item.hiddenMsgs?.length ?? 0), 0);
+    return {
+      display: capped,
+      lastAssistantId,
+      totalCount: sortedAll.length,
+      renderedCount,
+      truncated: renderedCount < sortedAll.length,
+    };
   }, [messages]);
 
   // PERF: O(1) lookup maps
@@ -12522,10 +12531,12 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* 4번: 중복 메시지 압축 렌더링 — useMemo로 계산, cap 150개 */}
-          {displayData.totalCount > 150 && (
+          {/* 4번: 중복 메시지 압축 렌더링 — 고지 건수는 실제 렌더된 메시지 수(renderedCount) 기준 */}
+          {(displayData.truncated || hasMoreMessages) && (
             <div style={{ textAlign: "center", padding: "8px", fontSize: "12px", color: "var(--ct-text2)" }}>
-              최근 150건만 표시 중 (전체 {displayData.totalCount}건)
+              {displayData.truncated
+                ? `최근 ${displayData.renderedCount}건 표시 중 (불러온 ${displayData.totalCount}건)`
+                : "이전 대화가 더 있습니다 — 위 '이전 대화 불러오기'를 눌러 주세요"}
             </div>
           )}
           {sessionGoals.length > 0 && (
