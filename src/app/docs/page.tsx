@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import Link from "next/link";
+import CanonicalDocuments from "./CanonicalDocuments";
 
 interface DocSearchHit {
   path: string;
@@ -525,6 +526,7 @@ function DocContentViewer({
 }
 
 export default function DocsPage() {
+  const [activeTab, setActiveTab] = useState<"canonical" | "files">("files");
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const dataRef = useRef<ScanResult | null>(null);
   const [data, setData] = useState<ScanResult | null>(null);
@@ -817,6 +819,7 @@ export default function DocsPage() {
     };
 
     openedDeepLinkRef.current = key;
+    setActiveTab("files");
     setSelectedProject(project);
     setSelectedType("all");
     setSelectedFormat("all");
@@ -824,7 +827,7 @@ export default function DocsPage() {
     void openFile(project, { ...file, project }, { updateUrl: false });
   }, [data, openFile]);
 
-  if (!isDesktop && selectedFile) {
+  if (activeTab === "files" && !isDesktop && selectedFile) {
     return (
       <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
         <Header title="📄 문서 보기" />
@@ -890,6 +893,21 @@ export default function DocsPage() {
           DB 핸드오버
         </Link>
       </div>
+
+      <div className="flex gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }} role="tablist" aria-label="문서 화면">
+        <button type="button" role="tab" aria-selected={activeTab === "canonical"} onClick={() => setActiveTab("canonical")}
+          className="min-h-10 rounded-lg px-4 text-sm font-medium"
+          style={activeTab === "canonical" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>문서 정본</button>
+        <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")}
+          className="min-h-10 rounded-lg px-4 text-sm font-medium"
+          style={activeTab === "files" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>프로젝트 파일</button>
+      </div>
+
+      {activeTab === "canonical" ? (
+        <CanonicalDocuments project={selectedProject === "all" ? "AADS" : selectedProject}
+          projects={data?.projects?.map((item) => item.project) || []}
+          onProjectChange={setSelectedProject} />
+      ) : (
 
       <div ref={layoutRef} className="flex-1 flex overflow-hidden">
         <div
@@ -1464,6 +1482,7 @@ export default function DocsPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

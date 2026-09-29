@@ -435,6 +435,27 @@ export interface UserProjectServerRouteResponse {
   next_action: string;
 }
 
+export interface CanonicalDocument {
+  id: string;
+  document_key: string;
+  kind: string;
+  title: string;
+  generation: number;
+  latest_revision_id: string | null;
+  approved_revision_id: string | null;
+  updated_at: string;
+  status: string;
+}
+export interface CanonicalDocumentDetail {
+  document: CanonicalDocument;
+  revision: { id: string; version: string; title: string; content: string; change_summary: string | null } | null;
+  status: string;
+  authoritative: boolean;
+}
+export interface CanonicalDocumentHistory {
+  revisions: Array<{ id: string; revision: number; version: string; title: string; change_summary: string | null; created_at: string; status: string }>;
+}
+
 import type {
   HealthResponse,
   ProjectListResponse,
@@ -633,6 +654,19 @@ export const api = {
   getAnalytics: () => request<any>("/dashboard/analytics"),
   getDocuments: (tag?: string) => request<any>("/documents" + (tag ? "?tag=" + encodeURIComponent(tag) : "")),
   getDocumentContent: (docId: string) => request<any>("/documents/" + encodeURIComponent(docId)),
+  listCanonicalDocuments: (project: string, query = "") => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (query) params.set("q", query);
+    return request<{ documents: CanonicalDocument[] }>(`/projects/${encodeURIComponent(project)}/documents?${params}`);
+  },
+  getCanonicalDocument: (project: string, key: string, approvedOnly = false) =>
+    request<CanonicalDocumentDetail>(`/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(key)}${approvedOnly ? "?approved_only=true" : ""}`),
+  getCanonicalDocumentHistory: (project: string, key: string) =>
+    request<CanonicalDocumentHistory>(`/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(key)}/history`),
+  decideCanonicalDocument: (project: string, key: string, action: "review" | "approve" | "archive", revisionId: string, generation: number) =>
+    request<Record<string, unknown>>(`/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(key)}/${action}`, {
+      method: "POST", body: JSON.stringify({ revision_id: revisionId, expected_generation: generation }),
+    }),
 
   // T-073: CEO Chat v2 — Legacy, /chat으로 통합됨 (2026-03-11 비활성화)
   completeRunning: (project?: string) => request<any>("/dashboard/complete-running", {
