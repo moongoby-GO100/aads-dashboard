@@ -19,7 +19,10 @@ import AccountLoginModal from "./AccountLoginModal";
 
 type State = "ok" | "rate_limited" | "needs_login" | "inactive" | "unknown";
 
-type UsageWindow = { window_minutes: number | null; used_percent: number; resets_at: string | null };
+type UsageWindow = {
+  window_minutes: number | null; used_percent: number; resets_at: string | null;
+  stale?: boolean; snapshot_age_hours?: number | null;
+};
 
 type Account = {
   windows: UsageWindow[];
@@ -92,6 +95,12 @@ function windowLabel(minutes: number | null): string {
   return `${minutes}분`;
 }
 
+/** 수집이 멈춘 기간. 기록 시각을 모르면 기간 없이 '수집 멈춤' 만 적는다. */
+function staleDays(hours: number | null | undefined): string {
+  if (hours == null) return "";
+  return hours >= 24 ? ` ${Math.floor(hours / 24)}일` : ` ${Math.max(1, Math.round(hours))}시간`;
+}
+
 function Bar({ pct, color }: { pct: number; color: string }) {
   return (
     <div className="h-1.5 rounded-full overflow-hidden w-full" style={{ background: "var(--border)" }}>
@@ -130,16 +139,9 @@ export default function LlmAccountCard() {
 
   useEffect(() => { load(); }, [load]);
 
-  const hasBlockingAction = Boolean(data && (
-    data.accounts.some((a) => a.state === "needs_login")
-    || (data.summary.codex.total > 0 && data.summary.codex.usable === 0)
-    || (data.summary.anthropic.total > 0 && data.summary.anthropic.usable === 0)
-  ));
-
-  // 로그인 필요나 provider 전체 장애면 조치 필터를 먼저 연다. 사용 가능한 대체
-  // 계정이 있는데 한 계정만 한도정지인 경우에는 전체 장애처럼 보이지 않게
-  // 구독 전체를 먼저 보여준다.
-  const effectiveChip: Chip = chip ?? (hasBlockingAction ? "action" : "subscription");
+  // 기본 화면은 항상 구독 전체. 조치가 필요한 계정이 있어도 목록을 좁히지 않고
+  // 상단 배너로만 알린다 — 정상 계정이 첫 화면에서 사라지면 "반영 안 됨" 으로 읽힌다.
+  const effectiveChip: Chip = chip ?? "subscription";
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 4000); };
 
@@ -186,6 +188,7 @@ export default function LlmAccountCard() {
   const s = data.summary;
   const actionAccounts = data.accounts.filter((a) => a.state === "needs_login" || a.state === "rate_limited");
   const codexActionCount = actionAccounts.filter((a) => a.provider === "codex").length;
+  const needsLoginCount = data.accounts.filter((a) => a.state === "needs_login").length;
   const actionChipLabel = s.action_required > 0
     ? `${codexActionCount > 0 ? "조치 필요" : "Claude 조치 필요"} ${s.action_required}`
     : "";
@@ -240,6 +243,15 @@ export default function LlmAccountCard() {
           color: "var(--text-primary)",
         }}>
           Codex는 정상입니다. 표시된 조치 필요 항목은 Claude 계정 상태입니다.
+        </div>
+      )}
+      {needsLoginCount > 0 && effectiveChip !== "action" && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{
+          background: "rgba(217,119,6,0.08)",
+          border: "1px solid rgba(217,119,6,0.35)",
+          color: "var(--text-primary)",
+        }}>
+          로그인이 필요한 계정 {needsLoginCount}건 — &apos;조치 필요&apos; 를 누르면 그 계정만 봅니다.
         </div>
       )}
 
@@ -360,11 +372,21 @@ export default function LlmAccountCard() {
                         차오르고 숫자는 남은 양을 적는다. */}
                     {a.windows.length > 0 ? a.windows.map((w) => (
                       <span key={w.window_minutes ?? "n"} className="block">
-                        <Bar pct={w.used_percent} color={w.used_percent >= 90 ? "#dc2626" : w.used_percent >= 80 ? "#d97706" : color} />
-                        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                          {windowLabel(w.window_minutes)} {(100 - w.used_percent).toFixed(0)}% 남음
-                          {w.resets_at ? ` · ${kst(w.resets_at)} 리셋` : ""}
-                        </span>
+                        <Bar pct={w.used_percent}
+                          color={w.stale ? "var(--text-secondary)"
+                            : w.used_percent >= 90 ? "#dc2626" : w.used_percent >= 80 ? "#d97706" : color} />
+                        {w.stale ? (
+                          // 수집이 멈춘 값이다. 잔량 숫자를 내세우면 아직 남은 것으로 읽히므로 낡음을 먼저 적는다.
+                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {windowLabel(w.window_minutes)} 수집 멈춤{staleDays(w.snapshot_age_hours)}
+                            <span style={{ opacity: 0.7 }}> · 마지막 기록 {(100 - w.used_percent).toFixed(0)}% 남음</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {windowLabel(w.window_minutes)} {(100 - w.used_percent).toFixed(0)}% 남음
+                            {w.resets_at ? ` · ${kst(w.resets_at)} 리셋` : ""}
+                          </span>
+                        )}
                       </span>
                     )) : (
                       <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
