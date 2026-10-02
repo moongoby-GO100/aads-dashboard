@@ -736,7 +736,7 @@ export default function ChannelsPage() {
                     value={form.id}
                     onChange={(e) => setForm({ ...form, id: e.target.value })}
                     placeholder="예: GO100_MGR"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none aads-focus-border"
                     style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                   />
                 </div>
@@ -748,7 +748,7 @@ export default function ChannelsPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="예: GO100 총괄매니저"
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none aads-focus-border"
                   style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -759,7 +759,7 @@ export default function ChannelsPage() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="예: AI 투자 에이전트, 자동매매"
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none aads-focus-border"
                   style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -770,7 +770,7 @@ export default function ChannelsPage() {
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
                   placeholder="https://www.genspark.ai/agents?id=..."
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none aads-focus-border"
                   style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
               </div>
@@ -875,7 +875,7 @@ export default function ChannelsPage() {
                     value={doc.label}
                     onChange={(e) => updateDocRow(idx, "label", e.target.value)}
                     placeholder="이름 (예: HANDOVER)"
-                    className="w-28 px-2 py-1.5 rounded text-xs outline-none"
+                    className="w-28 px-2 py-1.5 rounded text-xs outline-none aads-focus-border"
                     style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                   />
                   <input
@@ -883,7 +883,7 @@ export default function ChannelsPage() {
                     value={doc.url}
                     onChange={(e) => updateDocRow(idx, "url", e.target.value)}
                     placeholder="URL"
-                    className="flex-1 px-2 py-1.5 rounded text-xs outline-none"
+                    className="flex-1 px-2 py-1.5 rounded text-xs outline-none aads-focus-border"
                     style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                   />
                   <button
@@ -961,7 +961,7 @@ export default function ChannelsPage() {
               value={triggerEditText}
               onChange={(e) => setTriggerEditText(e.target.value)}
               rows={8}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y aads-focus-border"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: "120px" }}
               placeholder="트리거 메시지를 입력하세요..."
             />

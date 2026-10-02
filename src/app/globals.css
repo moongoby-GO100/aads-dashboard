@@ -15,6 +15,9 @@
   --border: #334155;
   --background: #0f172a;
   --foreground: #e2e8f0;
+  --bg-main: var(--bg-primary);
+  --bg-secondary: var(--bg-card);
+  --bg-tertiary: var(--bg-hover);
 }
 
 @theme inline {
@@ -95,6 +98,22 @@ body {
   --danger: #ef4444;
   --background: #FAFAFA;
   --foreground: #1A1A1A;
+  --bg-main: var(--bg-primary);
+  --bg-secondary: var(--bg-card);
+  --bg-tertiary: var(--bg-hover);
+}
+
+:is(button, a, [role="button"], [role="tab"], [role="menuitem"], select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent, #60a5fa) !important;
+  outline-offset: 2px;
+}
+
+/* 포커스 표시가 없던 input/textarea 개별 보강 (마우스 클릭 포함 text 입력은 border 색만 변경) */
+.aads-focus-border:focus {
+  border-color: var(--accent, #60a5fa) !important;
+}
+[data-theme="kakaobot"] .aads-focus-border:focus {
+  border-color: var(--text-primary) !important;
 }
 
 [data-theme="kakaobot"] body {

@@ -142,13 +142,13 @@ export default function AIWriterPage() {
               <div>
                 <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>받는 사람 이름 (선택)</label>
                 <input value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="예: 김민수"
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>추가 맥락 (선택)</label>
                 <textarea value={extraContext} onChange={e => setExtraContext(e.target.value)} rows={2}
                   placeholder="예: 최근 승진했고, 10년 지기 친구입니다"
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
               </div>
               <button onClick={handleGenerate} disabled={generating}
                 className="w-full rounded-lg px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 transition-colors"
@@ -179,7 +179,7 @@ export default function AIWriterPage() {
                     </div>
                     {editingId === item.id ? (
                       <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={4}
-                        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-2"
+                        className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none mb-2 aads-focus-border"
                         style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                     ) : (
                       <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--text-primary)" }}>{item.content}</p>

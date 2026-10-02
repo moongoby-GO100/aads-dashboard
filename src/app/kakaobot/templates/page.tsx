@@ -151,9 +151,9 @@ export default function TemplatesPage() {
                   {CATEGORIES.filter(c => c.key !== "all").map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select>
                 <input placeholder="제목 *" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <textarea placeholder="내용 ({name}으로 이름 치환)" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <select value={form.tone} onChange={e => setForm({ ...form, tone: e.target.value })}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                   {TONES.map(t => <option key={t} value={t}>{TONE_LABELS[t]}</option>)}

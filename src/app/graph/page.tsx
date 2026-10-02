@@ -152,7 +152,7 @@ export default function GraphPage() {
         </p>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input
+          <input className="aads-focus-border"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void run(q); }}

@@ -148,7 +148,7 @@ export default function AIDriveFileList({ files, selectedFolder, onRefresh }: Pr
                         if (e.key === "Enter") handleRenameSubmit(file);
                         if (e.key === "Escape") setRenamingId(null);
                       }}
-                      className="text-xs px-1 rounded outline-none flex-1"
+                      className="text-xs px-1 rounded outline-none flex-1 aads-focus-border"
                       style={{
                         background: "var(--ct-input-bg)",
                         color: "var(--ct-text)",

@@ -92,7 +92,7 @@ export default function ContactsPage() {
             placeholder="이름 또는 번호 검색..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px] outline-none"
+            className="rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px] outline-none aads-focus-border"
             style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
           />
           <select
@@ -164,17 +164,17 @@ export default function ContactsPage() {
               </h3>
               <div className="space-y-3">
                 <input placeholder="이름 *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <input placeholder="전화번호" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <select value={form.relationship} onChange={e => setForm({ ...form, relationship: e.target.value })}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                   {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <input placeholder="그룹" value={form.group_name} onChange={e => setForm({ ...form, group_name: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <textarea placeholder="메모" value={form.memo} onChange={e => setForm({ ...form, memo: e.target.value })} rows={2}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
               </div>
               <div className="flex justify-end gap-2 mt-4">
                 <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: "var(--text-secondary)" }}>취소</button>

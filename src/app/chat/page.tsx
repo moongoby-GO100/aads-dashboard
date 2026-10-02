@@ -11282,7 +11282,7 @@ export default function ChatPage() {
             <h3 style={{ color: "#a78bfa", marginBottom: "16px", fontSize: "1rem" }}>
               🎨 AI 이미지 생성
             </h3>
-            <textarea
+            <textarea className="aads-focus-border"
               value={imageGenPrompt}
               onChange={(e) => setImageGenPrompt(e.target.value)}
               placeholder="이미지 프롬프트 입력 (예: 서울 야경, 미래도시, 귀여운 강아지...)"
@@ -11509,7 +11509,7 @@ export default function ChatPage() {
             </div>
             {/* 커스텀 태그 입력 */}
             <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
-              <input
+              <input className="aads-focus-border"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -11596,7 +11596,7 @@ export default function ChatPage() {
                 <label style={{ fontSize: "11px", color: "var(--ct-text2)", display: "block", marginBottom: "4px" }}>
                   세션명
                 </label>
-                <input
+                <input className="aads-focus-border"
                   autoFocus
                   value={newSessionTitle}
                   onChange={(e) => setNewSessionTitle(e.target.value)}
@@ -13444,7 +13444,7 @@ export default function ChatPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                   {todoAdding && (
                     <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
-                      <input
+                      <input className="aads-focus-border"
                         autoFocus
                         value={todoAddTitle}
                         onChange={(e) => setTodoAddTitle(e.target.value)}
@@ -13498,7 +13498,7 @@ export default function ChatPage() {
                           }}
                         />
                         {todoEditingId === item.id ? (
-                          <input
+                          <input className="aads-focus-border"
                             autoFocus
                             value={todoEditTitle}
                             onChange={(e) => setTodoEditTitle(e.target.value)}
@@ -13929,7 +13929,7 @@ export default function ChatPage() {
                     </option>
                   ))}
                 </select>
-                <input
+                <input className="aads-focus-border"
                   value={designPrompt}
                   onChange={(event) => setDesignPrompt(event.target.value)}
                   placeholder="예: 카드 간격을 줄이고 모바일에서 버튼이 겹치지 않게 수정"
@@ -13956,7 +13956,7 @@ export default function ChatPage() {
                 ].map((item) => (
                   <label key={item.label} style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "11px", color: "var(--ct-text2)" }}>
                     {item.label}
-                    <textarea
+                    <textarea className="aads-focus-border"
                       value={item.value}
                       onChange={(event) => item.setter(event.target.value)}
                       rows={2}
@@ -14438,7 +14438,7 @@ export default function ChatPage() {
                 padding: "12px 20px", borderBottom: "1px solid var(--ct-border)",
                 display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap",
               }}>
-                <input
+                <input className="aads-focus-border"
                   value={newTplTitle} onChange={(e) => setNewTplTitle(e.target.value)}
                   placeholder="템플릿 제목"
                   style={{

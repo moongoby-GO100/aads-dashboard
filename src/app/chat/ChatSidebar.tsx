@@ -347,7 +347,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
             >
               ✏️ 새 대화 ({activeWsObj?.icon || "📁"} {activeWsName.replace(/^\[.*?\]\s*/, "")})
             </button>
-            <input
+            <input className="aads-focus-border"
               type="text"
               placeholder="세션 검색..."
               value={search}
@@ -612,7 +612,7 @@ const ChatSidebar = memo(function ChatSidebar(props: ChatSidebarProps) {
                     <div key={s.id} style={{ marginBottom: "1px" }}>
                       {renaming?.id === s.id ? (
                         <div style={{ padding: "3px 6px" }}>
-                          <input
+                          <input className="aads-focus-border"
                             autoFocus
                             value={renaming.value}
                             onChange={(e) =>

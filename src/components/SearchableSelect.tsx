@@ -87,7 +87,7 @@ export default function SearchableSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="검색..."
-              className="w-full text-sm px-2 py-1 rounded"
+              className="w-full text-sm px-2 py-1 rounded aads-focus-border"
               style={{
                 background: "var(--bg-hover)",
                 border: "1px solid var(--border)",

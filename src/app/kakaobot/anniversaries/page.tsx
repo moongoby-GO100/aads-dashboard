@@ -174,19 +174,19 @@ export default function AnniversariesPage() {
               <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>기념일 등록</h3>
               <div className="space-y-3">
                 <input placeholder="이름 *" value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <select value={form.anniversary_type} onChange={e => setForm({ ...form, anniversary_type: e.target.value })}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                   {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
                   <input type="checkbox" checked={form.lunar} onChange={e => setForm({ ...form, lunar: e.target.checked })} />
                   음력
                 </label>
                 <textarea placeholder="메모" value={form.memo} onChange={e => setForm({ ...form, memo: e.target.value })} rows={2}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none aads-focus-border" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
                   <input type="checkbox" checked={form.auto_send} onChange={e => setForm({ ...form, auto_send: e.target.checked })} />
                   자동 발송

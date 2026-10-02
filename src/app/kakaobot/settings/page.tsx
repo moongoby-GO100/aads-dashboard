@@ -189,7 +189,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>발송 시간</label>
                   <input type="time" value={settings.send_time} onChange={e => update("send_time", e.target.value)}
-                    className="rounded-lg px-3 py-2 text-sm outline-none"
+                    className="rounded-lg px-3 py-2 text-sm outline-none aads-focus-border"
                     style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

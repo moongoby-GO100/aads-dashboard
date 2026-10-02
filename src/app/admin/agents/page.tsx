@@ -321,7 +321,7 @@ export default function AdminAgentsPage() {
                   프로젝트 범위: {projectList.length ? projectList.join(", ") : "-"}
                 </div>
               </div>
-              <input
+              <input className="aads-focus-border"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="역할, 분류, 프로젝트 검색"

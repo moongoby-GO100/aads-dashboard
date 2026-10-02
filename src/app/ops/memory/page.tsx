@@ -306,7 +306,7 @@ export default function MemoryDashboardPage() {
             </select>
 
             <div style={{ display: "flex", gap: 4 }}>
-              <input type="text" placeholder="검색..." value={searchInput}
+              <input className="aads-focus-border" type="text" placeholder="검색..." value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                 style={{ background: "var(--bg-primary)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: 12, outline: "none", width: 160 }}

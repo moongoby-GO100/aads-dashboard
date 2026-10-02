@@ -259,7 +259,7 @@ export default function BramingPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "16px" }}>🧠 새 브레인스토밍 세션</h2>
-            <input
+            <input className="aads-focus-border"
               type="text"
               value={newTopic}
               onChange={(e) => setNewTopic(e.target.value)}

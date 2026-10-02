@@ -94,7 +94,7 @@ export default function NodeDetailPanel({ node, loading, onGenerateIdeas, onGene
 
         {editing ? (
           <div onKeyDown={handleKeyDown}>
-            <input
+            <input className="aads-focus-border"
               value={editLabel}
               onChange={(e) => setEditLabel(e.target.value)}
               placeholder="제목"
@@ -106,7 +106,7 @@ export default function NodeDetailPanel({ node, loading, onGenerateIdeas, onGene
                 outline: "none", marginBottom: "8px", boxSizing: "border-box",
               }}
             />
-            <textarea
+            <textarea className="aads-focus-border"
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               placeholder="내용"

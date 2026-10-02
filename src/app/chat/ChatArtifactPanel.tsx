@@ -1768,7 +1768,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 flexDirection: "column",
                 gap: "5px",
               }}>
-                <input
+                <input className="aads-focus-border"
                   type="text"
                   placeholder="제목 검색..."
                   value={searchQuery}
@@ -1954,7 +1954,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         새로고침
                       </button>
                     </div>
-                    <input
+                    <input className="aads-focus-border"
                       value={agendaDraftTitle}
                       onChange={(e) => setAgendaDraftTitle(e.target.value)}
                       placeholder="메모 제목"
@@ -1970,7 +1970,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         outline: "none",
                       }}
                     />
-                    <textarea
+                    <textarea className="aads-focus-border"
                       value={agendaDraftSummary}
                       onChange={(e) => setAgendaDraftSummary(e.target.value)}
                       placeholder="메모 내용"
@@ -2655,7 +2655,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         ? "clamp(420px, calc(100dvh - 300px), 820px)"
                         : "clamp(320px, calc(100dvh - 240px), 720px)",
                     }}>
-                      <input
+                      <input className="aads-focus-border"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         placeholder="제목"
@@ -2672,7 +2672,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           boxSizing: "border-box",
                         }}
                       />
-                      <textarea
+                      <textarea className="aads-focus-border"
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         style={{

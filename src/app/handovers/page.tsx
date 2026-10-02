@@ -102,7 +102,7 @@ export default function HandoversPage() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") setSubmittedQuery(query.trim()); }}
             placeholder="제목·본문·경로 검색"
-            className="col-span-2 md:col-span-1 rounded-lg px-3 py-2 text-sm outline-none"
+            className="col-span-2 md:col-span-1 rounded-lg px-3 py-2 text-sm outline-none aads-focus-border"
             style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
           />
           <button onClick={() => setSubmittedQuery(query.trim())} className="rounded-lg px-4 py-2 text-sm font-semibold" style={{ background: "var(--accent)", color: "#fff" }}>검색</button>

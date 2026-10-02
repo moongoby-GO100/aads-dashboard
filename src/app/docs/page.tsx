@@ -985,7 +985,7 @@ export default function DocsPage() {
                     : "파일명 또는 경로 검색..."}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                  className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none aads-focus-border"
                   style={{
                     background: "var(--bg-card)",
                     border: "1px solid var(--border)",
