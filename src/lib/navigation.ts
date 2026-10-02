@@ -62,6 +62,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true, group: "일·프로젝트" },
   { href: "/ops", label: "운영 현황", icon: "📊", adminOnly: true, group: "운영·서버" },
   { href: "/ops/recovery", label: "Recovery", icon: "🔄", adminOnly: true, group: "운영·서버" },
+  { href: "/ops/ai-errors", label: "AI 응답 오류", icon: "⚠️", adminOnly: true, group: "운영·서버" },
   { href: "/ops/servers", label: "Servers", icon: "🖥️", adminOnly: true, group: "운영·서버" },
   { href: "/ops/memory", label: "메모리", icon: "🧠", adminOnly: true, group: "운영·서버" },
   { href: "/ops/pc-agents", label: "PC Agent", icon: "💻", adminOnly: true, group: "운영·서버" },
