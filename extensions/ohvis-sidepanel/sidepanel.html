@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OHVIS</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="statusbar" id="statusbar">
+    <span class="dot" id="status-dot" aria-hidden="true"></span>
+    <div class="status-text">
+      <strong id="status-text">연결 확인 중…</strong>
+      <span class="muted" id="status-time">마지막 갱신 –</span>
+    </div>
+    <button type="button" class="btn small" id="btn-refresh">새로고침</button>
+  </header>
+
+  <section class="login-banner" id="login-banner" hidden>
+    <p>OHVIS 에 로그인하면 승인 대기와 진행 중 작업이 여기에 표시됩니다.</p>
+    <button type="button" class="btn primary" id="btn-login">OHVIS 에 로그인</button>
+  </section>
+
+  <main>
+    <section class="panel" aria-labelledby="h-approvals">
+      <h2 id="h-approvals">승인 대기 <span class="count" id="approvals-count"></span></h2>
+      <div id="approvals" class="stack"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-tasks">
+      <h2 id="h-tasks">진행 중 작업 <span class="count" id="tasks-count"></span></h2>
+      <div id="tasks" class="stack"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-chat">
+      <div class="row-between">
+        <h2 id="h-chat">OHVIS 채팅</h2>
+        <div class="row">
+          <button type="button" class="btn small" id="btn-chat-toggle">패널에서 숨기기</button>
+          <button type="button" class="btn small" id="btn-chat-tab">새 탭에서 열기</button>
+        </div>
+      </div>
+      <div id="chat-body"></div>
+    </section>
+  </main>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

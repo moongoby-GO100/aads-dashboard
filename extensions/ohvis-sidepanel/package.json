@@ -1,0 +1,6 @@
+{
+  "name": "ohvis-sidepanel-extension",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension (MV3, no bundler). Not part of the dashboard build."
+}

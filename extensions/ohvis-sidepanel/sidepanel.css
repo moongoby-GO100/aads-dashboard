@@ -1,0 +1,66 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b; --line: #e2e8f0;
+  --primary: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --info: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --muted: #94a3b8; --line: #334155; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+[hidden] { display: none !important; }
+.muted { color: var(--muted); font-size: 12px; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.statusbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
+.status-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.status-text strong { font-size: 13px; overflow-wrap: anywhere; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.login { background: var(--warn); } .dot.error { background: var(--bad); }
+
+.login-banner { margin: 10px; padding: 12px; border: 1px solid var(--warn); border-radius: 8px; background: var(--card); }
+.login-banner p { margin: 0 0 8px; }
+
+main { padding: 10px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { margin: 0 0 6px; font-size: 14px; }
+.count { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.card.attention { border-color: var(--warn); }
+.field { display: grid; grid-template-columns: 54px 1fr; gap: 4px; margin: 2px 0; }
+.field dt { color: var(--muted); }
+.field dd { margin: 0; overflow-wrap: anywhere; }
+.empty { color: var(--muted); padding: 10px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; }
+.msg { margin-top: 6px; color: var(--bad); font-size: 12px; }
+.msg.ok { color: var(--ok); }
+
+.btn { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--primary); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
+.btn.danger.armed { background: var(--bad); color: #fff; }
+
+.task { padding: 0; overflow: hidden; }
+.task-head { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0;
+  padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.task-head:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.task-line { display: flex; gap: 6px; align-items: center; justify-content: space-between; }
+.task-host { font-weight: 600; overflow-wrap: anywhere; }
+.badge { flex: none; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; }
+.badge.ok { color: var(--ok); } .badge.bad { color: var(--bad); } .badge.warn { color: var(--warn); }
+.badge.info { color: var(--info); } .badge.muted { color: var(--muted); }
+.task-detail { border-top: 1px solid var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.steps { margin: 0; padding-left: 18px; }
+.steps li { margin: 2px 0; }
+.frame { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; color: var(--muted); }
+
+#chat-body iframe { width: 100%; height: 480px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
