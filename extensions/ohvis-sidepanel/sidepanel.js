@@ -1,12 +1,14 @@
-import { createApi, readTokenFromCookies, ApiError, LOGIN_URL, CHAT_URL, COOKIE_NAME } from "./lib/api.js";
+import { createApi, readTokenFromCookies, ApiError, LOGIN_URL, CHAT_URL, EXT_AUTH_URL, COOKIE_NAME } from "./lib/api.js";
+import { sendAuthToFrame } from "./lib/auth-bridge.js";
 import {
   nextPollDelay, POLL_BASE_MS, taskStatusLabel, taskStatusTone, canRetry, describePermission, isExpired,
   sortByUpdatedDesc, formatTime, formatDateTime, connectionMessage, actionErrorMessage, frameImageSrc,
 } from "./lib/format.js";
 
+const getToken = () => readTokenFromCookies(chrome.cookies);
 const api = createApi({
   fetchImpl: (url, init) => fetch(url, init),
-  getToken: () => readTokenFromCookies(chrome.cookies),
+  getToken,
 });
 
 const $ = (id) => document.getElementById(id);
@@ -24,6 +26,8 @@ const state = {
   busy: new Set(),
   armedReject: new Map(),
   chatMode: "embed",
+  authFailed: false,
+  tokenSent: false,
 };
 
 function el(tag, { cls, text, attrs } = {}, children = []) {
@@ -277,15 +281,18 @@ function renderChat() {
   if (state.chatMode === "embed") {
     toggle.textContent = "패널에서 숨기기";
     if (!body.querySelector("iframe")) {
+      state.tokenSent = false;
+      const frame = el("iframe", {
+        attrs: {
+          src: EXT_AUTH_URL,
+          title: "OHVIS 채팅",
+          sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads",
+          allow: "clipboard-write",
+        },
+      });
+      frame.addEventListener("load", () => deliverAuth(frame));
       body.replaceChildren(
-        el("iframe", {
-          attrs: {
-            src: CHAT_URL,
-            title: "OHVIS 채팅",
-            sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads",
-            allow: "clipboard-write",
-          },
-        }),
+        frame,
         el("div", { cls: "muted", text: "채팅이 비어 있거나 로그인 화면이 보이면 '새 탭에서 열기'를 이용하세요." }),
       );
     }
@@ -294,6 +301,15 @@ function renderChat() {
     const open = el("button", { cls: "btn primary", text: "OHVIS 채팅 열기", attrs: { type: "button" } });
     open.addEventListener("click", openChatTab);
     body.replaceChildren(open);
+  }
+}
+
+async function deliverAuth(frame) {
+  if (state.tokenSent || state.authFailed) return;
+  try {
+    state.tokenSent = await sendAuthToFrame({ frameWindow: frame.contentWindow, getToken });
+  } catch {
+    state.tokenSent = false;
   }
 }
 
@@ -331,6 +347,7 @@ async function refresh() {
   try {
     const errors = applyResults(await Promise.allSettled([api.listPending(), api.listTasks(10)]));
     const authError = errors.find((e) => e instanceof ApiError && e.kind === "auth");
+    state.authFailed = Boolean(authError);
     if (authError) {
       state.failures = 0;
       const msg = connectionMessage(authError);
@@ -342,6 +359,8 @@ async function refresh() {
       setStatus(msg.state, msg.text);
     } else {
       state.failures = 0;
+      const frame = $("chat-body").querySelector("iframe");
+      if (frame && !state.tokenSent) deliverAuth(frame);
       setStatus("ok", "로그인됨 · 정상 연결");
       $("status-time").textContent = `마지막 갱신 ${formatTime(Date.now())}`;
       if (state.expandedTaskId) await loadDetail(state.expandedTaskId);

@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArv9SH+dVlCsP71yXmhdQNbQg09aHQVkxUOnSwGKxUObK4AbbjnCDJD5WixtWQRKP1b45NcA1MoMSOwb5xzoDvdHmtyq67IhohrfWmlFt1hQfu4erGiZ0v2vFuaaDOWS3yJwLDDcAQE0Gjm20O+1+xTnAClX1CsRfomlh3IjmlUUUZ9hsWKs2jUzNUOiIdIiRYTDP5e4QvaKKm9LDTDSkfXdeKeylc4n1YsBSW/wf02kuNuuLHyTfvqRFLmmbFxM0eq72IxfKu3y5Pg0TygPmWjIyIziz6YNJmtRrynPBgCh05B04Qz7EvE5weVW5YT7t/xVIJ4qM1gI4mkiZjFAfXwIDAQAB",
   "name": "OHVIS 사이드패널",
   "short_name": "OHVIS",
   "version": "0.1.0",

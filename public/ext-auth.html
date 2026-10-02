@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>OHVIS 로그인 연결</title>
+<style>
+  body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, sans-serif; color: #1f2937; background: #fff; }
+  a.btn { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 6px; background: #2563eb; color: #fff; text-decoration: none; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<p id="msg">OHVIS 로그인 정보를 확인하는 중…</p>
+<div id="fallback" hidden>
+  <p>로그인 정보를 받지 못했습니다. OHVIS 에 로그인한 뒤 패널을 다시 열어 주세요.</p>
+  <a class="btn" id="login-link" href="/login" target="_blank" rel="noopener">OHVIS 에 로그인</a>
+</div>
+<div id="standalone" hidden>
+  <p>이 페이지는 OHVIS 사이드패널 안에서만 쓰입니다.</p>
+  <a class="btn" href="/chat">OHVIS 채팅으로 이동</a>
+</div>
+<script>
+// ext-auth-core:begin (tests/ext-auth.test.mjs 가 이 구간을 추출해 검증한다)
+var ALLOWED_ORIGINS = ["chrome-extension://hdohafmpafacecmangkedcbgaoaghcic"];
+var MESSAGE_TYPE = "ohvis-auth";
+var MAX_TOKEN_LENGTH = 4096;
+var JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+function isJwtShape(token) {
+  return typeof token === "string" && token.length <= MAX_TOKEN_LENGTH && JWT_PATTERN.test(token);
+}
+
+function acceptAuthMessage(origin, data) {
+  if (ALLOWED_ORIGINS.indexOf(origin) === -1) return null;
+  if (!data || typeof data !== "object" || data.type !== MESSAGE_TYPE) return null;
+  return isJwtShape(data.token) ? data.token : null;
+}
+
+function buildPartitionedCookie(token) {
+  return "aads_token=" + token + "; path=/; max-age=604800; Secure; SameSite=None; Partitioned";
+}
+// ext-auth-core:end
+
+(function () {
+  var inFrame = false;
+  try { inFrame = window.parent !== window; } catch (e) { inFrame = false; }
+  if (!inFrame) {
+    document.getElementById("msg").hidden = true;
+    document.getElementById("standalone").hidden = false;
+    return;
+  }
+
+  var done = false;
+  var timer = setTimeout(function () {
+    if (done) return;
+    document.getElementById("msg").hidden = true;
+    document.getElementById("fallback").hidden = false;
+  }, 5000);
+
+  window.addEventListener("message", function (event) {
+    if (done || event.source !== window.parent) return;
+    var token = acceptAuthMessage(event.origin, event.data);
+    if (!token) return;
+    done = true;
+    clearTimeout(timer);
+    try {
+      localStorage.setItem("aads_token", token);
+    } catch (e) { /* 저장소 차단 시 쿠키만으로 진행 */ }
+    document.cookie = buildPartitionedCookie(token);
+    location.replace("/chat");
+  });
+})();
+</script>
+</body>
+</html>

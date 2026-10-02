@@ -2,6 +2,7 @@ export const BASE_URL = "https://aads.newtalk.kr";
 export const API_PREFIX = "/api/v1/browser-tasks";
 export const LOGIN_URL = `${BASE_URL}/login`;
 export const CHAT_URL = `${BASE_URL}/chat`;
+export const EXT_AUTH_URL = `${BASE_URL}/ext-auth.html`;
 export const COOKIE_NAME = "aads_token";
 
 export class ApiError extends Error {
