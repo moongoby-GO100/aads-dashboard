@@ -62,6 +62,7 @@ import type { ExecutionPhase } from "@/features/chat/domain/runtimeTypes";
 import { createChatRuntime } from "@/features/chat/runtime/createChatRuntime";
 import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusScheduler";
 import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
+import { PANEL_BODY_FONT_PX, PANEL_SIDE_PADDING_PX, readPanelSurface } from "@/lib/chatPanelSurface";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -4231,6 +4232,12 @@ export default function ChatPage() {
   const [artifactTab, setArtifactTab] = useState<ArtifactTab>("agenda");
   const [unreadLogCount, setUnreadLogCount] = useState(0);
   const [screenSize, setScreenSize] = useState<ScreenSize>("desktop");
+  // Chrome 사이드패널 iframe 전용 축소 모드 (?surface=panel, 탭 단위로 기억). 일반 /chat 은 항상 false.
+  const [panelMode, setPanelMode] = useState(false);
+  const [panelMenuOpen, setPanelMenuOpen] = useState(false);
+  useEffect(() => {
+    setPanelMode(readPanelSurface());
+  }, []);
   const [composerWidthPx, setComposerWidthPx] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const isInternalAdmin = Boolean(currentUser?.is_internal_admin);
@@ -4291,7 +4298,8 @@ export default function ChatPage() {
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_RUNTIME_MODEL);
   const [responseMode, setResponseMode] = useState<"quality" | "fast">("quality");
-  const [mobileChatFontPx, setMobileChatFontPx] = useState(19);
+  const [savedMobileChatFontPx, setMobileChatFontPx] = useState(19);
+  const mobileChatFontPx = panelMode ? PANEL_BODY_FONT_PX : savedMobileChatFontPx;
   const [roleKey, setRoleKey] = useState("CEO");
   const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
   const roleLabels = useMemo(() => new Map(roleOptions.map((role) => [role.id, role.label])), [roleOptions]);
@@ -6467,7 +6475,7 @@ export default function ChatPage() {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     function check() {
       const w = window.innerWidth;
-      const size: ScreenSize = w >= 1280 ? "desktop" : w >= 768 ? "tablet" : "mobile";
+      const size: ScreenSize = panelMode ? "mobile" : w >= 1280 ? "desktop" : w >= 768 ? "tablet" : "mobile";
       setScreenSize(size);
       if (size === "mobile") { setLeftOpen(false); setArtifactMode("hidden"); }
       else if (size === "tablet") { setLeftOpen(false); }
@@ -6480,7 +6488,7 @@ export default function ChatPage() {
     check();
     window.addEventListener("resize", debouncedCheck);
     return () => { window.removeEventListener("resize", debouncedCheck); if (debounceTimer) clearTimeout(debounceTimer); };
-  }, []);
+  }, [panelMode]);
 
   useEffect(() => {
     const el = composerContainerRef.current;
@@ -10884,7 +10892,7 @@ export default function ChatPage() {
 
   // C1: swipe gesture handlers
   function onSwipeStart(e: React.TouchEvent) {
-    if (screenSize === "desktop") return;
+    if (screenSize === "desktop" || panelMode) return;
     const t = e.touches[0];
     swipeRef.current = { startX: t.clientX, startY: t.clientY, t: Date.now() };
   }
@@ -11189,7 +11197,7 @@ export default function ChatPage() {
         fontFamily: "Arial, Helvetica, sans-serif",
         position: "relative",
       }}
-      onClick={() => setContextMenu(null)}
+      onClick={() => { setContextMenu(null); setPanelMenuOpen(false); }}
       onTouchStart={onSwipeStart}
       onTouchEnd={onSwipeEnd}
     >
@@ -11837,7 +11845,7 @@ export default function ChatPage() {
       />
 
       {/* ── Mobile/Tablet overlay backdrop ── */}
-      {mobileOverlay && screenSize !== "desktop" && (
+      {!panelMode && mobileOverlay && screenSize !== "desktop" && (
         <div
           style={{
             position: "fixed",
@@ -11850,7 +11858,7 @@ export default function ChatPage() {
       )}
 
       {/* LEFT SIDEBAR */}
-      <ChatSidebar
+      {!panelMode && <ChatSidebar
         screenSize={screenSize} leftOpen={leftOpen} setLeftOpen={setLeftOpen}
         mobileOverlay={mobileOverlay} setMobileOverlay={setMobileOverlay}
         activeWsObj={activeWsObj} activeWsName={activeWsName}
@@ -11871,7 +11879,7 @@ export default function ChatPage() {
         setShowAddProject={setShowAddProject}
         theme={theme} toggleTheme={toggleTheme}
         tagFilter={tagFilter} setTagFilter={setTagFilter} allTags={allTags}
-      />
+      />}
 
 
       {/* ════════════════════════════════════════════════════════════
@@ -11883,7 +11891,7 @@ export default function ChatPage() {
         onDragOver={(e) => e.preventDefault()}
       >
         {/* Chat Header */}
-          <div
+          {!panelMode && <div
             className={screenSize === "mobile" ? "ct-mobile-chat-header" : undefined}
             style={{
             padding: screenSize === "mobile" ? "6px 8px" : "10px 14px",
@@ -12303,9 +12311,9 @@ export default function ChatPage() {
             📄{artifactMode === "hidden" && screenSize === "desktop" ? "▶" : "◀"}
           </button>
           </div>
-        </div>
+        </div>}
 
-        <UsageBar />
+        {!panelMode && <UsageBar />}
         {/* Messages */}
         <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden" }}>
         <div
@@ -12314,13 +12322,13 @@ export default function ChatPage() {
           data-follow-mode={chatFollowMode}
           style={{
             "--ct-mobile-font-size": `${mobileChatFontPx}px`,
-            "--ct-mobile-code-font-size": `${Math.max(15, mobileChatFontPx - 2)}px`,
+            "--ct-mobile-code-font-size": `${panelMode ? PANEL_BODY_FONT_PX - 1 : Math.max(15, mobileChatFontPx - 2)}px`,
             height: "100%",
             overflowY: "auto",
             overflowAnchor: "none" as never,
             scrollBehavior: "auto",
             fontSize: screenSize === "mobile" ? `${mobileChatFontPx}px` : undefined,
-            padding: screenSize === "mobile" ? "10px 8px" : "16px",
+            padding: panelMode ? `10px ${PANEL_SIDE_PADDING_PX}px` : screenSize === "mobile" ? "10px 8px" : "16px",
             display: "flex",
             flexDirection: "column",
             gap: "12px",
@@ -14061,8 +14069,72 @@ export default function ChatPage() {
             flexDirection: isComposerCompact ? "column" : "row",
             flexWrap: "wrap",
           }}>
+            {/* Panel: 새 대화·세션 전환용 ⋯ 메뉴 (패널에서는 이것 하나만 둔다) */}
+            {panelMode && (
+              <div style={{ position: "relative", flexShrink: 0, alignSelf: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setPanelMenuOpen((open) => !open); }}
+                  aria-label="대화 메뉴"
+                  aria-haspopup="menu"
+                  aria-expanded={panelMenuOpen}
+                  title="새 대화 · 대화 전환"
+                  style={{
+                    width: "32px", height: "40px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: panelMenuOpen ? "var(--ct-accent)" : "var(--ct-hover)",
+                    color: panelMenuOpen ? "#fff" : "var(--ct-text)",
+                    border: "1px solid var(--ct-border)", borderRadius: "10px",
+                    cursor: "pointer", fontSize: "18px", fontWeight: 700, padding: 0,
+                  }}
+                >
+                  ⋯
+                </button>
+                {panelMenuOpen && (
+                  <div
+                    role="menu"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: "absolute", left: 0, bottom: "calc(100% + 6px)",
+                      width: "min(240px, calc(100vw - 16px))", maxHeight: "50dvh", overflowY: "auto",
+                      background: "var(--ct-card)", color: "var(--ct-text)",
+                      border: "1px solid var(--ct-border)", borderRadius: "10px",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.35)", padding: "4px", zIndex: 200,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setPanelMenuOpen(false); void createSession(); }}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "8px", fontSize: "13px", fontWeight: 600,
+                        background: "none", border: "none", color: "var(--ct-accent)", cursor: "pointer", borderRadius: "6px",
+                      }}
+                    >
+                      ＋ 새 대화
+                    </button>
+                    {sessions.slice(0, 15).map((session) => (
+                      <button
+                        key={session.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setPanelMenuOpen(false); selectSidebarSession(session); }}
+                        style={{
+                          width: "100%", textAlign: "left", padding: "8px", fontSize: "12px",
+                          background: session.id === activeSession?.id ? "var(--ct-hover)" : "none",
+                          border: "none", color: "var(--ct-text)", cursor: "pointer", borderRadius: "6px",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}
+                      >
+                        {session.title || "새 대화"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Mobile "+" toggle button */}
-            {screenSize === "mobile" && (
+            {screenSize === "mobile" && !panelMode && (
               <button
                 onClick={() => setShowMobileActions(!showMobileActions)}
                 style={{
@@ -14080,7 +14152,7 @@ export default function ChatPage() {
               </button>
             )}
             {/* Mobile: newline button */}
-            {screenSize === "mobile" && (
+            {screenSize === "mobile" && !panelMode && (
               <button
                 onClick={() => {
                   const ta = chatInputRef.current;
@@ -14141,7 +14213,7 @@ export default function ChatPage() {
                 onHiddenScreenCapture={handleHiddenScreenCapture}
                 screenHiddenMode={screenHiddenMode}
                 allowInternalMentions={isInternalAdmin}
-                mobileFontPx={mobileChatFontPx + 1}
+                mobileFontPx={panelMode ? PANEL_BODY_FONT_PX : mobileChatFontPx + 1}
                 onCreateDirectiveDraft={() => void handleCreateDirectiveDraft()}
                 directiveDrafting={directiveDrafting}
                 directiveDraftDisabled={!activeSession}
@@ -14384,7 +14456,7 @@ export default function ChatPage() {
       )}
 
       {/* RIGHT ARTIFACT PANEL */}
-      <ChatArtifactPanel
+      {!panelMode && <ChatArtifactPanel
         key={activeSession?.id ?? "no-session"}
         screenSize={screenSize} showArtifactPanel={showArtifactPanel}
         artifactMode={artifactMode} setArtifactMode={setArtifactMode}
@@ -14402,7 +14474,7 @@ export default function ChatPage() {
         regenerateDirective={regenerateDirective}
         deleteDirective={deleteDirective}
         sessionId={activeSession?.id ?? ""}
-      />
+      />}
 
       {/* P2-10: 프롬프트 템플릿 모달 */}
       {showTemplates && (

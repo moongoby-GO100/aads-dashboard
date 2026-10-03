@@ -69,6 +69,8 @@ function buildPartitionedCookie(token) {
       localStorage.setItem("aads_token", token);
     } catch (e) { /* 저장소 차단 시 쿠키만으로 진행 */ }
     document.cookie = buildPartitionedCookie(token);
+    // /chat 은 이 값을 읽어 패널 축소 모드로 뜬다 (src/lib/chatPanelSurface.ts 의 키와 동일)
+    try { sessionStorage.setItem("aads-chat-surface", "panel"); } catch (e) { /* 차단 시 일반 레이아웃 */ }
     location.replace("/chat");
   });
 })();
