@@ -21,18 +21,30 @@
     <button type="button" class="btn primary" id="btn-login">OHVIS 에 로그인</button>
   </section>
 
-  <main>
-    <section class="panel" aria-labelledby="h-approvals">
-      <h2 id="h-approvals">승인 대기 <span class="count" id="approvals-count"></span></h2>
-      <div id="approvals" class="stack"></div>
-    </section>
+  <main id="main">
+    <div class="folds" id="folds">
+      <details class="fold" id="fold-approvals">
+        <summary id="approvals-summary">승인 대기 <span class="summary-count" id="approvals-summary-count">0</span></summary>
+        <div class="fold-body">
+          <section aria-label="승인 대기">
+            <div class="muted fold-note"><span id="approvals-count"></span></div>
+            <div id="approvals" class="stack"></div>
+          </section>
+        </div>
+      </details>
 
-    <section class="panel" aria-labelledby="h-tasks">
-      <h2 id="h-tasks">진행 중 작업 <span class="count" id="tasks-count"></span></h2>
-      <div id="tasks" class="stack"></div>
-    </section>
+      <details class="fold" id="fold-tasks">
+        <summary id="tasks-summary">진행 작업 <span class="summary-count" id="tasks-summary-count">0</span></summary>
+        <div class="fold-body">
+          <section aria-label="진행 중 작업">
+            <div class="muted fold-note"><span id="tasks-count"></span></div>
+            <div id="tasks" class="stack"></div>
+          </section>
+        </div>
+      </details>
+    </div>
 
-    <section class="panel" aria-labelledby="h-chat">
+    <section class="panel chat-panel" id="chat-panel" aria-labelledby="h-chat">
       <div class="row-between">
         <h2 id="h-chat">OHVIS 채팅</h2>
         <div class="row">

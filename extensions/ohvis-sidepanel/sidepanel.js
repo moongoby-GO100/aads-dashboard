@@ -66,7 +66,15 @@ function field(label, value) {
   return el("div", { cls: "field" }, [el("dt", { text: label }), el("dd", { text: value })]);
 }
 
+function renderSummaryCounts() {
+  const approvals = state.pending.filter((r) => !isExpired(r)).length;
+  $("approvals-summary-count").textContent = String(approvals);
+  $("approvals-summary").classList.toggle("attention", approvals > 0);
+  $("tasks-summary-count").textContent = String(state.tasks.length);
+}
+
 function renderApprovals() {
+  renderSummaryCounts();
   const box = $("approvals");
   const list = state.pending.filter((r) => !isExpired(r));
   $("approvals-count").textContent = list.length ? `(${list.length})` : "";
@@ -161,6 +169,7 @@ async function decide(id, action) {
 }
 
 function renderTasks() {
+  renderSummaryCounts();
   const box = $("tasks");
   $("tasks-count").textContent = state.tasks.length ? `(최근 ${state.tasks.length}건)` : "";
   if (!state.tasks.length) {
@@ -278,6 +287,7 @@ async function retryTask(id) {
 function renderChat() {
   const body = $("chat-body");
   const toggle = $("btn-chat-toggle");
+  $("main").classList.toggle("chat-hidden", state.chatMode !== "embed");
   if (state.chatMode === "embed") {
     toggle.textContent = "패널에서 숨기기";
     if (!body.querySelector("iframe")) {
