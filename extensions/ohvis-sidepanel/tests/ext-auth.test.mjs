@@ -50,7 +50,7 @@ test("(b) 토큰이 없으면 전송하지 않는다", async () => {
 test("sidepanel.js: iframe 은 ext-auth.html 로 열고 '*' targetOrigin 을 쓰지 않는다", () => {
   const src = readFileSync(join(ROOT, "sidepanel.js"), "utf8");
   assert.equal(EXT_AUTH_URL, "https://aads.newtalk.kr/ext-auth.html");
-  assert.match(src, /src:\s*EXT_AUTH_URL/);
+  assert.match(src, /src:\s*PANEL_FRAME_URL/);
   assert.doesNotMatch(src, /src:\s*CHAT_URL/);
   assert.doesNotMatch(src, /postMessage\([^)]*["']\*["']/);
   assert.match(src, /state\.authFailed/);

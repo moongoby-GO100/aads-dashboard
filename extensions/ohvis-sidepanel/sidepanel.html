@@ -7,13 +7,20 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header class="statusbar" id="statusbar">
-    <span class="dot" id="status-dot" aria-hidden="true"></span>
-    <div class="status-text">
-      <strong id="status-text">연결 확인 중…</strong>
-      <span class="muted" id="status-time">마지막 갱신 –</span>
+  <header class="topbar" id="topbar">
+    <span class="dot" id="status-dot" title="연결 확인 중…" aria-hidden="true"></span>
+    <strong class="brand">OHVIS</strong>
+    <button type="button" class="chip" id="chip-approvals" aria-expanded="false" aria-controls="sheet">승인 <span class="chip-count" id="approvals-summary-count">0</span></button>
+    <button type="button" class="chip" id="chip-tasks" aria-expanded="false" aria-controls="sheet">작업 <span class="chip-count" id="tasks-summary-count">0</span></button>
+    <span class="status-text" id="status-text" role="status">연결 확인 중…</span>
+    <div class="menu-wrap">
+      <button type="button" class="icon-btn" id="btn-menu" aria-label="더보기" aria-haspopup="menu" aria-expanded="false" aria-controls="menu">⋯</button>
+      <div class="menu" id="menu" role="menu" hidden>
+        <button type="button" role="menuitem" id="btn-refresh">새로고침</button>
+        <button type="button" role="menuitem" id="btn-chat-tab">새 탭에서 열기</button>
+        <button type="button" role="menuitem" id="btn-sheet-only">승인·작업만 보기</button>
+      </div>
     </div>
-    <button type="button" class="btn small" id="btn-refresh">새로고침</button>
   </header>
 
   <section class="login-banner" id="login-banner" hidden>
@@ -22,39 +29,32 @@
   </section>
 
   <main id="main">
-    <div class="folds" id="folds">
-      <details class="fold" id="fold-approvals">
-        <summary id="approvals-summary">승인 대기 <span class="summary-count" id="approvals-summary-count">0</span></summary>
-        <div class="fold-body">
-          <section aria-label="승인 대기">
-            <div class="muted fold-note"><span id="approvals-count"></span></div>
-            <div id="approvals" class="stack"></div>
-          </section>
-        </div>
-      </details>
-
-      <details class="fold" id="fold-tasks">
-        <summary id="tasks-summary">진행 작업 <span class="summary-count" id="tasks-summary-count">0</span></summary>
-        <div class="fold-body">
-          <section aria-label="진행 중 작업">
-            <div class="muted fold-note"><span id="tasks-count"></span></div>
-            <div id="tasks" class="stack"></div>
-          </section>
-        </div>
-      </details>
-    </div>
-
-    <section class="panel chat-panel" id="chat-panel" aria-labelledby="h-chat">
-      <div class="row-between">
-        <h2 id="h-chat">OHVIS 채팅</h2>
-        <div class="row">
-          <button type="button" class="btn small" id="btn-chat-toggle">패널에서 숨기기</button>
-          <button type="button" class="btn small" id="btn-chat-tab">새 탭에서 열기</button>
-        </div>
+    <section class="chat-panel" id="chat-panel" aria-label="OHVIS 채팅">
+      <div class="chat-notice" id="chat-notice" hidden>
+        <span>채팅을 불러오지 못했거나 로그인 확인이 되지 않았습니다. 계속되면 ⋯ 메뉴의 '새 탭에서 열기'를 이용하세요.</span>
+        <button type="button" class="btn small" id="btn-chat-reconnect">다시 연결</button>
       </div>
       <div id="chat-body"></div>
     </section>
   </main>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="false" aria-labelledby="sheet-title" tabindex="-1" hidden>
+    <div class="sheet-head">
+      <strong id="sheet-title">승인·작업</strong>
+      <button type="button" class="btn small" id="btn-sheet-close">닫기</button>
+    </div>
+    <div class="sheet-body">
+      <section class="sheet-section" id="sheet-approvals" aria-label="승인 대기">
+        <h2>승인 대기 <span class="muted" id="approvals-count"></span></h2>
+        <div id="approvals" class="stack"></div>
+      </section>
+      <section class="sheet-section" id="sheet-tasks" aria-label="진행 중 작업">
+        <h2>진행 작업 <span class="muted" id="tasks-count"></span></h2>
+        <div id="tasks" class="stack"></div>
+      </section>
+    </div>
+  </section>
 
   <script type="module" src="sidepanel.js"></script>
 </body>

@@ -3,6 +3,7 @@ export const API_PREFIX = "/api/v1/browser-tasks";
 export const LOGIN_URL = `${BASE_URL}/login`;
 export const CHAT_URL = `${BASE_URL}/chat`;
 export const EXT_AUTH_URL = `${BASE_URL}/ext-auth.html`;
+export const PANEL_FRAME_URL = `${EXT_AUTH_URL}?surface=panel`;
 export const COOKIE_NAME = "aads_token";
 
 export class ApiError extends Error {
