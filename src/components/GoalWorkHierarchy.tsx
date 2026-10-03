@@ -1,22 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import type { GoalApprovalGrant, GoalGovernance, GoalWorkItem, GoalWorkTree, WorkItemApprovalPreview } from "@/lib/api";
 
 const TYPE_LABEL = { epic: "Epic", story: "Story", task: "Task" } as const;
-const STATUS_COLOR: Record<string, string> = {
+export const STATUS_COLOR: Record<string, string> = {
   completed: "#16a34a", in_review: "#7c3aed", changes_requested: "#d97706",
   in_progress: "#2563eb", ready: "#0284c7", blocked: "#dc2626",
   cancelled: "#64748b", draft: "#64748b",
 };
 
-function ItemCard({ item, previews, actorSessionId, onChanged, depth = 0 }: {
+export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0, tree }: {
   item: GoalWorkItem;
   previews: Record<string, WorkItemApprovalPreview | null>;
   actorSessionId?: string | null;
   onChanged: () => Promise<void>;
   depth?: number;
+  tree?: {
+    expanded: boolean; childCount: number; onToggle: () => void;
+    assigneeLabel?: string; warning?: string; dependencyLabels?: string[]; children?: ReactNode;
+  };
 }) {
   const color = STATUS_COLOR[item.status] || "#64748b";
   const evidence = item.evidence;
@@ -39,21 +43,41 @@ function ItemCard({ item, previews, actorSessionId, onChanged, depth = 0 }: {
     <div style={{ marginLeft: depth ? 18 : 0, marginTop: 8 }}>
       <div style={{ border: "1px solid var(--border)", borderLeft: `4px solid ${color}`, borderRadius: 10,
                     padding: "10px 12px", background: "var(--bg-primary)" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase" }}>{TYPE_LABEL[item.type]}</span>
-          <strong style={{ flex: 1, minWidth: 140, color: "var(--text-primary)", fontSize: 12.5 }}>{item.title}</strong>
-          <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
-        </div>
+        {tree ? (
+          <button type="button" onClick={tree.onToggle} aria-expanded={tree.expanded}
+            aria-label={`${TYPE_LABEL[item.type]} ${item.title} ${tree.expanded ? "접기" : "펼치기"}`}
+            style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", width: "100%", minHeight: 36,
+                     padding: 0, border: 0, background: "transparent", textAlign: "left", cursor: "pointer" }}>
+            <span aria-hidden style={{ width: 12, color: "var(--text-secondary)", fontSize: 10 }}>{tree.expanded ? "▼" : "▶"}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase" }}>{TYPE_LABEL[item.type]}</span>
+            <strong style={{ flex: 1, minWidth: 120, color: "var(--text-primary)", fontSize: 12.5, overflowWrap: "anywhere" }}>{item.title}</strong>
+            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase" }}>{TYPE_LABEL[item.type]}</span>
+            <strong style={{ flex: 1, minWidth: 140, color: "var(--text-primary)", fontSize: 12.5 }}>{item.title}</strong>
+            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5 }}>
-          {item.milestone_title && <span>마일스톤 {item.milestone_sequence ?? "—"} · {item.milestone_title}</span>}
+          {!tree && item.milestone_title && <span>마일스톤 {item.milestone_sequence ?? "—"} · {item.milestone_title}</span>}
+          {tree && <span>우선순위 {item.priority || "—"}</span>}
+          {tree && <span>담당 {tree.assigneeLabel || "미지정"}</span>}
           <span>진행 {Number(item.progress || 0).toFixed(0)}%</span>
           <span>버전 {item.version}</span>
+          {tree && tree.childCount > 0 && <span>하위 {tree.childCount}</span>}
           {evidence && <span>근거 {evidence.verified_count}/{evidence.count}</span>}
           {item.pending_approval_count > 0 && <span style={{ color: "#d97706", fontWeight: 800 }}>승인 대기 {item.pending_approval_count}</span>}
           {(item.dependencies?.length || 0) > 0 && <span>의존 {item.dependencies?.length}</span>}
+          {item.status === "blocked" && <span style={{ color: "#dc2626", fontWeight: 800 }}>차단됨</span>}
         </div>
+        {tree?.warning && <div role="alert" style={{ marginTop: 7, color: "#d97706", fontSize: 11 }}>⚠ {tree.warning}</div>}
         {item.last_error && <div role="alert" style={{ marginTop: 7, color: "#dc2626", fontSize: 11 }}>마지막 오류 · {item.last_error}</div>}
-        {evidence?.items?.length ? <details style={{ marginTop: 7 }}>
+        {tree?.expanded && tree.dependencyLabels?.length ? <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5, overflowWrap: "anywhere" }}>
+          의존 · {tree.dependencyLabels.join(" / ")}
+        </div> : null}
+        {(!tree || tree.expanded) && evidence?.items?.length ? <details style={{ marginTop: 7 }}>
           <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-secondary)", fontSize: 10.5, fontWeight: 800 }}>
             최근 검증 근거 {evidence.items.length}건 보기
           </summary>
@@ -93,13 +117,24 @@ function ItemCard({ item, previews, actorSessionId, onChanged, depth = 0 }: {
           {retryError && <div role="alert" style={{ marginTop: 6, color: "#dc2626", fontSize: 10.5 }}>{retryError}</div>}
         </div>}
       </div>
-      {item.children?.map((child) => <ItemCard key={child.id} item={child} previews={previews}
-        actorSessionId={actorSessionId} onChanged={onChanged} depth={depth + 1} />)}
+      {tree ? (tree.expanded ? tree.children : null)
+        : item.children?.map((child) => <ItemCard key={child.id} item={child} previews={previews}
+            actorSessionId={actorSessionId} onChanged={onChanged} depth={depth + 1} />)}
     </div>
   );
 }
 
-function GrantCard({ grant, actorSessionId, onChanged }: {
+function ItemCard(props: {
+  item: GoalWorkItem;
+  previews: Record<string, WorkItemApprovalPreview | null>;
+  actorSessionId?: string | null;
+  onChanged: () => Promise<void>;
+  depth?: number;
+}) {
+  return <ItemBody {...props} />;
+}
+
+export function GrantCard({ grant, actorSessionId, onChanged }: {
   grant: GoalApprovalGrant; actorSessionId?: string | null; onChanged: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -137,7 +172,7 @@ function GrantCard({ grant, actorSessionId, onChanged }: {
   );
 }
 
-export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; actorSessionId?: string | null }) {
+export function useGoalWorkData(goalId: string, actorSessionId?: string | null) {
   const [tree, setTree] = useState<GoalWorkTree | null>(null);
   const [governance, setGovernance] = useState<GoalGovernance | null>(null);
   const [grants, setGrants] = useState<GoalApprovalGrant[]>([]);
@@ -173,6 +208,44 @@ export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; 
   useEffect(() => { setSelectedActor(actorSessionId || ""); }, [actorSessionId, goalId]);
   const activeGrants = useMemo(() => grants.filter((grant) => grant.status === "active").length, [grants]);
 
+  return { tree, governance, grants, previews, selectedActor, setSelectedActor, loading, error, load, activeGrants };
+}
+
+export function GrantsSection({ grants, governance, actorSessionId, selectedActor, setSelectedActor, onChanged }: {
+  grants: GoalApprovalGrant[];
+  governance: GoalGovernance | null;
+  actorSessionId?: string | null;
+  selectedActor: string;
+  setSelectedActor: (value: string) => void;
+  onChanged: () => Promise<void>;
+}) {
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-primary)", fontSize: 12, fontWeight: 800 }}>
+        단계별 자동승인 권한 {grants.length}건
+      </summary>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 8 }}>
+        {!actorSessionId && governance?.assignments.length ? <label style={{ gridColumn: "1 / -1", color: "var(--text-secondary)", fontSize: 11 }}>
+          회수 권한을 확인할 담당 세션
+          <select value={selectedActor} onChange={(event) => setSelectedActor(event.target.value)}
+            style={{ display: "block", width: "100%", minHeight: 44, marginTop: 4, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-card)", color: "var(--text-primary)", padding: "0 9px" }}>
+            <option value="">세션을 선택하십시오</option>
+            {governance.assignments.map((assignment) => <option key={assignment.id} value={assignment.session_id}>
+              {assignment.role_key} · {assignment.session_title || assignment.session_id}
+            </option>)}
+          </select>
+        </label> : null}
+        {grants.length ? grants.map((grant) => <GrantCard key={grant.id} grant={grant} actorSessionId={selectedActor} onChanged={onChanged} />)
+          : <div style={{ color: "var(--text-secondary)", fontSize: 11.5 }}>발급된 자동승인 권한이 없습니다. 자동승인 불가 작업은 기존 수동 승인으로 전환됩니다.</div>}
+      </div>
+    </details>
+  );
+}
+
+export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; actorSessionId?: string | null }) {
+  const { tree, governance, grants, previews, selectedActor, setSelectedActor, loading, error, load, activeGrants } =
+    useGoalWorkData(goalId, actorSessionId);
+
   return (
     <section aria-label="업무 계층과 자동승인 권한" style={{ margin: "12px 18px", padding: 13, borderRadius: 12,
       border: "1px solid var(--border)", background: "var(--bg-card)" }}>
@@ -198,25 +271,8 @@ export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; 
       {!error && tree?.items.map((item) => <ItemCard key={item.id} item={item} previews={previews}
         actorSessionId={selectedActor} onChanged={load} />)}
       {!error && (
-        <details style={{ marginTop: 12 }}>
-          <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-primary)", fontSize: 12, fontWeight: 800 }}>
-            단계별 자동승인 권한 {grants.length}건
-          </summary>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 8 }}>
-            {!actorSessionId && governance?.assignments.length ? <label style={{ gridColumn: "1 / -1", color: "var(--text-secondary)", fontSize: 11 }}>
-              회수 권한을 확인할 담당 세션
-              <select value={selectedActor} onChange={(event) => setSelectedActor(event.target.value)}
-                style={{ display: "block", width: "100%", minHeight: 44, marginTop: 4, border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-card)", color: "var(--text-primary)", padding: "0 9px" }}>
-                <option value="">세션을 선택하십시오</option>
-                {governance.assignments.map((assignment) => <option key={assignment.id} value={assignment.session_id}>
-                  {assignment.role_key} · {assignment.session_title || assignment.session_id}
-                </option>)}
-              </select>
-            </label> : null}
-            {grants.length ? grants.map((grant) => <GrantCard key={grant.id} grant={grant} actorSessionId={selectedActor} onChanged={load} />)
-              : <div style={{ color: "var(--text-secondary)", fontSize: 11.5 }}>발급된 자동승인 권한이 없습니다. 자동승인 불가 작업은 기존 수동 승인으로 전환됩니다.</div>}
-          </div>
-        </details>
+        <GrantsSection grants={grants} governance={governance} actorSessionId={actorSessionId}
+          selectedActor={selectedActor} setSelectedActor={setSelectedActor} onChanged={load} />
       )}
     </section>
   );

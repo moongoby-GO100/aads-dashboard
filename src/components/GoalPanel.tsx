@@ -12,12 +12,17 @@
  */
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { api } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
-import { GoalWorkHierarchy } from "@/components/GoalWorkHierarchy";
+import { GrantsSection, useGoalWorkData } from "@/components/GoalWorkHierarchy";
+import {
+  MilestoneWorkTree, UnassignedWork, indexWorkItems, milestoneProgressLabel, useExpansionState,
+  type WorkTreeContext,
+} from "@/components/GoalMilestoneWork";
+import { groupWorkItemsByMilestone } from "@/lib/goalMilestoneGrouping";
 
 type Milestone = {
   id: string; title: string; status: string; sequence_order: number;
@@ -193,6 +198,21 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
   const hasLead = !!board && (board.has_lead ?? board.owners.some((o) => o.is_lead));
   const crew = board?.owners.filter((o) => !o.is_lead) ?? [];
 
+  // 업무 트리·거버넌스는 패널에서 한 번만 조회하고 마일스톤별로 나눠 쓴다.
+  const actorSessionId = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "").split(/[?&]/)[0] : "";
+  const work = useGoalWorkData(goalId, actorSessionId);
+  const { isOpen, toggle } = useExpansionState(goalId);
+  const grouping = useMemo(
+    () => groupWorkItemsByMilestone(work.tree?.items ?? [], (board?.milestones ?? []).map((m) => m.id)),
+    [work.tree, board?.milestones],
+  );
+  const workCtx = useMemo<WorkTreeContext>(() => ({
+    previews: work.previews, actorSessionId: work.selectedActor, onChanged: work.load, isOpen, toggle,
+    governance: work.governance, itemsById: indexWorkItems(work.tree?.items ?? []),
+    milestoneLabels: Object.fromEntries((board?.milestones ?? []).map((m) => [m.id, `${m.sequence_order}${m.variant || ""} ${m.title}`])),
+  }), [work.previews, work.selectedActor, work.load, isOpen, toggle, work.governance, work.tree, board?.milestones]);
+  const workLoaded = !!work.tree && !work.error;
+
   return (
     <aside aria-label="목표 진행" style={{
       // 420px 에서는 마일스톤 제목이 두세 줄로 접혀 목록이 읽히지 않는다
@@ -274,10 +294,42 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
           )}
 
           {board && (
-            <GoalWorkHierarchy
-              goalId={goalId}
-              actorSessionId={typeof window !== "undefined" ? window.location.hash.replace(/^#/, "").split(/[?&]/)[0] : ""}
-            />
+            <section aria-label="업무 계층과 자동승인 권한" style={{ marginBottom: 11, padding: "10px 12px", borderRadius: 10,
+              border: "1px solid var(--border)", background: "var(--bg-card)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <strong style={{ color: "var(--text-primary)", fontSize: 12.5 }}>업무 계층 · Epic → Story → Task</strong>
+                  <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5 }}>
+                    승인 대기 {work.tree?.pending_approval_count || 0} · 활성 자동승인 {work.activeGrants} · 정책 {work.governance?.policy?.mode || "미설정"}
+                  </div>
+                </div>
+                <button type="button" onClick={() => void work.load()} disabled={work.loading}
+                  style={{ minHeight: 36, padding: "0 12px", borderRadius: 8, border: "1px solid var(--accent)", background: "transparent",
+                           color: "var(--accent)", fontWeight: 800, fontSize: 11.5, cursor: work.loading ? "wait" : "pointer" }}>
+                  {work.loading ? "불러오는 중" : "다시 불러오기"}
+                </button>
+              </div>
+              {work.error && (
+                <div role="alert" style={{ marginTop: 9, padding: 9, borderRadius: 8, border: "1px solid #dc2626", color: "#dc2626", fontSize: 11.5, lineHeight: 1.5 }}>
+                  업무 계층을 표시하지 못했습니다 · {work.error}
+                  <div style={{ marginTop: 6 }}>
+                    <button type="button" onClick={() => void work.load()} disabled={work.loading}
+                      style={{ minHeight: 36, padding: "0 12px", borderRadius: 8, border: 0, background: "#dc2626", color: "white", fontWeight: 800, fontSize: 11.5, cursor: work.loading ? "wait" : "pointer" }}>
+                      재시도
+                    </button>
+                  </div>
+                </div>
+              )}
+              {workLoaded && work.tree && work.tree.items.length === 0 && (
+                <div style={{ marginTop: 9, padding: 10, border: "1px dashed var(--border)", borderRadius: 8, color: "var(--text-secondary)", fontSize: 11.5 }}>
+                  등록된 Epic이 없습니다. Epic을 만들면 해당 마일스톤 카드 아래에 Story와 Task가 이어집니다.
+                </div>
+              )}
+              {!work.error && (
+                <GrantsSection grants={work.grants} governance={work.governance} actorSessionId={actorSessionId}
+                  selectedActor={work.selectedActor} setSelectedActor={work.setSelectedActor} onChanged={work.load} />
+              )}
+            </section>
           )}
 
           {board && total === 0 && (
@@ -293,13 +345,22 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
             const refs = evidenceRefs(m.evidence);
             const showEvidence = (m.status === "review" || m.status === "completed") && (ev || refs.length > 0);
             return (
-              <div key={m.id} style={{ marginBottom: 9, padding: "9px 11px", borderRadius: 9, border: "1px solid var(--border)", borderLeft: `3px solid ${mk.color}`, background: "var(--bg-primary)" }}>
+              <div key={m.id} style={{ marginBottom: 12 }}>
+              <div style={{ padding: "9px 11px", borderRadius: 9, border: "1px solid var(--border)", borderLeft: `3px solid ${mk.color}`, background: "var(--bg-primary)" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                   <span style={{ color: mk.color, fontWeight: 800, fontSize: 12 }}>{mk.icon}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", flex: 1 }}>
                     {m.sequence_order}{m.variant || ""} {m.title}
                   </span>
                   {m.owner_role_key && <span style={{ fontSize: 10.5, color: "var(--text-secondary)" }}>{m.owner_role_key}</span>}
+                </div>
+
+                <div style={{ marginTop: 5, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 10.5, color: "var(--text-secondary)" }}>
+                  <span>상태 {m.status}</span>
+                  {workLoaded && <span>{milestoneProgressLabel(grouping.byMilestone[m.id]?.roots ?? [])}</span>}
+                  {(board?.owners ?? []).filter((o) => o.milestone && (o.milestone === m.id || o.milestone === m.title)).map((o) => (
+                    <span key={o.session_id}>담당 세션 {o.title}</span>
+                  ))}
                 </div>
 
                 {m.completion_criteria && (
@@ -343,8 +404,16 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
                   <div style={{ marginTop: 5, fontSize: 11, color: "#d97706" }}>✏ 의견·수정 요청 {m.open_notes}건 — 응답 대기</div>
                 )}
               </div>
+              <MilestoneWorkTree milestoneId={m.id} roots={grouping.byMilestone[m.id]?.roots ?? []}
+                itemCount={grouping.byMilestone[m.id]?.itemCount ?? 0} loaded={workLoaded}
+                defaultOpen={total <= 6} ctx={workCtx} />
+              </div>
             );
           })}
+
+          {board && workLoaded && (
+            <UnassignedWork roots={grouping.unassigned} count={grouping.unassignedCount} ctx={workCtx} />
+          )}
 
         </div>
 
