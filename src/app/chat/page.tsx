@@ -63,6 +63,7 @@ import { createChatRuntime } from "@/features/chat/runtime/createChatRuntime";
 import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusScheduler";
 import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
 import { PANEL_BODY_FONT_PX, PANEL_SIDE_PADDING_PX, readPanelSurface } from "@/lib/chatPanelSurface";
+import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/chatDeepLink";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -345,7 +346,7 @@ let _messagePrefetch: PrefetchedMessages | null = null;
 
 function startMessagePrefetch(): void {
   if (typeof window === "undefined" || _messagePrefetch) return;
-  const sid = window.location.hash.replace(/^#/, "").trim();
+  const sid = chatHashSessionId(window.location.hash);
   // UUID 모양이 아니면 세션 id 가 아니다.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sid)) return;
   _messagePrefetch = {
@@ -4366,6 +4367,23 @@ export default function ChatPage() {
   // 띠를 누르면 우측 패널이 열린다. 대화는 그대로 있다 — 창을 떠나지
   // 않고 근거를 보고 그 자리에서 판정하고 바로 되물을 수 있다.
   const [panelGoalId, setPanelGoalId] = useState<string | null>(null);
+  // /chat?goal=<uuid>#<sid> 또는 /chat#<sid>?goal=<uuid> 로 들어오면 세션이 잡힌 뒤 한 번 연다.
+  const pendingDeepLinkGoalRef = useRef<string | null>(null);
+  useEffect(() => {
+    pendingDeepLinkGoalRef.current = parseGoalDeepLink(window.location.search, window.location.hash);
+  }, []);
+  useEffect(() => {
+    const goalId = pendingDeepLinkGoalRef.current;
+    if (!goalId || !activeSession) return;
+    pendingDeepLinkGoalRef.current = null;
+    setPanelGoalId(goalId);
+  }, [activeSession]);
+  // 패널을 닫으면(또는 값이 잘못됐으면) 주소에서 goal 을 지워 새로고침 시 다시 열리지 않게 한다.
+  useEffect(() => {
+    if (panelGoalId || pendingDeepLinkGoalRef.current) return;
+    const next = stripGoalFromUrl(window.location.pathname, window.location.search, window.location.hash);
+    if (next) window.history.replaceState(null, "", next);
+  }, [panelGoalId]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -6524,7 +6542,7 @@ export default function ChatPage() {
 
         // 1. URL hash에서 세션 ID 추출
         const hashSid = typeof window !== "undefined" && window.location.hash
-          ? window.location.hash.replace(/^#/, "")
+          ? chatHashSessionId(window.location.hash)
           : null;
 
         // 2. hash 세션이 있으면 해당 세션의 워크스페이스를 먼저 확인
@@ -6618,7 +6636,7 @@ export default function ChatPage() {
           return;
         }
         // localStorage에 저장된 세션 복원 시도
-        const hashSid = typeof window !== "undefined" && window.location.hash ? window.location.hash.replace(/^#/, "") : null;
+        const hashSid = typeof window !== "undefined" && window.location.hash ? chatHashSessionId(window.location.hash) : null;
         const lsSid = localStorage.getItem(`aads-chat-activeSession-${activeWs}`);
         const savedSid = hashSid || lsSid;
         const match = savedSid ? loaded.find((s) => s.id === savedSid) : null;
@@ -6669,7 +6687,7 @@ export default function ChatPage() {
     if (activeSession?.id && activeWs) {
       localStorage.setItem(`aads-chat-activeSession-${activeWs}`, activeSession.id);
       if (typeof window !== "undefined") {
-        const currentHash = window.location.hash.replace(/^#/, "");
+        const currentHash = chatHashSessionId(window.location.hash);
         if (currentHash !== activeSession.id) {
           window.history.replaceState(null, "", `#${activeSession.id}`);
         }

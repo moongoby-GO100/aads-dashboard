@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { syncTokenCookieFromStorage } from "@/lib/auth";
+import { chatHashSessionId } from "@/lib/chatDeepLink";
 import { resolveRouteTitle } from "@/lib/navigation";
 import { CHAT_SESSION_TITLE_EVENT, type ChatSessionTitleEventDetail } from "@/lib/pageTitleEvents";
 import { SESSION_ATTENTION_EVENT, type SessionAttentionCounts } from "@/lib/sessionAttention";
@@ -18,7 +19,7 @@ function formatDocumentTitle(title: string, suffix = APP_SUFFIX): string {
 
 function currentChatSessionId(): string | null {
   if (typeof window === "undefined") return null;
-  const raw = window.location.hash.replace(/^#/, "").trim();
+  const raw = chatHashSessionId(window.location.hash);
   if (!raw) return null;
   try {
     return decodeURIComponent(raw);
