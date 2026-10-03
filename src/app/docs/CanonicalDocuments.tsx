@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type CanonicalDocument, type CanonicalDocumentDetail, type CanonicalDocumentHistory } from "@/lib/api";
 import { canTransitionDocumentForHead } from "@/lib/canonicalDocumentWorkflow";
+import { canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
 
 const STATUS: Record<string, string> = { draft: "초안", review: "검토", approved: "승인", archived: "보관" };
 const KIND: Record<string, string> = {
@@ -24,12 +25,25 @@ function kst(value: string | null | undefined): string {
   }).format(date) + " KST";
 }
 
-function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : "네트워크 오류";
-  if (message.includes("401")) return "로그인이 만료되었습니다. 다시 로그인한 뒤 재시도하세요.";
-  if (message.includes("403")) return "이 프로젝트의 문서 접근 권한이 없습니다. 권한을 확인한 뒤 재시도하세요.";
-  if (message.includes("409")) return "문서 상태가 변경되었습니다. 새로고침 후 다시 시도하세요.";
-  return `문서를 불러오거나 변경하지 못했습니다. 연결을 확인하고 재시도하세요. (${message})`;
+type Problem = { kind: CanonicalErrorKind; text: string };
+
+function problemOf(error: unknown, project: string): Problem {
+  const kind = canonicalErrorKind(error);
+  if (kind === "auth") return { kind, text: "로그인이 만료되었습니다. 다시 로그인한 뒤 재시도하세요." };
+  if (kind === "forbidden") return { kind, text: `${project} 프로젝트의 문서 접근 권한이 없습니다. 다른 프로젝트를 선택하거나 권한을 확인한 뒤 재시도하세요.` };
+  if (kind === "conflict") return { kind, text: "문서 상태가 변경되었습니다. 새로고침 후 다시 시도하세요." };
+  const raw = error instanceof Error ? error.message : "네트워크 오류";
+  const message = raw.replace(/https?:\/\/\S+/g, "[URL]").slice(0, 120);
+  return { kind, text: `문서를 불러오거나 변경하지 못했습니다. 연결을 확인하고 재시도하세요. (${message})` };
+}
+
+function ProblemBox({ problem }: { problem: Problem }) {
+  return (
+    <div role="alert" className="mb-3 rounded-lg border border-red-700 p-3 text-sm">
+      <p>{problem.text}</p>
+      {problem.kind === "auth" && <Link href="/login?next=%2Fdocs" className="mt-2 inline-block underline">로그인 복구</Link>}
+    </div>
+  );
 }
 
 export default function CanonicalDocuments({ project, projects, onProjectChange }: {
@@ -38,7 +52,9 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
   onProjectChange: (project: string) => void;
 }) {
   const [documents, setDocuments] = useState<CanonicalDocument[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ project: string; key: string } | null>(null);
+  const selected = selection?.project === project ? selection.key : null;
+  const setSelected = (key: string | null) => setSelection(key ? { project, key } : null);
   const [detail, setDetail] = useState<CanonicalDocumentDetail | null>(null);
   const [history, setHistory] = useState<CanonicalDocumentHistory | null>(null);
   const [approved, setApproved] = useState<CanonicalDocumentDetail | null>(null);
@@ -46,14 +62,16 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [error, setError] = useState<Problem | null>(null);
+  const [detailError, setDetailError] = useState<Problem | null>(null);
   const [pending, setPending] = useState<"review" | "approve" | "archive" | null>(null);
   const [saving, setSaving] = useState(false);
   const listRequest = useRef(0);
   const detailRequest = useRef(0);
+  const projectRef = useRef(project);
 
   const reloadList = useCallback(async () => {
+    if (projectRef.current !== project) return;
     const requestId = ++listRequest.current;
     setLoading(true);
     setError(null);
@@ -61,13 +79,17 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
       const response = await api.listCanonicalDocuments(project, query);
       if (requestId === listRequest.current) setDocuments(response.documents);
     } catch (cause) {
-      if (requestId === listRequest.current) setError(errorText(cause));
+      if (requestId === listRequest.current) {
+        setDocuments([]);
+        setError(problemOf(cause, project));
+      }
     } finally {
       if (requestId === listRequest.current) setLoading(false);
     }
   }, [project, query]);
 
   const reloadDetail = useCallback(async (key: string) => {
+    if (projectRef.current !== project) return;
     const requestId = ++detailRequest.current;
     setDetailLoading(true);
     setDetailError(null);
@@ -83,19 +105,24 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
         setApproved(currentApproved);
       }
     } catch (cause) {
-      if (requestId === detailRequest.current) setDetailError(errorText(cause));
+      if (requestId === detailRequest.current) setDetailError(problemOf(cause, project));
     } finally {
       if (requestId === detailRequest.current) setDetailLoading(false);
     }
   }, [project]);
 
   useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
     ++detailRequest.current;
-    setSelected(null);
     setPending(null);
     setDetail(null);
     setHistory(null);
     setApproved(null);
+    setDetailError(null);
+    setDetailLoading(false);
     void reloadList();
   }, [reloadList]);
 
@@ -118,10 +145,10 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
       setPending(null);
       await Promise.all([reloadList(), reloadDetail(selected)]);
     } catch (cause) {
-      const message = errorText(cause);
+      const problem = problemOf(cause, project);
       setPending(null);
       await Promise.all([reloadList(), reloadDetail(selected)]);
-      setDetailError(message);
+      if (projectRef.current === project) setDetailError(problem);
     } finally {
       setSaving(false);
     }
@@ -132,8 +159,8 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">프로젝트</span>
-          {[...new Set(["AADS", ...projects])].map((name) => (
-            <button key={name} type="button" onClick={() => onProjectChange(name)}
+          {mergeCanonicalProjects(projects).map((name) => (
+            <button key={name} type="button" onClick={() => onProjectChange(name)} aria-pressed={project === name}
               className="min-h-10 rounded-lg px-3 text-sm"
               style={project === name ? { background: "var(--accent)", color: "#fff" } : { border: "1px solid var(--border)" }}>
               {name}
@@ -151,9 +178,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
                 placeholder="문서명 또는 내용 검색" className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 text-sm" style={{ borderColor: "var(--border)" }} />
               <button type="submit" className="min-h-11 rounded-lg px-4 text-sm" style={{ border: "1px solid var(--border)" }}>검색</button>
             </form>
-            {error && <div role="alert" className="mb-3 rounded-lg border border-red-700 p-3 text-sm">
-              <p>{error}</p><Link href="/login?next=%2Fdocs" className="mt-2 inline-block underline">로그인 복구</Link>
-            </div>}
+            {error && <ProblemBox problem={error} />}
             {loading && <p className="text-sm">목록을 불러오는 중…</p>}
             {!loading && !error && documents.length === 0 && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>{query ? "검색 결과가 없습니다." : "승인된 정본 없음 · 등록된 문서가 없습니다."}</p>}
             {!loading && !error && <div className="space-y-2">
@@ -177,7 +202,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
                 <h2 className="font-semibold">현재 문서와 개정 이력</h2>
                 <button type="button" onClick={() => void reloadDetail(selected)} className="min-h-10 rounded-lg px-3 text-sm" style={{ border: "1px solid var(--border)" }}>재시도</button>
               </div>
-              {detailError && <div role="alert" className="mb-3 rounded-lg border border-red-700 p-3 text-sm"><p>{detailError}</p><Link href="/login?next=%2Fdocs" className="mt-2 inline-block underline">로그인 복구</Link></div>}
+              {detailError && <ProblemBox problem={detailError} />}
               {detailLoading && <p className="text-sm">상세를 불러오는 중…</p>}
               {!detailLoading && detail && <div className="space-y-4 text-sm">
                 <div>

@@ -1,0 +1,182 @@
+[
+ {
+  "name": "desktop/scan=pending: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=pending: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=pending: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=pending: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=pending: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=error: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=error: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=error: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=error: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=error: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=ok: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=ok: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=ok: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=ok: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "desktop/scan=ok: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=pending: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=pending: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=pending: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=pending: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=pending: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=error: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=error: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=error: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=error: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=error: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=ok: ACCT button visible",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=ok: ACCT list 4 docs",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=ok: pilot119 approved body+revision",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=ok: AADS pilot74/92/109/110 listed",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "mobile/scan=ok: AADS pilot92 latest+approved pointer",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "stale: slow AADS list does not overwrite ACCT",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "403: grant message shown",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "403: no login-recovery link",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "403: retry button present",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "403: switching to ACCT recovers",
+  "ok": true,
+  "note": ""
+ },
+ {
+  "name": "files tab: scanned file still listed after canonical ACCT selection",
+  "ok": true,
+  "note": ""
+ }
+]

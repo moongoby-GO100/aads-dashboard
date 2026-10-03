@@ -533,6 +533,7 @@ export default function DocsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>("all");
+  const [canonicalProject, setCanonicalProject] = useState<string>("AADS");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [search, setSearch] = useState("");
   // 파일명 검색과 내용 검색을 나눈다. 파일명 검색은 무엇을 찾는지 이미
@@ -904,9 +905,9 @@ export default function DocsPage() {
       </div>
 
       {activeTab === "canonical" ? (
-        <CanonicalDocuments project={selectedProject === "all" ? "AADS" : selectedProject}
+        <CanonicalDocuments project={canonicalProject}
           projects={data?.projects?.map((item) => item.project) || []}
-          onProjectChange={setSelectedProject} />
+          onProjectChange={setCanonicalProject} />
       ) : (
 
       <div ref={layoutRef} className="flex-1 flex overflow-hidden">
