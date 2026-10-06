@@ -539,6 +539,65 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Vault 보안 입력(채팅 카드) — 비밀번호가 오가는 호출이라 일반 request() 를 쓰지 않는다.
+// request() 는 실패 시 응답 본문을 Error 메시지에 싣는다. 여기서는 본문을 버리고
+// 오류 코드(detail.error)와 상태만 돌려준다. 어떤 값도 console/로그에 남기지 않는다.
+export type VaultCredentialRequestStatus =
+  | "pending" | "submitted" | "verified" | "failed" | "expired" | "cancelled";
+
+export interface VaultCredentialRequestView {
+  id: string;
+  status: VaultCredentialRequestStatus;
+  origin: string;
+  host: string;
+  login_url: string;
+  reason?: string;
+  expires_at?: string | null;
+}
+
+export type VaultCredentialCallResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; code: string; requestStatus?: string; retryAfter?: number };
+
+async function vaultCredentialRequestCall<T>(path: string, init?: RequestInit): Promise<VaultCredentialCallResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/agent-vault/credential-requests/${path}`, {
+      ...init,
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    });
+  } catch {
+    return { ok: false, status: 0, code: "network" };
+  }
+  if (res.status === 401) {
+    handle401Redirect();
+    return { ok: false, status: 401, code: "unauthorized" };
+  }
+  if (!res.ok) {
+    let code = "";
+    let requestStatus: string | undefined;
+    try {
+      const body = (await res.json()) as { detail?: { error?: unknown; status?: unknown } | string };
+      const detail = body?.detail;
+      if (detail && typeof detail === "object") {
+        if (typeof detail.error === "string") code = detail.error;
+        if (typeof detail.status === "string") requestStatus = detail.status;
+      }
+    } catch {
+      // 본문이 JSON 이 아니면 상태 코드만 쓴다.
+    }
+    const ra = Number(res.headers.get("Retry-After"));
+    return { ok: false, status: res.status, code, requestStatus, retryAfter: Number.isFinite(ra) && ra > 0 ? ra : undefined };
+  }
+  try {
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, status: res.status, code: "invalid_response" };
+  }
+}
+
 const _meInflight = new Map<string, Promise<MeResponse | null>>();
 
 export const api = {
@@ -1193,6 +1252,18 @@ export const api = {
   },
   issueAgentVaultAutofillToken: (data: { credential_id: string; work_key: string; origin: string; ttl_seconds?: number }) =>
     request<unknown>("/agent-vault/autofill-token", { method: "POST", body: JSON.stringify(data) }),
+  getVaultCredentialRequest: (requestId: string) =>
+    vaultCredentialRequestCall<{ request: VaultCredentialRequestView }>(encodeURIComponent(requestId)),
+  submitVaultCredentialRequest: (requestId: string, data: { username: string; password: string }) =>
+    vaultCredentialRequestCall<{ status: string; request_id: string; host?: string }>(
+      `${encodeURIComponent(requestId)}/submit`,
+      { method: "POST", body: JSON.stringify({ username: data.username, password: data.password }) },
+    ),
+  cancelVaultCredentialRequest: (requestId: string) =>
+    vaultCredentialRequestCall<{ status: string; request_id: string }>(
+      `${encodeURIComponent(requestId)}/cancel`,
+      { method: "POST" },
+    ),
   getAgentVaultAccessLogs: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

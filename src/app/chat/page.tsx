@@ -13,6 +13,7 @@ import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
+import VaultCredentialCard, { type VaultCredentialCardData } from "@/components/chat/VaultCredentialCard";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
@@ -2765,6 +2766,9 @@ interface MessageItemProps {
   }>;
   approvalBusyId?: string | null;
   onDecideApproval?: (id: string, decision: "approved" | "rejected", scope?: ApprovalScope) => void;
+  /** Vault 보안 입력 카드 — 승인 버튼 대신 아이디·비밀번호 폼으로 그린다 */
+  bubbleVaultCards?: VaultCredentialCardData[];
+  onDismissVaultCard?: (id: string) => void;
   /** 승인 대신 말로 고쳐 주실 때 — 카드는 대기 상태로 남는다 */
   onExtraInstruction?: (text: string) => void;
 }
@@ -2782,6 +2786,7 @@ const MessageItem = memo(function MessageItem({
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
   onApplyPendingInterrupt, onCancelPendingInterrupt, onRetractMessage,
   bubbleApprovals, approvalBusyId, onDecideApproval, onExtraInstruction,
+  bubbleVaultCards, onDismissVaultCard,
 }: MessageItemProps) {
   const [extraOpen, setExtraOpen] = useState(false);
   const [extraText, setExtraText] = useState("");
@@ -3783,6 +3788,9 @@ const MessageItem = memo(function MessageItem({
             critical 은 인라인 버튼을 만들지 않는다. 버블 안에서 습관적으로
             누르시는 순간 게이트가 무력해진다 — 주문·자금 경로는 팝업에서
             개별 승인만 받는다. */}
+        {msg.role === "assistant" && (bubbleVaultCards?.length ?? 0) > 0 && bubbleVaultCards!.map((vc) => (
+          <VaultCredentialCard key={vc.id} card={vc} onDismiss={onDismissVaultCard} />
+        ))}
         {msg.role === "assistant" && (bubbleApprovals?.length ?? 0) > 0 && (
           <div style={{
             marginTop: 10, padding: "10px 12px", borderRadius: 10,
@@ -4428,6 +4436,12 @@ export default function ChatPage() {
     gate_source?: string; source_message_id?: string | null;
   }>>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
+  // Vault 보안 입력 카드는 제출하면 서버의 승인 대기 목록에서 빠진다. 로그인 확인
+  // 결과까지 보여 줘야 하므로 한 번 본 카드는 사용자가 닫을 때까지 여기에 남긴다.
+  const [vaultCards, setVaultCards] = useState<VaultCredentialCardData[]>([]);
+  const dismissVaultCard = useCallback((id: string) => {
+    setVaultCards((prev) => prev.filter((c) => c.id !== id));
+  }, []);
   // 여러 건을 한 번에 처리하는 체크박스 선택 — critical 등급은 실수 방지를
   // 위해 선택 대상에서 제외하고 개별 클릭만 받는다 (2026-09-15).
   const [selectedApprovalIds, setSelectedApprovalIds] = useState<Set<string>>(new Set());
@@ -4484,6 +4498,20 @@ export default function ChatPage() {
     }
     return m;
   }, [approvals, attachableMessageIds]);
+  const vaultCardsByMessage = useMemo(() => {
+    const m = new Map<string, VaultCredentialCardData[]>();
+    for (const c of vaultCards) {
+      const mid = c.sourceMessageId || "";
+      if (!mid || !attachableMessageIds.has(mid)) continue;
+      const cur = m.get(mid);
+      if (cur) cur.push(c); else m.set(mid, [c]);
+    }
+    return m;
+  }, [vaultCards, attachableMessageIds]);
+  const bottomVaultCards = useMemo(
+    () => vaultCards.filter((c) => !(c.sourceMessageId && attachableMessageIds.has(c.sourceMessageId))),
+    [vaultCards, attachableMessageIds],
+  );
   const inlineApprovalIds = useMemo(
     () => new Set(
       approvals
@@ -4537,9 +4565,33 @@ export default function ChatPage() {
         pending?: Array<{
           id: string; tool: string; summary: string; at: string; risk?: string;
           gate_source?: string; source_message_id?: string | null;
+          credential_request?: { id?: string | null; host?: string; login_url?: string } | null;
         }>;
       }>(`/approvals/pending?session_id=${encodeURIComponent(sid)}`);
-      setApprovals(r.pending || []);
+      const pending = r.pending || [];
+      const regular: typeof pending = [];
+      const vault: VaultCredentialCardData[] = [];
+      for (const a of pending) {
+        if (a.gate_source === "vault_credential_input" || a.tool === "vault_credential_input") {
+          const cr = a.credential_request;
+          if (cr?.id) {
+            vault.push({
+              id: a.id, requestId: cr.id, host: cr.host || "", loginUrl: cr.login_url || "",
+              sourceMessageId: a.source_message_id ?? null,
+            });
+          }
+          continue;
+        }
+        regular.push(a);
+      }
+      setApprovals(regular);
+      if (vault.length > 0) {
+        setVaultCards((prev) => {
+          const known = new Set(prev.map((c) => c.id));
+          const added = vault.filter((c) => !known.has(c.id));
+          return added.length > 0 ? [...prev, ...added] : prev;
+        });
+      }
     } catch {
       // 승인 조회 실패가 대화를 막으면 안 된다.
     }
@@ -4610,6 +4662,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     const sid = activeSession?.id;
+    setVaultCards([]);
     if (!sid) { setApprovals([]); return; }
     void refreshApprovals(sid);
     const iv = window.setInterval(() => {
@@ -12794,6 +12847,8 @@ export default function ChatPage() {
                     onCancelPendingInterrupt={cancelOnePendingInterrupt}
                     onRetractMessage={retractMessage}
                     bubbleApprovals={approvalsByMessage.get(msg.id)}
+                    bubbleVaultCards={vaultCardsByMessage.get(msg.id)}
+                    onDismissVaultCard={dismissVaultCard}
                     approvalBusyId={approvalBusy}
                     onDecideApproval={(id, decision, scope) => void decideApproval(id, decision, scope)}
                     onExtraInstruction={(text) => { void sendMessage(text); }}
@@ -13113,6 +13168,10 @@ export default function ChatPage() {
             </button>,
             document.body,
           )}
+
+          {bottomVaultCards.map((vc) => (
+            <VaultCredentialCard key={vc.id} card={vc} onDismiss={dismissVaultCard} />
+          ))}
 
           {bottomApprovals.length > 0 && (
             <div style={{
