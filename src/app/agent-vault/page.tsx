@@ -225,7 +225,7 @@ export default function AgentVaultPage() {
   const [credentials, setCredentials] = useState<VaultCredential[]>([]);
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [workKey, setWorkKey] = useState(getInitialWorkKey);
-  const [originFilter, setOriginFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [targetUrl, setTargetUrl] = useState("https://aads.newtalk.kr/login");
   const [origin, setOrigin] = useState("https://aads.newtalk.kr");
   const [label, setLabel] = useState("대표 계정");
@@ -252,10 +252,25 @@ export default function AgentVaultPage() {
     () => credentials.find((credential) => credential.id === selectedId) || credentials[0],
     [credentials, selectedId],
   );
-  const filteredCredentials = useMemo(
-    () => credentials.filter((credential) => !originFilter || credential.origin.includes(originFilter)),
-    [credentials, originFilter],
-  );
+  const filteredCredentials = useMemo(() => {
+    const terms = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return credentials;
+    return credentials.filter((credential) => {
+      const meta = credential.metadata || {};
+      const haystack = [
+        meta.service_name,
+        credential.label,
+        credential.origin,
+        meta.target_url,
+        credential.username,
+        credential.work_key,
+        meta.project,
+        meta.owner,
+        ...(Array.isArray(meta.tags) ? meta.tags : []),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [credentials, searchQuery]);
   const activeCount = credentials.filter((credential) => credential.is_active !== false).length;
   const askCount = credentials.filter((credential) => (credential.metadata?.policy || "ask") === "ask").length;
   const recentUseCount = logs.filter((log) => {
@@ -269,7 +284,7 @@ export default function AgentVaultPage() {
     setError(null);
     try {
       const [credentialRes, logRes] = await Promise.all([
-        api.getAgentVaultCredentials({ work_key: workKey || undefined, origin: originFilter || undefined }),
+        api.getAgentVaultCredentials({ work_key: workKey || undefined }),
         api.getAgentVaultAccessLogs({ limit: 50 }),
       ]);
       const credentialData = credentialRes as { credentials?: VaultCredential[] };
@@ -565,13 +580,20 @@ export default function AgentVaultPage() {
               {WORK_KEYS.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <input
-              className="rounded border px-3 py-2 text-sm"
-              placeholder="origin 필터"
-              value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") refresh(); }}
+              type="search"
+              className="w-64 rounded border px-3 py-2 text-sm"
+              placeholder="서비스명·주소·아이디·태그 검색"
+              aria-label="계정 검색"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") setSearchQuery(""); }}
               style={{ background: "var(--bg-primary)", borderColor: "var(--border)" }}
             />
+            {searchQuery.trim() && (
+              <span className="self-center text-xs" style={{ color: "var(--text-secondary)" }}>
+                {filteredCredentials.length} / {credentials.length}건
+              </span>
+            )}
           </div>
         </div>
 
@@ -639,7 +661,7 @@ export default function AgentVaultPage() {
                   {!loading && filteredCredentials.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
-                        등록된 계정이 없습니다.
+                        {searchQuery.trim() ? `"${searchQuery.trim()}" 검색 결과가 없습니다.` : "등록된 계정이 없습니다."}
                       </td>
                     </tr>
                   )}
