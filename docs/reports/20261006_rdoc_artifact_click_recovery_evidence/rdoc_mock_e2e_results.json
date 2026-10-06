@@ -1,0 +1,154 @@
+{
+  "kind": "MOCK_API_ISOLATED_PREVIEW",
+  "base": "http://127.0.0.1:3927",
+  "token": "MOCK (fake)",
+  "results": [
+    {
+      "case": "desktop 정본 클릭 → 본문 표시",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 정본 한글 제목 표시",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 정본 메타(개정/상태) 표시",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 정본은 인증 /content API 로 조회(revision=3)",
+      "pass": true,
+      "detail": "GET /projects/AADS/documents/rdoc-click-recovery-plan/content?revision=3"
+    },
+    {
+      "case": "desktop 세션 문서 목록 클릭 → 화면 이탈 없음",
+      "pass": true,
+      "detail": "http://127.0.0.1:3927/chat#11111111-2222-4333-8444-555555555555"
+    },
+    {
+      "case": "desktop 세션 문서 목록 클릭 → 인증 /content 재조회 + 본문 열림",
+      "pass": true,
+      "detail": "calls 1->2"
+    },
+    {
+      "case": "desktop HTML 은 sandbox iframe 로 격리(속성 존재, same-origin/scripts 미허용)",
+      "pass": true,
+      "detail": "sandbox=''"
+    },
+    {
+      "case": "desktop HTML 스크립트가 상위 문서에 영향 없음",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop HTML 저장 제목 표시",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 레거시 PDF(인증 fetch 바이너리)는 blob 내려받기 링크(인증 없는 raw URL 아님)",
+      "pass": true,
+      "detail": "blob:http://127.0.0.1:3927/640ad996-fb7b-490e-bdbf-01703977c"
+    },
+    {
+      "case": "desktop 레거시 한글/공백 파일 링크 → 본문",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop /content 미배포 서버 → 상세 API 폴백으로 열림",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 403: '불러오는 중' 고착 없음",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 403: 복구 동작(문서 정본에서 찾기) + 다시 시도 노출",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 404: '불러오는 중' 고착 없음",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 404: 복구 동작(문서 정본에서 찾기) + 다시 시도 노출",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 직접 링크 401: '불러오는 중' 고착 없음",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 직접 링크 401: 로그인 복구 링크(next/reason) + 다시 시도",
+      "pass": true,
+      "detail": "/login?next=%2Fchat&reason=session_expired"
+    },
+    {
+      "case": "desktop 503 반복 → 실패 상태 + 다시 시도",
+      "pass": true,
+      "detail": "calls=3"
+    },
+    {
+      "case": "desktop 다시 시도 → 본문 열림",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 응답 무응답 → 제한시간 후 실패 상태(영구 로딩 아님)",
+      "pass": true,
+      "detail": "62s, calls=3"
+    },
+    {
+      "case": "운영 호스트/외부 호출 0건(격리)",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "desktop 정본 401 → 로그인 복구 화면(next·reason=session_expired)",
+      "pass": true,
+      "detail": "http://127.0.0.1:3927/login?next=%2Fchat&reason=session_expired"
+    },
+    {
+      "case": "desktop 로그인 화면 만료 안내 문구",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "mobile 정본 클릭 → 패널 오버레이에 본문",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "mobile 한글 제목 표시",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "mobile 한글 제목·본문 모두 뷰포트 폭 안",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "mobile 404: 복구 동작(다시 시도·정본에서 찾기) 노출",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "mobile 404: '불러오는 중' 고착 없음",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "passed": 29,
+  "total": 29
+}

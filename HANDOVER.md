@@ -2874,3 +2874,10 @@ Validation: typecheck passed; chat regression 49/49 passed (previously 48/49). R
 
 - An older report that the reader explicitly expanded no longer collapses when polling changes its content length. The viewport controller retains the last user-selected anchor when a layout change emits a passive scroll event and repairs an unexpected top reset in manual reading mode.
 - Regression: viewport controller T01–T06, chat tests, and TypeScript typecheck. Dashboard lint has 29 pre-existing warnings against its 23-warning gate; this change adds no lint error. Production screen verification and release outcome are recorded in DB handover key `aads.chat.reading-scroll-20260923`.
+
+## 2026-10-06 — 채팅 저장 문서 클릭 → 아티팩트 열람 복구 (AADS-RDOC-ARTIFACT-CLICK-RECOVERY-20261006)
+
+- 정본 문서 링크 `/docs?tab=canonical&project&document_key[&revision]` 를 채팅에서 클릭하면 로그인 세션 인증으로 `/projects/{P}/documents/{key}/content` 를 읽어 아티팩트 패널에 한글 제목·본문을 연다. `/content` 미배포 서버는 상세 API 로 폴백. 실패 시 타임아웃(20초)·재시도·로그인/정본 찾기 복구 버튼.
+- 검증: typecheck, selftest 12/12, test:chat 60/60, vitest 51/51 통과. 격리 미리보기(모킹 API) Playwright 29/29. `lint:chat` 은 기존 경고 29(> 상한 23)로 실패하며 신규 경고 없음.
+- 미실행/미확인: 로그인된 실제 브라우저 E2E, 운영 배포, 운영 backend `/content` 반영 여부. 승인 게이트 `screen_e2e_evidence_required` 증거(aads.e2e_verify.v1)는 배포 후 Runner 가 생성해야 한다.
+- 상세: `docs/reports/20261006_RDOC_ARTIFACT_CLICK_RECOVERY.md`, 증거 `docs/reports/20261006_rdoc_artifact_click_recovery_evidence/`. DB handover 키 `rdoc-unified-artifact-recovery-20261006` 는 도구 부재로 미기록.

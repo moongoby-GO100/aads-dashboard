@@ -9,6 +9,8 @@ import { MarkdownBlock } from "./MarkdownRenderer";
 import MermaidDiagram from "@/components/MermaidDiagram";
 import { BASE_URL, authHdrs, chatApi, updateArtifact } from "./api";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
+import { buildCanonicalDocHref } from "@/lib/canonicalDocLinks";
+import { isArtifactPreviewHref } from "@/lib/documentLinks";
 import {
   openIsolatedHtmlPreview,
   openStaticTextPreview,
@@ -199,6 +201,13 @@ export interface ChatArtifactPanelProps {
     source?: string; source_label?: string; repo?: string; view_url?: string | null;
   }>;
   sessionOtherFiles?: number;
+  // 이 대화가 정본(project_document_*)에 등록한 문서. 열람은 인증 API 로만 한다.
+  sessionCanonicalDocs?: Array<{
+    project: string; document_key: string; revision?: number | null;
+    title?: string | null; approved?: boolean; at?: string | null;
+  }>;
+  // 문서 링크를 아티팩트 본문으로 연다(채팅 링크와 같은 처리기).
+  onOpenDocument?: (href: string, label: string) => void | Promise<void>;
   filteredArtifacts: Artifact[];
   activeArtifact: Artifact | null;
   selectedArtifactIdx: number;
@@ -1060,6 +1069,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     mobileOverlay, setMobileOverlay,
     artifacts, artifactTab, setArtifactTab, artifactCounts,
     sessionDocs = [], sessionOtherFiles = 0,
+    sessionCanonicalDocs = [], onOpenDocument,
     systemMessages, unreadLogCount,
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective, sendDirectiveNow, regenerateDirective, deleteDirective, sessionId,
@@ -2363,7 +2373,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                 </div>
               ) : artifactTab === "files" ? (
                 <div style={{ padding: "10px 12px", overflowY: "auto", height: "100%" }}>
-                  {sessionDocs.length === 0 ? (
+                  {sessionDocs.length === 0 && sessionCanonicalDocs.length === 0 ? (
                     <div style={{ padding: 22, textAlign: "center", color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7 }}>
                       이 대화가 파일로 저장한 문서가 아직 없습니다.
                       <br />
@@ -2379,10 +2389,61 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     </div>
                   ) : (
                     <>
+                      {sessionCanonicalDocs.length > 0 && (
+                        <div data-testid="session-canonical-docs" style={{ marginBottom: 12 }}>
+                          <div style={{ marginBottom: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
+                            정본 문서 {sessionCanonicalDocs.length}건
+                          </div>
+                          {sessionCanonicalDocs.map((c) => {
+                            const href = buildCanonicalDocHref({
+                              project: c.project,
+                              documentKey: c.document_key,
+                              revision: c.revision ?? undefined,
+                            });
+                            const label = (c.title || "").trim() || c.document_key;
+                            return (
+                              <a
+                                key={`${c.project}/${c.document_key}/${c.revision ?? "latest"}`}
+                                href={href}
+                                data-testid="session-canonical-doc"
+                                title={`${c.project} · ${c.document_key}`}
+                                onClick={(e) => {
+                                  if (!onOpenDocument) return;
+                                  e.preventDefault();
+                                  void onOpenDocument(href, label);
+                                }}
+                                style={{
+                                  display: "block", marginBottom: 6, padding: "8px 10px", borderRadius: 8,
+                                  border: "1px solid var(--border)", background: "var(--bg-primary)",
+                                  textDecoration: "none", cursor: "pointer",
+                                }}
+                              >
+                                <div style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
+                                  <span>📘</span>
+                                  <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-primary)", wordBreak: "break-all" }}>
+                                    {label}
+                                  </span>
+                                  <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)",
+                                                 border: "1px solid var(--border)", borderRadius: 5,
+                                                 padding: "1px 5px", whiteSpace: "nowrap" }}>
+                                    {c.approved ? "승인됨" : "초안"}
+                                  </span>
+                                </div>
+                                <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                                  {c.project} · {c.document_key}
+                                  {c.revision != null && ` · 개정 ${c.revision}`}
+                                </div>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {sessionDocs.length > 0 && (
                       <div style={{ marginBottom: 8, fontSize: 11.5, color: "var(--text-secondary)" }}>
                         문서 {sessionDocs.length}건
                         {sessionOtherFiles > 0 && ` · 문서가 아닌 파일 ${sessionOtherFiles}건은 제외`}
                       </div>
+                      )}
                       {sessionDocs.map((d) => {
                         // 링크는 뷰어가 실제로 열 수 있을 때만 건다.
                         // 예전에는 `/docs?path=` 로 걸었는데 /docs 는
@@ -2417,7 +2478,19 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                           textDecoration: "none",
                         };
                         return d.view_url ? (
-                          <a key={d.path} href={d.view_url} title={d.path} style={box}>{body}</a>
+                          <a
+                            key={d.path}
+                            href={d.view_url}
+                            title={d.path}
+                            data-testid="session-doc-link"
+                            style={box}
+                            onClick={(e) => {
+                              // 새 화면(/docs)으로 이탈하지 않고 우측 아티팩트에서 연다.
+                              if (!onOpenDocument || !d.view_url || !isArtifactPreviewHref(d.view_url)) return;
+                              e.preventDefault();
+                              void onOpenDocument(d.view_url, d.name);
+                            }}
+                          >{body}</a>
                         ) : (
                           <div key={d.path} title={d.path} style={{ ...box, cursor: "default" }}>{body}</div>
                         );
@@ -2749,6 +2822,55 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                     >
                       {displayArtifact.title}
                     </div>
+                    {(() => {
+                      const canonical = displayArtifact.metadata?.canonical as
+                        | { revision?: number | null; version?: string | null; status_label?: string }
+                        | undefined;
+                      if (!canonical) return null;
+                      return (
+                        <div data-testid="canonical-doc-meta" style={{ fontSize: "11px", color: "var(--ct-text-muted)", marginBottom: "8px" }}>
+                          정본 문서
+                          {canonical.status_label ? ` · ${canonical.status_label}` : ""}
+                          {canonical.version ? ` · v${canonical.version}` : ""}
+                          {canonical.revision != null ? ` · 개정 ${canonical.revision}` : ""}
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const failure = displayArtifact.metadata?.doc_error as
+                        | { kind?: string; link_label?: string }
+                        | undefined;
+                      const sourceUrl =
+                        typeof displayArtifact.metadata?.source_url === "string" ? displayArtifact.metadata.source_url : "";
+                      if (!failure || !sourceUrl) return null;
+                      const actionStyle: React.CSSProperties = {
+                        padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
+                        border: "1px solid var(--ct-accent, #6C5CE7)", background: "var(--ct-accent, #6C5CE7)",
+                        color: "#fff", textDecoration: "none", cursor: "pointer",
+                      };
+                      const loginHref =
+                        "/login?next=" +
+                        encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/chat") +
+                        "&reason=session_expired";
+                      return (
+                        <div role="group" aria-label="문서 열람 복구" data-testid="doc-recovery" style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                          {onOpenDocument && (
+                            <button type="button" data-testid="doc-retry" style={actionStyle}
+                              onClick={() => void onOpenDocument(sourceUrl, failure.link_label || displayArtifact.title)}>
+                              다시 시도
+                            </button>
+                          )}
+                          {failure.kind === "auth" && (
+                            <a data-testid="doc-login" href={loginHref} style={actionStyle}>다시 로그인</a>
+                          )}
+                          {(failure.kind === "notfound" || failure.kind === "forbidden") && (
+                            <a data-testid="doc-find-canonical" href="/docs?tab=canonical" target="_blank" rel="noopener noreferrer" style={actionStyle}>
+                              문서 정본에서 찾기
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {activeArtifact.session_id !== activeSession?.id && (
                       <span style={{ fontSize: "10px", color: "#888", marginLeft: "4px" }}>
                         (다른 세션)

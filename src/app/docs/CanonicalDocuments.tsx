@@ -46,8 +46,9 @@ function ProblemBox({ problem }: { problem: Problem }) {
   );
 }
 
-export default function CanonicalDocuments({ project, projects, onProjectChange }: {
+export default function CanonicalDocuments({ project, projects, onProjectChange, initialKey }: {
   project: string;
+  initialKey?: string | null;
   projects: string[];
   onProjectChange: (project: string) => void;
 }) {
@@ -55,6 +56,9 @@ export default function CanonicalDocuments({ project, projects, onProjectChange 
   const [selection, setSelection] = useState<{ project: string; key: string } | null>(null);
   const selected = selection?.project === project ? selection.key : null;
   const setSelected = (key: string | null) => setSelection(key ? { project, key } : null);
+  useEffect(() => {
+    if (initialKey) setSelection({ project, key: initialKey });
+  }, [initialKey, project]);
   const [detail, setDetail] = useState<CanonicalDocumentDetail | null>(null);
   const [history, setHistory] = useState<CanonicalDocumentHistory | null>(null);
   const [approved, setApproved] = useState<CanonicalDocumentDetail | null>(null);

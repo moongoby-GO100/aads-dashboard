@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
+import { parseCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import Link from "next/link";
 import CanonicalDocuments from "./CanonicalDocuments";
 
@@ -534,6 +535,7 @@ export default function DocsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [canonicalProject, setCanonicalProject] = useState<string>("AADS");
+  const [canonicalDeepKey, setCanonicalDeepKey] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>("all");
   const [search, setSearch] = useState("");
   // 파일명 검색과 내용 검색을 나눈다. 파일명 검색은 무엇을 찾는지 이미
@@ -777,6 +779,19 @@ export default function DocsPage() {
     return labelA.localeCompare(labelB, "ko");
   });
 
+  // 채팅의 정본 문서 링크(/docs?tab=canonical&project=…&document_key=…)를 새 탭/직접 접근으로 열 때.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ref = parseCanonicalDocHref(`/docs${window.location.search}`);
+    if (ref) {
+      setActiveTab("canonical");
+      setCanonicalProject(ref.project);
+      setCanonicalDeepKey(ref.documentKey);
+    } else if (new URLSearchParams(window.location.search).get("tab") === "canonical") {
+      setActiveTab("canonical");
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -905,7 +920,7 @@ export default function DocsPage() {
       </div>
 
       {activeTab === "canonical" ? (
-        <CanonicalDocuments project={canonicalProject}
+        <CanonicalDocuments project={canonicalProject} initialKey={canonicalDeepKey}
           projects={data?.projects?.map((item) => item.project) || []}
           onProjectChange={setCanonicalProject} />
       ) : (

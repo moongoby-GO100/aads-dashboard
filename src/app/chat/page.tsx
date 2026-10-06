@@ -48,6 +48,17 @@ import {
   removeOptimisticInterruptMessage,
 } from "@/lib/chatInterruptReceipt";
 import { isPreviewableTextFile, normalizeDocumentRouteParams } from "@/lib/documentLinks";
+import {
+  canonicalContentPath,
+  canonicalDetailPath,
+  canonicalDisplayTitle,
+  canonicalStatusLabel,
+  contentFromDetail,
+  parseCanonicalDocHref,
+  type CanonicalContentResponse,
+  type CanonicalDetailResponse,
+  type CanonicalDocRef,
+} from "@/lib/canonicalDocLinks";
 import { artifactMatchesTab, artifactTabForArtifact, isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { type ChatFollowMode } from "@/lib/chatScrollPolicy";
 import { useToolLogFollow } from "@/features/chat/viewport/useToolLogFollow";
@@ -236,11 +247,26 @@ const DOCUMENT_UNSUPPORTED_MESSAGE =
 /** 재시도해도 소용없는 실패(권한·부재·형식)와 일시 실패를 구분하기 위한 오류 */
 class DocumentLoadError extends Error {
   retryable: boolean;
-  constructor(message: string, retryable: boolean) {
+  status?: number;
+  constructor(message: string, retryable: boolean, status?: number) {
     super(message);
     this.name = "DocumentLoadError";
     this.retryable = retryable;
+    this.status = status;
   }
+}
+
+type DocumentFailureKind = "auth" | "forbidden" | "notfound" | "network" | "server" | "unsupported" | "empty" | "other";
+
+function documentFailureKind(error: DocumentLoadError): DocumentFailureKind {
+  if (error.status === 401) return "auth";
+  if (error.status === 403) return "forbidden";
+  if (error.status === 404) return "notfound";
+  if (error.status && error.status >= 500) return "server";
+  if (error.status === undefined && error.retryable) return "network";
+  if (error.message === DOCUMENT_UNSUPPORTED_MESSAGE) return "unsupported";
+  if (error.message.includes("내용이 비어")) return "empty";
+  return "other";
 }
 
 function isRetryableStatus(status: number): boolean {
@@ -264,7 +290,7 @@ function toDocumentLoadError(error: unknown): DocumentLoadError {
   }
   const message = error instanceof Error ? error.message : "";
   const status = Number(/^(\d{3})\b/.exec(message)?.[1] || 0);
-  if (status) return new DocumentLoadError(describeDocumentStatus(status), isRetryableStatus(status));
+  if (status) return new DocumentLoadError(describeDocumentStatus(status), isRetryableStatus(status), status);
   return new DocumentLoadError("문서를 불러오지 못했습니다.", false);
 }
 
@@ -315,7 +341,65 @@ function buildProjectDocContentPath(params: { project: string; basePath: string;
 }
 
 function documentArtifactIdFromHref(href: string): string {
-  return `doc-link-${href.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120)}`;
+  // 긴 문서 키·개정 번호가 120자 절단으로 서로 같은 id 가 되지 않도록 전체 href 해시를 붙인다.
+  let hash = 5381;
+  for (let i = 0; i < href.length; i += 1) hash = ((hash * 33) ^ href.charCodeAt(i)) >>> 0;
+  return `doc-link-${href.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 100)}-${hash.toString(36)}`;
+}
+
+const DOCUMENT_ATTEMPT_TIMEOUT_MS = 20_000;
+const DOCUMENT_DOWNLOAD_MAX_BYTES = 25 * 1024 * 1024;
+const DOCUMENT_BLOB_URL_KEEP = 3;
+const documentBlobUrls: string[] = [];
+
+/** 인증 fetch 로 받은 이진 문서를 패널 링크로 연다. 오래된 blob 은 반납해 메모리가 쌓이지 않게 한다. */
+function documentBlobUrl(bytes: Uint8Array<ArrayBuffer>, mime: string): string {
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime || "application/octet-stream" }));
+  documentBlobUrls.push(url);
+  while (documentBlobUrls.length > DOCUMENT_BLOB_URL_KEEP) {
+    const stale = documentBlobUrls.shift();
+    if (stale) URL.revokeObjectURL(stale);
+  }
+  return url;
+}
+
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/** 정본 본문 읽기. `/content` 가 아직 배포되지 않은 서버(라우트 부재 404)면 상세 API 로 대신 읽는다. */
+async function readCanonicalContent(ref: CanonicalDocRef, signal: AbortSignal): Promise<CanonicalContentResponse> {
+  try {
+    return await chatApi<CanonicalContentResponse>(canonicalContentPath(ref), { signal });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const routeMissing = /^404\b/.test(message) && !/document_not_found|revision_not_found/.test(message);
+    if (!routeMissing) {
+      if (/^404\b/.test(message)) {
+        throw new DocumentLoadError(
+          `정본 문서를 찾을 수 없습니다. 프로젝트(${ref.project})와 문서 키(${ref.documentKey})${ref.revision !== undefined ? `, 개정 ${ref.revision}` : ""}를 확인해 주세요.`,
+          false,
+          404,
+        );
+      }
+      throw error;
+    }
+  }
+  const detail = await chatApi<CanonicalDetailResponse>(canonicalDetailPath(ref), { signal });
+  const mapped = contentFromDetail(ref, detail);
+  if (!mapped) {
+    throw new DocumentLoadError(
+      ref.revision !== undefined
+        ? `정본 문서의 개정 ${ref.revision} 본문을 지금 서버에서 열람할 수 없습니다. 최신 개정 링크로 열어 주세요.`
+        : "정본 문서에 열람할 개정이 없습니다.",
+      false,
+      404,
+    );
+  }
+  return mapped;
 }
 
 // 유휴 세션의 streaming-status 조회 간격 = 스케줄러 tick(1.5초) × 이 값.
@@ -10709,7 +10793,12 @@ export default function ChatPage() {
       documentPreviewRequestRef.current !== requestId ||
       activeSessionRef.current !== requestSessionId
     );
-    const title = titleFromHref(href, label);
+    const docsParams = parseDocsPreviewHref(href);
+    const canonicalRef = docsParams ? null : parseCanonicalDocHref(href);
+    // 정본 링크는 파일명이 없다 — 링크 문구(한글 제목)를 먼저 쓰고, 본문을 받으면 저장된 제목으로 바꾼다.
+    const title = canonicalRef
+      ? (label || "").trim() || canonicalRef.documentKey
+      : titleFromHref(href, label);
     const id = documentArtifactIdFromHref(href);
     const now = new Date().toISOString();
     const showArtifact = (artifact: Artifact) => {
@@ -10738,15 +10827,40 @@ export default function ChatPage() {
       metadata: { source_url: href, transient: true, loading: true },
     });
 
-    const docsParams = parseDocsPreviewHref(href);
-
     // 한 번의 열람 시도. 내용을 실제로 읽지 못하면 반드시 throw 한다 —
     // 빈 패널을 성공으로 처리하지 않기 위한 계약이다.
-    const readDocument = async (): Promise<Artifact> => {
+    const readDocument = async (signal: AbortSignal): Promise<Artifact> => {
+      if (canonicalRef) {
+        const response = await readCanonicalContent(canonicalRef, signal);
+        const meta = response.canonical || {};
+        const docTitle = canonicalDisplayTitle(canonicalRef, response);
+        const content = response.content || "";
+        if (!content.trim()) throw new DocumentLoadError("문서를 열었지만 내용이 비어 있습니다.", false);
+        const sourceName = meta.source_path || `${canonicalRef.documentKey}.md`;
+        return {
+          ...baseArtifact,
+          artifact_type: artifactTypeForDocument(sourceName, response.mime_type, response.format),
+          title: docTitle,
+          content,
+          metadata: {
+            source_url: href,
+            project: canonicalRef.project,
+            document_key: canonicalRef.documentKey,
+            canonical: {
+              revision: meta.revision ?? null,
+              version: meta.version ?? null,
+              status: meta.status ?? null,
+              status_label: canonicalStatusLabel(meta.status, meta.authoritative),
+              authoritative: Boolean(meta.authoritative),
+            },
+            language: languageForDocument(sourceName, response.format),
+            transient: true,
+          },
+        };
+      }
+
       if (docsParams) {
-        const doc = await chatApi<ProjectDocContentResponse>(buildProjectDocContentPath(docsParams), {
-          signal: controller.signal,
-        });
+        const doc = await chatApi<ProjectDocContentResponse>(buildProjectDocContentPath(docsParams), { signal });
         const docTitle = titleFromHref(doc.full_path || doc.file_path || href, title);
         const docMeta = {
           source_url: href,
@@ -10760,7 +10874,8 @@ export default function ChatPage() {
         };
         if (doc.is_binary) {
           if (!doc.content) throw new DocumentLoadError("문서 내용을 읽지 못했습니다.", false);
-          if ((doc.mime_type || "").toLowerCase().startsWith("image/")) {
+          const mime = (doc.mime_type || "").toLowerCase();
+          if (mime.startsWith("image/")) {
             return {
               ...baseArtifact,
               artifact_type: "image",
@@ -10769,7 +10884,23 @@ export default function ChatPage() {
               metadata: docMeta,
             };
           }
-          throw new DocumentLoadError(DOCUMENT_UNSUPPORTED_MESSAGE, false);
+          // PDF 등 패널이 직접 그리지 못하는 형식: 이미 인증 fetch 로 받은 본문을 내려받기 링크로 연다.
+          if (doc.content.length > (DOCUMENT_DOWNLOAD_MAX_BYTES * 4) / 3) {
+            throw new DocumentLoadError("파일이 너무 커서 패널에서 열 수 없습니다.", false);
+          }
+          let bytes: Uint8Array<ArrayBuffer>;
+          try {
+            bytes = base64ToBytes(doc.content);
+          } catch {
+            throw new DocumentLoadError(DOCUMENT_UNSUPPORTED_MESSAGE, false);
+          }
+          return {
+            ...baseArtifact,
+            artifact_type: "file",
+            title: docTitle,
+            content: documentBlobUrl(bytes, mime),
+            metadata: { ...docMeta, download: true },
+          };
         }
         const content = doc.content || "";
         if (!content.trim()) throw new DocumentLoadError("문서를 열었지만 내용이 비어 있습니다.", false);
@@ -10792,13 +10923,13 @@ export default function ChatPage() {
           credentials: "include",
           headers: authHdrs(),
           cache: "no-store",
-          signal: controller.signal,
+          signal,
         });
       } catch (error) {
         throw toDocumentLoadError(error);
       }
       if (!response.ok) {
-        throw new DocumentLoadError(describeDocumentStatus(response.status), isRetryableStatus(response.status));
+        throw new DocumentLoadError(describeDocumentStatus(response.status), isRetryableStatus(response.status), response.status);
       }
       const contentType = (response.headers.get("content-type") || "").toLowerCase();
 
@@ -10820,7 +10951,20 @@ export default function ChatPage() {
 
       // 확장자를 먼저 믿는다: 서버 mimetypes 는 `.ts` 를 video/mp2t 로 추정한다.
       if (!isPreviewableTextFile(title) && !isTextualContentType(contentType)) {
-        throw new DocumentLoadError(DOCUMENT_UNSUPPORTED_MESSAGE, false);
+        // PDF 등: 인증 fetch 로 받은 본문을 내려받기 링크로 연다(인증 없는 원본 URL 을 걸지 않는다).
+        const blob = await response.blob();
+        if (!blob.size) throw new DocumentLoadError("파일을 열었지만 내용이 비어 있습니다.", false);
+        if (blob.size > DOCUMENT_DOWNLOAD_MAX_BYTES) {
+          throw new DocumentLoadError("파일이 너무 커서 패널에서 열 수 없습니다.", false);
+        }
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        return {
+          ...baseArtifact,
+          artifact_type: "file",
+          title,
+          content: documentBlobUrl(bytes, contentType.split(";")[0]),
+          metadata: { source_url: href, mime_type: contentType, transient: true, download: true },
+        };
       }
       const content = await response.text();
       if (!content.trim()) throw new DocumentLoadError("문서를 열었지만 내용이 비어 있습니다.", false);
@@ -10838,11 +10982,32 @@ export default function ChatPage() {
       };
     };
 
+    // 시도마다 시간 제한을 둔다 — 응답이 오지 않아도 "불러오는 중"이 영구히 남지 않는다.
+    const readWithTimeout = async (): Promise<Artifact> => {
+      const attempt = new AbortController();
+      let timedOut = false;
+      const onAbort = () => attempt.abort();
+      controller.signal.addEventListener("abort", onAbort);
+      const timer = setTimeout(() => {
+        timedOut = true;
+        attempt.abort();
+      }, DOCUMENT_ATTEMPT_TIMEOUT_MS);
+      try {
+        return await readDocument(attempt.signal);
+      } catch (error) {
+        if (timedOut) throw new DocumentLoadError("문서 서버 응답이 지연되어 불러오지 못했습니다.", true);
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        controller.signal.removeEventListener("abort", onAbort);
+      }
+    };
+
     let failure: DocumentLoadError | null = null;
     for (let attempt = 0; attempt <= DOCUMENT_LINK_RETRY_DELAYS_MS.length; attempt += 1) {
       if (isStale()) return;
       try {
-        showArtifact(await readDocument());
+        showArtifact(await readWithTimeout());
         return;
       } catch (error) {
         if (isStale()) return;
@@ -10853,6 +11018,7 @@ export default function ChatPage() {
     }
 
     const reason = failure?.message || "문서를 불러오지 못했습니다.";
+    const failureKind = failure ? documentFailureKind(failure) : "other";
     // 링크 표기가 제목과 다른 경로 형태일 때만 덧붙인다 (같은 문구를 두 번 보여주지 않는다).
     const requestedName = (label || "").trim() || title;
     const requestedLine =
@@ -10861,8 +11027,18 @@ export default function ChatPage() {
       ...baseArtifact,
       artifact_type: "report",
       title,
-      content: `### ⚠️ ${title}\n\n${reason}${requestedLine}\n\n채팅의 파일 링크를 다시 클릭해 재시도할 수 있습니다.`,
-      metadata: { source_url: href, transient: true, error: reason },
+      content: `### ⚠️ ${title}\n\n${reason}${requestedLine}`,
+      metadata: {
+        source_url: href,
+        transient: true,
+        error: reason,
+        doc_error: {
+          kind: failureKind,
+          status: failure?.status ?? null,
+          retryable: failure?.retryable ?? true,
+          link_label: label,
+        },
+      },
     });
   }, [activeWs, screenSize, setMobileOverlay]);
 
@@ -10900,19 +11076,26 @@ export default function ChatPage() {
     source?: string; source_label?: string; repo?: string; view_url?: string | null;
   }>>([]);
   const [sessionOtherFiles, setSessionOtherFiles] = useState(0);
+  const [sessionCanonicalDocs, setSessionCanonicalDocs] = useState<Array<{
+    project: string; document_key: string; revision?: number | null;
+    title?: string | null; approved?: boolean; at?: string | null;
+  }>>([]);
 
   useEffect(() => {
     const sid = activeSession?.id;
-    if (!sid) { setSessionDocs([]); setSessionOtherFiles(0); return; }
+    if (!sid) { setSessionDocs([]); setSessionOtherFiles(0); setSessionCanonicalDocs([]); return; }
     let alive = true;
     const load = async () => {
       try {
-        const r = await chatApi<{ documents?: typeof sessionDocs; other_files?: number }>(
-          `/chat/sessions/${encodeURIComponent(sid)}/documents`,
-        );
+        const r = await chatApi<{
+          documents?: typeof sessionDocs;
+          other_files?: number;
+          canonical_documents?: typeof sessionCanonicalDocs;
+        }>(`/chat/sessions/${encodeURIComponent(sid)}/documents`);
         if (!alive) return;
         setSessionDocs(r.documents || []);
         setSessionOtherFiles(r.other_files || 0);
+        setSessionCanonicalDocs(r.canonical_documents || []);
       } catch { /* 목록 조회 실패가 대화를 막지 않는다 */ }
     };
     void load();
@@ -10932,9 +11115,9 @@ export default function ChatPage() {
     agenda: 0,
     log: systemMessages.length,
     deploy: 0,
-    files: sessionDocs.length,
+    files: sessionDocs.length + sessionCanonicalDocs.length,
     html_preview: artifacts.filter((a) => a.artifact_type === "html_preview").length,
-  }), [artifacts, systemMessages.length, sessionDocs.length]);
+  }), [artifacts, systemMessages.length, sessionDocs.length, sessionCanonicalDocs.length]);
 
   function openCreateSessionModal() {
     const defaultRole = getWorkspaceDefaultRole(activeWsObj);
@@ -14542,6 +14725,8 @@ export default function ChatPage() {
         artifactCounts={artifactCounts}
         sessionDocs={sessionDocs}
         sessionOtherFiles={sessionOtherFiles}
+        sessionCanonicalDocs={sessionCanonicalDocs}
+        onOpenDocument={handleDocumentLinkClickStable}
         systemMessages={systemMessages}
         unreadLogCount={unreadLogCount}
         filteredArtifacts={filteredArtifacts} activeArtifact={activeArtifact}
