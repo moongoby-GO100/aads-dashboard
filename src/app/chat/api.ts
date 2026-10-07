@@ -69,8 +69,29 @@ function _coalesceKey(path: string, opts?: RequestInit): string | null {
   return path;
 }
 
-export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = _coalesceKey(path, opts);
+export class ChatApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ChatApiError";
+    this.status = status;
+  }
+}
+
+export interface ChatApiOptions {
+  /**
+   * 관리자 전용처럼 "이 요청만" 권한이 없을 수 있는 조회용. true 면 401/403 을
+   * 세션 만료로 보지 않고(전역 로그아웃 없음) ChatApiError 로 던진다.
+   * 기본값(false)은 기존 동작 그대로 — 401 이면 handleChat401().
+   */
+  softAuth?: boolean;
+}
+
+export async function chatApi<T>(path: string, opts?: RequestInit, apiOpts?: ChatApiOptions): Promise<T> {
+  const softAuth = apiOpts?.softAuth === true;
+  const baseKey = _coalesceKey(path, opts);
+  // 전역 401 처리 여부가 다른 호출끼리 한 약속을 나눠 쓰면 안 된다.
+  const key = baseKey && softAuth ? `soft:${baseKey}` : baseKey;
   if (key) {
     const pending = _inflight.get(key);
     if (pending) return pending as Promise<T>;
@@ -86,11 +107,14 @@ export async function chatApi<T>(path: string, opts?: RequestInit): Promise<T> {
         ...((opts?.headers as Record<string, string>) || {}),
       },
     });
+    if (softAuth && (res.status === 401 || res.status === 403)) {
+      throw new ChatApiError(res.status, `${res.status}: ${await res.text().catch(() => "")}`);
+    }
     if (res.status === 401) {
       handleChat401();
-      throw new Error("401: 세션이 만료되었습니다. 다시 로그인해주세요.");
+      throw new ChatApiError(401, "401: 세션이 만료되었습니다. 다시 로그인해주세요.");
     }
-    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new ChatApiError(res.status, `${res.status}: ${await res.text()}`);
     if (res.status === 204) return undefined as unknown as T;
     return res.json() as Promise<T>;
   })();

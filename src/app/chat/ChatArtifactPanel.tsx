@@ -7,7 +7,8 @@ import BrowserArtifactView from "@/components/chat/BrowserArtifactView";
 import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import MermaidDiagram from "@/components/MermaidDiagram";
-import { BASE_URL, authHdrs, chatApi, updateArtifact } from "./api";
+import { BASE_URL, authHdrs, chatApi, ChatApiError, updateArtifact } from "./api";
+import { getMe } from "@/lib/auth";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { buildCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import { isArtifactPreviewHref } from "@/lib/documentLinks";
@@ -255,6 +256,8 @@ function formatKst(value: string | null | undefined): string {
     hour12: false,
   });
 }
+
+const DEPLOY_ADMIN_ONLY_MESSAGE = "배포 상태는 관리자만 볼 수 있습니다";
 
 function deployTone(status: string | undefined | null): string {
   switch ((status || "").toLowerCase()) {
@@ -1108,13 +1111,26 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     lastDeployFetchRef.current = now;
     setDeployLoading(true);
     try {
+      // 서버 라우트가 관리자 전용이다. 관리자가 아니라고 확인되면 호출하지 않는다.
+      // 확인 실패(null)면 시도하되, 아래 softAuth 로 401/403 이 로그아웃으로 번지지 않게 한다.
+      const me = await getMe().catch(() => null);
+      if (me && !me.is_internal_admin) {
+        setDeployStatus(null);
+        setDeployError(DEPLOY_ADMIN_ONLY_MESSAGE);
+        return;
+      }
       // chatApi 경유 — 같은 GET 이 이미 날아가 있으면 합쳐진다. 이 패널은 보이는
       // 순간 한 번 + 15초마다 부르는데, 마운트 직후 panelVisible 이 흔들리며
       // 94KB 응답을 1.3초 간격으로 두 번 받고 있었다(2026-09-14 실측).
-      const data = await chatApi<DeployObservabilityStatus>("/ops/deploy/status");
+      const data = await chatApi<DeployObservabilityStatus>("/ops/deploy/status", undefined, { softAuth: true });
       setDeployStatus(data);
       setDeployError(null);
     } catch (e) {
+      if (e instanceof ChatApiError && (e.status === 401 || e.status === 403)) {
+        setDeployStatus(null);
+        setDeployError(DEPLOY_ADMIN_ONLY_MESSAGE);
+        return;
+      }
       setDeployError((e as Error).message || "배포 상태를 불러오지 못했습니다.");
     } finally {
       setDeployLoading(false);
