@@ -84,6 +84,13 @@ const defaultFrames: FrameScheduler = {
  */
 const ANCHOR_NEIGHBOR_SPAN = 8;
 
+/**
+ * Scroll events that keep arriving at frame rate after the last wheel/touch
+ * input (fling momentum) belong to the reader.  A gap longer than this ends
+ * the chain, so an isolated layout-driven scroll is never mistaken for it.
+ */
+const USER_SCROLL_CHAIN_GAP_MS = 250;
+
 function rowKey(element: HTMLElement): string | null {
   return element.dataset.messageRenderId || element.dataset.messageId || null;
 }
@@ -217,6 +224,9 @@ export class ChatViewportController {
   private bottomFrames = new Set<number>();
   private stableAnchor: MessageViewportAnchor | null = null;
   private stableScrollTop = 0;
+  private lastLayout: { scrollHeight: number; clientHeight: number } | null = null;
+  private lastUserScrollAt = 0;
+  private lastWriteScrollTop: number | null = null;
   private unreadCount = 0;
   private applying = false;
 
@@ -250,6 +260,9 @@ export class ChatViewportController {
     this.nearBottom = true;
     this.stableAnchor = null;
     this.stableScrollTop = 0;
+    this.lastLayout = null;
+    this.lastUserScrollAt = 0;
+    this.lastWriteScrollTop = null;
     this.setUnreadCount(0);
     this.setFollowMode("auto");
   }
@@ -269,15 +282,42 @@ export class ChatViewportController {
   recordScroll(userInitiated: boolean): void {
     const metrics = this.adapter.readMetrics();
     if (!metrics) return;
+    const now = this.now();
+    const previousLayout = this.lastLayout;
+    this.lastLayout = { scrollHeight: metrics.scrollHeight, clientHeight: metrics.clientHeight };
+    // Content getting shorter (or the viewport resizing) makes the browser clamp
+    // scrollTop and emit a scroll event the reader did not cause.  Any other
+    // scroll without a fresh gesture is the reader's own motion carrying on
+    // after the gesture window: fling momentum, selection autoscroll, an
+    // overlay scrollbar drag.
+    const layoutShrank = previousLayout !== null && (
+      metrics.scrollHeight < previousLayout.scrollHeight ||
+      metrics.clientHeight !== previousLayout.clientHeight
+    );
+    const ownWrite = this.lastWriteScrollTop !== null && Math.abs(metrics.scrollTop - this.lastWriteScrollTop) <= 1;
+    const momentum = !userInitiated && !layoutShrank && !ownWrite && !this.applying &&
+      this.lastUserScrollAt > 0 && now - this.lastUserScrollAt <= USER_SCROLL_CHAIN_GAP_MS;
+    const userDriven = userInitiated || momentum;
+    if (userDriven) {
+      this.lastUserScrollAt = now;
+      if (momentum) {
+        // Keep the gesture alive while momentum runs so commits and streaming
+        // ticks cannot write over it; only the chain's end re-opens writes.
+        this.gestureEpoch += 1;
+        this.gestureActiveUntil = Math.max(this.gestureActiveUntil, now + USER_SCROLL_CHAIN_GAP_MS);
+        this.cancelPendingIntent();
+        this.cancelBottomFrames();
+      }
+    }
     this.nearBottom = isChatNearBottom(metrics);
     // A layout shrink can emit a scroll event without user input. In manual
     // mode that event must not replace the last position the reader chose;
     // the resize observer needs that anchor to repair the jump.
-    if (!this.applying && (userInitiated || this.followMode !== "manual" || !this.stableAnchor)) {
+    if (!this.applying && (userDriven || !layoutShrank || this.followMode !== "manual" || !this.stableAnchor)) {
       this.stableScrollTop = metrics.scrollTop;
       this.stableAnchor = this.adapter.captureAnchor();
     }
-    if (!userInitiated) return;
+    if (!userDriven) return;
     const mode = nextChatFollowModeAfterUserScroll(metrics);
     this.setFollowMode(mode);
     if (mode === "auto") {
@@ -297,6 +337,7 @@ export class ChatViewportController {
     this.setFollowMode("auto");
     this.nearBottom = true;
     this.gestureActiveUntil = 0;
+    this.lastUserScrollAt = 0;
     this.bottomStickUntil = this.now() + 180_000;
     this.setUnreadCount(0);
   }
@@ -423,6 +464,7 @@ export class ChatViewportController {
     const metrics = this.adapter.readMetrics();
     if (!metrics) return;
     this.nearBottom = isChatNearBottom(metrics, CHAT_BOTTOM_THRESHOLD_PX);
+    this.lastLayout = { scrollHeight: metrics.scrollHeight, clientHeight: metrics.clientHeight };
     this.stableScrollTop = metrics.scrollTop;
     this.stableAnchor = this.adapter.captureAnchor();
   }
@@ -458,6 +500,7 @@ export class ChatViewportController {
     this.applying = true;
     try {
       const applied = write();
+      if (applied) this.lastWriteScrollTop = this.adapter.readMetrics()?.scrollTop ?? null;
       if (applied) this.onViewportWrite?.({
         reason,
         followMode: this.followMode,

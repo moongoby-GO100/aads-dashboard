@@ -156,7 +156,8 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   h.setAnchor(anchor("reading-row", 640));
   h.controller.recordScroll(true);
   h.setNow(2_000);
-  h.setMetrics({ scrollTop: 0, clientHeight: 500, scrollHeight: 2_000 });
+  // The clamp comes from the content getting shorter, so scrollHeight shrinks.
+  h.setMetrics({ scrollTop: 0, clientHeight: 500, scrollHeight: 500 });
   h.setAnchor(anchor("wrong-top-row", 0));
   h.controller.recordScroll(false);
   assertEqual(h.controller.correctContentResize(), true, "manual resize repairs reading position");
@@ -166,4 +167,129 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes[h.writes.length - 1], "anchor:reading-row", "top reset uses reader anchor");
 }
 
-console.log("PASS: WP02 viewport controller T01-T06 cases");
+// T07: the reader keeps scrolling after the 1s gesture window (fling momentum,
+// selection autoscroll, overlay scrollbar drag).  Those passive scroll events
+// must move the stored reading position, otherwise the next resize drags the
+// view back to where the last wheel/touch event happened.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 2_000, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor(anchor("gesture-end", 2_000));
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  h.setNow(2_500); // isolated passive scroll: no chain, no layout shrink
+  h.setMetrics({ scrollTop: 1_200, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor(anchor("where-reader-is", 1_200));
+  h.controller.recordScroll(false);
+  assertEqual(h.controller.correctContentResize(), true, "resize correction runs");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:where-reader-is", "resize keeps the reader's current anchor, not the gesture-end one");
+}
+
+// T08: a fling that outlives the gesture window and ends at the very top is a
+// normal user scroll, never an "unexpected top reset" (the handler asks the
+// controller before recording, so every step is checked first).
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 2_000, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor(anchor("start", 2_000));
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  let now = 900;
+  for (const top of [1_500, 1_000, 500, 0]) {
+    now += 116; // frame-rate chain; the first step lands after the 1s window closed
+    h.setNow(now);
+    h.setMetrics({ scrollTop: top, clientHeight: 500, scrollHeight: 6_000 });
+    h.setAnchor(anchor(`row-at-${top}`, top));
+    assertEqual(h.controller.restoreUnexpectedTopReset(), false, `fling step ${top} is not a top reset`);
+    h.controller.recordScroll(false);
+  }
+  assertEqual(h.writes.length, 0, "a user fling to the top never gets written back");
+  assertEqual(h.controller.hasActiveGesture, true, "momentum keeps the gesture open");
+}
+
+// T09: momentum cancels an intent captured before it, and streaming ticks
+// cannot write the bottom while it runs; after the chain ends follow stays off
+// because the reader left the near-bottom band.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_000, clientHeight: 500, scrollHeight: 6_000 });
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  h.controller.enqueueMutationAnchor(anchor("captured-before-momentum", 1_000), "message-commit");
+  h.setNow(1_100);
+  h.setMetrics({ scrollTop: 900, clientHeight: 500, scrollHeight: 6_000 });
+  h.controller.recordScroll(false);
+  assertEqual(h.controller.commitPendingIntent(), false, "stale intent is dropped while momentum runs");
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.length, 0, "no write over momentum");
+  h.setNow(30_000);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.controller.mode, "manual", "reader left the bottom band");
+  assertEqual(h.writes.length, 0, "manual mode stays put after the chain ends");
+}
+
+// T10: a layout-driven clamp inside a chain is not momentum.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_000, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor(anchor("reading", 1_000));
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  h.setNow(1_100);
+  h.setMetrics({ scrollTop: 0, clientHeight: 500, scrollHeight: 500 });
+  h.setAnchor(anchor("clamped-top", 0));
+  h.controller.recordScroll(false);
+  assertEqual(h.controller.hasActiveGesture, false, "a shrink clamp does not extend the gesture");
+  assertEqual(h.controller.correctContentResize(), true, "reader position is repaired");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:reading", "anchor survives the clamp");
+}
+
+// T11: the controller's own bottom write echoing back as a scroll event is not user motion.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_400, clientHeight: 500, scrollHeight: 2_000 });
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  h.setNow(1_100);
+  h.controller.requestBottom(true, "user-send");
+  h.flushFrame();
+  assertEqual(h.writes.join(","), "bottom", "write happens once the gesture window is closed");
+  h.controller.recordScroll(false);
+  assertEqual(h.controller.hasActiveGesture, false, "own write does not reopen the gesture");
+}
+
+// T12: while the reader is away from the bottom, nothing moves them; at the bottom the view follows.
+{
+  const h = harness();
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 100, clientHeight: 500, scrollHeight: 6_000 });
+  h.setNow(900);
+  h.controller.recordScroll(true);
+  h.setNow(5_000);
+  h.controller.settleAfterMessageChange(true, true);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.length, 0, "reading position is left alone");
+  h.setMetrics({ scrollTop: 5_450, clientHeight: 500, scrollHeight: 6_000 });
+  h.setNow(5_100);
+  h.controller.markUserGesture();
+  h.controller.recordScroll(true);
+  h.setNow(7_000);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.controller.mode, "auto", "back at the bottom resumes follow");
+  assertEqual(h.writes.join(","), "bottom,bottom", "bottom follows only once the reader is back there");
+}
+
+console.log("PASS: WP02 viewport controller T01-T12 cases");

@@ -19,7 +19,11 @@ assertEqual(decideChatFollow({ mode: "auto", isNearBottom: true, activeReply: fa
 assertEqual(decideChatFollow({ mode: "auto", isNearBottom: true, activeReply: true, bottomStickActive: true, messageCountGrew: false }), "force-bottom", "send stick follows updates");
 assertEqual(decideChatFollow({ mode: "auto", isNearBottom: true, activeReply: true, bottomStickActive: false, messageCountGrew: true }), "follow-bottom", "new message follows");
 assertEqual(decideChatFollow({ mode: "auto", isNearBottom: true, activeReply: true, bottomStickActive: false, messageCountGrew: false }), "none", "poll replacement does not scroll");
+assertEqual(isChatNearBottom({ scrollTop: 400, clientHeight: 300, scrollHeight: 1000 }), true, "threshold edge is still near bottom");
+assertEqual(nextChatFollowModeAfterUserScroll({ scrollTop: 399, clientHeight: 300, scrollHeight: 1000 }), "manual", "one pixel past the band releases follow");
+assertEqual(decideChatFollow({ mode: "manual", isNearBottom: false, activeReply: true, bottomStickActive: false, messageCountGrew: true }), "none", "reading a past message: streaming never scrolls");
+assertEqual(decideChatFollow({ mode: "manual", isNearBottom: false, activeReply: true, bottomStickActive: true, messageCountGrew: false }), "none", "send-stick cannot override a reader who left the bottom");
 assertEqual(shouldLockHistoryActions(false, true), true, "recovery locks actions");
 assertEqual(shouldLockHistoryActions(false, false), false, "idle unlocks actions");
 
-console.log("PASS: 12 chat scroll policy cases");
+console.log("PASS: 16 chat scroll policy cases");

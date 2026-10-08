@@ -1,0 +1,1032 @@
+{
+ "device": "mobile",
+ "scenarios": {
+  "A_reading_content_changes": {
+   "before": {
+    "st": 56107,
+    "sh": 60812,
+    "ch": 844,
+    "mode": "manual",
+    "anchorId": "msg-139",
+    "anchorTop": -46
+   },
+   "after": {
+    "st": 56407,
+    "sh": 62204,
+    "ch": 844,
+    "mode": "manual",
+    "anchorId": "msg-139",
+    "anchorTop": -46
+   },
+   "anchorTopDelta": 0,
+   "scrollTopDelta": 300,
+   "events": [
+    {
+     "t": 1824,
+     "ev": "gesture"
+    },
+    {
+     "t": 1874,
+     "ev": "gesture"
+    },
+    {
+     "t": 1940,
+     "ev": "gesture"
+    },
+    {
+     "t": 1974,
+     "ev": "gesture"
+    },
+    {
+     "t": 2009,
+     "ev": "gesture"
+    },
+    {
+     "t": 2074,
+     "ev": "gesture"
+    },
+    {
+     "t": 2107,
+     "ev": "gesture"
+    },
+    {
+     "t": 2142,
+     "ev": "gesture"
+    },
+    {
+     "t": 2175,
+     "ev": "gesture"
+    },
+    {
+     "t": 2209,
+     "ev": "gesture"
+    },
+    {
+     "t": 2241,
+     "ev": "gesture"
+    },
+    {
+     "t": 2275,
+     "ev": "gesture"
+    },
+    {
+     "t": 2309,
+     "ev": "gesture"
+    },
+    {
+     "t": 2426,
+     "ev": "gesture"
+    },
+    {
+     "t": 2441,
+     "ev": "gesture"
+    },
+    {
+     "t": 2525,
+     "ev": "gesture"
+    },
+    {
+     "t": 2525,
+     "ev": "gesture"
+    },
+    {
+     "t": 2592,
+     "ev": "gesture"
+    },
+    {
+     "t": 2624,
+     "ev": "gesture"
+    },
+    {
+     "t": 2691,
+     "ev": "gesture"
+    },
+    {
+     "t": 2724,
+     "ev": "gesture"
+    },
+    {
+     "t": 2756,
+     "ev": "gesture"
+    },
+    {
+     "t": 2790,
+     "ev": "gesture"
+    },
+    {
+     "t": 2824,
+     "ev": "gesture"
+    },
+    {
+     "t": 2857,
+     "ev": "gesture"
+    },
+    {
+     "t": 2891,
+     "ev": "gesture"
+    },
+    {
+     "t": 2925,
+     "ev": "gesture"
+    },
+    {
+     "t": 3025,
+     "ev": "gesture"
+    },
+    {
+     "t": 3041,
+     "ev": "gesture"
+    },
+    {
+     "t": 3091,
+     "ev": "gesture"
+    },
+    {
+     "t": 3157,
+     "ev": "gesture"
+    },
+    {
+     "t": 3180,
+     "ev": "gesture"
+    },
+    {
+     "t": 3224,
+     "ev": "gesture"
+    },
+    {
+     "t": 3296,
+     "ev": "gesture"
+    },
+    {
+     "t": 3324,
+     "ev": "gesture"
+    },
+    {
+     "t": 3394,
+     "ev": "gesture"
+    },
+    {
+     "t": 3425,
+     "ev": "gesture"
+    },
+    {
+     "t": 3493,
+     "ev": "gesture"
+    },
+    {
+     "t": 3556,
+     "ev": "gesture"
+    },
+    {
+     "t": 6740,
+     "ev": "CONTENT-RESIZE-MOVED",
+     "from": 56107,
+     "to": 56407
+    }
+   ]
+  },
+  "B_momentum_then_resize": {
+   "gestureEndPos": 55744,
+   "userPosAfterMomentum": 53244,
+   "afterResize": 53244,
+   "afterNewMessage": 53244,
+   "driftAfterResizePx": 0,
+   "driftAfterNewMsgPx": 0,
+   "events": [
+    {
+     "t": 1650,
+     "ev": "gesture"
+    },
+    {
+     "t": 1715,
+     "ev": "gesture"
+    },
+    {
+     "t": 1785,
+     "ev": "gesture"
+    },
+    {
+     "t": 1801,
+     "ev": "gesture"
+    },
+    {
+     "t": 1850,
+     "ev": "gesture"
+    },
+    {
+     "t": 1916,
+     "ev": "gesture"
+    },
+    {
+     "t": 1983,
+     "ev": "gesture"
+    },
+    {
+     "t": 2017,
+     "ev": "gesture"
+    },
+    {
+     "t": 2082,
+     "ev": "gesture"
+    },
+    {
+     "t": 2115,
+     "ev": "gesture"
+    },
+    {
+     "t": 2148,
+     "ev": "gesture"
+    },
+    {
+     "t": 2183,
+     "ev": "gesture"
+    },
+    {
+     "t": 2248,
+     "ev": "gesture"
+    },
+    {
+     "t": 2281,
+     "ev": "gesture"
+    },
+    {
+     "t": 2282,
+     "ev": "gesture"
+    },
+    {
+     "t": 2402,
+     "ev": "gesture"
+    },
+    {
+     "t": 2418,
+     "ev": "gesture"
+    },
+    {
+     "t": 2498,
+     "ev": "gesture"
+    },
+    {
+     "t": 2498,
+     "ev": "gesture"
+    },
+    {
+     "t": 2565,
+     "ev": "gesture"
+    },
+    {
+     "t": 2600,
+     "ev": "gesture"
+    },
+    {
+     "t": 2666,
+     "ev": "gesture"
+    },
+    {
+     "t": 2731,
+     "ev": "gesture"
+    },
+    {
+     "t": 2765,
+     "ev": "gesture"
+    },
+    {
+     "t": 2832,
+     "ev": "gesture"
+    },
+    {
+     "t": 2865,
+     "ev": "gesture"
+    },
+    {
+     "t": 2899,
+     "ev": "gesture"
+    },
+    {
+     "t": 2933,
+     "ev": "gesture"
+    },
+    {
+     "t": 3016,
+     "ev": "gesture"
+    },
+    {
+     "t": 3032,
+     "ev": "gesture"
+    },
+    {
+     "t": 3085,
+     "ev": "gesture"
+    },
+    {
+     "t": 3148,
+     "ev": "gesture"
+    },
+    {
+     "t": 3181,
+     "ev": "gesture"
+    },
+    {
+     "t": 3215,
+     "ev": "gesture"
+    },
+    {
+     "t": 3283,
+     "ev": "gesture"
+    },
+    {
+     "t": 3316,
+     "ev": "gesture"
+    },
+    {
+     "t": 3382,
+     "ev": "gesture"
+    },
+    {
+     "t": 3448,
+     "ev": "gesture"
+    },
+    {
+     "t": 3514,
+     "ev": "gesture"
+    },
+    {
+     "t": 3548,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "B2_momentum_then_raw_resize": {
+   "gestureEndPos": 56714,
+   "userPosAfterMomentum": 54214,
+   "afterRawResize": 54214,
+   "driftPx": 0,
+   "anchorBefore": [
+    "msg-133",
+    -585
+   ],
+   "anchorAfter": [
+    "msg-133",
+    -585
+   ],
+   "events": [
+    {
+     "t": 1441,
+     "ev": "gesture"
+    },
+    {
+     "t": 1475,
+     "ev": "gesture"
+    },
+    {
+     "t": 1555,
+     "ev": "gesture"
+    },
+    {
+     "t": 1592,
+     "ev": "gesture"
+    },
+    {
+     "t": 1674,
+     "ev": "gesture"
+    },
+    {
+     "t": 1739,
+     "ev": "gesture"
+    },
+    {
+     "t": 1808,
+     "ev": "gesture"
+    },
+    {
+     "t": 1926,
+     "ev": "gesture"
+    },
+    {
+     "t": 1936,
+     "ev": "gesture"
+    },
+    {
+     "t": 1987,
+     "ev": "gesture"
+    },
+    {
+     "t": 2054,
+     "ev": "gesture"
+    },
+    {
+     "t": 2090,
+     "ev": "gesture"
+    },
+    {
+     "t": 2175,
+     "ev": "gesture"
+    },
+    {
+     "t": 2205,
+     "ev": "gesture"
+    },
+    {
+     "t": 2238,
+     "ev": "gesture"
+    },
+    {
+     "t": 2307,
+     "ev": "gesture"
+    },
+    {
+     "t": 2387,
+     "ev": "gesture"
+    },
+    {
+     "t": 2454,
+     "ev": "gesture"
+    },
+    {
+     "t": 2573,
+     "ev": "gesture"
+    },
+    {
+     "t": 2590,
+     "ev": "gesture"
+    },
+    {
+     "t": 2638,
+     "ev": "gesture"
+    },
+    {
+     "t": 2711,
+     "ev": "gesture"
+    },
+    {
+     "t": 2768,
+     "ev": "gesture"
+    },
+    {
+     "t": 2843,
+     "ev": "gesture"
+    },
+    {
+     "t": 2872,
+     "ev": "gesture"
+    },
+    {
+     "t": 2940,
+     "ev": "gesture"
+    },
+    {
+     "t": 2974,
+     "ev": "gesture"
+    },
+    {
+     "t": 3058,
+     "ev": "gesture"
+    },
+    {
+     "t": 3088,
+     "ev": "gesture"
+    },
+    {
+     "t": 3154,
+     "ev": "gesture"
+    },
+    {
+     "t": 3242,
+     "ev": "gesture"
+    },
+    {
+     "t": 3253,
+     "ev": "gesture"
+    },
+    {
+     "t": 3305,
+     "ev": "gesture"
+    },
+    {
+     "t": 3374,
+     "ev": "gesture"
+    },
+    {
+     "t": 3437,
+     "ev": "gesture"
+    },
+    {
+     "t": 3505,
+     "ev": "gesture"
+    },
+    {
+     "t": 3543,
+     "ev": "gesture"
+    },
+    {
+     "t": 3608,
+     "ev": "gesture"
+    },
+    {
+     "t": 3679,
+     "ev": "gesture"
+    },
+    {
+     "t": 3755,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "C_fling_to_top": {
+   "beforeFling": 55723,
+   "afterFlingToTop": 0,
+   "reachedTop": true,
+   "events": [
+    {
+     "t": 1758,
+     "ev": "gesture"
+    },
+    {
+     "t": 1846,
+     "ev": "gesture"
+    },
+    {
+     "t": 1859,
+     "ev": "gesture"
+    },
+    {
+     "t": 1909,
+     "ev": "gesture"
+    },
+    {
+     "t": 1974,
+     "ev": "gesture"
+    },
+    {
+     "t": 2008,
+     "ev": "gesture"
+    },
+    {
+     "t": 2042,
+     "ev": "gesture"
+    },
+    {
+     "t": 2076,
+     "ev": "gesture"
+    },
+    {
+     "t": 2108,
+     "ev": "gesture"
+    },
+    {
+     "t": 2140,
+     "ev": "gesture"
+    },
+    {
+     "t": 2174,
+     "ev": "gesture"
+    },
+    {
+     "t": 2208,
+     "ev": "gesture"
+    },
+    {
+     "t": 2241,
+     "ev": "gesture"
+    },
+    {
+     "t": 2308,
+     "ev": "gesture"
+    },
+    {
+     "t": 2342,
+     "ev": "gesture"
+    },
+    {
+     "t": 2447,
+     "ev": "gesture"
+    },
+    {
+     "t": 2460,
+     "ev": "gesture"
+    },
+    {
+     "t": 2543,
+     "ev": "gesture"
+    },
+    {
+     "t": 2574,
+     "ev": "gesture"
+    },
+    {
+     "t": 2608,
+     "ev": "gesture"
+    },
+    {
+     "t": 2643,
+     "ev": "gesture"
+    },
+    {
+     "t": 2675,
+     "ev": "gesture"
+    },
+    {
+     "t": 2709,
+     "ev": "gesture"
+    },
+    {
+     "t": 2742,
+     "ev": "gesture"
+    },
+    {
+     "t": 2775,
+     "ev": "gesture"
+    },
+    {
+     "t": 2842,
+     "ev": "gesture"
+    },
+    {
+     "t": 2908,
+     "ev": "gesture"
+    },
+    {
+     "t": 2942,
+     "ev": "gesture"
+    },
+    {
+     "t": 3061,
+     "ev": "gesture"
+    },
+    {
+     "t": 3076,
+     "ev": "gesture"
+    },
+    {
+     "t": 3125,
+     "ev": "gesture"
+    },
+    {
+     "t": 3192,
+     "ev": "gesture"
+    },
+    {
+     "t": 3225,
+     "ev": "gesture"
+    },
+    {
+     "t": 3292,
+     "ev": "gesture"
+    },
+    {
+     "t": 3358,
+     "ev": "gesture"
+    },
+    {
+     "t": 3392,
+     "ev": "gesture"
+    },
+    {
+     "t": 3429,
+     "ev": "gesture"
+    },
+    {
+     "t": 3491,
+     "ev": "gesture"
+    },
+    {
+     "t": 3525,
+     "ev": "gesture"
+    },
+    {
+     "t": 3563,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "D_bottom_follows": {
+   "before": {
+    "st": 59968,
+    "sh": 60812,
+    "ch": 844,
+    "mode": "auto",
+    "anchorId": "msg-148",
+    "anchorTop": 21
+   },
+   "after": {
+    "st": 61424,
+    "sh": 62268,
+    "ch": 844,
+    "mode": "auto",
+    "anchorId": "msg-151",
+    "anchorTop": -200
+   },
+   "distanceFromBottom": 0,
+   "events": []
+  },
+  "E_small_scroll_up_inside_300px_zone": {
+   "distFromBottomBefore": 0,
+   "distFromBottomAfter": 0,
+   "modeBefore": "auto",
+   "modeAfter": "auto",
+   "anchorBefore": [
+    "msg-148",
+    21
+   ],
+   "anchorAfter": [
+    "msg-149",
+    -35
+   ],
+   "events": [
+    {
+     "t": 565,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 565,
+     "ev": "gesture"
+    },
+    {
+     "t": 583,
+     "ev": "gesture"
+    },
+    {
+     "t": 618,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 620,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 620,
+     "ev": "gesture"
+    },
+    {
+     "t": 621,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 685,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 685,
+     "ev": "gesture"
+    },
+    {
+     "t": 686,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 720,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 720,
+     "ev": "gesture"
+    },
+    {
+     "t": 722,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 785,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 785,
+     "ev": "gesture"
+    },
+    {
+     "t": 788,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 819,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 819,
+     "ev": "gesture"
+    },
+    {
+     "t": 821,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 854,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 854,
+     "ev": "gesture"
+    },
+    {
+     "t": 856,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 920,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 920,
+     "ev": "gesture"
+    },
+    {
+     "t": 923,
+     "ev": "mode",
+     "m": "auto"
+    }
+   ]
+  },
+  "F_continuous_momentum_with_commits": {
+   "frames": 169,
+   "startScrollTop": 57905,
+   "endOfMomentum": 48134,
+   "backwardJumps": 0,
+   "revertedPxTotal": 0,
+   "finalAfterSettle": 48134,
+   "events": [
+    {
+     "t": 641,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 707,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 707,
+     "ev": "gesture"
+    },
+    {
+     "t": 753,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 786,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 786,
+     "ev": "gesture"
+    },
+    {
+     "t": 787,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 867,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 867,
+     "ev": "gesture"
+    },
+    {
+     "t": 868,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 872,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 907,
+     "ev": "gesture"
+    },
+    {
+     "t": 988,
+     "ev": "gesture"
+    },
+    {
+     "t": 1052,
+     "ev": "gesture"
+    },
+    {
+     "t": 1101,
+     "ev": "gesture"
+    },
+    {
+     "t": 1186,
+     "ev": "gesture"
+    },
+    {
+     "t": 1259,
+     "ev": "gesture"
+    },
+    {
+     "t": 1284,
+     "ev": "gesture"
+    },
+    {
+     "t": 1337,
+     "ev": "gesture"
+    },
+    {
+     "t": 1404,
+     "ev": "gesture"
+    },
+    {
+     "t": 1469,
+     "ev": "gesture"
+    },
+    {
+     "t": 1502,
+     "ev": "gesture"
+    },
+    {
+     "t": 1538,
+     "ev": "gesture"
+    },
+    {
+     "t": 1602,
+     "ev": "gesture"
+    },
+    {
+     "t": 1647,
+     "ev": "gesture"
+    },
+    {
+     "t": 1711,
+     "ev": "gesture"
+    },
+    {
+     "t": 1753,
+     "ev": "gesture"
+    },
+    {
+     "t": 1821,
+     "ev": "gesture"
+    },
+    {
+     "t": 1889,
+     "ev": "gesture"
+    },
+    {
+     "t": 1917,
+     "ev": "gesture"
+    },
+    {
+     "t": 1984,
+     "ev": "gesture"
+    },
+    {
+     "t": 2021,
+     "ev": "gesture"
+    },
+    {
+     "t": 2052,
+     "ev": "gesture"
+    },
+    {
+     "t": 2119,
+     "ev": "gesture"
+    },
+    {
+     "t": 2185,
+     "ev": "gesture"
+    },
+    {
+     "t": 2185,
+     "ev": "gesture"
+    },
+    {
+     "t": 2252,
+     "ev": "gesture"
+    },
+    {
+     "t": 2319,
+     "ev": "gesture"
+    },
+    {
+     "t": 2352,
+     "ev": "gesture"
+    },
+    {
+     "t": 2418,
+     "ev": "gesture"
+    }
+   ]
+  }
+ }
+}

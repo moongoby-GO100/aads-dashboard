@@ -1,0 +1,381 @@
+{
+ "device": "desktop",
+ "scenarios": {
+  "A_reading_content_changes": {
+   "before": {
+    "st": 26537,
+    "sh": 30437,
+    "ch": 900,
+    "mode": "manual",
+    "anchorId": "msg-131",
+    "anchorTop": -88
+   },
+   "after": {
+    "st": 26837,
+    "sh": 31356,
+    "ch": 900,
+    "mode": "manual",
+    "anchorId": "msg-131",
+    "anchorTop": -88
+   },
+   "anchorTopDelta": 0,
+   "scrollTopDelta": 300,
+   "events": [
+    {
+     "t": 656,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 656,
+     "ev": "gesture"
+    },
+    {
+     "t": 657,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 705,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 705,
+     "ev": "gesture"
+    },
+    {
+     "t": 755,
+     "ev": "gesture"
+    },
+    {
+     "t": 806,
+     "ev": "gesture"
+    },
+    {
+     "t": 839,
+     "ev": "gesture"
+    },
+    {
+     "t": 872,
+     "ev": "gesture"
+    },
+    {
+     "t": 905,
+     "ev": "gesture"
+    },
+    {
+     "t": 955,
+     "ev": "gesture"
+    },
+    {
+     "t": 1006,
+     "ev": "gesture"
+    },
+    {
+     "t": 1055,
+     "ev": "gesture"
+    },
+    {
+     "t": 4140,
+     "ev": "CONTENT-RESIZE-MOVED",
+     "from": 26537,
+     "to": 26837
+    }
+   ]
+  },
+  "B_momentum_then_resize": {
+   "gestureEndPos": 26537,
+   "userPosAfterMomentum": 24037,
+   "afterResize": 24037,
+   "afterNewMessage": 24037,
+   "driftAfterResizePx": 0,
+   "driftAfterNewMsgPx": 0,
+   "events": [
+    {
+     "t": 607,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 607,
+     "ev": "gesture"
+    },
+    {
+     "t": 608,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 652,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 652,
+     "ev": "gesture"
+    },
+    {
+     "t": 701,
+     "ev": "gesture"
+    },
+    {
+     "t": 734,
+     "ev": "gesture"
+    },
+    {
+     "t": 767,
+     "ev": "gesture"
+    },
+    {
+     "t": 801,
+     "ev": "gesture"
+    },
+    {
+     "t": 834,
+     "ev": "gesture"
+    },
+    {
+     "t": 867,
+     "ev": "gesture"
+    },
+    {
+     "t": 901,
+     "ev": "gesture"
+    },
+    {
+     "t": 934,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "B2_momentum_then_raw_resize": {
+   "gestureEndPos": 26537,
+   "userPosAfterMomentum": 24037,
+   "afterRawResize": 24037,
+   "driftPx": 0,
+   "anchorBefore": [
+    "msg-119",
+    -21
+   ],
+   "anchorAfter": [
+    "msg-119",
+    -21
+   ],
+   "events": [
+    {
+     "t": 600,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 600,
+     "ev": "gesture"
+    },
+    {
+     "t": 601,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 632,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 632,
+     "ev": "gesture"
+    },
+    {
+     "t": 666,
+     "ev": "gesture"
+    },
+    {
+     "t": 699,
+     "ev": "gesture"
+    },
+    {
+     "t": 732,
+     "ev": "gesture"
+    },
+    {
+     "t": 766,
+     "ev": "gesture"
+    },
+    {
+     "t": 799,
+     "ev": "gesture"
+    },
+    {
+     "t": 833,
+     "ev": "gesture"
+    },
+    {
+     "t": 865,
+     "ev": "gesture"
+    },
+    {
+     "t": 916,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "C_fling_to_top": {
+   "beforeFling": 26537,
+   "afterFlingToTop": 0,
+   "reachedTop": true,
+   "events": [
+    {
+     "t": 640,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 640,
+     "ev": "gesture"
+    },
+    {
+     "t": 641,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 683,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 683,
+     "ev": "gesture"
+    },
+    {
+     "t": 720,
+     "ev": "gesture"
+    },
+    {
+     "t": 768,
+     "ev": "gesture"
+    },
+    {
+     "t": 817,
+     "ev": "gesture"
+    },
+    {
+     "t": 867,
+     "ev": "gesture"
+    },
+    {
+     "t": 917,
+     "ev": "gesture"
+    },
+    {
+     "t": 950,
+     "ev": "gesture"
+    },
+    {
+     "t": 1002,
+     "ev": "gesture"
+    },
+    {
+     "t": 1067,
+     "ev": "gesture"
+    }
+   ]
+  },
+  "D_bottom_follows": {
+   "before": {
+    "st": 29537,
+    "sh": 30437,
+    "ch": 900,
+    "mode": "auto",
+    "anchorId": "msg-145",
+    "anchorTop": -250
+   },
+   "after": {
+    "st": 30363,
+    "sh": 31263,
+    "ch": 900,
+    "mode": "auto",
+    "anchorId": "msg-149",
+    "anchorTop": -265
+   },
+   "distanceFromBottom": 0,
+   "events": []
+  },
+  "E_small_scroll_up_inside_300px_zone": {
+   "distFromBottomBefore": 0,
+   "distFromBottomAfter": 0,
+   "modeBefore": "auto",
+   "modeAfter": "auto",
+   "anchorBefore": [
+    "msg-145",
+    -250
+   ],
+   "anchorAfter": [
+    "msg-147",
+    -24
+   ],
+   "events": [
+    {
+     "t": 608,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 608,
+     "ev": "gesture"
+    },
+    {
+     "t": 609,
+     "ev": "mode",
+     "m": "auto"
+    }
+   ]
+  },
+  "F_continuous_momentum_with_commits": {
+   "frames": 170,
+   "startScrollTop": 28063,
+   "endOfMomentum": 18256,
+   "backwardJumps": 0,
+   "revertedPxTotal": 0,
+   "finalAfterSettle": 18256,
+   "events": [
+    {
+     "t": 598,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 598,
+     "ev": "gesture"
+    },
+    {
+     "t": 600,
+     "ev": "mode",
+     "m": "auto"
+    },
+    {
+     "t": 648,
+     "ev": "mode",
+     "m": "manual"
+    },
+    {
+     "t": 648,
+     "ev": "gesture"
+    },
+    {
+     "t": 681,
+     "ev": "gesture"
+    },
+    {
+     "t": 715,
+     "ev": "gesture"
+    },
+    {
+     "t": 748,
+     "ev": "gesture"
+    }
+   ]
+  }
+ }
+}
