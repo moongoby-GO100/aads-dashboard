@@ -53,6 +53,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/agenda", label: "아젠다", icon: "📌", adminOnly: true, group: "일·프로젝트" },
   { href: "/marketing/ably", label: "에이블리 광고분석", icon: "📈", adminOnly: true, group: "사람·고객" },
   { href: "/marketing/sns", label: "SNS 플래너", icon: "🗓️", adminOnly: true, group: "사람·고객" },
+  { href: "/inbox", label: "알림 모아보기", icon: "🔔", adminOnly: true, group: "대화·결정" },
   { href: "/decisions", label: "CEO Decisions", icon: "🎯", adminOnly: true, group: "대화·결정" },
   { href: "/tasks", label: "Tasks", icon: "📋", adminOnly: true, group: "일·프로젝트" },
   { href: "/goals", label: "Goal Control", icon: "🎯", adminOnly: true, group: "일·프로젝트" },

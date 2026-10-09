@@ -470,6 +470,55 @@ export interface CanonicalDocumentHistory {
   revisions: Array<{ id: string; revision: number; version: string; title: string; change_summary: string | null; created_at: string; status: string }>;
 }
 
+// AADS-OHVIS-INBOX: 알림 모아보기(/inbox) — aads-server app/api/inbox.py 응답과 짝이다.
+export type InboxTab = "action" | "alert" | "change" | "runner";
+export interface InboxItem {
+  source: string;
+  source_id: string;
+  tab: InboxTab;
+  project: string;
+  severity: string;
+  title: string;
+  summary: string;
+  occurred_at_kst: string;
+  count: number;
+  read: boolean;
+  link: string;
+  actions: string[];
+}
+export interface InboxSummary {
+  tabs: Record<InboxTab, { total: number; unread: number }>;
+  degraded_sources: string[];
+}
+export interface InboxListResponse {
+  tab: InboxTab;
+  items: InboxItem[];
+  next_cursor: string | null;
+  degraded_sources: string[];
+}
+export interface InboxListParams {
+  tab: InboxTab;
+  project?: string;
+  unreadOnly?: boolean;
+  cursor?: string | null;
+  limit?: number;
+}
+export interface InboxReadResult {
+  ok: boolean;
+  tab?: InboxTab;
+  marked: Record<string, number>;
+  failed_sources: string[];
+}
+
+export class InboxApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "InboxApiError";
+    this.status = status;
+  }
+}
+
 import type {
   HealthResponse,
   ProjectListResponse,
@@ -539,6 +588,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// 알림 모아보기는 관리자 전용이다. 비관리자의 401/403 을 세션 만료로 보지 않는다
+// (전역 로그아웃 없음) — runner-77b1c37f 의 softAuth 와 같은 규칙.
+async function inboxRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    credentials: options?.credentials ?? "include",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) throw new InboxApiError(res.status, `API error ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 // Vault 보안 입력(채팅 카드) — 비밀번호가 오가는 호출이라 일반 request() 를 쓰지 않는다.
 // request() 는 실패 시 응답 본문을 Error 메시지에 싣는다. 여기서는 본문을 버리고
 // 오류 코드(detail.error)와 상태만 돌려준다. 어떤 값도 console/로그에 남기지 않는다.
@@ -601,6 +667,25 @@ async function vaultCredentialRequestCall<T>(path: string, init?: RequestInit): 
 const _meInflight = new Map<string, Promise<MeResponse | null>>();
 
 export const api = {
+  getInboxSummary: () => inboxRequest<InboxSummary>("/inbox/summary"),
+  getInbox: (params: InboxListParams) => {
+    const qs = new URLSearchParams({ tab: params.tab });
+    if (params.project) qs.set("project", params.project);
+    if (params.unreadOnly) qs.set("unread_only", "true");
+    if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return inboxRequest<InboxListResponse>(`/inbox?${qs.toString()}`);
+  },
+  markInboxRead: (items: Array<Pick<InboxItem, "source" | "source_id">>) =>
+    inboxRequest<InboxReadResult>("/inbox/read", {
+      method: "POST",
+      body: JSON.stringify({ items: items.map((i) => ({ source: i.source, source_id: i.source_id })) }),
+    }),
+  markInboxReadAll: (tab: InboxTab, before: string) =>
+    inboxRequest<InboxReadResult>("/inbox/read-all", {
+      method: "POST",
+      body: JSON.stringify({ tab, before }),
+    }),
   getOpsStatus: () => request<OpsServerStatusResponse>("/ops/status"),
   getCollectorOverview: () => request<CollectorOverview>("/authenticated-site-collector/overview"),
   getCollectorSites: (projectKey?: string) =>
