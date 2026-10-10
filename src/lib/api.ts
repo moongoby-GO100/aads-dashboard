@@ -664,6 +664,45 @@ async function vaultCredentialRequestCall<T>(path: string, init?: RequestInit): 
   }
 }
 
+export interface RunnerHostPolicy {
+  max_concurrent: number | null;
+  heavy_slots: number | null;
+  urgent_reserved_slots: number | null;
+  low_priority_nice: number | null;
+  revision: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+export interface RunnerHostPolicyHost {
+  host: string;
+  projects: string[];
+  engine_mode: string;
+  env_max_concurrent: number | null;
+  alive: boolean | null;
+  running: number;
+  queued: number;
+  policy: RunnerHostPolicy | null;
+}
+export interface RunnerHostPolicyResponse {
+  hosts: RunnerHostPolicyHost[];
+  limits: Record<"max_concurrent" | "heavy_slots" | "urgent_reserved_slots" | "low_priority_nice", { min: number; max: number }>;
+  apply_hint_sec: number;
+  generated_at: string;
+}
+export interface RunnerHostPolicyUpdate {
+  host: string;
+  max_concurrent: number | null;
+  heavy_slots: number;
+  urgent_reserved_slots: number;
+  expected_revision: number | null;
+}
+export interface RunnerHostPolicySaveResult {
+  ok: boolean;
+  host: string;
+  policy: RunnerHostPolicy | null;
+  apply_hint_sec: number;
+}
+
 const _meInflight = new Map<string, Promise<MeResponse | null>>();
 
 export const api = {
@@ -915,6 +954,12 @@ export const api = {
   getOpsConsistencyCheck: () => request<any>("/ops/consistency-check"),
   getOpsFullHealth: () => request<any>("/ops/full-health"),
   getOpsCommonDeployStatus: () => request<any>("/ops/deploy/status"),
+  getRunnerHostPolicy: () => request<RunnerHostPolicyResponse>("/ops/runner-host-policy"),
+  putRunnerHostPolicy: (body: RunnerHostPolicyUpdate) =>
+    request<RunnerHostPolicySaveResult>("/ops/runner-host-policy", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   approveOpsDeploy: (runId: number, actor = "ops-dashboard") =>
     request<any>(`/ops/deploy/${runId}/approve`, {
       method: "POST",

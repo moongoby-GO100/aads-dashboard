@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
+import RunnerHostPolicyCard from "@/components/ops/RunnerHostPolicyCard";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1436,6 +1437,9 @@ export default function OpsPage() {
             </div>
           )}
         </section>
+
+        {/* ─── 섹션 9: 서버별 러너 설정 ─── */}
+        <RunnerHostPolicyCard />
       </div>
 
       {/* Modal */}
