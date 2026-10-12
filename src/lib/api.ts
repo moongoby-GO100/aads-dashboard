@@ -1430,6 +1430,22 @@ export const api = {
   updateLlmKey: (id: number, data: Partial<{ value: string; label: string; priority: number; is_active: boolean; notes: string }>) =>
     request<any>(`/llm-keys/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteLlmKey: (id: number) => request<any>(`/llm-keys/${id}`, { method: "DELETE" }),
+  // CEO 수동 켜기/끄기 — POST /llm-keys/{key_id}/enabled. 실패하면 status 가 붙은 Error(message=서버 detail)를 던진다.
+  setLlmKeyEnabled: async (id: number, enabled: boolean) => {
+    try {
+      return await request<any>(`/llm-keys/${id}/enabled`, { method: "POST", body: JSON.stringify({ enabled }) });
+    } catch (e) {
+      const m = e instanceof Error ? /^API error (\d+): ([\s\S]*)$/.exec(e.message) : null;
+      if (!m) throw e;
+      let detail = m[2];
+      try {
+        const d = JSON.parse(m[2])?.detail;
+        if (typeof d === "string") detail = d;
+        else if (d != null) detail = JSON.stringify(d);
+      } catch { /* 본문이 JSON 이 아니면 그대로 쓴다 */ }
+      throw Object.assign(new Error(detail || `요청 실패 (${m[1]})`), { status: Number(m[1]) });
+    }
+  },
   // 코덱스 계정별 사용량 (PRD-LLM-ACCOUNT-RUNTIME-BINDING)
   getCodexUsage: () => request<any>("/llm-keys/codex-usage"),
   // 통합 계정 카드 — 키·바인딩·사용량을 서버가 합쳐 내려준다 (PRD-SETTINGS-UNIFIED-ACCOUNT-CARD)

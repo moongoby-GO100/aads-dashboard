@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import AccountLoginModal from "./AccountLoginModal";
+import EnableSwitch from "./EnableSwitch";
 
 /** LLM 계정 통합 카드.
  *
@@ -27,7 +28,8 @@ type UsageWindow = {
 type Account = {
   windows: UsageWindow[];
   key_name: string; provider: string; label: string; priority: number;
-  is_active: boolean; kind: "subscription"; masked_value: string; slot: string | null;
+  is_active: boolean; manual_disabled?: boolean; manual_disabled_at?: string | null;
+  kind: "subscription"; masked_value: string; slot: string | null;
   state: State; bound: boolean; needs_login: boolean; login_in_progress: boolean;
   binding_mismatch?: boolean; actual_account?: string | null;
   login_target: string | null; subscription: string | null;
@@ -71,8 +73,8 @@ const PROVIDER_LABEL: Record<string, string> = { anthropic: "Claude", codex: "Co
 
 /** 구독 계정 표의 열 정의. 헤더와 각 행이 같은 값을 써야 열이 어긋나지 않는다.
  *  펼침 · provider · 계정 · 순위 · 상태 · 사용량 · 액션 */
-const COLS = "14px 68px minmax(160px,1fr) 34px 76px 200px 152px";
-const COLS_MIN_WIDTH = 860;
+const COLS = "14px 68px minmax(160px,1fr) 34px 76px 200px 220px";
+const COLS_MIN_WIDTH = 930;
 
 const KST = "Asia/Seoul";
 const kst = (iso: string | null) =>
@@ -121,6 +123,7 @@ export default function LlmAccountCard() {
   const [msg, setMsg] = useState("");
   const [current, setCurrent] = useState<number | null>(null);
   const [primaryInfo, setPrimaryInfo] = useState<PrimaryState | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -167,6 +170,45 @@ export default function LlmAccountCard() {
       ? `${PROVIDER_LABEL[provider] ?? provider} 자동 — 곧 리셋될 한도부터 씁니다`
       : res?.detail || "전환 실패");
     if (res?.ok) load();
+  };
+
+  // 주계정 판정은 provider 를 가리지 않고 key_name 으로 한다.
+  // 예전에는 슬롯이 있는 클로드만 표시·전환이 됐고, 코덱스는 어느
+  // 계정이 쓰이는지 화면에서 알 수 없었다(2026-09-17 대표님 지적).
+  const isPrimaryAccount = (a: Account) => {
+    const primaryKey = primaryInfo?.providers?.[a.provider]?.primary;
+    return primaryKey
+      ? a.key_name === primaryKey
+      : Boolean(a.slot && current !== null && a.slot === `slot${current}`);
+  };
+  const isOn = (a: Account) => a.is_active && !a.manual_disabled;
+
+  /** CEO 수동 켜기/끄기. 서버는 key_id 로만 받는데 overview 에는 id 가 없어서
+   *  눌렀을 때 /llm-keys 목록에서 key_name 으로 id 를 찾는다. */
+  const toggleEnabled = async (a: Account) => {
+    if (toggling) return;
+    const next = !isOn(a);
+    const name = a.label || a.key_name;
+    const lines = next
+      ? [`${name} 계정을 켭니다.`]
+      : [`${name} 계정을 끕니다. 채팅·러너가 이 계정을 쓰지 않습니다.`];
+    if (!next && isPrimaryAccount(a)) lines.push("주계정입니다. 다음 우선순위 계정이 쓰입니다.");
+    if (!window.confirm(lines.join("\n"))) return;
+    setToggling(a.key_name);
+    try {
+      const keys: Array<{ id: number; key_name: string }> = await (api as any).getLlmKeys();
+      const id = keys.find((k) => k.key_name === a.key_name)?.id;
+      if (id == null) throw new Error("계정 id 를 찾을 수 없습니다");
+      await (api as any).setLlmKeyEnabled(id, next);
+      flash(next ? `${name} 계정을 켰습니다` : `${name} 계정을 껐습니다`);
+      load();
+    } catch (e: any) {
+      flash(e?.status === 403
+        ? "CEO 로그인 세션에서만 변경할 수 있습니다"
+        : e?.message || "켜기/끄기 실패");
+    } finally {
+      setToggling(null);
+    }
   };
 
   const rows = useMemo(() => {
@@ -338,13 +380,9 @@ export default function LlmAccountCard() {
           ) : rows.map((a) => {
             const open = openRow === a.key_name;
             const color = STATE_COLOR[a.state];
-            // 주계정 판정은 provider 를 가리지 않고 key_name 으로 한다.
-            // 예전에는 슬롯이 있는 클로드만 표시·전환이 됐고, 코덱스는 어느
-            // 계정이 쓰이는지 화면에서 알 수 없었다(2026-09-17 대표님 지적).
-            const primaryKey = primaryInfo?.providers?.[a.provider]?.primary;
-            const isPrimary = primaryKey
-              ? a.key_name === primaryKey
-              : Boolean(a.slot && current !== null && a.slot === `slot${current}`);
+            const isPrimary = isPrimaryAccount(a);
+            const autoHold = !a.manual_disabled && a.rate_limited_until && new Date(a.rate_limited_until).getTime() > Date.now()
+              ? a.rate_limited_until : null;
             return (
               <div key={a.key_name} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="px-3 py-2" style={{
@@ -393,11 +431,18 @@ export default function LlmAccountCard() {
                         기록 없음 — 첫 호출 후 표시
                       </span>
                     )}
-                    {a.rate_limited_until && (
-                      <span className="block text-xs" style={{ color: "#dc2626" }}>{kst(a.rate_limited_until)} 복귀</span>
+                    {a.manual_disabled && (
+                      <span className="block text-xs" style={{ color: "var(--text-secondary)" }}>
+                        직접 끔{a.manual_disabled_at ? ` · ${kst(a.manual_disabled_at)} KST` : ""}
+                      </span>
+                    )}
+                    {autoHold && (
+                      <span className="block text-xs" style={{ color: "#dc2626" }}>자동 보류 · {kst(autoHold)} 복귀</span>
                     )}
                   </span>
-                  <span className="flex gap-1 justify-end">
+                  <span className="flex gap-1 justify-end items-center flex-wrap">
+                    <EnableSwitch checked={isOn(a)} busy={toggling === a.key_name} disabled={toggling !== null}
+                      label={a.label || a.key_name} onToggle={() => void toggleEnabled(a)} />
                     {!a.needs_login && !isPrimary && (
                       <button onClick={() => void makePrimary(a.provider, a.key_name, a.label || a.key_name)}
                         className="text-xs px-2 py-1 rounded whitespace-nowrap"
@@ -418,7 +463,7 @@ export default function LlmAccountCard() {
 
                 {open && (
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
-                    <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"}</div>
+                    <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"} · {a.manual_disabled ? `직접 끔${a.manual_disabled_at ? ` (${kst(a.manual_disabled_at)} KST)` : ""}` : "직접 끔 아님"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
                     {a.binding_mismatch && (
                       <div style={{ color: "#d97706" }}>
