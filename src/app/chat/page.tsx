@@ -14,7 +14,6 @@ import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import VaultCredentialCard, { type VaultCredentialCardData } from "@/components/chat/VaultCredentialCard";
-import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import UsageBar from "@/components/chat/UsageBar";
@@ -38,8 +37,8 @@ import {
   type VoiceAlertKind,
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
-import { BASE_URL, getToken, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
-import { processInline, InlineMd, CopyableCodeBlock, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
+import { BASE_URL, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
+import { processInline, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
 import { allowReplyReplacement, shouldQueueAdditionalInstruction } from "@/lib/chatReplacementGuard";
@@ -7229,13 +7228,12 @@ export default function ChatPage() {
       chatViewportController.recordScroll(chatViewportController.hasActiveGesture);
     };
     let mutationAuditFrame = 0;
-    let resizeAuditFrame = 0;
+    // ResizeObserver delivers once per frame after layout and before paint.
+    // Deferring the correction to the next animation frame painted one frame
+    // with the reader's row displaced by the full height change (a late image
+    // or an expanded report above the row flashed by hundreds of px).
     const resizeObserver = new ResizeObserver(() => {
-      if (resizeAuditFrame) return;
-      resizeAuditFrame = requestAnimationFrame(() => {
-        resizeAuditFrame = 0;
-        chatViewportController.correctContentResize();
-      });
+      chatViewportController.correctContentResize();
     });
     const observedRows = new WeakSet<HTMLElement>();
     const observeMessageRows = () => {
@@ -7272,7 +7270,6 @@ export default function ChatPage() {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
       if (mutationAuditFrame) cancelAnimationFrame(mutationAuditFrame);
-      if (resizeAuditFrame) cancelAnimationFrame(resizeAuditFrame);
       container.removeEventListener("scroll", handleScroll);
       container.removeEventListener("wheel", markUserScrollIntent);
       container.removeEventListener("touchstart", markUserScrollIntent);
@@ -8120,7 +8117,7 @@ export default function ChatPage() {
       } else {
         setYellowWarning(data.detail || "이미지 생성 실패");
       }
-    } catch (e) {
+    } catch {
       setYellowWarning("이미지 생성 중 오류가 발생했습니다");
     } finally {
       setImageGenLoading(false);
@@ -9976,7 +9973,7 @@ export default function ChatPage() {
           }
         });
       }
-    } catch (e) {
+    } catch {
     }
   }, [setMessagesPreservingViewport]);
 

@@ -1,5 +1,6 @@
 import {
   CHAT_BOTTOM_THRESHOLD_PX,
+  CHAT_FOLLOW_RELEASE_PX,
   decideChatFollow,
   isChatNearBottom,
   nextChatFollowModeAfterUserScroll,
@@ -269,7 +270,17 @@ export class ChatViewportController {
 
   destroy(): void { this.cancelAll(); }
 
-  captureAnchor(): MessageViewportAnchor | null { return this.adapter.captureAnchor(); }
+  /**
+   * The adapter marks any anchor inside the 300px band as near-bottom, and
+   * restoring such an anchor writes the bottom.  That is follow behaviour, so
+   * a reader who released follow keeps their row unless they are really at
+   * the bottom (a touch that did not move the view).
+   */
+  captureAnchor(): MessageViewportAnchor | null {
+    const anchor = this.adapter.captureAnchor();
+    if (!anchor || !anchor.wasNearBottom || this.followMode === "auto") return anchor;
+    return { ...anchor, wasNearBottom: anchor.distanceFromBottom <= CHAT_FOLLOW_RELEASE_PX };
+  }
 
   markUserGesture(durationMs = 1_000): void {
     this.gestureEpoch += 1;
@@ -310,16 +321,18 @@ export class ChatViewportController {
       }
     }
     this.nearBottom = isChatNearBottom(metrics);
+    // Decide follow before capturing the anchor: the anchor's near-bottom flag
+    // depends on whether this scroll released follow.
+    const mode = userDriven ? nextChatFollowModeAfterUserScroll(metrics) : this.followMode;
+    if (userDriven) this.setFollowMode(mode);
     // A layout shrink can emit a scroll event without user input. In manual
     // mode that event must not replace the last position the reader chose;
     // the resize observer needs that anchor to repair the jump.
     if (!this.applying && (userDriven || !layoutShrank || this.followMode !== "manual" || !this.stableAnchor)) {
       this.stableScrollTop = metrics.scrollTop;
-      this.stableAnchor = this.adapter.captureAnchor();
+      this.stableAnchor = this.captureAnchor();
     }
     if (!userDriven) return;
-    const mode = nextChatFollowModeAfterUserScroll(metrics);
-    this.setFollowMode(mode);
     if (mode === "auto") {
       // Resuming follow does NOT end the gesture.  Clearing the window here let
       // the 300ms streaming tick write the bottom while the user was still
@@ -466,7 +479,7 @@ export class ChatViewportController {
     this.nearBottom = isChatNearBottom(metrics, CHAT_BOTTOM_THRESHOLD_PX);
     this.lastLayout = { scrollHeight: metrics.scrollHeight, clientHeight: metrics.clientHeight };
     this.stableScrollTop = metrics.scrollTop;
-    this.stableAnchor = this.adapter.captureAnchor();
+    this.stableAnchor = this.captureAnchor();
   }
 
   private setFollowMode(mode: ChatFollowMode): void {

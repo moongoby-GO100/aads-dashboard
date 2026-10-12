@@ -1,0 +1,1743 @@
+{
+"before5/desktop/S1_idle_up3screens": {
+"anchor_top_first": -325,
+"anchor_top_last": -325,
+"anchor_top_range_px": 0,
+"start": {
+"st": 40188,
+"sh": 42960,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 40188,
+"sh": 42960,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/desktop/S2_arrive_up3screens": {
+"anchor_top_first": -325,
+"anchor_top_last": -325,
+"anchor_top_range_px": 0,
+"start": {
+"st": 40188,
+"sh": 42960,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 40188,
+"sh": 43018,
+"ch": 372,
+"dist": 2458,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/desktop/S5_arrive_up180px": {
+"anchor_top_first": -2603,
+"anchor_top_last": -2783,
+"anchor_top_range_px": 180,
+"start": {
+"st": 42466,
+"sh": 43018,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"end": {
+"st": 42646,
+"sh": 43018,
+"ch": 372,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 202783,
+"kind": "scrollTop=",
+"before": 42466,
+"after": 42646,
+"sinceInput": 6098,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 1
+},
+"before5/desktop/S5_idle_up180px": {
+"anchor_top_first": -2603,
+"anchor_top_last": -2603,
+"anchor_top_range_px": 0,
+"start": {
+"st": 42466,
+"sh": 43018,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"end": {
+"st": 42466,
+"sh": 43018,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/desktop/S6_visibility_up3screens": {
+"anchor_top_first": -383,
+"anchor_top_last": -383,
+"anchor_top_range_px": 0,
+"start": {
+"st": 40246,
+"sh": 43018,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 40246,
+"sh": 43018,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/mobile/S1_idle_up3screens": {
+"anchor_top_first": -4513,
+"anchor_top_last": -4513,
+"anchor_top_range_px": 0,
+"start": {
+"st": 60926,
+"sh": 61574,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 60926,
+"sh": 61574,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/mobile/S2_arrive_up3screens": {
+"anchor_top_first": -4513,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 61,
+"start": {
+"st": 60926,
+"sh": 61574,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 1,
+"writes": [
+{
+"t": 174497,
+"kind": "scrollTop=",
+"before": 60926,
+"after": 60987,
+"sinceInput": 9094,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 1
+},
+"before5/mobile/S5_arrive_up180px": {
+"anchor_top_first": -4574,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 0,
+"start": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/mobile/S5_idle_up180px": {
+"anchor_top_first": -4574,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 0,
+"start": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before5/mobile/S6_visibility_up3screens": {
+"anchor_top_first": -4574,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 0,
+"start": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before6/desktop/S3_stream_up180px": {
+"anchor_top_first": -2546,
+"anchor_top_last": -3918,
+"anchor_top_range_px": 1372,
+"start": {
+"st": 42196,
+"sh": 42748,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"end": {
+"st": 43568,
+"sh": 43940,
+"ch": 372,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 1,
+"writes": [
+{
+"t": 47061,
+"kind": "scrollTop=",
+"before": 42196,
+"after": 42599,
+"sinceInput": 2676,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 48617,
+"kind": "scrollTop=",
+"before": 42599,
+"after": 42690,
+"sinceInput": 4232,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 50190,
+"kind": "scrollTop=",
+"before": 42690,
+"after": 42713,
+"sinceInput": 5804,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 26
+},
+"before6/desktop/S3_stream_up3screens": {
+"anchor_top_first": -1518,
+"anchor_top_last": -1518,
+"anchor_top_range_px": 0,
+"start": {
+"st": 41168,
+"sh": 43940,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 41168,
+"sh": 43940,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before7/desktop/S5_arrive_up250px": {
+"anchor_top_first": -2476,
+"anchor_top_last": -2783,
+"anchor_top_range_px": 307,
+"start": {
+"st": 41870,
+"sh": 42492,
+"ch": 372,
+"dist": 250,
+"mode": "auto"
+},
+"end": {
+"st": 42177,
+"sh": 42549,
+"ch": 372,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 46220,
+"kind": "scrollTop=",
+"before": 41870,
+"after": 42177,
+"sinceInput": 6487,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 1
+},
+"before7/desktop/S6_visibility_up3screens": {
+"anchor_top_first": -383,
+"anchor_top_last": -383,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39777,
+"sh": 42549,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39777,
+"sh": 42549,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before7/desktop/S1_idle_up3screens": {
+"anchor_top_first": -383,
+"anchor_top_last": -383,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39777,
+"sh": 42549,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39777,
+"sh": 42549,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before7/mobile/S5_arrive_up180px": {
+"anchor_top_first": -4348,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 226,
+"start": {
+"st": 60761,
+"sh": 61574,
+"ch": 648,
+"dist": 165,
+"mode": "auto"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 21391,
+"kind": "scrollTop=",
+"before": 60761,
+"after": 60987,
+"sinceInput": 6402,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 1
+},
+"before7/mobile/S5_arrive_up250px": {
+"anchor_top_first": -4339,
+"anchor_top_last": -4574,
+"anchor_top_range_px": 235,
+"start": {
+"st": 60752,
+"sh": 61635,
+"ch": 648,
+"dist": 235,
+"mode": "auto"
+},
+"end": {
+"st": 60987,
+"sh": 61635,
+"ch": 648,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 59326,
+"kind": "scrollTop=",
+"before": 60752,
+"after": 60987,
+"sinceInput": 6624,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 1
+},
+"before7/mobile/S3_stream_up180px": {
+"anchor_top_first": -4409,
+"anchor_top_last": -7270,
+"anchor_top_range_px": 2861,
+"start": {
+"st": 60822,
+"sh": 61635,
+"ch": 648,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 63683,
+"sh": 64331,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 2,
+"writes": [
+{
+"t": 93599,
+"kind": "scrollTop=",
+"before": 60822,
+"after": 61285,
+"sinceInput": 3107,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 95167,
+"kind": "scrollTop=",
+"before": 61285,
+"after": 61427,
+"sinceInput": 4675,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 96713,
+"kind": "scrollTop=",
+"before": 61427,
+"after": 61521,
+"sinceInput": 6221,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 26
+},
+"before7/mobile/S2_arrive_up3screens": {
+"anchor_top_first": 221,
+"anchor_top_last": 221,
+"anchor_top_range_px": 0,
+"start": {
+"st": 61403,
+"sh": 64331,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 61403,
+"sh": 64331,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before7/mobile/S1_idle_up3screens": {
+"anchor_top_first": 21,
+"anchor_top_last": 21,
+"anchor_top_range_px": 0,
+"start": {
+"st": 61603,
+"sh": 64331,
+"ch": 648,
+"dist": 2080,
+"mode": "manual"
+},
+"end": {
+"st": 61603,
+"sh": 64331,
+"ch": 648,
+"dist": 2080,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before_s4/desktop/S4_latelayout_up3screens": {
+"anchor_top_first": -326,
+"anchor_top_last": -326,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39779,
+"sh": 42551,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39779,
+"sh": 42551,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 45262,
+"kind": "scrollTop=",
+"before": 39779,
+"after": 40199,
+"sinceInput": 2339,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+},
+{
+"t": 47799,
+"kind": "scrollTop=",
+"before": 40199,
+"after": 39779,
+"sinceInput": 4876,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+},
+{
+"t": 50330,
+"kind": "scrollTop=",
+"before": 39779,
+"after": 40679,
+"sinceInput": 7406,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+}
+],
+"write_count": 4
+},
+"before_s4/desktop/S4_latelayout_up180px": {
+"anchor_top_first": -2546,
+"anchor_top_last": -2546,
+"anchor_top_range_px": 900,
+"start": {
+"st": 41999,
+"sh": 42551,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"end": {
+"st": 41999,
+"sh": 42551,
+"ch": 372,
+"dist": 180,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"before_s4/mobile/S4_latelayout_up3screens": {
+"anchor_top_first": -2232,
+"anchor_top_last": -2232,
+"anchor_top_range_px": 900,
+"start": {
+"st": 58730,
+"sh": 61658,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 58730,
+"sh": 61658,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [
+{
+"t": 21542,
+"kind": "scrollTop=",
+"before": 58730,
+"after": 59150,
+"sinceInput": 2560,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+},
+{
+"t": 24056,
+"kind": "scrollTop=",
+"before": 59150,
+"after": 58730,
+"sinceInput": 5075,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+},
+{
+"t": 26593,
+"kind": "scrollTop=",
+"before": 58730,
+"after": 59630,
+"sinceInput": 7612,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+}
+],
+"write_count": 4
+},
+"before_s4/mobile/S4_latelayout_up180px": {
+"anchor_top_first": -4347,
+"anchor_top_last": -4512,
+"anchor_top_range_px": 165,
+"start": {
+"st": 60845,
+"sh": 61658,
+"ch": 648,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 61010,
+"sh": 61658,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 3,
+"writes": [
+{
+"t": 37619,
+"kind": "scrollTop=",
+"before": 60845,
+"after": 61430,
+"sinceInput": 2453,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+},
+{
+"t": 42686,
+"kind": "scrollTop=",
+"before": 61010,
+"after": 61910,
+"sinceInput": 7519,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:10070",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10023)",
+"at app/chat/page-2213a37374d23dc1.js:50:161277"
+]
+}
+],
+"write_count": 2
+},
+"before_s3b_fresh/mobile/S3_stream_up180px": {
+"anchor_top_first": -4374,
+"anchor_top_last": -7236,
+"anchor_top_range_px": 2862,
+"start": {
+"st": 60766,
+"sh": 61552,
+"ch": 621,
+"dist": 165,
+"mode": "auto"
+},
+"end": {
+"st": 63628,
+"sh": 64249,
+"ch": 621,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 3,
+"writes": [
+{
+"t": 18656,
+"kind": "scrollTop=",
+"before": 60766,
+"after": 61230,
+"sinceInput": 3736,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 20296,
+"kind": "scrollTop=",
+"before": 61230,
+"after": 61371,
+"sinceInput": 5376,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 21921,
+"kind": "scrollTop=",
+"before": 61371,
+"after": 61465,
+"sinceInput": 7001,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9523",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11523)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9484)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 26
+},
+"after_patch/desktop/S1_idle_up3screens": {
+"anchor_top_first": -326,
+"anchor_top_last": -326,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39699,
+"sh": 42471,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39699,
+"sh": 42471,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S2_arrive_up3screens": {
+"anchor_top_first": -326,
+"anchor_top_last": -326,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39699,
+"sh": 42471,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39699,
+"sh": 42528,
+"ch": 372,
+"dist": 2457,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S3_stream_up3screens": {
+"anchor_top_first": -383,
+"anchor_top_last": -383,
+"anchor_top_range_px": 0,
+"start": {
+"st": 39756,
+"sh": 42528,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 39756,
+"sh": 43720,
+"ch": 372,
+"dist": 3592,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S3_stream_up180px": {
+"anchor_top_first": -657,
+"anchor_top_last": 87,
+"anchor_top_range_px": 744,
+"start": {
+"st": 43168,
+"sh": 43720,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"end": {
+"st": 43302,
+"sh": 43674,
+"ch": 372,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 4,
+"writes": [
+{
+"t": 273538,
+"kind": "scrollTop=",
+"before": 42424,
+"after": 42470,
+"sinceInput": 4846,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 275166,
+"kind": "scrollTop=",
+"before": 42470,
+"after": 42493,
+"sinceInput": 6475,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 277092,
+"kind": "scrollTop=",
+"before": 42493,
+"after": 42540,
+"sinceInput": 8401,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 24
+},
+"after_patch/desktop/S5_arrive_up180px": {
+"anchor_top_first": -611,
+"anchor_top_last": -611,
+"anchor_top_range_px": 0,
+"start": {
+"st": 43122,
+"sh": 43674,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"end": {
+"st": 43122,
+"sh": 43674,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S5_arrive_up250px": {
+"anchor_top_first": -541,
+"anchor_top_last": -541,
+"anchor_top_range_px": 0,
+"start": {
+"st": 43052,
+"sh": 43674,
+"ch": 372,
+"dist": 250,
+"mode": "manual"
+},
+"end": {
+"st": 43052,
+"sh": 43674,
+"ch": 372,
+"dist": 250,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S6_visibility_up3screens": {
+"anchor_top_first": -1529,
+"anchor_top_last": -1529,
+"anchor_top_range_px": 0,
+"start": {
+"st": 40902,
+"sh": 43674,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 40902,
+"sh": 43674,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S7_arrive_atbottom": {
+"anchor_top_first": -791,
+"anchor_top_last": -791,
+"anchor_top_range_px": 0,
+"start": {
+"st": 43302,
+"sh": 43674,
+"ch": 372,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 43302,
+"sh": 43674,
+"ch": 372,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/desktop/S7_stream_atbottom": {
+"anchor_top_first": -791,
+"anchor_top_last": 87,
+"anchor_top_range_px": 878,
+"start": {
+"st": 43302,
+"sh": 43674,
+"ch": 372,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 43348,
+"sh": 43720,
+"ch": 372,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 1,
+"writes": [
+{
+"t": 612769,
+"kind": "scrollTop=",
+"before": 42424,
+"after": 42470,
+"sinceInput": 5770,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 614340,
+"kind": "scrollTop=",
+"before": 42470,
+"after": 42493,
+"sinceInput": 7341,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 615892,
+"kind": "scrollTop=",
+"before": 42493,
+"after": 42540,
+"sinceInput": 8893,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 25
+},
+"after_patch/mobile/S1_idle_up3screens": {
+"anchor_top_first": -2433,
+"anchor_top_last": -2433,
+"anchor_top_range_px": 0,
+"start": {
+"st": 59048,
+"sh": 61776,
+"ch": 648,
+"dist": 2080,
+"mode": "manual"
+},
+"end": {
+"st": 59048,
+"sh": 61776,
+"ch": 648,
+"dist": 2080,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S2_arrive_up3screens": {
+"anchor_top_first": -2233,
+"anchor_top_last": -2233,
+"anchor_top_range_px": 0,
+"start": {
+"st": 58848,
+"sh": 61776,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 58848,
+"sh": 61837,
+"ch": 648,
+"dist": 2341,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S3_stream_up3screens": {
+"anchor_top_first": -2294,
+"anchor_top_last": -2294,
+"anchor_top_range_px": 0,
+"start": {
+"st": 58909,
+"sh": 61837,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 58909,
+"sh": 64439,
+"ch": 648,
+"dist": 4882,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S3_stream_up180px": {
+"anchor_top_first": -1800,
+"anchor_top_last": 292,
+"anchor_top_range_px": 2092,
+"start": {
+"st": 63626,
+"sh": 64439,
+"ch": 648,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 63885,
+"sh": 64533,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 4,
+"writes": [
+{
+"t": 186108,
+"kind": "scrollTop=",
+"before": 61534,
+"after": 61629,
+"sinceInput": 4803,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 187651,
+"kind": "scrollTop=",
+"before": 61629,
+"after": 61723,
+"sinceInput": 6347,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 189208,
+"kind": "scrollTop=",
+"before": 61723,
+"after": 61817,
+"sinceInput": 7904,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 25
+},
+"after_patch/mobile/S5_arrive_up180px": {
+"anchor_top_first": -1894,
+"anchor_top_last": -1894,
+"anchor_top_range_px": 0,
+"start": {
+"st": 63720,
+"sh": 64533,
+"ch": 648,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 63720,
+"sh": 64533,
+"ch": 648,
+"dist": 165,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S5_arrive_up250px": {
+"anchor_top_first": -1824,
+"anchor_top_last": -1824,
+"anchor_top_range_px": 0,
+"start": {
+"st": 63650,
+"sh": 64533,
+"ch": 648,
+"dist": 235,
+"mode": "manual"
+},
+"end": {
+"st": 63650,
+"sh": 64533,
+"ch": 648,
+"dist": 235,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S6_visibility_up3screens": {
+"anchor_top_first": 221,
+"anchor_top_last": 221,
+"anchor_top_range_px": 0,
+"start": {
+"st": 61605,
+"sh": 64533,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 61605,
+"sh": 64533,
+"ch": 648,
+"dist": 2280,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S7_arrive_atbottom": {
+"anchor_top_first": -2059,
+"anchor_top_last": -2059,
+"anchor_top_range_px": 0,
+"start": {
+"st": 63885,
+"sh": 64533,
+"ch": 648,
+"dist": 0,
+"mode": "auto"
+},
+"end": {
+"st": 63885,
+"sh": 64533,
+"ch": 648,
+"dist": 0,
+"mode": "auto"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch/mobile/S7_stream_atbottom": {
+"anchor_top_first": -2059,
+"anchor_top_last": 292,
+"anchor_top_range_px": 2351,
+"start": {
+"st": 63885,
+"sh": 64533,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"end": {
+"st": 63791,
+"sh": 64439,
+"ch": 648,
+"dist": 0,
+"mode": "manual"
+},
+"native_scroll_events": 6,
+"writes": [
+{
+"t": 381213,
+"kind": "scrollTop=",
+"before": 61534,
+"after": 61629,
+"sinceInput": 6004,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 382858,
+"kind": "scrollTop=",
+"before": 61629,
+"after": 61723,
+"sinceInput": 7650,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+},
+{
+"t": 384437,
+"kind": "scrollTop=",
+"before": 61723,
+"after": 61817,
+"sinceInput": 9229,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122376)",
+"at app/chat/page-2213a37374d23dc1.js:49:9664",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.commitPendingIntent (app/chat/page-2213a37374d23dc1.js:49:9625)",
+"at app/chat/page-2213a37374d23dc1.js:50:125546"
+]
+}
+],
+"write_count": 24
+},
+"after_patch2/desktop/S3_stream_up180px": {
+"anchor_top_first": -2546,
+"anchor_top_last": -2546,
+"anchor_top_range_px": 0,
+"start": {
+"st": 41919,
+"sh": 42471,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"end": {
+"st": 41919,
+"sh": 43662,
+"ch": 372,
+"dist": 1371,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch2/desktop/S4_latelayout_up3screens": {
+"anchor_top_first": -1517,
+"anchor_top_last": -1517,
+"anchor_top_range_px": 900,
+"start": {
+"st": 40890,
+"sh": 43662,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"end": {
+"st": 40890,
+"sh": 43662,
+"ch": 372,
+"dist": 2400,
+"mode": "manual"
+},
+"native_scroll_events": 2,
+"writes": [
+{
+"t": 116056,
+"kind": "scrollTop=",
+"before": 40890,
+"after": 41310,
+"sinceInput": 2182,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 118575,
+"kind": "scrollTop=",
+"before": 41310,
+"after": 40890,
+"sinceInput": 4702,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 121076,
+"kind": "scrollTop=",
+"before": 40890,
+"after": 41790,
+"sinceInput": 7203,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+}
+],
+"write_count": 4
+},
+"after_patch2/desktop/S4_latelayout_up180px": {
+"anchor_top_first": -656,
+"anchor_top_last": -656,
+"anchor_top_range_px": 0,
+"start": {
+"st": 43110,
+"sh": 43662,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"end": {
+"st": 43110,
+"sh": 43662,
+"ch": 372,
+"dist": 180,
+"mode": "manual"
+},
+"native_scroll_events": 4,
+"writes": [
+{
+"t": 166025,
+"kind": "scrollTop=",
+"before": 43110,
+"after": 43530,
+"sinceInput": 2865,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 168493,
+"kind": "scrollTop=",
+"before": 43290,
+"after": 43110,
+"sinceInput": 5333,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 171146,
+"kind": "scrollTop=",
+"before": 43110,
+"after": 44010,
+"sinceInput": 7986,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+}
+],
+"write_count": 4
+},
+"after_patch2/mobile/S3_stream_up180px": {
+"anchor_top_first": -4374,
+"anchor_top_last": -4374,
+"anchor_top_range_px": 0,
+"start": {
+"st": 60766,
+"sh": 61552,
+"ch": 621,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 60766,
+"sh": 64155,
+"ch": 621,
+"dist": 2768,
+"mode": "manual"
+},
+"native_scroll_events": 0,
+"writes": [],
+"write_count": 0
+},
+"after_patch2/mobile/S4_latelayout_up3screens": {
+"anchor_top_first": 287,
+"anchor_top_last": 287,
+"anchor_top_range_px": 0,
+"start": {
+"st": 61254,
+"sh": 64155,
+"ch": 621,
+"dist": 2280,
+"mode": "manual"
+},
+"end": {
+"st": 61254,
+"sh": 64155,
+"ch": 621,
+"dist": 2280,
+"mode": "manual"
+},
+"native_scroll_events": 3,
+"writes": [
+{
+"t": 71148,
+"kind": "scrollTop=",
+"before": 61254,
+"after": 61674,
+"sinceInput": 2700,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 73660,
+"kind": "scrollTop=",
+"before": 61674,
+"after": 61254,
+"sinceInput": 5213,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 76161,
+"kind": "scrollTop=",
+"before": 61254,
+"after": 62154,
+"sinceInput": 7713,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+}
+],
+"write_count": 4
+},
+"after_patch2/mobile/S4_latelayout_up180px": {
+"anchor_top_first": -1828,
+"anchor_top_last": -1828,
+"anchor_top_range_px": 420,
+"start": {
+"st": 63369,
+"sh": 64155,
+"ch": 621,
+"dist": 165,
+"mode": "manual"
+},
+"end": {
+"st": 63369,
+"sh": 64155,
+"ch": 621,
+"dist": 165,
+"mode": "manual"
+},
+"native_scroll_events": 1,
+"writes": [
+{
+"t": 87230,
+"kind": "scrollTop=",
+"before": 63369,
+"after": 63789,
+"sinceInput": 2500,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 89746,
+"kind": "scrollTop=",
+"before": 63534,
+"after": 63369,
+"sinceInput": 5017,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+},
+{
+"t": 92264,
+"kind": "scrollTop=",
+"before": 63369,
+"after": 64269,
+"sinceInput": 7534,
+"stack": [
+"at Object.restoreAnchor (app/chat/page-2213a37374d23dc1.js:50:122758)",
+"at app/chat/page-2213a37374d23dc1.js:49:10211",
+"at r$.performWrite (app/chat/page-2213a37374d23dc1.js:49:11656)",
+"at r$.correctContentResize (app/chat/page-2213a37374d23dc1.js:49:10164)",
+"at ResizeObserver.<anonymous> (app/chat/page-2213a37374d23dc1.js:50:161240)"
+]
+}
+],
+"write_count": 4
+}
+}

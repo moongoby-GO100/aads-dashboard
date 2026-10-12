@@ -1,0 +1,41 @@
+PASS: WP03 runtime/SSE/status/capability T05-T09, T21, T36 cases
+/tmp/aads-selftest-Kd7KK3/features/chat/viewport/chatViewportController.selftest.js:6
+        throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
+        ^
+
+Error: a 100px scroll up is reading, not a nudge: expected manual, received auto
+    at assertEqual (/tmp/aads-selftest-Kd7KK3/features/chat/viewport/chatViewportController.selftest.js:6:15)
+    at Object.<anonymous> (/tmp/aads-selftest-Kd7KK3/features/chat/viewport/chatViewportController.selftest.js:138:5)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at node:internal/main/run_main_module:28:49
+
+Node.js v20.20.2
+aiResponseErrors selftest: OK
+PASS: interrupt receipt rollback is command-scoped
+PASS: 16 chat panel surface cases
+PASS: 10 reply replacement / additional instruction cases
+/tmp/aads-selftest-Kd7KK3/lib/chatScrollPolicy.selftest.js:6
+        throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
+        ^
+
+Error: a 180px scroll up inside the band releases follow: expected manual, received auto
+    at assertEqual (/tmp/aads-selftest-Kd7KK3/lib/chatScrollPolicy.selftest.js:6:15)
+    at Object.<anonymous> (/tmp/aads-selftest-Kd7KK3/lib/chatScrollPolicy.selftest.js:26:1)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at node:internal/main/run_main_module:28:49
+
+Node.js v20.20.2
+documentLinks selftest: OK
+liveBrowserCoordinates.selftest: ok
+sessionRef selftest: OK
+
+selftest: 10/12 files passed
+FAIL: features/chat/viewport/chatViewportController.selftest.js, lib/chatScrollPolicy.selftest.js

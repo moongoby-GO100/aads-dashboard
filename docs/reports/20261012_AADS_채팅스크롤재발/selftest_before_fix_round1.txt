@@ -1,0 +1,6 @@
+# 재작업 라운드 1 (runner-c4360cf1) — 수정 전 HEAD 2ebccea 의 chatScrollPolicy.ts / chatViewportController.ts 에
+# 현재 selftest 두 파일을 그대로 붙여 tsc → node 로 실행한 출력
+== lib/chatScrollPolicy.selftest.js
+Error: a 180px scroll up inside the band releases follow: expected manual, received auto
+== features/chat/viewport/chatViewportController.selftest.js
+Error: a 100px scroll up is reading, not a nudge: expected manual, received auto

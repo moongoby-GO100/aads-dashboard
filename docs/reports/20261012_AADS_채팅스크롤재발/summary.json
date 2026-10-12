@@ -1,0 +1,678 @@
+[
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S2_arrive_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2458,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S5_arrive_up180px",
+  "mode_start": "auto",
+  "dist_start": 180,
+  "dist_end": 0,
+  "net_anchor_px": -180,
+  "range_anchor_px": 180,
+  "writes": 1,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 1
+  }
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S5_idle_up180px",
+  "mode_start": "auto",
+  "dist_start": 180,
+  "dist_end": 180,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S6_visibility_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S2_arrive_up3screens",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": -61,
+  "range_anchor_px": 61,
+  "writes": 1,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 1
+  }
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S5_arrive_up180px",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S5_idle_up180px",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before5",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S6_visibility_up3screens",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before6",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "auto",
+  "dist_start": 180,
+  "dist_end": 0,
+  "net_anchor_px": -1372,
+  "range_anchor_px": 1372,
+  "writes": 26,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 26
+  }
+ },
+ {
+  "run": "before6",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S3_stream_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S5_arrive_up250px",
+  "mode_start": "auto",
+  "dist_start": 250,
+  "dist_end": 0,
+  "net_anchor_px": -307,
+  "range_anchor_px": 307,
+  "writes": 1,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 1
+  }
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S6_visibility_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S5_arrive_up180px",
+  "mode_start": "auto",
+  "dist_start": 165,
+  "dist_end": 0,
+  "net_anchor_px": -226,
+  "range_anchor_px": 226,
+  "writes": 1,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 1
+  }
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S5_arrive_up250px",
+  "mode_start": "auto",
+  "dist_start": 235,
+  "dist_end": 0,
+  "net_anchor_px": -235,
+  "range_anchor_px": 235,
+  "writes": 1,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 1
+  }
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 0,
+  "net_anchor_px": -2861,
+  "range_anchor_px": 2861,
+  "writes": 26,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 26
+  }
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S2_arrive_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 2280,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before7",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2080,
+  "dist_end": 2080,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before_s4",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S4_latelayout_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ },
+ {
+  "run": "before_s4",
+  "label": "수정 전(운영 번들)",
+  "profile": "desktop",
+  "scenario": "S4_latelayout_up180px",
+  "mode_start": "auto",
+  "dist_start": 180,
+  "dist_end": 180,
+  "net_anchor_px": 0,
+  "range_anchor_px": 900,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "before_s4",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S4_latelayout_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 2280,
+  "net_anchor_px": 0,
+  "range_anchor_px": 900,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ },
+ {
+  "run": "before_s4",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S4_latelayout_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 0,
+  "net_anchor_px": -165,
+  "range_anchor_px": 165,
+  "writes": 2,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 2
+  }
+ },
+ {
+  "run": "before_s3b_fresh",
+  "label": "수정 전(운영 번들)",
+  "profile": "mobile",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "auto",
+  "dist_start": 165,
+  "dist_end": 0,
+  "net_anchor_px": -2862,
+  "range_anchor_px": 2862,
+  "writes": 26,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 26
+  }
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S2_arrive_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2457,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S3_stream_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 3592,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "manual",
+  "dist_start": 180,
+  "dist_end": 0,
+  "net_anchor_px": 744,
+  "range_anchor_px": 744,
+  "writes": 24,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 24
+  }
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S5_arrive_up180px",
+  "mode_start": "manual",
+  "dist_start": 180,
+  "dist_end": 180,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S5_arrive_up250px",
+  "mode_start": "manual",
+  "dist_start": 250,
+  "dist_end": 250,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S6_visibility_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S7_arrive_atbottom",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S7_stream_atbottom",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 878,
+  "range_anchor_px": 878,
+  "writes": 25,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 25
+  }
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S1_idle_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2080,
+  "dist_end": 2080,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S2_arrive_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 2341,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S3_stream_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 4882,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 0,
+  "net_anchor_px": 2092,
+  "range_anchor_px": 2092,
+  "writes": 25,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 25
+  }
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S5_arrive_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 165,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S5_arrive_up250px",
+  "mode_start": "manual",
+  "dist_start": 235,
+  "dist_end": 235,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S6_visibility_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 2280,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S7_arrive_atbottom",
+  "mode_start": "auto",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S7_stream_atbottom",
+  "mode_start": "manual",
+  "dist_start": 0,
+  "dist_end": 0,
+  "net_anchor_px": 2351,
+  "range_anchor_px": 2351,
+  "writes": 24,
+  "sources": {
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via commitPendingIntent (ts:423/429) ← page.tsx:5184": 23,
+   "chatViewportController.ts:157 restoreAnchor (wasNearBottom → bottom) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 1
+  }
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "manual",
+  "dist_start": 180,
+  "dist_end": 1371,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S4_latelayout_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2400,
+  "dist_end": 2400,
+  "net_anchor_px": 0,
+  "range_anchor_px": 900,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "desktop",
+  "scenario": "S4_latelayout_up180px",
+  "mode_start": "manual",
+  "dist_start": 180,
+  "dist_end": 180,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S3_stream_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 2768,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 0,
+  "sources": {}
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S4_latelayout_up3screens",
+  "mode_start": "manual",
+  "dist_start": 2280,
+  "dist_end": 2280,
+  "net_anchor_px": 0,
+  "range_anchor_px": 0,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ },
+ {
+  "run": "after_patch2",
+  "label": "수정 로직 주입(운영 번들 패치)",
+  "profile": "mobile",
+  "scenario": "S4_latelayout_up180px",
+  "mode_start": "manual",
+  "dist_start": 165,
+  "dist_end": 165,
+  "net_anchor_px": 0,
+  "range_anchor_px": 420,
+  "writes": 4,
+  "sources": {
+   "chatViewportController.ts:181 restoreAnchor (row anchor) via correctContentResize (ts:438) ← page.tsx:7237 ResizeObserver": 4
+  }
+ }
+]

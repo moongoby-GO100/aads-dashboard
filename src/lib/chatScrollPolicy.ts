@@ -1,5 +1,13 @@
 export const CHAT_BOTTOM_THRESHOLD_PX = 300;
 
+/**
+ * A user scroll that leaves the bottom by more than this ends follow, even
+ * inside CHAT_BOTTOM_THRESHOLD_PX (CEO decision 2026-10-12: a reader who moved
+ * up on purpose is reading).  Coming back within it resumes follow.  The 300px
+ * band still decides whether a *following* view keeps up with content growth.
+ */
+export const CHAT_FOLLOW_RELEASE_PX = 64;
+
 export type ChatFollowMode = "auto" | "manual";
 
 export type ChatScrollMetrics = {
@@ -18,7 +26,7 @@ export function isChatNearBottom(
 }
 
 export function nextChatFollowModeAfterUserScroll(metrics: ChatScrollMetrics): ChatFollowMode {
-  return isChatNearBottom(metrics) ? "auto" : "manual";
+  return isChatNearBottom(metrics, CHAT_FOLLOW_RELEASE_PX) ? "auto" : "manual";
 }
 
 export function decideChatFollow(params: {

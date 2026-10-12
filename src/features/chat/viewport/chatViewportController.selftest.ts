@@ -31,7 +31,17 @@ function harness() {
   const adapter: ChatViewportAdapter = {
     readMetrics: () => metrics,
     captureAnchor: () => currentAnchor,
-    restoreAnchor: (value) => { writes.push(`anchor:${value.renderKey}`); metrics = { ...metrics, scrollTop: value.scrollTop }; return true; },
+    restoreAnchor: (value) => {
+      // The DOM adapter writes the bottom for a near-bottom anchor; record that separately.
+      if (value.wasNearBottom) {
+        writes.push("anchor-bottom");
+        metrics = { ...metrics, scrollTop: metrics.scrollHeight - metrics.clientHeight };
+        return true;
+      }
+      writes.push(`anchor:${value.renderKey}`);
+      metrics = { ...metrics, scrollTop: value.scrollTop };
+      return true;
+    },
     writeBottom: () => { writes.push("bottom"); metrics = { ...metrics, scrollTop: metrics.scrollHeight - metrics.clientHeight }; return true; },
     writeScrollTop: (value) => { writes.push(`top:${value}`); metrics = { ...metrics, scrollTop: value }; return true; },
     scrollElementIntoView: () => { writes.push("element"); return true; },
@@ -125,17 +135,17 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes[h.writes.length - 1], "anchor:stable", "resize uses latest stable anchor");
 }
 
-// T05: a nudge that stays inside the near-bottom band must survive the
-// streaming tick.  Resuming auto-follow used to clear the gesture window in the
-// same call, so the very next bottom write undid the user scroll and the view
-// felt stuck to the bottom while a reply streamed.
+// T05: a deliberate scroll up inside the near-bottom band releases follow
+// (CEO decision 2026-10-12): the streaming tick must not pull the reader back
+// down, neither while the gesture is open nor after it expires.  A small
+// jitter that stays within the release distance keeps follow armed.
 {
   const h = harness();
   h.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
   h.controller.markUserGesture();
   h.setMetrics({ scrollTop: 1_400, clientHeight: 500, scrollHeight: 2_000 });
   h.controller.recordScroll(true);
-  assertEqual(h.controller.mode, "auto", "a nudge inside the band keeps follow armed");
+  assertEqual(h.controller.mode, "manual", "a 100px scroll up is reading, not a nudge");
   h.controller.requestBottom(false, "message-commit");
   h.flushFrame();
   h.flushFrame();
@@ -144,7 +154,19 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   h.controller.requestBottom(false, "message-commit");
   h.flushFrame();
   h.flushFrame();
-  assertEqual(h.writes.join(","), "bottom,bottom", "follow resumes once the gesture expires");
+  assertEqual(h.writes.length, 0, "follow stays released after the gesture expires");
+
+  const jitter = harness();
+  jitter.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
+  jitter.controller.markUserGesture();
+  jitter.setMetrics({ scrollTop: 1_460, clientHeight: 500, scrollHeight: 2_000 });
+  jitter.controller.recordScroll(true);
+  assertEqual(jitter.controller.mode, "auto", "a 40px jitter keeps follow armed");
+  jitter.setNow(2_000);
+  jitter.controller.requestBottom(false, "message-commit");
+  jitter.flushFrame();
+  jitter.flushFrame();
+  assertEqual(jitter.writes.join(","), "bottom,bottom", "follow resumes once the gesture expires");
 }
 
 // T06: a passive scroll event caused by a shrinking message must not erase
@@ -292,4 +314,66 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes.join(","), "bottom,bottom", "bottom follows only once the reader is back there");
 }
 
-console.log("PASS: WP02 viewport controller T01-T12 cases");
+// T13 (production probe S5/S3, 2026-10-12): the reader scrolled 180px up from
+// the bottom.  The anchor captured for the next row commit reported
+// wasNearBottom (300px band), so restoreAnchor wrote the bottom
+// (chatViewportController.ts restoreAnchor -> commitPendingIntent).  A reader
+// who moved up must get their row back, not the bottom.
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 5_500, clientHeight: 500, scrollHeight: 6_000 });
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 5_320, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor({ ...anchor("reading-180", 5_320), distanceFromBottom: 180, wasNearBottom: true });
+  h.controller.recordScroll(true);
+  h.setNow(5_000);
+  h.controller.enqueueMutationAnchor(h.controller.captureAnchor(), "message-commit");
+  h.setMetrics({ scrollTop: 5_320, clientHeight: 500, scrollHeight: 6_400 });
+  assertEqual(h.controller.commitPendingIntent(), true, "row commit restores the reader");
+  h.flushFrame();
+  h.controller.settleAfterMessageChange(true, true);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.includes("anchor-bottom") || h.writes.includes("bottom"), false, "a reader 180px up is never pulled to the bottom");
+  assertEqual(h.writes[0], "anchor:reading-180", "the reading row is restored");
+  h.controller.markUserGesture();
+  h.setNow(5_100);
+  assertEqual(h.controller.correctContentResize(), false, "no write while the reader's gesture is open");
+  h.setNow(9_000);
+  assertEqual(h.controller.correctContentResize(), true, "late layout is repaired against the reading row");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:reading-180", "late layout keeps the reading row, not the bottom");
+}
+
+// T14: at the bottom the view keeps following new rows, both in auto mode and
+// after a touch that did not move the view (markUserGesture without scroll).
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 5_500, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor({ ...anchor("last-row", 5_500), distanceFromBottom: 0, wasNearBottom: true });
+  h.controller.enqueueMutationAnchor(h.controller.captureAnchor(), "message-commit");
+  h.setMetrics({ scrollTop: 5_500, clientHeight: 500, scrollHeight: 6_300 });
+  h.controller.commitPendingIntent();
+  assertEqual(h.writes[0], "anchor-bottom", "auto follow keeps the bottom");
+  h.controller.markUserGesture();
+  h.setNow(2_000);
+  h.setMetrics({ scrollTop: 5_800, clientHeight: 500, scrollHeight: 6_300 });
+  h.setAnchor({ ...anchor("last-row", 5_800), distanceFromBottom: 0, wasNearBottom: true });
+  h.controller.enqueueMutationAnchor(h.controller.captureAnchor(), "message-commit");
+  h.setMetrics({ scrollTop: 5_800, clientHeight: 500, scrollHeight: 6_600 });
+  h.controller.commitPendingIntent();
+  assertEqual(h.writes[h.writes.length - 1], "anchor-bottom", "a tap at the bottom still follows the next row");
+}
+
+// T15: following at the bottom, content growth (no user input) may leave the
+// view inside the band; the next commit still follows.
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 5_300, clientHeight: 500, scrollHeight: 6_000 });
+  h.setAnchor({ ...anchor("grown", 5_300), distanceFromBottom: 200, wasNearBottom: true });
+  h.controller.enqueueMutationAnchor(h.controller.captureAnchor(), "message-commit");
+  h.controller.commitPendingIntent();
+  assertEqual(h.writes[0], "anchor-bottom", "content growth while following stays at the bottom");
+}
+
+console.log("PASS: WP02 viewport controller T01-T15 cases");

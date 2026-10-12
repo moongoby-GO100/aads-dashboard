@@ -23,6 +23,8 @@ test("manual follow remains user-owned for thirty seconds of synthetic ticks", (
     }), "none");
   }
   assert.equal(policy.CHAT_BOTTOM_THRESHOLD_PX, 300);
+  // A deliberate scroll up releases follow well inside the 300px band (CEO 2026-10-12).
+  assert.ok(policy.CHAT_FOLLOW_RELEASE_PX >= 48 && policy.CHAT_FOLLOW_RELEASE_PX <= 80);
 });
 
 // C10 / FR06-FR07 / INV05-INV06 / ADR06 / T06-T07 moved to the
