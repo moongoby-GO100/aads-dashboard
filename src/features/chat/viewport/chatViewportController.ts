@@ -4,6 +4,7 @@ import {
   decideChatFollow,
   isChatNearBottom,
   nextChatFollowModeAfterUserScroll,
+  shouldReleaseBottomStick,
   type ChatFollowMode,
   type ChatScrollMetrics,
 } from "../../../lib/chatScrollPolicy";
@@ -29,6 +30,14 @@ export type MessageViewportAnchor = {
   renderKey: string | null;
   messageId: string | null;
   neighborKeys: string[];
+  /**
+   * Each neighbour's own offset from the viewport top, index-aligned with
+   * neighborKeys.  Restoring through a neighbour with the anchor row's offset
+   * put the view off by every row in between (production S9, 2026-10-13: the
+   * streaming row changed key and the reader jumped 8,354px up).  Optional so
+   * snapshots written before this field still restore.
+   */
+  neighborOffsets?: number[];
   offsetPx: number;
   scrollTop: number;
   scrollHeight: number;
@@ -122,19 +131,19 @@ export function createDomChatViewportAdapter(
       const anchor = anchorIndex >= 0 ? messageRows[anchorIndex] : null;
       const following = anchorIndex >= 0 ? messageRows.slice(anchorIndex + 1) : [];
       const preceding = anchorIndex > 0 ? messageRows.slice(0, anchorIndex).reverse() : [];
+      // Only the rows adjacent to the anchor can serve as a fallback: if none
+      // of them survived the mutation, the anchor's neighbourhood is gone and
+      // a far-away row would restore the wrong position anyway.  Keeping the
+      // whole list made every scroll event allocate one key per rendered row.
+      const neighbors = [
+        ...following.slice(0, ANCHOR_NEIGHBOR_SPAN),
+        ...preceding.slice(0, ANCHOR_NEIGHBOR_SPAN),
+      ].filter((element) => Boolean(rowKey(element)));
       return {
         renderKey: anchor ? rowKey(anchor) : null,
         messageId: anchor?.dataset.messageId || null,
-        // Only the rows adjacent to the anchor can serve as a fallback: if none
-        // of them survived the mutation, the anchor's neighbourhood is gone and
-        // a far-away row would restore the wrong position anyway.  Keeping the
-        // whole list made every scroll event allocate one key per rendered row.
-        neighborKeys: [
-          ...following.slice(0, ANCHOR_NEIGHBOR_SPAN),
-          ...preceding.slice(0, ANCHOR_NEIGHBOR_SPAN),
-        ]
-          .map(rowKey)
-          .filter((key): key is string => Boolean(key)),
+        neighborKeys: neighbors.map((element) => rowKey(element) as string),
+        neighborOffsets: neighbors.map((element) => element.offsetTop - container.scrollTop),
         offsetPx: anchor ? anchor.offsetTop - container.scrollTop : 0,
         scrollTop: container.scrollTop,
         scrollHeight: container.scrollHeight,
@@ -158,26 +167,43 @@ export function createDomChatViewportAdapter(
         if (Math.abs(container.scrollTop - maxScrollTop) > 1) container.scrollTop = maxScrollTop;
         return true;
       }
-      const targetKeys = [
-        anchor.renderKey || anchor.renderId || anchor.messageId,
-        ...(anchor.neighborKeys || []),
-      ].filter((key): key is string => Boolean(key));
+      const primaryKey = anchor.renderKey || anchor.renderId || anchor.messageId || null;
+      const offset = Number.isFinite(anchor.offsetPx) ? anchor.offsetPx : Number(anchor.offsetTop || 0);
+      const targets: Array<{ key: string; offset: number }> = [];
+      if (primaryKey) targets.push({ key: primaryKey, offset });
+      (anchor.neighborKeys || []).forEach((key, index) => {
+        const own = anchor.neighborOffsets?.[index];
+        if (key) targets.push({ key, offset: typeof own === "number" && Number.isFinite(own) ? own : offset });
+      });
       // `.map()` does not short-circuit, so the previous form re-ran
       // querySelectorAll once per candidate key — quadratic in the rendered row
       // count, on a path that runs for every ResizeObserver frame while a reply
       // streams.  Index the rows once and stop at the first surviving key.
-      const rowsByKey = new Map<string, HTMLElement>();
+      //
+      // A key can repeat: the local streaming placeholder is
+      // `ai-streaming-<session>` and the finished reply keeps that id until a
+      // refetch replaces it, so the next reply renders a second row with the
+      // same key.  Taking the first one sent the reader to the previous reply
+      // (production S9, 2026-10-13: 8,354px up).  Use the row nearest to where
+      // the anchor expects it.
+      const rowsByKey = new Map<string, HTMLElement[]>();
       for (const element of rows(container)) {
         const key = rowKey(element);
-        if (key && !rowsByKey.has(key)) rowsByKey.set(key, element);
+        if (!key) continue;
+        const sameKey = rowsByKey.get(key);
+        if (sameKey) sameKey.push(element);
+        else rowsByKey.set(key, [element]);
       }
-      let target: HTMLElement | null = null;
-      for (const key of targetKeys) {
-        const found = rowsByKey.get(key);
-        if (found) { target = found; break; }
+      let desired = anchor.scrollTop;
+      for (const candidate of targets) {
+        const found = rowsByKey.get(candidate.key);
+        if (!found) continue;
+        const expectedTop = anchor.scrollTop + candidate.offset;
+        const nearest = found.reduce((best, element) =>
+          Math.abs(element.offsetTop - expectedTop) < Math.abs(best.offsetTop - expectedTop) ? element : best);
+        desired = nearest.offsetTop - candidate.offset;
+        break;
       }
-      const offset = Number.isFinite(anchor.offsetPx) ? anchor.offsetPx : Number(anchor.offsetTop || 0);
-      const desired = target ? target.offsetTop - offset : anchor.scrollTop;
       const nextScrollTop = Math.max(0, Math.min(maxScrollTop, desired));
       if (Math.abs(container.scrollTop - nextScrollTop) > 1) container.scrollTop = nextScrollTop;
       return true;
@@ -282,9 +308,15 @@ export class ChatViewportController {
     return { ...anchor, wasNearBottom: anchor.distanceFromBottom <= CHAT_FOLLOW_RELEASE_PX };
   }
 
-  markUserGesture(durationMs = 1_000): void {
+  /**
+   * `direction: "up"` is a wheel/touch/key input that moves the view toward
+   * older messages.  It ends the post-send bottom stick at once, whatever the
+   * distance: a reader who reaches up has stopped watching the reply arrive.
+   */
+  markUserGesture(durationMs = 1_000, direction?: "up" | "down"): void {
     this.gestureEpoch += 1;
     this.gestureActiveUntil = Math.max(this.gestureActiveUntil, this.now() + durationMs);
+    if (direction === "up") this.bottomStickUntil = 0;
     this.cancelPendingIntent();
     this.cancelBottomFrames();
     this.setFollowMode("manual");
@@ -308,7 +340,14 @@ export class ChatViewportController {
     const ownWrite = this.lastWriteScrollTop !== null && Math.abs(metrics.scrollTop - this.lastWriteScrollTop) <= 1;
     const momentum = !userInitiated && !layoutShrank && !ownWrite && !this.applying &&
       this.lastUserScrollAt > 0 && now - this.lastUserScrollAt <= USER_SCROLL_CHAIN_GAP_MS;
-    const userDriven = userInitiated || momentum;
+    // A clamp from content getting shorter is the layout's motion even while
+    // the gesture window is open.  Production S9 (2026-10-13): the reader
+    // wheeled 120px up while a reply streamed, the streaming tail shrank 118px
+    // 70ms later, the clamp landed 2px from the bottom, was read as the
+    // reader's scroll and re-armed follow; the 300ms streaming tick then
+    // dragged the view 3,533px down within 10s.
+    const userDriven = (userInitiated && !layoutShrank) || momentum;
+    const movedUp = userDriven && this.stableScrollTop - metrics.scrollTop > 1;
     if (userDriven) {
       this.lastUserScrollAt = now;
       if (momentum) {
@@ -343,9 +382,19 @@ export class ChatViewportController {
       // because there the user asked to be taken to the bottom.
       this.setUnreadCount(0);
     }
-    if (!this.nearBottom) this.bottomStickUntil = 0;
+    // Only the 64px follow rule decides what follows after the stick ends.
+    if (shouldReleaseBottomStick({ movedUp, metrics })) this.bottomStickUntil = 0;
   }
 
+  /**
+   * The send asks to be taken to the reply, so for a while every message
+   * update (not only a new row) lands at the bottom: the placeholder being
+   * replaced by the final reply keeps the row count, and once streaming stops
+   * nothing else would follow that last growth.  The window is only a ceiling.
+   * It holds only in auto mode near the bottom (decideChatFollow), and ends at
+   * the first upward wheel/touch/key input, any upward user scroll, or a
+   * release of follow (recordScroll / markUserGesture "up").
+   */
   noteUserSend(): void {
     this.setFollowMode("auto");
     this.nearBottom = true;
@@ -464,9 +513,19 @@ export class ChatViewportController {
     return restored;
   }
 
+  /**
+   * Every caller is a reader's click (section chip, outline, interrupt or
+   * approval link): the reader chose a place to read, so follow and the
+   * post-send stick end before the move, otherwise the next streaming tick
+   * would take them back down.  The click's own touchstart/pointerdown armed
+   * the gesture guard; the explicit request overrides it.
+   */
   scrollElementIntoView(element: HTMLElement): boolean {
-    const scope = this.scope();
-    if (!this.scopeIsCurrent(scope)) return false;
+    this.bottomStickUntil = 0;
+    this.gestureActiveUntil = 0;
+    this.cancelPendingIntent();
+    this.cancelBottomFrames();
+    this.setFollowMode("manual");
     return this.performWrite("response-outline", () => this.adapter.scrollElementIntoView(element, {
       behavior: "smooth",
       block: "center",

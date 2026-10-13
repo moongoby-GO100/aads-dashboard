@@ -51,3 +51,18 @@ test("message mutation wrapper performs no DOM or scheduling work inside React u
   assert.doesNotMatch(body, /requestAnimationFrame|scrollTop|scrollIntoView/);
   assert.match(body, /enqueueMutationAnchor/);
 });
+
+// AADS-CHAT-SCROLL-AUTOMOVE-RECUR2-20261013: scrollIntoView moves every scroll
+// ancestor, so a call below the chat route moves the message list behind the
+// controller's back.
+test("chat input focus and CRF section chips do not scroll the message list directly", () => {
+  const input = source("src/app/chat/ChatInput.tsx");
+  assert.doesNotMatch(input, /\.scrollIntoView\??\.?\(/, "ChatInput focus must not call scrollIntoView");
+  assert.match(input, /window\.visualViewport/, "keyboard overlap is measured against the visual viewport");
+
+  const chip = source("src/components/chat/SectionCardContent.tsx");
+  assert.match(chip, /if \(onScrollToSection\) onScrollToSection\(target\)/);
+
+  const route = source("src/app/chat/page.tsx");
+  assert.match(route, /<SectionCardContent[^>]*onScrollToSection=\{onViewportTarget\}/);
+});

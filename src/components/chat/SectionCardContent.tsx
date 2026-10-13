@@ -122,6 +122,12 @@ interface Props {
   MarkdownRenderer: React.ComponentType<{ content: string }>;
   modelUsed?: string | null;
   createdAt?: string | null;
+  /**
+   * The chat route passes its viewport controller here: scrollIntoView moves
+   * every scroll ancestor, so a direct call moved the chat message list behind
+   * the controller's back and the next streaming tick took the reader away.
+   */
+  onScrollToSection?: (element: HTMLElement) => void;
 }
 
 export default function SectionCardContent({
@@ -129,6 +135,7 @@ export default function SectionCardContent({
   MarkdownRenderer,
   modelUsed,
   createdAt,
+  onScrollToSection,
 }: Props) {
   useInjectSccStyles();
   const [activeChip, setActiveChip] = useState(0);
@@ -140,7 +147,10 @@ export default function SectionCardContent({
 
   const handleChip = (i: number) => {
     setActiveChip(i);
-    refs.current[i]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const target = refs.current[i];
+    if (!target) return;
+    if (onScrollToSection) onScrollToSection(target);
+    else target.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const charCount = content.length.toLocaleString();

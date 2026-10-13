@@ -3,6 +3,7 @@ import {
   isChatNearBottom,
   nextChatFollowModeAfterUserScroll,
   shouldLockHistoryActions,
+  shouldReleaseBottomStick,
 } from "./chatScrollPolicy";
 
 function assertEqual<T>(actual: T, expected: T, label: string) {
@@ -32,7 +33,14 @@ assertEqual(nextChatFollowModeAfterUserScroll({ scrollTop: 610, clientHeight: 30
 assertEqual(nextChatFollowModeAfterUserScroll({ scrollTop: 640, clientHeight: 300, scrollHeight: 1000 }), "auto", "within the release distance still follows");
 assertEqual(nextChatFollowModeAfterUserScroll({ scrollTop: 636, clientHeight: 300, scrollHeight: 1000 }), "auto", "release distance edge still follows");
 assertEqual(nextChatFollowModeAfterUserScroll({ scrollTop: 635, clientHeight: 300, scrollHeight: 1000 }), "manual", "one pixel past the release distance releases follow");
+// AADS-CHAT-SCROLL-AUTOMOVE-RECUR2-20261013: the post-send bottom stick ends
+// at the reader's first upward scroll at any distance, and at the same 64px
+// line that releases follow.  Before, only leaving the 300px band ended it.
+assertEqual(shouldReleaseBottomStick({ movedUp: true, metrics: { scrollTop: 690, clientHeight: 300, scrollHeight: 1000 } }), true, "a 10px scroll up ends the stick");
+assertEqual(shouldReleaseBottomStick({ movedUp: false, metrics: { scrollTop: 600, clientHeight: 300, scrollHeight: 1000 } }), true, "100px from the bottom ends the stick (inside the 300px band)");
+assertEqual(shouldReleaseBottomStick({ movedUp: false, metrics: { scrollTop: 636, clientHeight: 300, scrollHeight: 1000 } }), false, "within the release distance, moving down keeps the stick");
+assertEqual(shouldReleaseBottomStick({ movedUp: false, metrics: { scrollTop: 635, clientHeight: 300, scrollHeight: 1000 } }), true, "the stick ends on the follow release line");
 assertEqual(shouldLockHistoryActions(false, true), true, "recovery locks actions");
 assertEqual(shouldLockHistoryActions(false, false), false, "idle unlocks actions");
 
-console.log("PASS: 21 chat scroll policy cases");
+console.log("PASS: 25 chat scroll policy cases");

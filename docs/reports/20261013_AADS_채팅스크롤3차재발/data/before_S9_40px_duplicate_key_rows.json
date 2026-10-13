@@ -1,0 +1,61 @@
+{
+ "note": "neighbour-offset patch only (before the duplicate-key fix); write that jumped 8354px up",
+ "writes": [
+  {
+   "before": 51363,
+   "after": 43009,
+   "stack": [
+    "    at HTMLDivElement.set [as scrollTop] (<anonymous>:18:20)",
+    "    at Object.restoreAnchor (https://aads.newtalk.kr/_next/static/chunks/app/chat/page-97dde5324d352497.js:50:122990)",
+    "    at https://aads.newtalk.kr/_next/static/chunks/app/chat/page-97dde5324d352497.js:49:10355",
+    "    at r$.performWrite (https://aads.newtalk.kr/_next/static/chunks/app/chat/page-97dde5324d352497.js:49:11888)",
+    "    at r$.correctContentResize (https://aads.newtalk.kr/_next/static/chunks/app/chat/page-97dde5324d352497.js:49:10308)",
+    "    at ResizeObserver.<anonymous> (https://aads.newtalk.kr/_next/static/chunks/app/chat/page-97dde5324d352497.js:50:161870)"
+   ],
+   "rows": [
+    {
+     "id": "a16da51f-e0b0-4c36-bde7-1b35d253c61c",
+     "rid": "a16da51f-e0b0-4c36-bde7-1b35d253c61c",
+     "top": 39338,
+     "h": 736,
+     "parent": "ct-messages-scroll"
+    },
+    {
+     "id": "1f457e1d-f710-4056-ada4-bff7ea960d11",
+     "rid": "1f457e1d-f710-4056-ada4-bff7ea960d11",
+     "top": 40086,
+     "h": 2406,
+     "parent": "ct-messages-scroll"
+    },
+    {
+     "id": "tmp-1791862090537",
+     "rid": "tmp-1791862090537",
+     "top": 42504,
+     "h": 69,
+     "parent": "ct-messages-scroll"
+    },
+    {
+     "id": "ai-streaming-b165b490-9f8a-40fb-aeab-0b483ff95406",
+     "rid": "ai-streaming-b165b490-9f8a-40fb-aeab-0b483ff95406",
+     "top": 42585,
+     "h": 8261,
+     "parent": "ct-messages-scroll"
+    },
+    {
+     "id": "tmp-1791862144672",
+     "rid": "tmp-1791862144672",
+     "top": 50858,
+     "h": 69,
+     "parent": "ct-messages-scroll"
+    },
+    {
+     "id": "ai-streaming-b165b490-9f8a-40fb-aeab-0b483ff95406",
+     "rid": "ai-streaming-b165b490-9f8a-40fb-aeab-0b483ff95406",
+     "top": 50939,
+     "h": 1295,
+     "parent": "ct-messages-scroll"
+    }
+   ]
+  }
+ ]
+}

@@ -3687,7 +3687,7 @@ const MessageItem = memo(function MessageItem({
                 </div>
               ) : (
                 <div data-response-body="true">
-                  {detectCrfSections(msg.content) ? (<SectionCardContent content={msg.content} MarkdownRenderer={CrfMarkdown} modelUsed={msg.model_used} createdAt={msg.created_at} />) : (<MarkdownBlock text={msg.content} onDocumentLinkClick={onDocumentLinkClick} />)}
+                  {detectCrfSections(msg.content) ? (<SectionCardContent content={msg.content} MarkdownRenderer={CrfMarkdown} modelUsed={msg.model_used} createdAt={msg.created_at} onScrollToSection={onViewportTarget} />) : (<MarkdownBlock text={msg.content} onDocumentLinkClick={onDocumentLinkClick} />)}
                   {msg.role === "assistant" && msg.content.length > 800 && !effectiveContentCollapsed && (
                     <div style={{ textAlign: "right", marginTop: "4px" }}>
                       <button
@@ -5091,8 +5091,9 @@ export default function ChatPage() {
 
     // 연결 정보가 없는 구형 승인도 하단 카드에는 항상 표시된다.
     // DOM 갱신 직후라 아직 카드가 없으면 하단으로 이동해 사용자가 찾을 수 있게 한다.
-    if (messagesEndRef.current) scrollMessageElementIntoView(messagesEndRef.current);
-  }, [approvals, scrollMessageElementIntoView]);
+    // 맨 아래로 가는 것이므로 요소 이동(따라가기 해제)이 아니라 '최신으로' 와 같은 경로를 쓴다.
+    if (messagesEndRef.current) chatViewportController.jumpToLatest();
+  }, [approvals, chatViewportController, scrollMessageElementIntoView]);
   const scrollToMessagesBottom = useCallback((force = false) => {
     chatViewportController.requestBottom(force, force ? "user-send" : "message-commit");
   }, [chatViewportController]);
@@ -7187,8 +7188,26 @@ export default function ChatPage() {
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const markUserScrollIntent = () => {
-      chatViewportController.markUserGesture();
+    const markUserScrollIntent = (direction?: "up" | "down") => {
+      chatViewportController.markUserGesture(1_000, direction);
+    };
+    // 위로 향한 입력(휠·손가락 내림·키)은 보낸 직후의 하단 고정을 거리와 무관하게 즉시 끝낸다.
+    const markWheelIntent = (event: WheelEvent) => {
+      markUserScrollIntent(event.deltaY < 0 ? "up" : event.deltaY > 0 ? "down" : undefined);
+    };
+    let lastTouchY: number | null = null;
+    const markTouchStartIntent = (event: TouchEvent) => {
+      lastTouchY = event.touches[0]?.clientY ?? null;
+      markUserScrollIntent();
+    };
+    const markTouchMoveIntent = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY ?? null;
+      // 손가락이 아래로 움직이면 화면은 위(과거 메시지)로 간다.
+      const direction = y !== null && lastTouchY !== null && y !== lastTouchY
+        ? (y > lastTouchY ? "up" : "down")
+        : undefined;
+      if (y !== null) lastTouchY = y;
+      markUserScrollIntent(direction);
     };
     let scrollbarPointerActive = false;
     const markScrollbarPointerIntent = (event: PointerEvent) => {
@@ -7209,8 +7228,10 @@ export default function ChatPage() {
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, [contenteditable='true']")) return;
-      if (["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", " "].includes(event.key)) {
-        markUserScrollIntent();
+      if (["Home", "PageUp", "ArrowUp"].includes(event.key) || (event.key === " " && event.shiftKey)) {
+        markUserScrollIntent("up");
+      } else if (["End", "PageDown", "ArrowDown", " "].includes(event.key)) {
+        markUserScrollIntent("down");
       }
     };
     const restoreIfUnexpectedTopReset = (source: "scroll" | "mutation") => {
@@ -7258,9 +7279,9 @@ export default function ChatPage() {
     observeMessageRows();
     mutationObserver.observe(container, { childList: true, subtree: true, characterData: true });
     container.addEventListener("scroll", handleScroll, { passive: true });
-    container.addEventListener("wheel", markUserScrollIntent, { passive: true });
-    container.addEventListener("touchstart", markUserScrollIntent, { passive: true });
-    container.addEventListener("touchmove", markUserScrollIntent, { passive: true });
+    container.addEventListener("wheel", markWheelIntent, { passive: true });
+    container.addEventListener("touchstart", markTouchStartIntent, { passive: true });
+    container.addEventListener("touchmove", markTouchMoveIntent, { passive: true });
     container.addEventListener("pointerdown", markScrollbarPointerIntent, { passive: true });
     window.addEventListener("pointermove", markScrollbarPointerMove, { passive: true });
     window.addEventListener("pointerup", releaseScrollbarPointer, { passive: true });
@@ -7271,9 +7292,9 @@ export default function ChatPage() {
       resizeObserver.disconnect();
       if (mutationAuditFrame) cancelAnimationFrame(mutationAuditFrame);
       container.removeEventListener("scroll", handleScroll);
-      container.removeEventListener("wheel", markUserScrollIntent);
-      container.removeEventListener("touchstart", markUserScrollIntent);
-      container.removeEventListener("touchmove", markUserScrollIntent);
+      container.removeEventListener("wheel", markWheelIntent);
+      container.removeEventListener("touchstart", markTouchStartIntent);
+      container.removeEventListener("touchmove", markTouchMoveIntent);
       container.removeEventListener("pointerdown", markScrollbarPointerIntent);
       window.removeEventListener("pointermove", markScrollbarPointerMove);
       window.removeEventListener("pointerup", releaseScrollbarPointer);

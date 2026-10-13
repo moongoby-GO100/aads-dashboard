@@ -513,8 +513,14 @@ const ChatInput = memo(forwardRef<ChatInputHandle, ChatInputProps>(
               enterKeyHint="send"
               onFocus={(e) => {
                 e.target.style.borderColor = "var(--ct-accent)";
+                // 모바일 키보드에 입력창이 가리면 페이지만 그만큼 올린다. scrollIntoView 는
+                // 모든 스크롤 조상을 움직여 채팅 메시지 목록까지 건드릴 수 있어 쓰지 않는다.
                 setTimeout(() => {
-                  (taRef.current ?? document.activeElement as HTMLElement)?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+                  const textarea = taRef.current;
+                  const viewport = window.visualViewport;
+                  if (!textarea || !viewport) return;
+                  const hiddenPx = textarea.getBoundingClientRect().bottom - (viewport.offsetTop + viewport.height);
+                  if (hiddenPx > 0) window.scrollBy({ top: hiddenPx, behavior: "smooth" });
                 }, 300);
               }}
               onBlur={(e) => {

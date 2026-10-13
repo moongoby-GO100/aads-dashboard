@@ -1,0 +1,20 @@
+48034 S st=42959 sh=43385 dist=54 mode=auto top=None
+48101 W scrollTop=  42959->43068 sinceInput=2348 | Object.writeBottom (https://aads.newtalk.kr/_next/static/ | page | r$.performWrite (https://aads.newtalk.kr/_next/static/chu | n (p | page
+48133 N 42959->43068 sh=43440 sinceInput=2380
+48145 S st=43068 sh=43440 dist=0 mode=auto top=None
+48159 N 43068->42968 sh=43440 sinceInput=1
+48227 N 42968->42948 sh=43322 sinceInput=1
+48290 S st=42948 sh=43322 dist=2 mode=auto top=None
+48336 S st=42948 sh=43494 dist=174 mode=auto top=None
+48528 S st=42948 sh=43548 dist=228 mode=auto top=-507
+48594 W MARK S9_send_then_up120px:scrolled None->None sinceInput=None | 
+48630 S st=42948 sh=43602 dist=282 mode=auto top=-507
+48726 S st=42948 sh=43656 dist=336 mode=auto top=-507
+48926 S st=42948 sh=43711 dist=391 mode=auto top=-507
+49038 S st=42948 sh=43765 dist=445 mode=auto top=-507
+49244 S st=42948 sh=43819 dist=499 mode=auto top=-507
+49306 W scrollTop=  42948->43501 sinceInput=1079 | Object.writeBottom (https://aads.newtalk.kr/_next/static/ | page | r$.performWrite (https://aads.newtalk.kr/_next/static/chu | n (p | page
+49325 S st=43501 sh=43873 dist=0 mode=auto top=-1060
+49527 S st=43501 sh=43927 dist=54 mode=auto top=-1060
+49609 W scrollTop=  43501->43609 sinceInput=1383 | Object.writeBottom (https://aads.newtalk.kr/_next/static/ | page | r$.performWrite (https://aads.newtalk.kr/_next/static/chu | n (p | page
+49629 S st=43609 sh=43981 dist=0 mode=auto top=-1168

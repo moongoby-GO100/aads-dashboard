@@ -1,5 +1,6 @@
 import {
   ChatViewportController,
+  createDomChatViewportAdapter,
   type ChatViewportAdapter,
   type MessageViewportAnchor,
 } from "./chatViewportController";
@@ -376,4 +377,137 @@ assertEqual(anchor().neighborKeys.join(","), "row-2,row-0", "next neighbor prece
   assertEqual(h.writes[0], "anchor-bottom", "content growth while following stays at the bottom");
 }
 
-console.log("PASS: WP02 viewport controller T01-T15 cases");
+// AADS-CHAT-SCROLL-AUTOMOVE-RECUR2-20261013 (production /chat probe S9): the
+// reader sent a message and wheeled 120px up while the reply streamed.
+
+// T16: 70ms later the streaming tail shrank 118px; the browser clamp put the
+// view 2px from the bottom inside the open gesture window.  That scroll was
+// read as the reader's, re-armed follow, and the 180s send stick plus the
+// streaming tick dragged the view down 3,533px in 10s.
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.noteUserSend();
+  h.controller.recordScroll(false);
+  h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_380, clientHeight: 500, scrollHeight: 2_000 });
+  h.setAnchor(anchor("reading-120", 1_380));
+  h.controller.recordScroll(true);
+  assertEqual(h.controller.mode, "manual", "120px up releases follow");
+  h.setNow(70);
+  h.setMetrics({ scrollTop: 1_380, clientHeight: 500, scrollHeight: 1_882 });
+  h.setAnchor(anchor("clamped", 1_380));
+  h.controller.recordScroll(h.controller.hasActiveGesture);
+  assertEqual(h.controller.mode, "manual", "a shrink clamp inside the gesture window is not the reader's scroll");
+  h.setNow(1_500);
+  h.setMetrics({ scrollTop: 1_380, clientHeight: 500, scrollHeight: 2_400 });
+  h.controller.settleAfterMessageChange(true, false);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.includes("bottom"), false, "the reader is not dragged to the bottom after the clamp");
+  assertEqual(h.controller.correctContentResize(), true, "the reading row is repaired after the clamp");
+  assertEqual(h.writes[h.writes.length - 1], "anchor:reading-120", "repair uses the row the reader chose, not the clamp");
+}
+
+// T17: an upward input ends the send stick at any distance.  A 30px nudge
+// stays inside the 64px follow line, so new rows still follow, but a plain
+// update (placeholder replaced, same row count) no longer forces the bottom.
+for (const viaDirection of [true, false]) {
+  const h = harness();
+  h.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.noteUserSend();
+  h.controller.recordScroll(false);
+  if (viaDirection) h.controller.markUserGesture(1_000, "up");
+  else h.controller.markUserGesture();
+  h.setMetrics({ scrollTop: 1_470, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.recordScroll(true);
+  const label = viaDirection ? "wheel-up" : "scroll-up";
+  assertEqual(h.controller.mode, "auto", `${label}: a 30px nudge keeps follow`);
+  h.setNow(2_000);
+  h.controller.settleAfterMessageChange(true, false);
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.length, 0, `${label}: the send stick no longer forces the bottom`);
+  h.controller.settleAfterMessageChange(true, true);
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.join(","), "bottom,bottom", `${label}: at the bottom a new row still follows`);
+}
+
+// T18: a section chip / outline / interrupt link click moves the view through
+// the controller even though the click's touchstart armed the gesture guard,
+// and the reader stays where they asked to go.
+{
+  const h = harness();
+  h.setMetrics({ scrollTop: 1_500, clientHeight: 500, scrollHeight: 2_000 });
+  h.controller.noteUserSend();
+  h.controller.markUserGesture();
+  assertEqual(h.controller.scrollElementIntoView({} as HTMLElement), true, "the click's move is applied");
+  assertEqual(h.writes.join(","), "element", "the move goes through the adapter");
+  assertEqual(h.controller.mode, "manual", "the reader's chosen section ends follow");
+  h.setNow(5_000);
+  h.controller.settleAfterMessageChange(true, true);
+  h.controller.requestBottom(false, "message-commit");
+  h.flushFrame();
+  h.flushFrame();
+  assertEqual(h.writes.join(","), "element", "neither the send stick nor streaming takes the reader away");
+}
+
+// T19: DOM adapter.  The streaming row the reader was looking at changes key
+// (placeholder -> final) and so does the local user row; the restore falls
+// back to an older neighbour and must use that row's own offset.  With the
+// anchor row's offset the view jumped 8,100px up (production S9, 40px case).
+{
+  type FakeRow = { dataset: Record<string, string>; offsetTop: number; offsetHeight: number };
+  let rows: FakeRow[] = [
+    { dataset: { messageId: "older" }, offsetTop: 0, offsetHeight: 8_000 },
+    { dataset: { messageId: "tmp-user" }, offsetTop: 8_000, offsetHeight: 100 },
+    { dataset: { messageId: "ai-streaming" }, offsetTop: 8_100, offsetHeight: 2_000 },
+  ];
+  const container = {
+    scrollTop: 9_000,
+    clientHeight: 400,
+    scrollHeight: 10_100,
+    querySelectorAll: () => rows,
+    contains: () => true,
+  };
+  const adapter = createDomChatViewportAdapter(() => container as unknown as HTMLElement);
+  const captured = adapter.captureAnchor();
+  assertEqual(captured?.renderKey, "ai-streaming", "anchor is the streaming row");
+  rows = [
+    { dataset: { messageId: "older" }, offsetTop: 0, offsetHeight: 8_000 },
+    { dataset: { messageId: "server-user" }, offsetTop: 8_000, offsetHeight: 100 },
+    { dataset: { messageId: "final-reply" }, offsetTop: 8_100, offsetHeight: 2_000 },
+  ];
+  assertEqual(adapter.restoreAnchor(captured!), true, "restore runs");
+  assertEqual(container.scrollTop, 9_000, "neighbour fallback keeps the reader's position");
+}
+
+// T20: two rows share the key: the finished reply kept the local
+// `ai-streaming-<session>` id and the next reply renders under the same key.
+// The restore must use the row the reader was looking at, not the first one.
+{
+  type FakeRow = { dataset: Record<string, string>; offsetTop: number; offsetHeight: number };
+  const rows: FakeRow[] = [
+    { dataset: { messageId: "ai-streaming-s1" }, offsetTop: 0, offsetHeight: 8_354 },
+    { dataset: { messageId: "tmp-user" }, offsetTop: 8_354, offsetHeight: 80 },
+    { dataset: { messageId: "ai-streaming-s1" }, offsetTop: 8_434, offsetHeight: 1_300 },
+  ];
+  const container = {
+    scrollTop: 9_000,
+    clientHeight: 372,
+    scrollHeight: 9_734,
+    querySelectorAll: () => rows,
+    contains: () => true,
+  };
+  const adapter = createDomChatViewportAdapter(() => container as unknown as HTMLElement);
+  const captured = adapter.captureAnchor();
+  assertEqual(captured?.renderKey, "ai-streaming-s1", "anchor is the current reply");
+  rows[2] = { ...rows[2], offsetHeight: 1_500 };
+  container.scrollHeight = 9_934;
+  assertEqual(adapter.restoreAnchor(captured!), true, "restore runs");
+  assertEqual(container.scrollTop, 9_000, "the duplicate key resolves to the row the reader was reading");
+}
+
+console.log("PASS: WP02 viewport controller T01-T20 cases");

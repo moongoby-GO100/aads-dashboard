@@ -29,6 +29,21 @@ export function nextChatFollowModeAfterUserScroll(metrics: ChatScrollMetrics): C
   return isChatNearBottom(metrics, CHAT_FOLLOW_RELEASE_PX) ? "auto" : "manual";
 }
 
+/**
+ * The post-send bottom stick ends at the reader's first upward scroll, at any
+ * distance, and whenever a user scroll ends past CHAT_FOLLOW_RELEASE_PX (the
+ * same line that releases follow).  Before 2026-10-13 only leaving the 300px
+ * band ended it, so it stayed armed under a reader 64-300px up, and anything
+ * that put follow back to auto (a layout clamp read as the reader's scroll)
+ * brought the forced bottom writes back for the rest of the three minutes.
+ */
+export function shouldReleaseBottomStick(params: {
+  movedUp: boolean;
+  metrics: ChatScrollMetrics;
+}): boolean {
+  return params.movedUp || !isChatNearBottom(params.metrics, CHAT_FOLLOW_RELEASE_PX);
+}
+
 export function decideChatFollow(params: {
   mode: ChatFollowMode;
   isNearBottom: boolean;
