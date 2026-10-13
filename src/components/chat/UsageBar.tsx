@@ -423,9 +423,24 @@ export default function UsageBar() {
 
   const cm = claude?.claude_max;
   const cxAll = codex?.ok ? (codex.limits ?? []) : [];
-  const slots = claude?.claude_slots ?? [];
   const tokenLabels = claude?.token_labels ?? [];
   const slotMeta = (slot: string) => tokenLabels.find((t) => String(t.slot ?? "") === slot);
+  // 꺼진 계정은 상단에 그리지 않는다. 쓰지 않는 계정의 막대가 섞여 있으면
+  // 지금 어느 계정으로 도는지 읽기 어렵다(2026-10-13 대표님 지시 "켜진것만
+  // 나오게"). 켜고 끄는 곳은 설정 > 구독계정이다.
+  const inactiveKeys = new Set(
+    Object.values(primaryInfo?.providers ?? {})
+      .flatMap((p) => p.accounts ?? [])
+      .filter((a) => a.is_active === false)
+      .map((a) => a.key_name),
+  );
+  const slots = (claude?.claude_slots ?? []).filter((sl) => {
+    if (sl.last_resort === true && sl.enabled !== true) return false;
+    const keyName = slotMeta(sl.slot)?.key_name;
+    return !(keyName && inactiveKeys.has(keyName));
+  });
+  const codexAccounts = (primaryInfo?.providers?.codex?.accounts ?? [])
+    .filter((a) => a.is_active !== false);
   // CLI 가 실제로 어느 슬롯으로 도는가. 서버가 말해 주는 주계정을 먼저 믿고,
   // 그 API 를 모르는 배포 창에서만 예전처럼 priority 1 을 훑어 짐작한다.
   // (짐작은 슬롯 4 처럼 priority 가 0 이거나 순번이 밀린 계정에서 틀린다)
@@ -471,7 +486,7 @@ export default function UsageBar() {
 
   // ── 접힘 줄에 쓸 값 ──────────────────────────────────────────────
   // 지금 쓰는 클로드 슬롯과, 새 세션이 배정받을 코덱스 계정 하나씩만 고른다.
-  const ovAccounts = overview?.accounts ?? [];
+  const ovAccounts = (overview?.accounts ?? []).filter((a) => !inactiveKeys.has(a.key_name));
   const curClaude = ovAccounts.find((a) => a.provider === "anthropic" && a.slot === `slot${activeSlot}`)
     ?? ovAccounts.find((a) => a.provider === "anthropic" && a.state === "ok")
     ?? null;
@@ -830,7 +845,7 @@ export default function UsageBar() {
           계정은 화면 어디에도 없었다 — 어느 계정이 남아 있는지 모른 채
           한도가 끊겼다(2026-09-17 대표님 지적). 클로드 슬롯 칩과 같은 방식으로
           전부 띄우고, 눌러서 주계정을 바꾼다. */}
-      {(primaryInfo?.providers?.codex?.accounts ?? []).map((acc) => {
+      {codexAccounts.map((acc) => {
         const isPrimary = primaryInfo?.providers?.codex?.primary === acc.key_name;
         const short = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
         const auto = primaryInfo?.providers?.codex?.mode === "auto";
@@ -863,7 +878,7 @@ export default function UsageBar() {
           답해서 어느 계정 값인지 이어 붙일 수 없었다 — 그래서 주계정을 펼쳐도
           사용량이 비어 보였다(2026-09-17 대표님 지적). 계정에 귀속된 값은
           codex_usage_snapshots 기반의 account-primary 쪽이므로 그것을 쓴다. */}
-      {(primaryInfo?.providers?.codex?.accounts ?? []).map((acc) => {
+      {codexAccounts.map((acc) => {
         if (acc.headroom_pct == null) return null;
         const short = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
         return (
