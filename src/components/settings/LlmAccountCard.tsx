@@ -27,7 +27,8 @@ type UsageWindow = {
 
 type Account = {
   windows: UsageWindow[];
-  key_name: string; provider: string; label: string; priority: number;
+  key_name: string; provider: string; label: string; priority: number | null;
+  id?: number | null; email?: string | null; toggleable?: boolean;
   is_active: boolean; manual_disabled?: boolean; manual_disabled_at?: string | null;
   kind: "subscription"; masked_value: string; slot: string | null;
   state: State; bound: boolean; needs_login: boolean; login_in_progress: boolean;
@@ -48,6 +49,7 @@ type Overview = {
     action_required: number;
     codex: { usable: number; total: number };
     anthropic: { usable: number; total: number };
+    antigravity?: { usable: number; total: number };
     subscription_total: number; apikey_total: number; total: number;
     bindings_available: boolean; collected_at: string | null;
   };
@@ -55,7 +57,7 @@ type Overview = {
   providers: ProviderGroup[];
 };
 
-type Chip = "action" | "codex" | "anthropic" | "subscription" | "apikey" | "all";
+type Chip = "action" | "codex" | "anthropic" | "antigravity" | "subscription" | "apikey" | "all";
 
 /** 주계정을 누가 정하는가.
  *  manual — 대표님이 고른 계정
@@ -69,7 +71,7 @@ type PrimaryState = {
   }>;
 };
 
-const PROVIDER_LABEL: Record<string, string> = { anthropic: "Claude", codex: "Codex" };
+const PROVIDER_LABEL: Record<string, string> = { anthropic: "Claude", codex: "Codex", antigravity: "Google" };
 
 /** 구독 계정 표의 열 정의. 헤더와 각 행이 같은 값을 써야 열이 어긋나지 않는다.
  *  펼침 · provider · 계정 · 순위 · 상태 · 사용량 · 액션 */
@@ -88,6 +90,10 @@ const STATE_COLOR: Record<State, string> = {
   ok: "#16a34a", rate_limited: "#dc2626", needs_login: "#d97706",
   inactive: "var(--text-secondary)", unknown: "var(--text-secondary)",
 };
+
+/** 호스트에 로그인된 계정(Google/Antigravity). 키가 DB 에 없어 켜기/끄기·로그인 창이 해당 없다.
+ *  기존 계정은 overview 에 id 가 없으므로 id 유무로 판정하면 안 된다. */
+const isHostManaged = (a: Account) => a.toggleable === false || a.provider === "antigravity";
 
 /** 창 길이를 사람이 읽는 이름으로. 300분=5시간, 10080분=주간. */
 function windowLabel(minutes: number | null): string {
@@ -218,6 +224,7 @@ export default function LlmAccountCard() {
       case "action": return a.filter((x) => x.state === "needs_login" || x.state === "rate_limited");
       case "codex": return a.filter((x) => x.provider === "codex");
       case "anthropic": return a.filter((x) => x.provider === "anthropic");
+      case "antigravity": return a.filter((x) => x.provider === "antigravity");
       case "apikey": return [];
       default: return a;
     }
@@ -229,15 +236,19 @@ export default function LlmAccountCard() {
 
   const s = data.summary;
   const actionAccounts = data.accounts.filter((a) => a.state === "needs_login" || a.state === "rate_limited");
-  const codexActionCount = actionAccounts.filter((a) => a.provider === "codex").length;
   const needsLoginCount = data.accounts.filter((a) => a.state === "needs_login").length;
+  const onlyClaudeAction = actionAccounts.every((a) => a.provider === "anthropic");
   const actionChipLabel = s.action_required > 0
-    ? `${codexActionCount > 0 ? "조치 필요" : "Claude 조치 필요"} ${s.action_required}`
+    ? `${onlyClaudeAction ? "Claude 조치 필요" : "조치 필요"} ${s.action_required}`
     : "";
+  const ag = s.antigravity;
   const chips: Array<{ id: Chip; label: string; danger?: boolean; warn?: boolean }> = [
     ...(s.action_required > 0 ? [{ id: "action" as Chip, label: actionChipLabel, warn: true }] : []),
     { id: "codex", label: `코덱스 ${s.codex.usable}/${s.codex.total}`, danger: s.codex.usable === 0 && s.codex.total > 0 },
     { id: "anthropic", label: `클로드 ${s.anthropic.usable}/${s.anthropic.total}`, danger: s.anthropic.usable === 0 && s.anthropic.total > 0 },
+    ...(ag && ag.total > 0
+      ? [{ id: "antigravity" as Chip, label: `구글 ${ag.usable}/${ag.total}`, danger: ag.usable === 0 }]
+      : []),
     { id: "subscription", label: `구독 ${s.subscription_total}` },
     { id: "apikey", label: `API 키 ${s.apikey_total}` },
     { id: "all", label: `전체 ${s.total}` },
@@ -278,7 +289,7 @@ export default function LlmAccountCard() {
           Codex는 사용 가능합니다. 일부 계정만 한도정지이며 자동 모드에서는 사용 가능한 주계정으로 우회합니다.
         </div>
       )}
-      {s.codex.total > 0 && s.codex.usable === s.codex.total && s.action_required > 0 && codexActionCount === 0 && (
+      {s.codex.total > 0 && s.codex.usable === s.codex.total && s.action_required > 0 && onlyClaudeAction && (
         <div className="rounded-lg px-3 py-2 text-xs" style={{
           background: "rgba(22,163,74,0.08)",
           border: "1px solid rgba(22,163,74,0.35)",
@@ -380,6 +391,8 @@ export default function LlmAccountCard() {
           ) : rows.map((a) => {
             const open = openRow === a.key_name;
             const color = STATE_COLOR[a.state];
+            const host = isHostManaged(a);
+            const hostAccount = a.email || a.actual_account || a.label || "-";
             const isPrimary = isPrimaryAccount(a);
             const autoHold = !a.manual_disabled && a.rate_limited_until && new Date(a.rate_limited_until).getTime() > Date.now()
               ? a.rate_limited_until : null;
@@ -392,11 +405,11 @@ export default function LlmAccountCard() {
                     className="text-xs text-left" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{open ? "▾" : "▸"}</button>
                   <span className="text-xs font-mono truncate" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{a.provider}</span>
                   <span className="text-xs font-semibold min-w-0 truncate" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
-                    {a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
-                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{a.label || "-"}</span>
+                    {host ? "Google" : (a.slot ?? a.key_name.replace("CODEX_OAUTH_", ""))}
+                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{host ? hostAccount : (a.label || "-")}</span>
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
-                  <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>p{a.priority}</span>
+                  <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>{a.priority == null ? "-" : `p${a.priority}`}</span>
                   <span className="text-xs font-semibold truncate" style={{ color, lineHeight: "20px" }}>
                     {a.binding_mismatch ? "계정 불일치" : STATE_TEXT[a.state]}
                   </span>
@@ -408,7 +421,11 @@ export default function LlmAccountCard() {
                         한쪽은 사용량, 한쪽은 잔량이면 같은 계정의 같은 창이
                         97% 와 3% 로 보인다(2026-09-16 실측). 막대는 사용량만큼
                         차오르고 숫자는 남은 양을 적는다. */}
-                    {a.windows.length > 0 ? a.windows.map((w) => (
+                    {host && a.state === "needs_login" ? (
+                      <span className="text-xs" style={{ color: "#d97706" }}>
+                        Google 로그인이 풀렸습니다. 서버에서 agy 로그인을 다시 해 주세요.
+                      </span>
+                    ) : a.windows.length > 0 ? a.windows.map((w) => (
                       <span key={w.window_minutes ?? "n"} className="block">
                         <Bar pct={w.used_percent}
                           color={w.stale ? "var(--text-secondary)"
@@ -441,6 +458,11 @@ export default function LlmAccountCard() {
                     )}
                   </span>
                   <span className="flex gap-1 justify-end items-center flex-wrap">
+                    {host ? (
+                      <span className="text-xs text-right" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>
+                        호스트 로그인 계정 — 서버에서 agy 로그인
+                      </span>
+                    ) : (<>
                     <EnableSwitch checked={isOn(a)} busy={toggling === a.key_name} disabled={toggling !== null}
                       label={a.label || a.key_name} onToggle={() => void toggleEnabled(a)} />
                     {!a.needs_login && !isPrimary && (
@@ -458,11 +480,15 @@ export default function LlmAccountCard() {
                                color: a.needs_login ? "#d97706" : "var(--text-primary)" }}>
                       {a.login_in_progress ? "진행창" : "재로그인"}
                     </button>
+                    </>)}
                   </span>
                 </div>
 
                 {open && (
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
+                    {host ? (
+                      <div>Google 계정 <span style={{ color: "var(--text-primary)" }}>{hostAccount}</span> · {STATE_TEXT[a.state]} · 서버에 로그인된 계정이라 여기서 켜고 끄거나 로그인할 수 없습니다.</div>
+                    ) : (<>
                     <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"} · {a.manual_disabled ? `직접 끔${a.manual_disabled_at ? ` (${kst(a.manual_disabled_at)} KST)` : ""}` : "직접 끔 아님"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
                     {a.binding_mismatch && (
@@ -479,6 +505,7 @@ export default function LlmAccountCard() {
                       )}
                     </div>
                     {a.notes && <div className="whitespace-pre-wrap">메모 {a.notes}</div>}
+                    </>)}
                   </div>
                 )}
               </div>
