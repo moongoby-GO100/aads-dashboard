@@ -133,6 +133,25 @@ export const COPY = {
   runConfirmDone: "실행을 시작했어요. 결과는 채팅에 이어서 알려 드려요.",
   runConfirmDeclined: "실행하지 않았습니다.",
   runConfirmRetry: "다시 시도",
+  listTitle: "내 자동화",
+  listLead: "만들어 둔 자동화를 한곳에서 보고, 바로 실행하거나 멈출 수 있어요.",
+  listTabsLabel: "자동화 상태",
+  listLoading: "자동화 목록을 불러오고 있어요…",
+  listEmpty: "아직 만든 자동화가 없어요. 아래 [＋ 자동화 만들기]로 시작해 보세요.",
+  listEmptyTab: "이 상태의 자동화는 없어요.",
+  listSomeMissing: "일부 자동화는 지금 불러오지 못했어요.",
+  listLastRun: "마지막 실행",
+  listNextRun: "다음 실행",
+  listRunNow: "지금 실행",
+  listPause: "멈추기",
+  listResume: "예약 켜기",
+  listFix: "고치기",
+  listFixOwner: "담당자에게 고쳐 달라고 요청해 주세요.",
+  listDetail: "자세히",
+  listDetailClose: "자세히 닫기",
+  listWorking: "처리하고 있어요…",
+  listFloating: "＋ 자동화 만들기",
+  listFloatingClose: "닫기",
 } as const;
 
 export function errorSentence(status: number, code: string): string {
@@ -150,6 +169,8 @@ export function errorSentence(status: number, code: string): string {
   }
   if (status === 409) {
     if (code === "approval_required") return "담당자 확인이 끝나야 실행할 수 있어요.";
+    if (code === "no_schedule") return "정해 둔 예약이 없어요.";
+    if (code === "not_supported_for_source") return "이 자동화는 여기서 바꿀 수 없어요. 채팅에서 요청해 주세요.";
     return COPY.stateChanged;
   }
   if (status === 422) {

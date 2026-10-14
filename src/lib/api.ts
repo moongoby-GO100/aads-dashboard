@@ -1500,6 +1500,13 @@ export const api = {
     automationCall<AutomationDraftView>(`/automations/${encodeURIComponent(`draft:${draftId}`)}/pause`, { method: "POST" }),
   resumeAutomationDraft: (draftId: string) =>
     automationCall<AutomationDraftView>(`/automations/${encodeURIComponent(`draft:${draftId}`)}/resume`, { method: "POST" }),
+  getAutomations: () => automationCall<unknown>("/automations"),
+  runAutomation: (key: string) =>
+    automationCall<unknown>(`/automations/${encodeURIComponent(key)}/run`, { method: "POST" }),
+  pauseAutomation: (key: string) =>
+    automationCall<unknown>(`/automations/${encodeURIComponent(key)}/pause`, { method: "POST" }),
+  resumeAutomation: (key: string) =>
+    automationCall<unknown>(`/automations/${encodeURIComponent(key)}/resume`, { method: "POST" }),
   getAutomationPendingCount: () =>
     automationCall<{ pending: number; oldest_hours: number }>("/automations/pending-count"),
   getVaultCredentialRequest: (requestId: string) =>

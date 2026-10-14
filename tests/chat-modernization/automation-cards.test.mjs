@@ -7,6 +7,9 @@ import { loadSource, source } from "./source-loader.mjs";
 const UI_FILES = [
   "src/components/chat/AutomationDraftCard.tsx",
   "src/components/automation/AutomationHomeEntry.tsx",
+  "src/components/automation/AutomationStartForm.tsx",
+  "src/app/automations/page.tsx",
+  "src/lib/automationList.ts",
   "src/lib/automationCopy.ts",
 ];
 const NEW_FILES = [...UI_FILES, "src/features/chat/automation/useAutomationDraftCards.ts", "src/lib/automationDraft.ts"];
@@ -115,7 +118,7 @@ test("card embeds the existing credential card and server stays the source of tr
 
 test("mobile 390px: 48px controls, 16px inputs, no horizontal overflow", () => {
   const card = source("src/components/chat/AutomationDraftCard.tsx");
-  const home = source("src/components/automation/AutomationHomeEntry.tsx");
+  const home = source("src/components/automation/AutomationHomeEntry.tsx") + source("src/components/automation/AutomationStartForm.tsx");
   for (const [name, text] of [["card", card], ["home", home]]) {
     assert.match(text, /minHeight: 48/, name);
     assert.match(text, /fontSize: 16/, name);
@@ -129,7 +132,7 @@ test("mobile 390px: 48px controls, 16px inputs, no horizontal overflow", () => {
 });
 
 test("home entry shows button + pending badge and degrades quietly when the switch is off", () => {
-  const home = source("src/components/automation/AutomationHomeEntry.tsx");
+  const home = source("src/components/automation/AutomationHomeEntry.tsx") + source("src/components/automation/AutomationStartForm.tsx");
   const page = source("src/app/home/page.tsx");
   assert.match(page, /import AutomationHomeEntry from "@\/components\/automation\/AutomationHomeEntry"/);
   assert.match(page, /<AutomationHomeEntry \/>/);
