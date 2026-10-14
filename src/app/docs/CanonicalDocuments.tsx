@@ -5,7 +5,13 @@ import Link from "next/link";
 import { api, type CanonicalDocument, type CanonicalDocumentDetail, type CanonicalDocumentHistory } from "@/lib/api";
 import { canTransitionDocumentForHead } from "@/lib/canonicalDocumentWorkflow";
 import { canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
-import { listBodyState, selectionPresence, SLOW_LIST_MS } from "@/lib/canonicalDocumentView";
+import {
+  duplicateKeyTails, filterDocuments, hasActiveFilter, kstShort, listBodyState, NO_FILTERS, optionCounts,
+  recentDocuments, selectionPresence, SLOW_LIST_MS, type DocFilters,
+} from "@/lib/canonicalDocumentView";
+import DocBadge, { statusTone } from "@/components/docs/DocBadge";
+import DocListRow from "@/components/docs/DocListRow";
+import DocListSkeleton from "@/components/docs/DocListSkeleton";
 
 const STATUS: Record<string, string> = { draft: "초안", review: "검토", approved: "승인", archived: "보관" };
 const KIND: Record<string, string> = {
@@ -47,47 +53,129 @@ export function ProblemBox({ problem }: { problem: Problem }) {
   );
 }
 
-export function CanonicalListBody({ loading, slow, error, documents, query, selected, selectedVersion, selectedRef, onSelect, onRetry, onClearSearch }: {
+const revisionOf = (item: CanonicalDocument): number | null => {
+  const value = (item as { revision?: unknown }).revision;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+};
+
+export function CanonicalListBody({ loading, slow, error, documents, totalCount, keyTails, filtered = false, query, selected, selectedRef, onSelect, onRetry, onClearSearch, onClearFilters }: {
   loading: boolean;
   slow: boolean;
   error: Problem | null;
   documents: CanonicalDocument[];
+  totalCount?: number;
+  keyTails?: Map<string, string>;
+  filtered?: boolean;
   query: string;
   selected: string | null;
-  selectedVersion: string | null;
   selectedRef?: Ref<HTMLButtonElement>;
   onSelect: (key: string) => void;
   onRetry: () => void;
   onClearSearch: () => void;
+  onClearFilters?: () => void;
 }) {
-  const state = listBodyState({ loading, hasError: !!error, count: documents.length, query });
+  const total = totalCount ?? documents.length;
+  const tails = keyTails ?? duplicateKeyTails(documents);
+  const state = listBodyState({ loading, hasError: !!error, count: total, query });
+  const filteredOut = state === "list" && filtered && documents.length === 0;
   return (
     <>
       {error && <ProblemBox problem={error} />}
       {state === "loading" && <div role="status" className="text-sm">
-        <p>{slow ? "아직 불러오는 중입니다. 잠시 기다리거나 재시도하세요." : "목록을 불러오는 중…"}</p>
-        {slow && <button type="button" onClick={onRetry} className="mt-2 min-h-10 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>재시도</button>}
+        {slow ? <>
+          <p className="mb-2">아직 불러오는 중입니다. 잠시 기다리거나 재시도하세요.</p>
+          <button type="button" onClick={onRetry} className="mb-2 min-h-10 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>재시도</button>
+        </> : <p className="sr-only">목록을 불러오는 중…</p>}
+        <DocListSkeleton rows={slow ? 5 : 6} />
       </div>}
       {state === "empty" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>승인된 정본 없음 · 등록된 문서가 없습니다.</p>}
       {state === "no-results" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>검색 결과가 없습니다. 다른 검색어를 입력하거나 검색을 해제하세요.</p>}
-      {(state === "list" || state === "empty" || state === "no-results") && <div className="space-y-2">
+      {filteredOut && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>
+        선택한 상태·종류에 맞는 문서가 없습니다. {onClearFilters && <button type="button" onClick={onClearFilters} className="underline">필터 초기화</button>}
+      </p>}
+      {(state === "list" || state === "empty" || state === "no-results") && <div className="space-y-1.5">
         {query && <p className="text-xs">검색어: {query} <button type="button" onClick={onClearSearch} className="underline">검색 해제</button></p>}
-        {documents.length === 100 && <p className="text-xs" role="status">최대 100건이 표시됩니다. 다른 문서를 찾으려면 이름이나 내용을 검색하세요.</p>}
+        {total === 100 && <p className="text-xs" role="status">최대 100건이 표시됩니다. 다른 문서를 찾으려면 이름이나 내용을 검색하세요.</p>}
         {documents.map((item) => {
           const isSelected = selected === item.document_key;
           return (
-            <button key={item.document_key} ref={isSelected ? selectedRef : undefined} type="button" onClick={() => onSelect(item.document_key)}
-              aria-current={isSelected ? "true" : undefined}
-              className="w-full min-w-0 rounded-lg border p-3 text-left"
-              style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)", background: isSelected ? "var(--bg-hover)" : "transparent", borderWidth: isSelected ? 2 : 1 }}>
-              <span className="block break-words font-medium">{item.title || "제목 없음"}</span>
-              <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>{KIND[item.kind] || item.kind} · 버전 {isSelected && selectedVersion ? selectedVersion : "상세에서 확인"} · {STATUS[item.status] || item.status}</span>
-              <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>최종 수정 {kst(item.updated_at)}</span>
-            </button>
+            <DocListRow key={item.document_key} buttonRef={isSelected ? selectedRef : undefined} selected={isSelected}
+              title={item.title} kindLabel={KIND[item.kind] || item.kind} status={item.status} statusLabel={STATUS[item.status] || item.status}
+              revision={revisionOf(item)} updatedLabel={kstShort(item.updated_at)} keyTail={tails.get(item.document_key)}
+              onClick={() => onSelect(item.document_key)} />
           );
         })}
       </div>}
     </>
+  );
+}
+
+function CountBadges({ counts, labels, tone }: { counts: Map<string, number>; labels: Record<string, string>; tone: "status" | "kind" }) {
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>없음</p>;
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px]">
+      {entries.map(([value, count]) => (
+        <li key={value} className="flex items-center gap-1.5">
+          <DocBadge tone={tone === "status" ? statusTone(value) : "kind"}>{labels[value] || value}</DocBadge>
+          <span className="font-semibold">{count}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function CanonicalSummary({ project, documents, loading, error, keyTails, onSelect }: {
+  project: string;
+  documents: CanonicalDocument[];
+  loading: boolean;
+  error: boolean;
+  keyTails: Map<string, string>;
+  onSelect: (key: string) => void;
+}) {
+  const counts = optionCounts(documents, NO_FILTERS);
+  return (
+    <div className="space-y-4" data-testid="canonical-summary">
+      <div>
+        <h2 className="font-semibold">{project} 정본 요약</h2>
+        <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>목록에서 문서를 선택하면 상태와 개정 이력이 표시됩니다.</p>
+      </div>
+      {loading && <DocListSkeleton rows={3} />}
+      {!loading && error && <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>목록을 불러오지 못해 요약을 표시할 수 없습니다.</p>}
+      {!loading && !error && documents.length === 0 && <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>등록된 문서가 없습니다.</p>}
+      {!loading && documents.length > 0 && <>
+        <section aria-label="상태별 건수"><h3 className="mb-1.5 text-[13px] font-semibold">상태별</h3><CountBadges counts={counts.status} labels={STATUS} tone="status" /></section>
+        <section aria-label="종류별 건수"><h3 className="mb-1.5 text-[13px] font-semibold">종류별</h3><CountBadges counts={counts.kind} labels={KIND} tone="kind" /></section>
+        <section aria-label="최근 수정 문서">
+          <h3 className="mb-1.5 text-[13px] font-semibold">최근 수정 5건</h3>
+          <div className="space-y-1.5">
+            {recentDocuments(documents, 5).map((item) => (
+              <DocListRow key={item.document_key} title={item.title} kindLabel={KIND[item.kind] || item.kind} status={item.status}
+                statusLabel={STATUS[item.status] || item.status} revision={revisionOf(item)} updatedLabel={kstShort(item.updated_at)}
+                keyTail={keyTails.get(item.document_key)} onClick={() => onSelect(item.document_key)} />
+            ))}
+          </div>
+        </section>
+      </>}
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, total, counts, labels }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  total: number;
+  counts: Map<string, number>;
+  labels: Record<string, string>;
+}) {
+  const values = [...new Set([...Object.keys(labels), ...counts.keys()])].filter((key) => counts.has(key) || key === value);
+  return (
+    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}
+      className="min-h-11 min-w-0 rounded-lg border px-2 text-[13px]" style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--bg-card)" }}>
+      <option value="">{label} 전체 {total}</option>
+      {values.map((key) => <option key={key} value={key}>{labels[key] || key} {counts.get(key) || 0}</option>)}
+    </select>
   );
 }
 
@@ -107,6 +195,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   const [detail, setDetail] = useState<CanonicalDocumentDetail | null>(null);
   const [history, setHistory] = useState<CanonicalDocumentHistory | null>(null);
   const [approved, setApproved] = useState<CanonicalDocumentDetail | null>(null);
+  const [filters, setFilters] = useState<DocFilters>(NO_FILTERS);
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -172,6 +261,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
 
   useEffect(() => {
     projectRef.current = project;
+    setFilters(NO_FILTERS);
   }, [project]);
 
   useEffect(() => {
@@ -196,6 +286,10 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   }, [loading]);
 
   const showDetailOnMobile = mobileView === "detail" && !!selected;
+  const visibleDocuments = filterDocuments(documents, filters);
+  const keyTails = duplicateKeyTails(documents);
+  const counts = optionCounts(documents, filters);
+  const sumOf = (map: Map<string, number>) => [...map.values()].reduce((a, b) => a + b, 0);
   const presence = selectionPresence({ selected, keys: documents.map((item) => item.document_key), loading, hasError: !!error });
 
   useEffect(() => {
@@ -228,9 +322,9 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   };
 
   return (
-    <div ref={rootRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-5" style={{ color: "var(--text-primary)" }}>
-      <div className="mx-auto max-w-5xl space-y-4">
-        <div role="group" className={`${showDetailOnMobile ? "hidden lg:flex" : "flex"} items-center gap-2 overflow-x-auto whitespace-nowrap lg:flex-wrap lg:overflow-visible`} aria-label="프로젝트 선택">
+    <div ref={rootRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-3 sm:px-5" style={{ color: "var(--text-primary)" }}>
+      <div className="mx-auto max-w-7xl space-y-3">
+        <div role="group" className={`${showDetailOnMobile ? "hidden lg:flex" : "flex"} items-center gap-2 overflow-x-auto whitespace-nowrap`} aria-label="프로젝트 선택">
           <span className="shrink-0 text-sm font-semibold">프로젝트</span>
           {mergeCanonicalProjects(projects).map((name) => (
             <button key={name} type="button" onClick={() => { onProjectChange(name); setMobileView("list"); }} aria-pressed={project === name}
@@ -240,17 +334,29 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
             </button>
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <section className={`${showDetailOnMobile ? "hidden lg:block" : ""} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 목록">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="font-semibold">문서 정본 목록</h2>
-              <button type="button" onClick={() => void reloadList()} className="min-h-10 rounded-lg px-3 text-sm" style={{ border: "1px solid var(--border)" }}>재시도 · 새로고침</button>
+            <div className="mb-2 flex items-center gap-2">
+              <h2 className="shrink-0 font-semibold">문서 정본 목록</h2>
+              {loadStat && !loading && <p className="ml-auto min-w-0 truncate text-xs" style={{ color: "var(--text-secondary)" }}>
+                {loadStat.ok ? `${hasActiveFilter(filters) ? `${visibleDocuments.length}/` : ""}${documents.length}건` : "불러오기 실패"} · {(loadStat.ms / 1000).toFixed(1)}초 · 프로젝트 {project}
+              </p>}
+              <button type="button" onClick={() => void reloadList()} className={`${loadStat && !loading ? "" : "ml-auto"} min-h-10 shrink-0 rounded-lg px-3 text-sm`} style={{ border: "1px solid var(--border)" }}>재시도 · 새로고침</button>
             </div>
-            <form className="mb-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); setQuery(searchInput.trim()); }}>
-              <input aria-label="문서 검색" value={searchInput} maxLength={100} onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="문서명 또는 내용 검색" className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 text-sm" style={{ borderColor: "var(--border)" }} />
-              <button type="submit" className="min-h-11 rounded-lg px-4 text-sm" style={{ border: "1px solid var(--border)" }}>검색</button>
-            </form>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <form className="flex min-w-[12rem] flex-1 gap-2" onSubmit={(event) => { event.preventDefault(); setQuery(searchInput.trim()); }}>
+                <input aria-label="문서 검색" value={searchInput} maxLength={100} onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="문서명 또는 내용 검색" className="min-h-11 min-w-0 flex-1 rounded-lg border bg-transparent px-3 text-sm" style={{ borderColor: "var(--border)" }} />
+                <button type="submit" className="min-h-11 shrink-0 rounded-lg px-3 text-sm" style={{ border: "1px solid var(--border)" }}>검색</button>
+              </form>
+              <div role="group" aria-label="상태·종류 필터" className="flex min-w-0 items-center gap-2">
+                <FilterSelect label="상태" value={filters.status} onChange={(status) => setFilters((prev) => ({ ...prev, status }))}
+                  total={sumOf(counts.status)} counts={counts.status} labels={STATUS} />
+                <FilterSelect label="종류" value={filters.kind} onChange={(kind) => setFilters((prev) => ({ ...prev, kind }))}
+                  total={sumOf(counts.kind)} counts={counts.kind} labels={KIND} />
+                {hasActiveFilter(filters) && <button type="button" onClick={() => setFilters(NO_FILTERS)} className="min-h-11 shrink-0 rounded-lg px-2 text-[13px] underline">초기화</button>}
+              </div>
+            </div>
             {presence === "missing" && <p role="status" className="mb-3 rounded-lg border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
               검색 결과에 선택 문서가 없습니다. 선택한 문서(<span className="break-all">{selected}</span>)의 상세는 그대로 유지됩니다.
               <button type="button" onClick={() => openDetail(selected!)} className="ml-2 underline lg:hidden">상세 보기</button>
@@ -258,16 +364,15 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
             {presence === "present" && <button type="button" onClick={() => openDetail(selected!)} className="mb-3 min-h-10 w-full rounded-lg px-3 text-left text-sm lg:hidden" style={{ border: "1px solid var(--accent)" }}>
               선택한 문서 상세 보기 ›
             </button>}
-            {loadStat && !loading && <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-              {loadStat.ok ? `${documents.length}건` : "불러오기 실패"} · {(loadStat.ms / 1000).toFixed(1)}초 · 프로젝트 {project}
-            </p>}
-            <CanonicalListBody loading={loading} slow={slow} error={error} documents={documents} query={query}
-              selected={selected} selectedVersion={detail?.revision ? `v${detail.revision.version}` : null} selectedRef={selectedItemRef}
-              onSelect={openDetail} onRetry={() => void reloadList()} onClearSearch={() => { setSearchInput(""); setQuery(""); }} />
+            <CanonicalListBody loading={loading} slow={slow} error={error} documents={visibleDocuments} totalCount={documents.length}
+              keyTails={keyTails} filtered={hasActiveFilter(filters)} query={query} selected={selected} selectedRef={selectedItemRef}
+              onSelect={openDetail} onRetry={() => void reloadList()} onClearSearch={() => { setSearchInput(""); setQuery(""); }}
+              onClearFilters={() => setFilters(NO_FILTERS)} />
           </section>
           <section className={`${showDetailOnMobile ? "" : "hidden lg:block"} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 상세">
             {selected && <button type="button" onClick={() => setMobileView("list")} className="mb-3 min-h-11 rounded-lg px-4 text-sm lg:hidden" style={{ border: "1px solid var(--border)" }}>‹ 목록으로</button>}
-            {!selected && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>목록에서 문서를 선택하면 상태와 개정 이력이 표시됩니다.</p>}
+            {!selected && <CanonicalSummary project={project} documents={documents} loading={loading} error={!!error}
+              keyTails={keyTails} onSelect={openDetail} />}
             {selected && <>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="font-semibold">현재 문서와 개정 이력</h2>

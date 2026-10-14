@@ -1,8 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { CanonicalDocument } from "@/lib/api";
-import { listBodyState, selectionPresence } from "@/lib/canonicalDocumentView";
-import { CanonicalListBody, ProblemBox } from "./CanonicalDocuments";
+import {
+  duplicateKeyTails, filterDocuments, kstShort, listBodyState, NO_FILTERS, optionCounts, recentDocuments, selectionPresence,
+} from "@/lib/canonicalDocumentView";
+import { CanonicalListBody, CanonicalSummary, ProblemBox } from "./CanonicalDocuments";
 
 const doc = (key: string, title = key): CanonicalDocument => ({
   id: key, document_key: key, title, kind: "prd", status: "draft", updated_at: "2026-10-14T02:00:00Z",
@@ -11,7 +13,7 @@ const doc = (key: string, title = key): CanonicalDocument => ({
 const noop = () => {};
 const render = (overrides: Partial<Parameters<typeof CanonicalListBody>[0]> = {}) => renderToStaticMarkup(
   <CanonicalListBody loading={false} slow={false} error={null} documents={[]} query="" selected={null}
-    selectedVersion={null} onSelect={noop} onRetry={noop} onClearSearch={noop} {...overrides} />,
+    onSelect={noop} onRetry={noop} onClearSearch={noop} {...overrides} />,
 );
 
 describe("selectionPresence (검색 후 상세 유지)", () => {
@@ -86,5 +88,123 @@ describe("CanonicalListBody", () => {
     const documents = Array.from({ length: 100 }, (_, i) => doc(`k${i}`));
     expect(render({ documents })).toContain("최대 100건이 표시됩니다");
     expect(render({ documents: documents.slice(0, 99) })).not.toContain("최대 100건");
+  });
+});
+
+describe("목록 행 디자인", () => {
+  it("does not render the placeholder phrase", () => {
+    const html = render({ documents: [doc("a"), doc("b")], selected: "a" });
+    expect(html).not.toContain("버전 상세에서 확인");
+    expect(html).not.toContain("상세에서 확인");
+    expect(html).toContain("제품 요구사항");
+    expect(html).toContain("초안");
+    expect(html).toContain("10/14 11:00");
+  });
+
+  it("marks the selected row with the accent bar", () => {
+    const html = render({ documents: [doc("a"), doc("b")], selected: "b" });
+    expect(html.match(/border-left:3px solid var\(--accent\)/g)).toHaveLength(1);
+  });
+
+  it("shows a dimmed document_key tail only for duplicated titles", () => {
+    const documents = [
+      doc("chat-scroll-report-aaaa1111", "채팅 스크롤 보고서"),
+      doc("chat-scroll-report-bbbb2222", "채팅 스크롤 보고서"),
+      doc("unique-doc-key-cccc3333", "다른 문서"),
+    ];
+    const html = render({ documents });
+    expect(html).toContain("…aa1111");
+    expect(html).toContain("…bb2222");
+    expect(html).not.toContain("cccc3333");
+    expect(html).toContain("opacity-60");
+  });
+
+  it("shows the revision number only when the API provides it", () => {
+    const withRevision = { ...doc("r", "개정 문서"), revision: 3 } as unknown as CanonicalDocument;
+    expect(render({ documents: [withRevision] })).toContain("<span>r3</span>");
+    expect(render({ documents: [doc("n", "개정 문서")] })).not.toContain("<span>r");
+  });
+
+  it("renders skeleton rows instead of a visible loading sentence", () => {
+    const html = render({ loading: true });
+    expect(html).toContain('data-testid="doc-list-skeleton"');
+    expect(html.match(/animate-pulse/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(html).toContain("sr-only");
+  });
+});
+
+describe("상태·종류 필터", () => {
+  const docs = [
+    { ...doc("a"), status: "approved", kind: "prd" }, { ...doc("b"), status: "draft", kind: "prd" },
+    { ...doc("c"), status: "draft", kind: "report" }, { ...doc("d"), status: "draft", kind: "report" },
+  ] as unknown as CanonicalDocument[];
+
+  it("counts options within the other filter and filters the loaded list", () => {
+    const counts = optionCounts(docs, NO_FILTERS);
+    expect(counts.status.get("approved")).toBe(1);
+    expect(counts.status.get("draft")).toBe(3);
+    expect(filterDocuments(docs, { status: "draft", kind: "" })).toHaveLength(3);
+    expect(filterDocuments(docs, { status: "draft", kind: "report" }).map((d) => d.document_key)).toEqual(["c", "d"]);
+    expect(optionCounts(docs, { status: "", kind: "report" }).status.get("approved")).toBeUndefined();
+    expect(optionCounts(docs, { status: "approved", kind: "" }).status.get("draft")).toBe(3);
+  });
+
+  it("tells the user when the filter hides everything", () => {
+    const html = render({ documents: [], totalCount: 4, filtered: true, onClearFilters: noop });
+    expect(html).toContain("필터 초기화");
+    expect(html).not.toContain("승인된 정본 없음");
+  });
+
+  it("keeps the 100 cap notice based on the unfiltered total", () => {
+    expect(render({ documents: [doc("x")], totalCount: 100, filtered: true })).toContain("최대 100건이 표시됩니다");
+  });
+});
+
+describe("선택 없음 요약", () => {
+  const docs = [
+    { ...doc("a"), status: "approved", kind: "prd", updated_at: "2026-10-14T01:00:00Z" },
+    { ...doc("b"), status: "draft", kind: "report", updated_at: "2026-10-14T03:00:00Z" },
+    { ...doc("c"), status: "draft", kind: "report", updated_at: "2026-10-13T03:00:00Z" },
+  ] as unknown as CanonicalDocument[];
+
+  it("shows status counts, kind counts and recent documents", () => {
+    const html = renderToStaticMarkup(<CanonicalSummary project="AADS" documents={docs} loading={false} error={false}
+      keyTails={duplicateKeyTails(docs)} onSelect={noop} />);
+    expect(html).toContain("AADS 정본 요약");
+    expect(html).toContain("상태별");
+    expect(html).toContain("종류별");
+    expect(html).toContain("최근 수정 5건");
+    expect(html).toContain("보고서");
+    expect(html.indexOf(">b<")).toBeLessThan(html.indexOf(">c<"));
+  });
+
+  it("sorts recent documents newest first and caps at five", () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ ...doc(`k${i}`), updated_at: `2026-10-1${i}T00:00:00Z` })) as unknown as CanonicalDocument[];
+    expect(recentDocuments(many).map((d) => d.document_key)).toEqual(["k7", "k6", "k5", "k4", "k3"]);
+  });
+
+  it("shows a skeleton while loading", () => {
+    const html = renderToStaticMarkup(<CanonicalSummary project="AADS" documents={[]} loading error={false} keyTails={new Map()} onSelect={noop} />);
+    expect(html).toContain('data-testid="doc-list-skeleton"');
+  });
+});
+
+describe("시각 헬퍼", () => {
+  it("formats same-year times as MM/DD HH:mm in KST and other years with the year", () => {
+    const now = new Date("2026-10-14T05:00:00Z");
+    expect(kstShort("2026-10-14T03:47:00Z", now)).toBe("10/14 12:47");
+    expect(kstShort("2026-01-01T00:00:00Z", now)).toBe("01/01 09:00");
+    expect(kstShort("2025-10-01T00:00:00Z", now)).toBe("2025/10/01 09:00");
+    expect(kstShort(null, now)).toBe("—");
+  });
+
+  it("finds the shortest distinguishing key tail", () => {
+    const tails = duplicateKeyTails([
+      { document_key: "same-title-key-1", title: "T", kind: "", status: "", updated_at: "" },
+      { document_key: "same-title-key-2", title: "T", kind: "", status: "", updated_at: "" },
+    ]);
+    expect(tails.get("same-title-key-1")).toBe("…-key-1");
+    expect(tails.get("same-title-key-2")).toBe("…-key-2");
+    expect(tails.get("same-title-key-1")).not.toBe(tails.get("same-title-key-2"));
   });
 });
