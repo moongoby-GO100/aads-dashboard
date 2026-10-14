@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import { api, type CanonicalDocument, type CanonicalDocumentDetail, type CanonicalDocumentHistory } from "@/lib/api";
 import { canTransitionDocumentForHead } from "@/lib/canonicalDocumentWorkflow";
 import { canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
+import { listBodyState, selectionPresence, SLOW_LIST_MS } from "@/lib/canonicalDocumentView";
 
 const STATUS: Record<string, string> = { draft: "초안", review: "검토", approved: "승인", archived: "보관" };
 const KIND: Record<string, string> = {
@@ -37,12 +38,56 @@ function problemOf(error: unknown, project: string): Problem {
   return { kind, text: `문서를 불러오거나 변경하지 못했습니다. 연결을 확인하고 재시도하세요. (${message})` };
 }
 
-function ProblemBox({ problem }: { problem: Problem }) {
+export function ProblemBox({ problem }: { problem: Problem }) {
   return (
     <div role="alert" className="mb-3 rounded-lg border border-red-700 p-3 text-sm">
       <p>{problem.text}</p>
       {problem.kind === "auth" && <Link href="/login?next=%2Fdocs" className="mt-2 inline-block underline">로그인 복구</Link>}
     </div>
+  );
+}
+
+export function CanonicalListBody({ loading, slow, error, documents, query, selected, selectedVersion, selectedRef, onSelect, onRetry, onClearSearch }: {
+  loading: boolean;
+  slow: boolean;
+  error: Problem | null;
+  documents: CanonicalDocument[];
+  query: string;
+  selected: string | null;
+  selectedVersion: string | null;
+  selectedRef?: Ref<HTMLButtonElement>;
+  onSelect: (key: string) => void;
+  onRetry: () => void;
+  onClearSearch: () => void;
+}) {
+  const state = listBodyState({ loading, hasError: !!error, count: documents.length, query });
+  return (
+    <>
+      {error && <ProblemBox problem={error} />}
+      {state === "loading" && <div role="status" className="text-sm">
+        <p>{slow ? "아직 불러오는 중입니다. 잠시 기다리거나 재시도하세요." : "목록을 불러오는 중…"}</p>
+        {slow && <button type="button" onClick={onRetry} className="mt-2 min-h-10 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>재시도</button>}
+      </div>}
+      {state === "empty" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>승인된 정본 없음 · 등록된 문서가 없습니다.</p>}
+      {state === "no-results" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>검색 결과가 없습니다. 다른 검색어를 입력하거나 검색을 해제하세요.</p>}
+      {(state === "list" || state === "empty" || state === "no-results") && <div className="space-y-2">
+        {query && <p className="text-xs">검색어: {query} <button type="button" onClick={onClearSearch} className="underline">검색 해제</button></p>}
+        {documents.length === 100 && <p className="text-xs" role="status">최대 100건이 표시됩니다. 다른 문서를 찾으려면 이름이나 내용을 검색하세요.</p>}
+        {documents.map((item) => {
+          const isSelected = selected === item.document_key;
+          return (
+            <button key={item.document_key} ref={isSelected ? selectedRef : undefined} type="button" onClick={() => onSelect(item.document_key)}
+              aria-current={isSelected ? "true" : undefined}
+              className="w-full min-w-0 rounded-lg border p-3 text-left"
+              style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)", background: isSelected ? "var(--bg-hover)" : "transparent", borderWidth: isSelected ? 2 : 1 }}>
+              <span className="block break-words font-medium">{item.title || "제목 없음"}</span>
+              <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>{KIND[item.kind] || item.kind} · 버전 {isSelected && selectedVersion ? selectedVersion : "상세에서 확인"} · {STATUS[item.status] || item.status}</span>
+              <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>최종 수정 {kst(item.updated_at)}</span>
+            </button>
+          );
+        })}
+      </div>}
+    </>
   );
 }
 
@@ -70,6 +115,11 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   const [detailError, setDetailError] = useState<Problem | null>(null);
   const [pending, setPending] = useState<"review" | "approve" | "archive" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [loadStat, setLoadStat] = useState<{ ms: number; ok: boolean } | null>(null);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedItemRef = useRef<HTMLButtonElement>(null);
   const listRequest = useRef(0);
   const detailRequest = useRef(0);
   const projectRef = useRef(project);
@@ -79,11 +129,16 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
     const requestId = ++listRequest.current;
     setLoading(true);
     setError(null);
+    const startedAt = Date.now();
     try {
       const response = await api.listCanonicalDocuments(project, query);
-      if (requestId === listRequest.current) setDocuments(response.documents);
+      if (requestId === listRequest.current) {
+        setDocuments(response.documents);
+        setLoadStat({ ms: Date.now() - startedAt, ok: true });
+      }
     } catch (cause) {
       if (requestId === listRequest.current) {
+        setLoadStat({ ms: Date.now() - startedAt, ok: false });
         setDocuments([]);
         setError(problemOf(cause, project));
       }
@@ -120,13 +175,6 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   }, [project]);
 
   useEffect(() => {
-    ++detailRequest.current;
-    setPending(null);
-    setDetail(null);
-    setHistory(null);
-    setApproved(null);
-    setDetailError(null);
-    setDetailLoading(false);
     void reloadList();
   }, [reloadList]);
 
@@ -136,8 +184,29 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
     setHistory(null);
     setApproved(null);
     setPending(null);
+    setDetailError(null);
+    setDetailLoading(false);
     if (selected) void reloadDetail(selected);
   }, [selected, reloadDetail]);
+
+  useEffect(() => {
+    if (!loading) { setSlow(false); return; }
+    const timer = setTimeout(() => setSlow(true), SLOW_LIST_MS);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  const showDetailOnMobile = mobileView === "detail" && !!selected;
+  const presence = selectionPresence({ selected, keys: documents.map((item) => item.document_key), loading, hasError: !!error });
+
+  useEffect(() => {
+    if (mobileView === "list" && selected) selectedItemRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [mobileView, selected]);
+
+  const openDetail = (key: string) => {
+    setSelected(key);
+    setMobileView("detail");
+    rootRef.current?.scrollTo?.({ top: 0 });
+  };
 
   const act = async () => {
     const target = pending === "archive" ? approved : detail;
@@ -159,20 +228,20 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-5" style={{ color: "var(--text-primary)" }}>
+    <div ref={rootRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-5" style={{ color: "var(--text-primary)" }}>
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold">프로젝트</span>
+        <div role="group" className={`${showDetailOnMobile ? "hidden lg:flex" : "flex"} items-center gap-2 overflow-x-auto whitespace-nowrap lg:flex-wrap lg:overflow-visible`} aria-label="프로젝트 선택">
+          <span className="shrink-0 text-sm font-semibold">프로젝트</span>
           {mergeCanonicalProjects(projects).map((name) => (
-            <button key={name} type="button" onClick={() => onProjectChange(name)} aria-pressed={project === name}
-              className="min-h-10 rounded-lg px-3 text-sm"
+            <button key={name} type="button" onClick={() => { onProjectChange(name); setMobileView("list"); }} aria-pressed={project === name}
+              className="min-h-10 shrink-0 rounded-lg px-3 text-sm"
               style={project === name ? { background: "var(--accent)", color: "#fff" } : { border: "1px solid var(--border)" }}>
               {name}
             </button>
           ))}
         </div>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-          <section className="min-w-0 rounded-xl border p-3" style={{ borderColor: "var(--border)" }} aria-label="문서 정본 목록">
+          <section className={`${showDetailOnMobile ? "hidden lg:block" : ""} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 목록">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="font-semibold">문서 정본 목록</h2>
               <button type="button" onClick={() => void reloadList()} className="min-h-10 rounded-lg px-3 text-sm" style={{ border: "1px solid var(--border)" }}>재시도 · 새로고침</button>
@@ -182,24 +251,22 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
                 placeholder="문서명 또는 내용 검색" className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 text-sm" style={{ borderColor: "var(--border)" }} />
               <button type="submit" className="min-h-11 rounded-lg px-4 text-sm" style={{ border: "1px solid var(--border)" }}>검색</button>
             </form>
-            {error && <ProblemBox problem={error} />}
-            {loading && <p className="text-sm">목록을 불러오는 중…</p>}
-            {!loading && !error && documents.length === 0 && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>{query ? "검색 결과가 없습니다." : "승인된 정본 없음 · 등록된 문서가 없습니다."}</p>}
-            {!loading && !error && <div className="space-y-2">
-              {query && <p className="text-xs">검색어: {query} <button type="button" onClick={() => { setSearchInput(""); setQuery(""); }} className="underline">검색 해제</button></p>}
-              {documents.length === 100 && <p className="text-xs" role="status">최대 100건이 표시됩니다. 다른 문서를 찾으려면 이름이나 내용을 검색하세요.</p>}
-              {documents.map((item) => (
-                <button key={item.document_key} type="button" onClick={() => setSelected(item.document_key)}
-                  className="w-full min-w-0 rounded-lg border p-3 text-left"
-                  style={{ borderColor: selected === item.document_key ? "var(--accent)" : "var(--border)", background: selected === item.document_key ? "var(--bg-hover)" : "transparent" }}>
-                  <span className="block break-words font-medium">{item.title || "제목 없음"}</span>
-                  <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>{KIND[item.kind] || item.kind} · 버전 {selected === item.document_key && detail?.revision ? `v${detail.revision.version}` : "상세에서 확인"} · {STATUS[item.status] || item.status}</span>
-                  <span className="mt-1 block text-xs" style={{ color: "var(--text-secondary)" }}>최종 수정 {kst(item.updated_at)}</span>
-                </button>
-              ))}
-            </div>}
+            {presence === "missing" && <p role="status" className="mb-3 rounded-lg border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
+              검색 결과에 선택 문서가 없습니다. 선택한 문서(<span className="break-all">{selected}</span>)의 상세는 그대로 유지됩니다.
+              <button type="button" onClick={() => openDetail(selected!)} className="ml-2 underline lg:hidden">상세 보기</button>
+            </p>}
+            {presence === "present" && <button type="button" onClick={() => openDetail(selected!)} className="mb-3 min-h-10 w-full rounded-lg px-3 text-left text-sm lg:hidden" style={{ border: "1px solid var(--accent)" }}>
+              선택한 문서 상세 보기 ›
+            </button>}
+            {loadStat && !loading && <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              {loadStat.ok ? `${documents.length}건` : "불러오기 실패"} · {(loadStat.ms / 1000).toFixed(1)}초 · 프로젝트 {project}
+            </p>}
+            <CanonicalListBody loading={loading} slow={slow} error={error} documents={documents} query={query}
+              selected={selected} selectedVersion={detail?.revision ? `v${detail.revision.version}` : null} selectedRef={selectedItemRef}
+              onSelect={openDetail} onRetry={() => void reloadList()} onClearSearch={() => { setSearchInput(""); setQuery(""); }} />
           </section>
-          <section className="min-w-0 rounded-xl border p-3" style={{ borderColor: "var(--border)" }} aria-label="문서 정본 상세">
+          <section className={`${showDetailOnMobile ? "" : "hidden lg:block"} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 상세">
+            {selected && <button type="button" onClick={() => setMobileView("list")} className="mb-3 min-h-11 rounded-lg px-4 text-sm lg:hidden" style={{ border: "1px solid var(--border)" }}>‹ 목록으로</button>}
             {!selected && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>목록에서 문서를 선택하면 상태와 개정 이력이 표시됩니다.</p>}
             {selected && <>
               <div className="mb-3 flex items-center justify-between gap-2">
