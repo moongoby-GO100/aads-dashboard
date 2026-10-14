@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Header from "@/components/Header";
+import AutomationHomeEntry from "@/components/automation/AutomationHomeEntry";
 import { api, type UserApiKeyItem, type UserProjectServerItem } from "@/lib/api";
 import { getMe, type CurrentUser } from "@/lib/auth";
 
@@ -99,6 +100,8 @@ export default function CustomerHomePage() {
               {error}
             </div>
           )}
+
+          <AutomationHomeEntry />
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             {[

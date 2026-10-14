@@ -14,6 +14,8 @@ import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import VaultCredentialCard, { type VaultCredentialCardData } from "@/components/chat/VaultCredentialCard";
+import AutomationDraftCard from "@/components/chat/AutomationDraftCard";
+import { useAutomationDraftCards } from "@/features/chat/automation/useAutomationDraftCards";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import UsageBar from "@/components/chat/UsageBar";
@@ -5100,6 +5102,17 @@ export default function ChatPage() {
   const jumpToLatestMessage = useCallback(() => {
     chatViewportController.jumpToLatest();
   }, [chatViewportController]);
+  const handleAutomationCardAdded = useCallback(() => {
+    scrollToMessagesBottom(true);
+  }, [scrollToMessagesBottom]);
+  const handleAutomationCardLayout = useCallback(() => {
+    scrollToMessagesBottom(false);
+  }, [scrollToMessagesBottom]);
+  const {
+    ids: automationCardIds,
+    remove: removeAutomationCard,
+    replace: replaceAutomationCard,
+  } = useAutomationDraftCards(handleAutomationCardAdded);
   const settleScrollAfterMessageMerge = useCallback(() => {
     chatViewportController.settleAfterMessageChange(
       streamingRef.current || waitingBgRef.current,
@@ -13369,6 +13382,16 @@ export default function ChatPage() {
             </button>,
             document.body,
           )}
+
+          {automationCardIds.map((draftId) => (
+            <AutomationDraftCard
+              key={draftId}
+              draftId={draftId}
+              onDismiss={removeAutomationCard}
+              onReplace={replaceAutomationCard}
+              onLayoutChange={handleAutomationCardLayout}
+            />
+          ))}
 
           {bottomVaultCards.map((vc) => (
             <VaultCredentialCard key={vc.id} card={vc} onDismiss={dismissVaultCard} />

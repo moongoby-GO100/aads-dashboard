@@ -533,6 +533,7 @@ import type {
   MemorySearchResponse,
   MemoryInboxResponse,
 } from "@/types";
+import type { AutomationCallResult, AutomationDraftView, AutomationSchedule } from "./automationDraft";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
@@ -656,6 +657,49 @@ async function vaultCredentialRequestCall<T>(path: string, init?: RequestInit): 
     }
     const ra = Number(res.headers.get("Retry-After"));
     return { ok: false, status: res.status, code, requestStatus, retryAfter: Number.isFinite(ra) && ra > 0 ? ra : undefined };
+  }
+  try {
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, status: res.status, code: "invalid_response" };
+  }
+}
+
+// 업무 자동화 초안 — 서버가 문장(카드)을 만들어 주므로 오류 본문 대신 상태·코드만 돌려준다.
+// 기능 스위치가 꺼져 있으면 404(automation_drafts_disabled)다. 호출부가 '준비 중'으로 처리한다.
+async function automationCall<T>(
+  path: string, init?: { method?: string; body?: unknown },
+): Promise<AutomationCallResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: init?.method ?? "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+  } catch {
+    return { ok: false, status: 0, code: "network" };
+  }
+  if (res.status === 401) {
+    handle401Redirect();
+    return { ok: false, status: 401, code: "unauthorized" };
+  }
+  if (!res.ok) {
+    let code = "";
+    let actual: string | undefined;
+    try {
+      const body = (await res.json()) as { detail?: { error?: unknown; actual?: unknown } | string };
+      const detail = body?.detail;
+      if (detail && typeof detail === "object") {
+        if (typeof detail.error === "string") code = detail.error;
+        if (typeof detail.actual === "string") actual = detail.actual;
+      }
+    } catch {
+      // 본문이 JSON 이 아니면 상태 코드만 쓴다.
+    }
+    return { ok: false, status: res.status, code, actual };
   }
   try {
     return { ok: true, data: (await res.json()) as T };
@@ -1382,6 +1426,51 @@ export const api = {
   },
   issueAgentVaultAutofillToken: (data: { credential_id: string; work_key: string; origin: string; ttl_seconds?: number }) =>
     request<unknown>("/agent-vault/autofill-token", { method: "POST", body: JSON.stringify(data) }),
+  createAutomationDraft: (intentText: string, sessionId?: string | null) =>
+    automationCall<AutomationDraftView>("/automation-drafts", {
+      method: "POST", body: { intent_text: intentText, ...(sessionId ? { session_id: sessionId } : {}) },
+    }),
+  getAutomationDraft: (draftId: string) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}`),
+  patchAutomationDraft: (
+    draftId: string,
+    changes: { site?: string; task?: string; output?: string; schedule?: AutomationSchedule | null },
+  ) => automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}`, { method: "PATCH", body: changes }),
+  confirmAutomationIntent: (draftId: string, expectedState: string, domainConfirmed: boolean) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/confirm-intent`, {
+      method: "POST", body: { expected_state: expectedState, domain_confirmed: domainConfirmed },
+    }),
+  chooseAutomationCredential: (draftId: string, choice: { credentialId: string } | { requestNew: true }) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/credential`, {
+      method: "POST",
+      body: "credentialId" in choice ? { credential_id: choice.credentialId } : { request_new: true },
+    }),
+  startAutomationDemo: (draftId: string, expectedState: string) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/demo`, {
+      method: "POST", body: { expected_state: expectedState },
+    }),
+  decideAutomationRisk: (draftId: string, decision: "proceed" | "stop_here" | "cancel") =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/risk-decision`, {
+      method: "POST", body: { decision },
+    }),
+  reviewAutomationDraft: (draftId: string, ok: boolean, reasonCode?: string) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/review`, {
+      method: "POST", body: { ok, ...(reasonCode ? { reason_code: reasonCode } : {}) },
+    }),
+  startAutomationManualRecord: (draftId: string) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/manual-record`, { method: "POST" }),
+  setAutomationSchedule: (draftId: string, schedule: AutomationSchedule) =>
+    automationCall<AutomationDraftView>(`/automation-drafts/${encodeURIComponent(draftId)}/schedule`, {
+      method: "POST", body: schedule,
+    }),
+  runAutomationDraft: (draftId: string) =>
+    automationCall<AutomationDraftView>(`/automations/${encodeURIComponent(`draft:${draftId}`)}/run`, { method: "POST" }),
+  pauseAutomationDraft: (draftId: string) =>
+    automationCall<AutomationDraftView>(`/automations/${encodeURIComponent(`draft:${draftId}`)}/pause`, { method: "POST" }),
+  resumeAutomationDraft: (draftId: string) =>
+    automationCall<AutomationDraftView>(`/automations/${encodeURIComponent(`draft:${draftId}`)}/resume`, { method: "POST" }),
+  getAutomationPendingCount: () =>
+    automationCall<{ pending: number; oldest_hours: number }>("/automations/pending-count"),
   getVaultCredentialRequest: (requestId: string) =>
     vaultCredentialRequestCall<{ request: VaultCredentialRequestView }>(encodeURIComponent(requestId)),
   submitVaultCredentialRequest: (requestId: string, data: { username: string; password: string }) =>
