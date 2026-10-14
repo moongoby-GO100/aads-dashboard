@@ -124,6 +124,15 @@ export const COPY = {
   manualStarted: "직접 보여주기를 시작했어요. 화면에서 한 번 해 주세요.",
   closeNote: "카드를 닫아도 진행 중인 일은 서버에서 이어져요. 다시 열려면 채팅을 새로 열어 주세요.",
   schedulePending: "정한 주기는 담당자가 확인하면 시작해요.",
+  runConfirmHeadline: "실행할까요?",
+  runConfirmBody: (title: string) => `${title}를 실행할까요?`,
+  runConfirmBodyPlain: "이 일을 실행할까요?",
+  runConfirmRun: "실행",
+  runConfirmDecline: "아니요",
+  runConfirmSending: "실행을 요청하고 있어요…",
+  runConfirmDone: "실행을 시작했어요. 결과는 채팅에 이어서 알려 드려요.",
+  runConfirmDeclined: "실행하지 않았습니다.",
+  runConfirmRetry: "다시 시도",
 } as const;
 
 export function errorSentence(status: number, code: string): string {

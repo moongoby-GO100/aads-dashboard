@@ -11,6 +11,9 @@ import {
   showCredentialConnect, stepOf, withCacheBust,
   type AutomationCallResult, type AutomationCardButton, type AutomationDraftView, type AutomationSchedule,
 } from "@/lib/automationDraft";
+import {
+  RUN_CONFIRM_INITIAL, canStartRun, confirmedCommandBody, reduceRunConfirm, type RunConfirmation,
+} from "@/lib/automationRunConfirm";
 import VaultCredentialCard from "@/components/chat/VaultCredentialCard";
 
 const FIELD: React.CSSProperties = {
@@ -57,6 +60,8 @@ export interface AutomationDraftCardProps {
   onDismiss: (draftId: string) => void;
   onReplace?: (oldId: string, newId: string) => void;
   onLayoutChange?: () => void;
+  // 있으면 서버에서 초안을 읽지 않고 "실행할까요?" 확인 카드로 그린다.
+  runConfirm?: { confirmation: RunConfirmation; sessionId?: string };
 }
 
 function Button({ label, kind, disabled, onClick, busy, testId }: {
@@ -129,7 +134,105 @@ function ScheduleEditor({ initial, allowNone, submitLabel, busy, onSubmit, onCan
   );
 }
 
-export default function AutomationDraftCard({ draftId, onDismiss, onReplace, onLayoutChange }: AutomationDraftCardProps) {
+export default function AutomationDraftCard(props: AutomationDraftCardProps) {
+  if (props.runConfirm) {
+    return (
+      <RunConfirmBody
+        confirmation={props.runConfirm.confirmation}
+        sessionId={props.runConfirm.sessionId}
+        onDismiss={props.onDismiss}
+        onLayoutChange={props.onLayoutChange}
+      />
+    );
+  }
+  return <AutomationDraftBody {...props} />;
+}
+
+function RunConfirmBody({ confirmation, sessionId, onDismiss, onLayoutChange }: {
+  confirmation: RunConfirmation;
+  sessionId?: string;
+  onDismiss: (draftId: string) => void;
+  onLayoutChange?: () => void;
+}) {
+  const [state, dispatch] = React.useReducer(reduceRunConfirm, RUN_CONFIRM_INITIAL);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const aliveRef = useRef(true);
+  const sendingRef = useRef(false);
+  const layoutRef = useRef(onLayoutChange);
+  const { draftId } = confirmation;
+
+  useEffect(() => { layoutRef.current = onLayoutChange; }, [onLayoutChange]);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+  useEffect(() => { layoutRef.current?.(); }, [state.phase]);
+
+  const run = useCallback(async () => {
+    if (sendingRef.current || !canStartRun(state)) return;
+    sendingRef.current = true;
+    dispatch({ type: "run" });
+    const r = await api.runOhvisConsoleCommandConfirmed(confirmedCommandBody(confirmation, sessionId));
+    sendingRef.current = false;
+    if (!aliveRef.current) return;
+    if (r.ok && r.data.status !== "confirmation_required") dispatch({ type: "ok" });
+    else if (r.ok) dispatch({ type: "fail", status: 500, code: "" });
+    else dispatch({ type: "fail", status: r.status, code: r.code });
+  }, [state, confirmation, sessionId]);
+
+  const decline = useCallback(() => {
+    if (sendingRef.current) return;
+    dispatch({ type: "decline" });
+  }, []);
+
+  const closeCard = useCallback(() => onDismiss(draftId), [onDismiss, draftId]);
+  const sending = state.phase === "sending";
+  const runButton = confirmation.buttons.find((b) => b.id === "confirm_run");
+  const declineButton = confirmation.buttons.find((b) => b.id === "decline_run");
+
+  return (
+    <Shell rootRef={rootRef} draftId={draftId} state={`confirm-${state.phase}`}>
+      <h3 style={{ margin: "2px 0 0", fontSize: 16, fontWeight: 800, color: "var(--ct-text)", wordBreak: "break-word" }}>
+        {confirmation.headline}
+      </h3>
+      {(state.phase === "idle" || state.phase === "sending" || state.phase === "error") && (
+        <p style={HINT}>{confirmation.body}</p>
+      )}
+      {sending && <div role="status" style={HINT}>{COPY.runConfirmSending}</div>}
+      {state.phase === "error" && (
+        <div role="alert" data-testid="automation-run-error" style={{ marginTop: 10, fontSize: 13, color: "#f87171", lineHeight: 1.55, wordBreak: "break-word" }}>
+          {errorSentence(state.errorStatus, state.errorCode)}
+        </div>
+      )}
+      {state.phase === "done" && <p role="status" style={HINT}>{COPY.runConfirmDone}</p>}
+      {state.phase === "declined" && <p role="status" style={HINT}>{COPY.runConfirmDeclined}</p>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+        {(state.phase === "idle" || state.phase === "sending" || state.phase === "error") && (
+          <>
+            {declineButton && (
+              <Button label={declineButton.label} kind="plain" disabled={sending} onClick={decline} testId="automation-btn-decline_run" />
+            )}
+            {runButton && (
+              <Button
+                label={state.phase === "error" ? COPY.runConfirmRetry : runButton.label}
+                kind="primary"
+                busy={sending}
+                disabled={sending}
+                onClick={() => void run()}
+                testId="automation-btn-confirm_run"
+              />
+            )}
+          </>
+        )}
+        {(state.phase === "done" || state.phase === "declined") && (
+          <Button label={COPY.closeCard} kind="plain" onClick={closeCard} testId="automation-btn-close" />
+        )}
+      </div>
+    </Shell>
+  );
+}
+
+function AutomationDraftBody({ draftId, onDismiss, onReplace, onLayoutChange }: AutomationDraftCardProps) {
   const [view, setView] = useState<AutomationDraftView | null>(null);
   const [loadError, setLoadError] = useState<{ status: number; code: string } | null>(null);
   const [busy, setBusy] = useState<ActionId | null>(null);

@@ -16,6 +16,7 @@ import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import VaultCredentialCard, { type VaultCredentialCardData } from "@/components/chat/VaultCredentialCard";
 import AutomationDraftCard from "@/components/chat/AutomationDraftCard";
 import { useAutomationDraftCards } from "@/features/chat/automation/useAutomationDraftCards";
+import { parseRunConfirmationText, type RunConfirmation } from "@/lib/automationRunConfirm";
 import ChatOpsDock from "@/components/chat/ChatOpsDock";
 import ShortcutHelp from "@/components/chat/ShortcutHelp";
 import UsageBar from "@/components/chat/UsageBar";
@@ -5113,6 +5114,10 @@ export default function ChatPage() {
     remove: removeAutomationCard,
     replace: replaceAutomationCard,
   } = useAutomationDraftCards(handleAutomationCardAdded);
+  const [runConfirmCards, setRunConfirmCards] = useState<Array<{ confirmation: RunConfirmation; sessionId: string }>>([]);
+  const dismissRunConfirmCard = useCallback((draftId: string) => {
+    setRunConfirmCards((prev) => prev.filter((c) => c.confirmation.draftId !== draftId));
+  }, []);
   const settleScrollAfterMessageMerge = useCallback(() => {
     chatViewportController.settleAfterMessageChange(
       streamingRef.current || waitingBgRef.current,
@@ -9051,6 +9056,15 @@ export default function ChatPage() {
                 }]),
               ];
               const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
+              const runConfirmation = parseRunConfirmationText(ev.content, content);
+              if (runConfirmation && requestSessionId && !isStale()) {
+                setRunConfirmCards((prev) => (
+                  prev.some((c) => c.confirmation.draftId === runConfirmation.draftId)
+                    ? prev
+                    : [...prev, { confirmation: runConfirmation, sessionId: requestSessionId }].slice(-3)
+                ));
+                scrollToMessagesBottom(false);
+              }
               if (!isStale()) {
                 setToolLogs(prev => {
                   const updated = [...prev];
@@ -13389,6 +13403,16 @@ export default function ChatPage() {
               draftId={draftId}
               onDismiss={removeAutomationCard}
               onReplace={replaceAutomationCard}
+              onLayoutChange={handleAutomationCardLayout}
+            />
+          ))}
+
+          {runConfirmCards.map((c) => (
+            <AutomationDraftCard
+              key={c.confirmation.draftId}
+              draftId={c.confirmation.draftId}
+              runConfirm={c}
+              onDismiss={dismissRunConfirmCard}
               onLayoutChange={handleAutomationCardLayout}
             />
           ))}

@@ -730,6 +730,15 @@ async function automationCall<T>(
   }
 }
 
+export interface OhvisConsoleCommandResult {
+  status: string;
+  task_id?: string;
+  session_id?: string;
+  execution?: string;
+  draft_id?: string;
+  card?: unknown;
+}
+
 export interface RunnerHostPolicy {
   max_concurrent: number | null;
   heavy_slots: number | null;
@@ -1778,10 +1787,14 @@ export const api = {
     ),
   // session_id 는 참고값이다 — 서버가 테넌트 소유 세션으로 다시 고른다.
   runOhvisConsoleCommand: (data: { title: string; session_id?: string }) =>
-    request<{ task_id: string; session_id: string; status: string }>(
+    request<OhvisConsoleCommandResult>(
       "/ohvis/console/command",
       { method: "POST", body: JSON.stringify(data) },
     ),
+  // 확인 카드의 [실행]: 같은 지시를 confirmed_draft_id 와 함께 다시 보낸다. 실패는 던지지 않고
+  // 상태·코드로 돌려줘서 카드 안에서 다시 시도할 수 있게 한다.
+  runOhvisConsoleCommandConfirmed: (data: { title: string; confirmed_draft_id: string; session_id?: string }) =>
+    automationCall<OhvisConsoleCommandResult>("/ohvis/console/command", { method: "POST", body: data }),
   startOhvisRecipeRecording: (data: { name: string; domain: string }) =>
     request<{ recording_id: string; name: string; domain: string; step_count: number }>(
       "/ohvis/recipes/recording",

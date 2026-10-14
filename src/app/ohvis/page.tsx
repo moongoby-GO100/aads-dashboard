@@ -16,6 +16,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import LiveBrowserStage, { type LiveBrowserConnection } from "@/components/browser/LiveBrowserStage";
+import AutomationDraftCard from "@/components/chat/AutomationDraftCard";
+import { parseRunConfirmation, type RunConfirmation } from "@/lib/automationRunConfirm";
 import RecipeApprovalPanel, { explainDecisionError } from "./RecipeApprovalPanel";
 import {
   api,
@@ -189,6 +191,7 @@ export default function OhvisConsolePage() {
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState("");
   const [command, setCommand] = useState("");
+  const [runConfirm, setRunConfirm] = useState<RunConfirmation | null>(null);
   const [sending, setSending] = useState(false);
   const [frameSrc, setFrameSrc] = useState("");
   const [modalApproval, setModalApproval] = useState<OhvisConsoleApproval | null>(null);
@@ -434,7 +437,10 @@ export default function OhvisConsolePage() {
     try {
       // 실행까지 거는 경로는 이것 하나다. POST /ohvis/tasks 는 기록만 하고
       // 끝나서 지시가 pending 으로 굳었다 (2026-09-18).
-      await api.runOhvisConsoleCommand({ session_id: activeSessionId, title });
+      const sent = await api.runOhvisConsoleCommand({ session_id: activeSessionId, title });
+      // 서버가 실행하지 않고 되물은 경우: 카드에서 [실행] 을 누를 때까지 아무것도 실행되지 않는다.
+      const pending = parseRunConfirmation(sent, title);
+      if (pending) setRunConfirm(pending);
       setCommand("");
       await refresh();
     } catch (e) {
@@ -630,6 +636,26 @@ export default function OhvisConsolePage() {
               ))}
               <div ref={chatEndRef} />
             </div>
+
+            {runConfirm && (
+              <div
+                style={{
+                  padding: "0 12px",
+                  ["--ct-border" as string]: C.border,
+                  ["--ct-text" as string]: C.text,
+                  ["--ct-text2" as string]: C.muted,
+                  ["--ct-bg" as string]: C.bg,
+                }}
+              >
+                <AutomationDraftCard
+                  key={runConfirm.draftId}
+                  draftId={runConfirm.draftId}
+                  runConfirm={{ confirmation: runConfirm, sessionId: activeSessionId }}
+                  onDismiss={() => setRunConfirm(null)}
+                  onLayoutChange={() => chatEndRef.current?.scrollIntoView({ block: "end" })}
+                />
+              </div>
+            )}
 
             {quick.length > 0 && (
               <div style={{ padding: "8px 12px", borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
