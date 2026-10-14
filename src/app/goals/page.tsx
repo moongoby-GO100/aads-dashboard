@@ -13,6 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import Header from "@/components/Header";
 import { GoalWorkHierarchy } from "@/components/GoalWorkHierarchy";
+import CanonicalAssignmentPanel from "./CanonicalAssignmentPanel";
 import { api } from "@/lib/api";
 import type { GoalDetail, GoalSummary } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
@@ -478,6 +479,8 @@ export default function GoalsPage() {
               <GoalWorkHierarchy
                 goalId={detail.goal_id}
               />
+
+              <CanonicalAssignmentPanel goalId={detail.goal_id} goalTitle={detail.title} project={detail.project} />
 
               {/* 담당이 0명이면 이 칸 전체가 사라져서 "+ 주도 지정" 도 같이
                   사라졌다. 주도를 세우려면 담당이 먼저 있어야 하는 역설
