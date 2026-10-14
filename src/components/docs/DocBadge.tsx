@@ -1,12 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
 
-export type DocBadgeTone = "kind" | "draft" | "review" | "approved" | "archived";
+export type DocBadgeTone = "kind" | "draft" | "review" | "approved" | "archived" | "project";
 
 const TONE: Record<DocBadgeTone, CSSProperties> = {
   kind: { borderColor: "var(--border)", color: "var(--text-secondary)", background: "transparent" },
   draft: { borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--bg-hover)" },
   review: { borderColor: "var(--accent)", color: "var(--text-primary)", background: "transparent" },
   approved: { borderColor: "var(--accent)", color: "var(--text-primary)", background: "color-mix(in srgb, var(--accent) 30%, transparent)", fontWeight: 600 },
+  project: { borderColor: "var(--accent)", color: "var(--text-primary)", background: "color-mix(in srgb, var(--accent) 15%, transparent)" },
   archived: { borderColor: "var(--border)", color: "var(--text-secondary)", background: "transparent", textDecoration: "line-through" },
 };
 

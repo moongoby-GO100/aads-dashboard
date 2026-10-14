@@ -1,4 +1,16 @@
-export default function DocListSkeleton({ rows = 6 }: { rows?: number }) {
+export default function DocListSkeleton({ rows = 6, variant = "card" }: { rows?: number; variant?: "card" | "file" }) {
+  if (variant === "file") {
+    return (
+      <div aria-hidden="true" data-testid="doc-list-skeleton">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex h-[52px] animate-pulse flex-col justify-center gap-1.5 py-[3px] pl-2.5 pr-2.5 min-[600px]:h-11" style={{ borderBottom: "1px solid var(--border)", borderLeft: "3px solid transparent" }}>
+            <div className="h-[11px] rounded" style={{ background: "var(--bg-hover)", width: `${86 - (i % 3) * 14}%` }} />
+            <div className="h-[9px] w-[46%] rounded" style={{ background: "var(--bg-hover)" }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div aria-hidden="true" className="space-y-1.5" data-testid="doc-list-skeleton">
       {Array.from({ length: rows }, (_, i) => (

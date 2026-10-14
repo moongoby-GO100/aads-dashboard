@@ -1,13 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import { parseCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import { parseCanonicalHitPath, type CanonicalHitRef } from "@/lib/canonicalHitPath";
+import {
+  clampListWidth,
+  defaultListWidth,
+  DEFAULT_LIST_WIDTH,
+  readStoredListWidth,
+  UNKNOWN_FILE_SIZE,
+  writeStoredListWidth,
+} from "@/lib/docFileView";
 import Link from "next/link";
 import CanonicalDocuments from "./CanonicalDocuments";
+import DocContentViewer from "./DocContentViewer";
+import {
+  detectFormat,
+  FORMAT_LABELS,
+  TYPE_LABELS,
+  type DocFile,
+  type DocFileMeta,
+  type ListedDocFile,
+} from "./docFileTypes";
+import FileViewerHeader, { buildDocViewerUrl } from "./FileViewerHeader";
+import {
+  FileListNotice,
+  fileListState,
+  FileListSummary,
+  ProjectChipRow,
+  ProjectFileRows,
+} from "./ProjectFileList";
 import {
   CONTRACT_OPEN_KEY,
   PinnedContractCard,
@@ -33,18 +58,6 @@ interface DocSearchIndex {
   coverage_pct: number;
 }
 
-interface DocFile {
-  name: string;
-  path: string;
-  size: number;
-  modified: number;
-  type: string;
-  base_path: string;
-  label: string;
-  full_path?: string;
-  format?: string;
-}
-
 interface DocContentResponse {
   content: string;
   encoding?: "text" | "base64";
@@ -53,10 +66,6 @@ interface DocContentResponse {
   format?: string;
   converted_from?: string;
   source_mime_type?: string;
-}
-
-interface ListedDocFile extends DocFile {
-  project: string;
 }
 
 interface ProjectDocs {
@@ -83,37 +92,7 @@ interface ScanDelta {
   removed: number;
   unchanged: number;
 }
-
-const MIN_LIST_WIDTH = 320;
-const MAX_LIST_WIDTH_RATIO = 0.7;
 const DOCS_CACHE_KEY = "aads.docs.scanResult.v1";
-
-const PROJECT_COLORS: Record<string, string> = {
-  AADS: "bg-blue-900 text-blue-200",
-  KIS: "bg-purple-900 text-purple-200",
-  GO100: "bg-yellow-900 text-yellow-200",
-  SF: "bg-emerald-900 text-emerald-200",
-  NTV2: "bg-pink-900 text-pink-200",
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  doc: "일반문서",
-  contract: "계약/전자계약",
-  directive: "지시문",
-  handover: "인수인계",
-  changelog: "변경이력",
-  report: "리포트",
-  qa: "QA/검증",
-  api: "API",
-  architecture: "아키텍처",
-  runbook: "운영/배포",
-  plan: "기획/계획",
-  status: "상태/이슈",
-  knowledge: "가이드/지식",
-  schema: "스키마",
-  script: "스크립트",
-  config: "설정",
-};
 
 const TYPE_COLORS: Record<string, string> = {
   doc: "bg-gray-700 text-gray-200",
@@ -134,170 +113,11 @@ const TYPE_COLORS: Record<string, string> = {
   config: "bg-slate-700 text-slate-200",
 };
 
-const FORMAT_LABELS: Record<string, string> = {
-  markdown: "Markdown",
-  html: "HTML",
-  text: "텍스트",
-  pdf: "PDF",
-  image: "이미지",
-  word: "Word",
-  excel: "Excel",
-  powerpoint: "PowerPoint",
-  "powerpoint-text": "PowerPoint 텍스트",
-  json: "JSON",
-  yaml: "YAML",
-  toml: "TOML",
-  xml: "XML",
-  csv: "CSV",
-  "excel-csv": "Excel CSV",
-  "word-text": "Word 텍스트",
-  "office-text": "Office 텍스트",
-  binary: "바이너리",
-  python: "Python",
-  shell: "Shell",
-  sql: "SQL",
-  javascript: "JavaScript",
-  typescript: "TypeScript",
-  css: "CSS",
-  config: "설정파일",
-  log: "로그",
-  rst: "reStructuredText",
-  other: "기타",
-};
-
-const FORMAT_COLORS: Record<string, string> = {
-  markdown: "bg-blue-800 text-blue-100",
-  html: "bg-orange-800 text-orange-100",
-  text: "bg-gray-600 text-gray-100",
-  pdf: "bg-red-900 text-red-100",
-  image: "bg-purple-800 text-purple-100",
-  word: "bg-blue-900 text-blue-100",
-  excel: "bg-green-900 text-green-100",
-  powerpoint: "bg-orange-900 text-orange-100",
-  "powerpoint-text": "bg-orange-800 text-orange-100",
-  json: "bg-yellow-800 text-yellow-100",
-  yaml: "bg-green-800 text-green-100",
-  toml: "bg-teal-800 text-teal-100",
-  xml: "bg-indigo-800 text-indigo-100",
-  csv: "bg-emerald-800 text-emerald-100",
-  "excel-csv": "bg-emerald-900 text-emerald-100",
-  "word-text": "bg-blue-800 text-blue-100",
-  "office-text": "bg-slate-700 text-slate-100",
-  binary: "bg-gray-800 text-gray-100",
-  python: "bg-sky-800 text-sky-100",
-  shell: "bg-lime-800 text-lime-100",
-  sql: "bg-violet-800 text-violet-100",
-  javascript: "bg-amber-800 text-amber-100",
-  typescript: "bg-blue-700 text-blue-100",
-  css: "bg-pink-800 text-pink-100",
-  config: "bg-slate-600 text-slate-100",
-  log: "bg-red-800 text-red-100",
-  rst: "bg-cyan-800 text-cyan-100",
-  other: "bg-gray-700 text-gray-200",
-};
-
-function detectFormat(name: string): string {
-  const ext = name.includes(".") ? name.split(".").pop()?.toLowerCase() || "" : "";
-  const map: Record<string, string> = {
-    md: "markdown", txt: "text", html: "html", htm: "html", rst: "rst", pdf: "pdf",
-    json: "json", yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", csv: "csv",
-    py: "python", sh: "shell", sql: "sql",
-    js: "javascript", ts: "typescript", tsx: "typescript", jsx: "javascript",
-    css: "css", ini: "config", cfg: "config", conf: "config", log: "log",
-    png: "image", jpg: "image", jpeg: "image", gif: "image",
-    svg: "image", webp: "image", bmp: "image", ico: "image",
-    docx: "word", odt: "word",
-    xlsx: "excel", ods: "excel",
-    pptx: "powerpoint", odp: "powerpoint",
-  };
-  return map[ext] || "other";
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-}
-
-function formatDate(ts: number): string {
-  if (!ts) return "";
-  const d = new Date(ts * 1000);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${mm}-${dd} ${hh}:${mi}`;
-}
-
 function formatDelta(delta?: ScanDelta): string {
   if (!delta) return "";
   const changed = (delta.new || 0) + (delta.updated || 0) + (delta.removed || 0);
   if (!changed) return "변경 없음";
   return `신규 ${delta.new || 0} · 수정 ${delta.updated || 0} · 삭제 ${delta.removed || 0}`;
-}
-
-function buildFullPath(file: DocFile): string {
-  if (file.full_path) return file.full_path;
-  const base = file.base_path.replace(/\/+$/, "");
-  const rel = file.path.replace(/^\/+/, "");
-  return `${base}/${rel}`;
-}
-
-function buildDocViewerUrl(project: string, file: DocFile): string {
-  const q = new URLSearchParams();
-  q.set("project", project);
-  q.set("base_path", file.base_path);
-  q.set("file_path", file.path);
-  return `/docs?${q.toString()}`;
-}
-
-function splitCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-    if (char === '"' && inQuotes && next === '"') {
-      current += '"';
-      i += 1;
-      continue;
-    }
-    if (char === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (char === "," && !inQuotes) {
-      cells.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  cells.push(current);
-  return cells;
-}
-
-function parseCsvPreview(text: string): { title: string; rows: string[][] }[] {
-  const sections: { title: string; rows: string[][] }[] = [];
-  let current = { title: "Sheet", rows: [] as string[][] };
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trimEnd();
-    if (!line) continue;
-    if (line.startsWith("## Sheet:") || line.startsWith("# sheet:")) {
-      if (current.rows.length) sections.push(current);
-      current = { title: line.replace(/^#+\s*/g, ""), rows: [] };
-      continue;
-    }
-    if (line.startsWith("# ")) continue;
-    current.rows.push(splitCsvLine(line));
-  }
-  if (current.rows.length) sections.push(current);
-  return sections;
 }
 
 function isElectronicContractFile(file: ListedDocFile): boolean {
@@ -308,229 +128,6 @@ function isElectronicContractFile(file: ListedDocFile): boolean {
     haystack.includes("입점계약") ||
     haystack.includes("프리랜서") ||
     haystack.includes("contracts/")
-  );
-}
-
-function renderMarkdown(text: string): string {
-  let html = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) =>
-    `<pre class="bg-gray-900 border border-gray-700 rounded-lg p-3 my-2 overflow-x-auto text-sm"><code class="text-green-300">${code.trim()}</code></pre>`,
-  );
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-700 px-1 py-0.5 rounded text-sm text-yellow-200">$1</code>');
-  html = html.replace(/^#### (.+)$/gm, '<h4 class="text-sm font-bold mt-4 mb-1 text-blue-300">$1</h4>');
-  html = html.replace(/^### (.+)$/gm, '<h3 class="text-base font-bold mt-5 mb-2 text-blue-200">$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-6 mb-2 text-white border-b border-gray-700 pb-1">$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-6 mb-3 text-white">$1</h1>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-sm">$1</li>');
-  html = html.replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-sm">$2</li>');
-  html = html.replace(/^\|(.+)\|$/gm, (line) => {
-    const cells = line.split("|").filter(Boolean);
-    if (cells.every((c) => /^[\s-:]+$/.test(c))) return "";
-    const row = cells.map((c) => `<td class="border border-gray-700 px-2 py-1 text-sm">${c.trim()}</td>`).join("");
-    return `<tr class="hover:bg-gray-800">${row}</tr>`;
-  });
-  html = html.replace(/(<tr[^>]*>.*<\/tr>\n?)+/g, (m) =>
-    `<table class="w-full border-collapse border border-gray-700 my-3">${m}</table>`,
-  );
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-4 border-blue-500 pl-3 my-2 text-gray-400 italic text-sm">$1</blockquote>');
-  html = html.replace(/\n\n/g, '<div class="my-2"></div>');
-  html = html.replace(/\n/g, "<br/>");
-
-  return html;
-}
-
-function DocContentViewer({
-  selectedFile,
-  fileContent,
-  fileMeta,
-  contentLoading,
-  compact = false,
-}: {
-  selectedFile: ListedDocFile;
-  fileContent: string | null;
-  fileMeta: {
-    encoding: string;
-    mime_type: string;
-    is_binary: boolean;
-    format?: string;
-    converted_from?: string;
-    source_mime_type?: string;
-  } | null;
-  contentLoading: boolean;
-  compact?: boolean;
-}) {
-  if (contentLoading) {
-    return (
-      <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
-        로딩 중...
-      </div>
-    );
-  }
-
-  if (fileContent === null) return null;
-
-  const fmt = fileMeta?.format || selectedFile.format || detectFormat(selectedFile.name);
-  const lowerName = selectedFile.name.toLowerCase();
-  const isBinary = fileMeta?.is_binary || fileMeta?.encoding === "base64";
-  const mime = fileMeta?.mime_type || "application/octet-stream";
-  const frameHeight = compact ? "calc(100vh - 178px)" : "calc(100vh - 200px)";
-
-  if (fmt === "image") {
-    const src = isBinary
-      ? `data:${mime};base64,${fileContent}`
-      : `data:${mime || "image/svg+xml"};utf8,${encodeURIComponent(fileContent)}`;
-    return (
-      <div className="flex items-center justify-center bg-gray-900/40 rounded-lg p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={selectedFile.name}
-          className="max-w-full object-contain rounded"
-          style={{ maxHeight: compact ? "calc(100vh - 190px)" : "calc(100vh - 220px)" }}
-        />
-      </div>
-    );
-  }
-
-  if (fmt === "pdf") {
-    const src = `data:application/pdf;base64,${fileContent}`;
-    return (
-      <iframe
-        src={src}
-        className="w-full border-0 rounded-lg bg-white"
-        style={{ height: frameHeight }}
-        title={selectedFile.name}
-      />
-    );
-  }
-
-  if (fmt === "excel-csv" || (selectedFile.format === "excel" && !isBinary && fileMeta?.converted_from)) {
-    const sections = parseCsvPreview(fileContent);
-    return (
-      <div className="space-y-6">
-        {sections.length ? sections.map((section, sectionIndex) => (
-          <div key={`${section.title}-${sectionIndex}`} className="overflow-auto">
-            <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>
-              {section.title}
-            </div>
-            <table className="min-w-full text-xs border-collapse">
-              <tbody>
-                {section.rows.map((row, rowIndex) => (
-                  <tr key={`${section.title}-${rowIndex}`}>
-                    {row.map((cell, cellIndex) => (
-                      <td
-                        key={`${section.title}-${rowIndex}-${cellIndex}`}
-                        className="border px-2 py-1 align-top"
-                        style={{
-                          borderColor: "var(--border)",
-                          color: rowIndex === 0 ? "var(--text-primary)" : "var(--text-secondary)",
-                          fontWeight: rowIndex === 0 ? 600 : 400,
-                        }}
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )) : (
-          <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-            {fileContent}
-          </pre>
-        )}
-      </div>
-    );
-  }
-
-  if ((fmt === "word" || fmt === "excel" || fmt === "powerpoint") && isBinary) {
-    const downloadHref = `data:${mime};base64,${fileContent}`;
-    const officeLabel = fmt === "word" ? "Word" : fmt === "excel" ? "Excel" : "PowerPoint";
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="text-5xl mb-4">📎</div>
-        <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-          {officeLabel} 문서는 브라우저에서 미리보기를 지원하지 않습니다
-        </p>
-        <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-          {selectedFile.name} · {formatSize(selectedFile.size)}
-        </p>
-        <a
-          href={downloadHref}
-          download={selectedFile.name}
-          className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          ⬇️ 다운로드
-        </a>
-      </div>
-    );
-  }
-
-  if (isBinary) {
-    const downloadHref = `data:${mime};base64,${fileContent}`;
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="text-5xl mb-4">📎</div>
-        <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-          이 파일은 다운로드로 열 수 있습니다
-        </p>
-        <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-          {selectedFile.name} · {formatSize(selectedFile.size)}
-        </p>
-        <a
-          href={downloadHref}
-          download={selectedFile.name}
-          className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          다운로드
-        </a>
-      </div>
-    );
-  }
-
-  if (lowerName.endsWith(".md")) {
-    return (
-      <div
-        className="prose prose-invert max-w-none text-sm leading-relaxed"
-        style={{ color: "var(--text-primary)" }}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(fileContent) }}
-      />
-    );
-  }
-
-  if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
-    return (
-      <iframe
-        srcDoc={fileContent}
-        className="w-full border-0 rounded-lg"
-        style={{ background: "#fff", height: frameHeight }}
-        title={selectedFile.name}
-        sandbox="allow-same-origin allow-popups"
-      />
-    );
-  }
-
-  if (lowerName.endsWith(".json")) {
-    return (
-      <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-        {(() => { try { return JSON.stringify(JSON.parse(fileContent), null, 2); } catch { return fileContent; } })()}
-      </pre>
-    );
-  }
-
-  return (
-    <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-      {fileContent}
-    </pre>
   );
 }
 
@@ -557,18 +154,15 @@ export default function DocsPage() {
   const [indexInfo, setIndexInfo] = useState<DocSearchIndex | null>(null);
   const [selectedFile, setSelectedFile] = useState<ListedDocFile | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileMeta, setFileMeta] = useState<{
-    encoding: string;
-    mime_type: string;
-    is_binary: boolean;
-    format?: string;
-    converted_from?: string;
-    source_mime_type?: string;
-  } | null>(null);
+  const [fileMeta, setFileMeta] = useState<DocFileMeta | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "modified" | "size">("modified");
-  const [listPaneWidth, setListPaneWidth] = useState(420);
+  const [listPaneWidth, setListPaneWidth] = useState(DEFAULT_LIST_WIDTH);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [isResizing, setIsResizing] = useState(false);
+  const listPaneWidthRef = useRef(DEFAULT_LIST_WIDTH);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const savedListScroll = useRef(0);
   const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [isDesktop, setIsDesktop] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -620,41 +214,58 @@ export default function DocsPage() {
   }, [fetchDocs]);
 
   useEffect(() => {
+    setListPaneWidth(readStoredListWidth(window.localStorage) ?? defaultListWidth(window.innerWidth));
+  }, []);
+
+  useEffect(() => {
+    listPaneWidthRef.current = listPaneWidth;
+  }, [listPaneWidth]);
+
+  useEffect(() => {
     const syncViewport = () => {
       setIsDesktop(window.innerWidth >= 1024);
+      setContainerWidth(layoutRef.current?.getBoundingClientRect().width ?? 0);
     };
 
     syncViewport();
     window.addEventListener("resize", syncViewport);
     return () => window.removeEventListener("resize", syncViewport);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!isResizing) return;
 
-    const handleMove = (event: MouseEvent) => {
+    const handleMove = (event: PointerEvent) => {
       if (!layoutRef.current) return;
       const rect = layoutRef.current.getBoundingClientRect();
-      const maxWidth = Math.max(MIN_LIST_WIDTH, rect.width * MAX_LIST_WIDTH_RATIO);
-      setListPaneWidth(clamp(event.clientX - rect.left, MIN_LIST_WIDTH, maxWidth));
+      setListPaneWidth(clampListWidth(event.clientX - rect.left, rect.width));
     };
 
     const handleUp = () => {
       setIsResizing(false);
+      writeStoredListWidth(window.localStorage, listPaneWidthRef.current);
     };
 
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
 
     return () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
     };
   }, [isResizing]);
+
+  const nudgeListWidth = (delta: number) => {
+    const next = clampListWidth(listPaneWidthRef.current + delta, containerWidth || window.innerWidth);
+    setListPaneWidth(next);
+    writeStoredListWidth(window.localStorage, next);
+  };
 
   const openFile = useCallback(async (project: string, file: ListedDocFile, options?: { updateUrl?: boolean }) => {
     setSelectedFile(file);
@@ -745,16 +356,8 @@ export default function DocsPage() {
   }, [search, searchMode, runContentSearch]);
 
   const handleOpenFile = useCallback((project: string, file: ListedDocFile) => {
-    if (!isDesktop && typeof window !== "undefined") {
-      const opened = window.open(buildDocViewerUrl(project, file), "_blank", "noopener,noreferrer");
-      if (!opened) {
-        window.location.assign(buildDocViewerUrl(project, file));
-      }
-      return;
-    }
     void openFile(project, file);
-  }, [isDesktop, openFile]);
-
+  }, [openFile]);
   const filteredProjects =
     data?.projects?.filter((project) => selectedProject === "all" || project.project === selectedProject) || [];
 
@@ -854,7 +457,7 @@ export default function DocsPage() {
     const file: DocFile = scannedFile || {
       name,
       path: filePath,
-      size: 0,
+      size: UNKNOWN_FILE_SIZE,
       modified: 0,
       type: "doc",
       base_path: basePath,
@@ -871,81 +474,64 @@ export default function DocsPage() {
     void openFile(project, { ...file, project }, { updateUrl: false });
   }, [data, openFile]);
 
-  if (activeTab === "files" && !isDesktop && selectedFile) {
-    return (
-      <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-        <Header title="📄 문서 보기" />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-3 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div className="flex items-start gap-2">
-              <button
-                onClick={() => {
-                  setSelectedFile(null);
-                  setFileContent(null);
-                  setFileMeta(null);
-                  if (typeof window !== "undefined") window.history.replaceState(null, "", "/docs");
-                }}
-                className="shrink-0 px-2.5 py-1.5 text-xs rounded-lg"
-                style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
-              >
-                목록
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${PROJECT_COLORS[selectedFile.project] || "bg-gray-700 text-gray-200"}`}>
-                    {selectedFile.project}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[selectedFile.type] || "bg-gray-700 text-gray-200"}`}>
-                    {TYPE_LABELS[selectedFile.type] || selectedFile.type}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[selectedFile.format || detectFormat(selectedFile.name)] || "bg-gray-700 text-gray-200"}`}>
-                    {FORMAT_LABELS[selectedFile.format || detectFormat(selectedFile.name)] || detectFormat(selectedFile.name)}
-                  </span>
-                </div>
-                <div className="text-sm font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>
-                  {selectedFile.name}
-                </div>
-                <div className="text-xs font-mono mt-1 break-all" style={{ color: "var(--text-secondary)" }}>
-                  {buildFullPath(selectedFile)}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex-1 overflow-auto px-3 py-4">
-            <DocContentViewer
-              selectedFile={selectedFile}
-              fileContent={fileContent}
-              fileMeta={fileMeta}
-              contentLoading={contentLoading}
-              compact
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
+
+  // 직접 열기로 먼저 연 파일은 크기·수정 시각을 몰랐다가, 스캔 결과가 도착하면 채운다.
+  useEffect(() => {
+    if (!selectedFile || selectedFile.size !== UNKNOWN_FILE_SIZE) return;
+    const scanned = data?.projects
+      ?.find((item) => item.project === selectedFile.project)
+      ?.files.find((item) => item.base_path === selectedFile.base_path && item.path === selectedFile.path);
+    if (scanned) setSelectedFile({ ...scanned, project: selectedFile.project });
+  }, [data, selectedFile]);
+
+  const mobileViewer = activeTab === "files" && !isDesktop && selectedFile !== null;
+
+  // 폰에서 문서를 열면 목록은 숨기기만 하고 살려 둔다. 숨기면 스크롤 위치가 사라지므로 돌아올 때 되돌린다.
+  useLayoutEffect(() => {
+    if (!mobileViewer && listScrollRef.current) listScrollRef.current.scrollTop = savedListScroll.current;
+  }, [mobileViewer]);
+
+  const closeViewer = () => {
+    setSelectedFile(null);
+    setFileContent(null);
+    setFileMeta(null);
+    if (typeof window !== "undefined") window.history.replaceState(null, "", "/docs");
+  };
+
+  const filtersActive = selectedType !== "all" || selectedFormat !== "all";
+  const scanDetail = data
+    ? [
+        "강제 재스캔",
+        formatDelta(data.delta),
+        `${data.cache_hit ? "캐시" : data.cache_mode === "incremental" ? "증분" : "스캔"} ${new Date((data.scanned_at || 0) * 1000).toLocaleTimeString("ko-KR")}`,
+      ].filter(Boolean).join(" · ")
+    : "강제 재스캔";
+  const listState = fileListState({ loading, error, count: allFiles.length });
+  const tabClass = "min-h-9 rounded-lg px-4 text-sm font-medium max-[599px]:min-h-10";
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <div className="flex items-center gap-2 pr-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="flex-1"><Header title="📄 프로젝트별 문서 통합" /></div>
-        <Link
-          href="/handovers"
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          DB 핸드오버
-        </Link>
-      </div>
+    <div className="flex h-full flex-col" style={{ background: "var(--bg-primary)" }}>
+      <Header title={mobileViewer ? "📄 문서 보기" : "📄 프로젝트별 문서 통합"} />
 
-      <div className="flex gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }} role="tablist" aria-label="문서 화면">
-        <button type="button" role="tab" aria-selected={activeTab === "canonical"} onClick={() => { setCanonicalHitRevision(null); setActiveTab("canonical"); }}
-          className="min-h-10 rounded-lg px-4 text-sm font-medium"
-          style={activeTab === "canonical" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>문서 정본</button>
-        <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")}
-          className="min-h-10 rounded-lg px-4 text-sm font-medium"
-          style={activeTab === "files" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>프로젝트 파일</button>
-      </div>
+      {!mobileViewer && (
+        <div className="flex shrink-0 items-center gap-2 px-3 py-1" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="flex gap-1.5" role="tablist" aria-label="문서 화면">
+            <button type="button" role="tab" aria-selected={activeTab === "canonical"} onClick={() => { setCanonicalHitRevision(null); setActiveTab("canonical"); }}
+              className={tabClass}
+              style={activeTab === "canonical" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>문서 정본</button>
+            <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")}
+              className={tabClass}
+              style={activeTab === "files" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>프로젝트 파일</button>
+          </div>
+          <Link
+            href="/handovers"
+            className="ml-auto whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            DB 핸드오버
+          </Link>
+        </div>
+      )}
 
       {activeTab === "canonical" ? (
         <>
@@ -963,54 +549,26 @@ export default function DocsPage() {
             onProjectChange={setCanonicalProject} />
         </>
       ) : (
+        <div ref={layoutRef} className="flex min-h-0 flex-1 overflow-hidden">
+          <div
+            className={`${mobileViewer ? "hidden" : "flex"} w-full min-w-0 flex-col overflow-hidden border-r lg:flex lg:flex-none`}
+            style={{
+              borderColor: "var(--border)",
+              width: isDesktop ? `${containerWidth ? clampListWidth(listPaneWidth, containerWidth) : listPaneWidth}px` : undefined,
+            }}
+            data-testid="docs-list-pane"
+          >
+            <div className="flex shrink-0 flex-col gap-1 p-1.5 max-[599px]:p-2" style={{ borderBottom: "1px solid var(--border)" }}>
+              <ProjectChipRow
+                total={data?.total || 0}
+                projects={data?.projects?.map((item) => ({ project: item.project, total: item.total })) || []}
+                selected={selectedProject}
+                onSelect={setSelectedProject}
+                onRefresh={() => fetchDocs(true)}
+                refreshTitle={scanDetail}
+              />
 
-      <div ref={layoutRef} className="flex-1 flex overflow-hidden">
-        <div
-          className="w-full lg:flex-none flex flex-col border-r overflow-hidden"
-          style={{
-            borderColor: "var(--border)",
-            width: isDesktop ? `${listPaneWidth}px` : undefined,
-          }}
-        >
-          <div className="flex flex-col min-w-0 h-full">
-            <div className="p-2 space-y-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  onClick={() => setSelectedProject("all")}
-                  className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                  style={
-                    selectedProject === "all"
-                      ? { background: "var(--accent)", color: "#fff" }
-                      : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                  }
-                >
-                  전체 {data?.total || 0}
-                </button>
-                {data?.projects?.map((project) => (
-                  <button
-                    key={project.project}
-                    onClick={() => setSelectedProject(project.project)}
-                    className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                    style={
-                      selectedProject === project.project
-                        ? { background: "var(--accent)", color: "#fff" }
-                        : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                    }
-                  >
-                    {project.project} {project.total}
-                  </button>
-                ))}
-                <button
-                  onClick={() => fetchDocs(true)}
-                  className="ml-auto px-2 py-1 text-xs rounded-lg"
-                  style={{ background: "var(--bg-hover)", color: "var(--text-primary)" }}
-                  title="강제 재스캔"
-                >
-                  🔄
-                </button>
-              </div>
-
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <input
                   type="text"
                   placeholder={searchMode === "content"
@@ -1018,7 +576,7 @@ export default function DocsPage() {
                     : "파일명 또는 경로 검색..."}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none aads-focus-border"
+                  className="h-8 min-w-0 flex-1 rounded-lg px-3 text-sm outline-none aads-focus-border max-[599px]:h-10"
                   style={{
                     background: "var(--bg-card)",
                     border: "1px solid var(--border)",
@@ -1028,7 +586,7 @@ export default function DocsPage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as "name" | "modified" | "size")}
-                  className="px-2 py-1.5 rounded-lg text-xs outline-none"
+                  className="h-8 shrink-0 rounded-lg px-2 text-xs outline-none max-[599px]:h-10"
                   style={{
                     background: "var(--bg-card)",
                     border: "1px solid var(--border)",
@@ -1044,11 +602,14 @@ export default function DocsPage() {
               <ProjectFileFilters
                 leading={(
                   <div className="flex shrink-0 gap-1">
-                    {([["name", "파일명"], ["content", "내용(뜻으로)"]] as const).map(([mode, label]) => (
+                    {([["name", "파일명", "파일명과 경로에서 찾습니다"], ["content", "내용", "내용 검색은 비슷한 뜻도 찾습니다"]] as const).map(([mode, label, hint]) => (
                       <button
                         key={mode}
+                        type="button"
                         onClick={() => setSearchMode(mode)}
-                        className="px-2.5 py-1 rounded-lg text-xs whitespace-nowrap"
+                        title={hint}
+                        aria-pressed={searchMode === mode}
+                        className="whitespace-nowrap rounded-lg px-2.5 py-1 text-xs"
                         style={{
                           background: searchMode === mode ? "var(--accent, #2563eb)" : "var(--bg-card)",
                           color: searchMode === mode ? "#fff" : "var(--text-secondary)",
@@ -1105,370 +666,149 @@ export default function DocsPage() {
                   }}
                 />
               )}
-            </div>
 
-            <div className="flex-1 overflow-auto p-1.5 space-y-0.5">
-              {searchMode === "content" ? (
-                // ── 내용 검색 결과 ──
-                contentSearching ? (
-                  <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
-                    찾는 중...
-                  </div>
-                ) : contentError ? (
-                  <div className="text-center py-12 text-red-400 text-sm px-4">{contentError}</div>
-                ) : contentHits === null ? (
-                  <div className="text-center py-12 text-sm px-6" style={{ color: "var(--text-secondary)" }}>
-                    문장으로 물어보세요. 파일 이름을 몰라도 됩니다.
-                    <br />
-                    <span className="text-xs">예: &quot;채팅이 왜 느려졌지&quot;, &quot;배포 절차&quot;</span>
-                  </div>
-                ) : contentHits.length === 0 ? (
-                  <div className="text-center py-12 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    찾지 못했습니다
-                    {indexInfo && indexInfo.coverage_pct < 99 && (
-                      <div className="text-xs mt-2">
-                        색인이 {indexInfo.coverage_pct}% 만 채워져 있어 아직 못 찾는 문서가 있습니다
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  contentHits.map((hit, index) => {
-                    const canonicalRef = parseCanonicalHitPath(hit.path);
-                    const scanned = canonicalRef ? null : findScannedFile(hit.path);
-                    const openable = !!canonicalRef || !!scanned;
-                    return (
-                      <button
-                        key={`${hit.path}-${index}`}
-                        onClick={() => {
-                          if (canonicalRef) openCanonicalHit(canonicalRef);
-                          else if (scanned) handleOpenFile(scanned.project, scanned.file);
-                        }}
-                        disabled={!openable}
-                        className="w-full text-left px-3 py-2 rounded-lg transition-colors"
-                        style={{
-                          background: "var(--bg-card)",
-                          border: "1px solid var(--border)",
-                          cursor: openable ? "pointer" : "default",
-                          opacity: openable ? 1 : 0.7,
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
-                            {hit.title || hit.name}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
-                                style={{ background: "var(--bg-hover, rgba(127,127,127,.15))", color: "var(--text-secondary)" }}>
-                            {hit.project}
-                          </span>
-                        </div>
-                        {hit.heading && (
-                          <div className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-                            › {hit.heading}
-                          </div>
-                        )}
-                        <div className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                          {hit.snippet}
-                        </div>
-                        <div className="text-[10px] mt-1 truncate" style={{ color: "var(--text-secondary)", opacity: 0.7 }}>
-                          {hit.name}
-                          {canonicalRef && " · 정본 문서 열기"}
-                          {!openable && " · 목록에 없어 열 수 없습니다"}
-                        </div>
-                      </button>
-                    );
-                  })
-                )
-              ) : loading ? (
-                <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
-                  스캔 중...
-                </div>
-              ) : error ? (
-                <div className="text-center py-12 text-red-400">{error}</div>
-              ) : allFiles.length === 0 ? (
-                <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
-                  조건에 맞는 문서가 없습니다
-                </div>
-              ) : (
-                allFiles.map((file, index) => {
-                  const isSelected =
-                    selectedFile?.project === file.project &&
-                    selectedFile?.base_path === file.base_path &&
-                    selectedFile?.path === file.path;
-
-                  return (
-                    <button
-                      key={`${file.project}-${file.base_path}-${file.path}-${index}`}
-                      onClick={() => handleOpenFile(file.project, file)}
-                      title={`${buildFullPath(file)} · ${file.label}`}
-                      className="w-full text-left px-2.5 py-1 rounded-lg transition-colors"
-                      style={{
-                        background: isSelected ? "var(--accent)" : "transparent",
-                        color: isSelected ? "#fff" : "var(--text-primary)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.background = "var(--bg-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.background = "transparent";
-                      }}
-                    >
-                      <div className="text-[13px] leading-5 font-medium truncate">{file.name}</div>
-                      <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${PROJECT_COLORS[file.project] || "bg-gray-700 text-gray-200"}`}>
-                          {file.project}
-                        </span>
-                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
-                          {TYPE_LABELS[file.type] || file.type}
-                        </span>
-                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${FORMAT_COLORS[file.format || detectFormat(file.name)] || "bg-gray-700 text-gray-200"}`}>
-                          {FORMAT_LABELS[file.format || detectFormat(file.name)] || detectFormat(file.name)}
-                        </span>
-                        <span className="ml-auto shrink-0 text-[11px] leading-4" style={{ color: isSelected ? "rgba(255,255,255,0.75)" : "var(--text-secondary)" }}>
-                          {formatDate(file.modified)} · {formatSize(file.size)}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
+              {searchMode === "name" && listState !== "loading" && listState !== "error" && (
+                <FileListSummary count={allFiles.length} scannedAt={data?.scanned_at} detail={scanDetail} />
               )}
             </div>
 
-            {data && (
-              <div className="px-3 py-2 text-xs flex justify-between" style={{ borderTop: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                <span>{allFiles.length}개 문서 · {formatDelta(data.delta)}</span>
-                <span>
-                  {data.cache_hit ? "캐시" : data.cache_mode === "incremental" ? "증분" : "스캔"}:{" "}
-                  {new Date((data.scanned_at || 0) * 1000).toLocaleTimeString("ko-KR")}
-                </span>
+            <div
+              ref={listScrollRef}
+              onScroll={(e) => { if (!mobileViewer) savedListScroll.current = e.currentTarget.scrollTop; }}
+              className="min-h-0 flex-1 overflow-auto"
+              data-testid="docs-list-scroll"
+            >
+              {searchMode === "content" ? (
+                <div className="space-y-0.5 p-1.5">
+                  {contentSearching ? (
+                    <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
+                      찾는 중...
+                    </div>
+                  ) : contentError ? (
+                    <div className="text-center py-12 text-red-400 text-sm px-4">{contentError}</div>
+                  ) : contentHits === null ? (
+                    <div className="text-center py-12 text-sm px-6" style={{ color: "var(--text-secondary)" }}>
+                      문장으로 물어보세요. 파일 이름을 몰라도 됩니다.
+                      <br />
+                      <span className="text-xs">예: &quot;채팅이 왜 느려졌지&quot;, &quot;배포 절차&quot;</span>
+                    </div>
+                  ) : contentHits.length === 0 ? (
+                    <div className="text-center py-12 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      찾지 못했습니다
+                      {indexInfo && indexInfo.coverage_pct < 99 && (
+                        <div className="text-xs mt-2">
+                          색인이 {indexInfo.coverage_pct}% 만 채워져 있어 아직 못 찾는 문서가 있습니다
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    contentHits.map((hit, index) => {
+                      const canonicalRef = parseCanonicalHitPath(hit.path);
+                      const scanned = canonicalRef ? null : findScannedFile(hit.path);
+                      const openable = !!canonicalRef || !!scanned;
+                      return (
+                        <button
+                          key={`${hit.path}-${index}`}
+                          onClick={() => {
+                            if (canonicalRef) openCanonicalHit(canonicalRef);
+                            else if (scanned) handleOpenFile(scanned.project, scanned.file);
+                          }}
+                          disabled={!openable}
+                          className="w-full text-left px-3 py-2 rounded-lg transition-colors"
+                          style={{
+                            background: "var(--bg-card)",
+                            border: "1px solid var(--border)",
+                            cursor: openable ? "pointer" : "default",
+                            opacity: openable ? 1 : 0.7,
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                              {hit.title || hit.name}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0"
+                                  style={{ background: "var(--bg-hover, rgba(127,127,127,.15))", color: "var(--text-secondary)" }}>
+                              {hit.project}
+                            </span>
+                          </div>
+                          {hit.heading && (
+                            <div className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                              › {hit.heading}
+                            </div>
+                          )}
+                          <div className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                            {hit.snippet}
+                          </div>
+                          <div className="text-[10px] mt-1 truncate" style={{ color: "var(--text-secondary)", opacity: 0.7 }}>
+                            {hit.name}
+                            {canonicalRef && " · 정본 문서 열기"}
+                            {!openable && " · 목록에 없어 열 수 없습니다"}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              ) : listState === "list" ? (
+                <ProjectFileRows
+                  files={allFiles}
+                  selectedFile={selectedFile}
+                  showProject={selectedProject === "all"}
+                  onOpen={(file) => handleOpenFile(file.project, file)}
+                />
+              ) : (
+                <FileListNotice
+                  state={listState}
+                  error={error}
+                  search={search}
+                  filtered={filtersActive}
+                  onRetry={() => fetchDocs(false)}
+                  onResetFilters={() => { setSelectedType("all"); setSelectedFormat("all"); }}
+                  onClearSearch={() => setSearch("")}
+                />
+              )}
+            </div>
+          </div>
+
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="목록 폭 조절"
+            aria-valuemin={320}
+            aria-valuenow={containerWidth ? clampListWidth(listPaneWidth, containerWidth) : listPaneWidth}
+            tabIndex={0}
+            className="hidden w-1.5 shrink-0 cursor-col-resize items-stretch outline-none transition-colors focus-visible:ring-2 lg:flex"
+            onPointerDown={(event) => { event.preventDefault(); setIsResizing(true); }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") { event.preventDefault(); nudgeListWidth(-16); }
+              if (event.key === "ArrowRight") { event.preventDefault(); nudgeListWidth(16); }
+            }}
+            style={{ background: isResizing ? "var(--accent)" : "var(--border)", touchAction: "none" }}
+            title="좌우 폭 조절 (드래그 또는 ← →)"
+          />
+
+          <section className={`${mobileViewer ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`} data-testid="docs-viewer-pane">
+            {selectedFile ? (
+              <>
+                <FileViewerHeader file={selectedFile} onBack={mobileViewer ? closeViewer : undefined} />
+                <DocContentViewer
+                  selectedFile={selectedFile}
+                  fileContent={fileContent}
+                  fileMeta={fileMeta}
+                  contentLoading={contentLoading}
+                />
+              </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center" style={{ color: "var(--text-secondary)" }}>
+                <div className="text-center">
+                  <div className="mb-3 text-4xl">📄</div>
+                  <p className="text-sm">좌측에서 문서를 선택하세요</p>
+                  <p className="mt-1 text-xs">프로젝트별 문서를 한 곳에서 경로와 함께 확인합니다</p>
+                </div>
               </div>
             )}
-          </div>
+          </section>
         </div>
-
-        <div
-          className="hidden lg:flex w-3 items-stretch cursor-col-resize transition-colors"
-          onMouseDown={() => setIsResizing(true)}
-          style={{ background: isResizing ? "var(--accent)" : "var(--border)" }}
-          title="좌우 폭 조절"
-        >
-          <div className="mx-auto my-3 w-px bg-white/20" />
-        </div>
-
-        <div className="hidden lg:flex flex-1 flex-col overflow-hidden min-w-0">
-          {selectedFile ? (
-            <>
-              <div className="px-4 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)" }}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${PROJECT_COLORS[selectedFile.project] || "bg-gray-700 text-gray-200"}`}>
-                    {selectedFile.project}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[selectedFile.type] || "bg-gray-700 text-gray-200"}`}>
-                    {TYPE_LABELS[selectedFile.type] || selectedFile.type}
-                  </span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[selectedFile.format || detectFormat(selectedFile.name)] || "bg-gray-700 text-gray-200"}`}>
-                    {FORMAT_LABELS[selectedFile.format || detectFormat(selectedFile.name)] || detectFormat(selectedFile.name)}
-                  </span>
-                  <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
-                    {selectedFile.label}
-                  </span>
-                  <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {selectedFile.name}
-                  </span>
-                  <span className="text-xs ml-auto" style={{ color: "var(--text-secondary)" }}>
-                    {formatDate(selectedFile.modified)} · {formatSize(selectedFile.size)}
-                  </span>
-                </div>
-
-                <div className="text-xs font-mono break-all" style={{ color: "var(--text-secondary)" }}>
-                  {buildFullPath(selectedFile)}
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-auto px-6 py-5">
-                {contentLoading ? (
-                  <div className="text-center py-12" style={{ color: "var(--text-secondary)" }}>
-                    로딩 중...
-                  </div>
-                ) : fileContent !== null ? (
-                  (() => {
-                    const fmt = fileMeta?.format || selectedFile.format || detectFormat(selectedFile.name);
-                    const lowerName = selectedFile.name.toLowerCase();
-                    const isBinary = fileMeta?.is_binary || fileMeta?.encoding === "base64";
-                    const mime = fileMeta?.mime_type || "application/octet-stream";
-
-                    // 이미지: data URL로 직접 표시
-                    if (fmt === "image") {
-                      const src = isBinary
-                        ? `data:${mime};base64,${fileContent}`
-                        : `data:${mime || "image/svg+xml"};utf8,${encodeURIComponent(fileContent)}`;
-                      return (
-                        <div className="flex items-center justify-center bg-gray-900/40 rounded-lg p-4">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={src}
-                            alt={selectedFile.name}
-                            className="max-w-full max-h-[calc(100vh-220px)] object-contain rounded"
-                          />
-                        </div>
-                      );
-                    }
-
-                    // PDF: base64 data URL로 iframe 표시
-                    if (fmt === "pdf") {
-                      const src = `data:application/pdf;base64,${fileContent}`;
-                      return (
-                        <iframe
-                          src={src}
-                          className="w-full border-0 rounded-lg bg-white"
-                          style={{ height: "calc(100vh - 200px)" }}
-                          title={selectedFile.name}
-                        />
-                      );
-                    }
-
-                    if (fmt === "excel-csv" || (selectedFile.format === "excel" && !isBinary && fileMeta?.converted_from)) {
-                      const sections = parseCsvPreview(fileContent);
-                      return (
-                        <div className="space-y-6">
-                          {sections.length ? sections.map((section, sectionIndex) => (
-                            <div key={`${section.title}-${sectionIndex}`} className="overflow-auto">
-                              <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>
-                                {section.title}
-                              </div>
-                              <table className="min-w-full text-xs border-collapse">
-                                <tbody>
-                                  {section.rows.map((row, rowIndex) => (
-                                    <tr key={`${section.title}-${rowIndex}`}>
-                                      {row.map((cell, cellIndex) => (
-                                        <td
-                                          key={`${section.title}-${rowIndex}-${cellIndex}`}
-                                          className="border px-2 py-1 align-top"
-                                          style={{
-                                            borderColor: "var(--border)",
-                                            color: rowIndex === 0 ? "var(--text-primary)" : "var(--text-secondary)",
-                                            fontWeight: rowIndex === 0 ? 600 : 400,
-                                          }}
-                                        >
-                                          {cell}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )) : (
-                            <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-                              {fileContent}
-                            </pre>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // 오피스 문서: 서버가 텍스트/CSV로 변환하지 못한 바이너리만 다운로드 안내
-                    if ((fmt === "word" || fmt === "excel" || fmt === "powerpoint") && isBinary) {
-                      const downloadHref = `data:${mime};base64,${fileContent}`;
-                      const officeLabel = fmt === "word" ? "Word" : fmt === "excel" ? "Excel" : "PowerPoint";
-                      return (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="text-5xl mb-4">📎</div>
-                          <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                            {officeLabel} 문서는 브라우저에서 미리보기를 지원하지 않습니다
-                          </p>
-                          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-                            {selectedFile.name} · {formatSize(selectedFile.size)}
-                          </p>
-                          <a
-                            href={downloadHref}
-                            download={selectedFile.name}
-                            className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
-                            style={{ background: "var(--accent)", color: "#fff" }}
-                          >
-                            ⬇️ 다운로드
-                          </a>
-                        </div>
-                      );
-                    }
-
-                    // 미지원 바이너리: 깨진 base64를 본문에 노출하지 않고 다운로드 폴백
-                    if (isBinary) {
-                      const downloadHref = `data:${mime};base64,${fileContent}`;
-                      return (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                          <div className="text-5xl mb-4">📎</div>
-                          <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                            이 파일은 다운로드로 열 수 있습니다
-                          </p>
-                          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-                            {selectedFile.name} · {formatSize(selectedFile.size)}
-                          </p>
-                          <a
-                            href={downloadHref}
-                            download={selectedFile.name}
-                            className="mt-5 px-4 py-2 rounded-lg text-sm font-medium"
-                            style={{ background: "var(--accent)", color: "#fff" }}
-                          >
-                            다운로드
-                          </a>
-                        </div>
-                      );
-                    }
-
-                    // Markdown
-                    if (lowerName.endsWith(".md")) {
-                      return (
-                        <div
-                          className="prose prose-invert max-w-none text-sm leading-relaxed"
-                          style={{ color: "var(--text-primary)" }}
-                          dangerouslySetInnerHTML={{ __html: renderMarkdown(fileContent) }}
-                        />
-                      );
-                    }
-
-                    // HTML
-                    if (lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
-                      return (
-                        <iframe
-                          srcDoc={fileContent}
-                          className="w-full border-0 rounded-lg"
-                          style={{ background: "#fff", height: "calc(100vh - 200px)" }}
-                          title={selectedFile.name}
-                          sandbox="allow-same-origin allow-popups"
-                        />
-                      );
-                    }
-
-                    // JSON
-                    if (lowerName.endsWith(".json")) {
-                      return (
-                        <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-                          {(() => { try { return JSON.stringify(JSON.parse(fileContent), null, 2); } catch { return fileContent; } })()}
-                        </pre>
-                      );
-                    }
-
-                    // 기본: 텍스트
-                    return (
-                      <pre className="text-sm whitespace-pre-wrap break-words" style={{ color: "var(--text-primary)" }}>
-                        {fileContent}
-                      </pre>
-                    );
-                  })()
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center" style={{ color: "var(--text-secondary)" }}>
-              <div className="text-center">
-                <div className="text-4xl mb-3">📄</div>
-                <p className="text-sm">좌측에서 문서를 선택하세요</p>
-                <p className="text-xs mt-1">프로젝트별 문서를 한 곳에서 경로와 함께 확인합니다</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
       )}
     </div>
   );
