@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import { normalizeDocumentRouteParams } from "@/lib/documentLinks";
 import { parseCanonicalDocHref } from "@/lib/canonicalDocLinks";
+import { parseCanonicalHitPath, type CanonicalHitRef } from "@/lib/canonicalHitPath";
 import Link from "next/link";
 import CanonicalDocuments from "./CanonicalDocuments";
 
@@ -536,6 +537,7 @@ export default function DocsPage() {
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [canonicalProject, setCanonicalProject] = useState<string>("AADS");
   const [canonicalDeepKey, setCanonicalDeepKey] = useState<string | null>(null);
+  const [canonicalHitRevision, setCanonicalHitRevision] = useState<CanonicalHitRef | null>(null);
   const [selectedType, setSelectedType] = useState<string>("all");
   const [search, setSearch] = useState("");
   // 파일명 검색과 내용 검색을 나눈다. 파일명 검색은 무엇을 찾는지 이미
@@ -595,7 +597,8 @@ export default function DocsPage() {
     } catch {
       window.localStorage.removeItem(DOCS_CACHE_KEY);
     }
-    fetchDocs(true);
+    // 최초 진입은 서버의 5분 캐시를 쓴다. 강제 스캔은 새로고침 버튼에서만.
+    fetchDocs(false);
   }, [fetchDocs]);
 
   useEffect(() => {
@@ -678,6 +681,13 @@ export default function DocsPage() {
       }
     }
     return null;
+  }, []);
+
+  const openCanonicalHit = useCallback((ref: CanonicalHitRef) => {
+    setCanonicalProject(ref.project);
+    setCanonicalDeepKey(ref.documentKey);
+    setCanonicalHitRevision(ref);
+    setActiveTab("canonical");
   }, []);
 
   const runContentSearch = useCallback(async (query: string) => {
@@ -911,7 +921,7 @@ export default function DocsPage() {
       </div>
 
       <div className="flex gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }} role="tablist" aria-label="문서 화면">
-        <button type="button" role="tab" aria-selected={activeTab === "canonical"} onClick={() => setActiveTab("canonical")}
+        <button type="button" role="tab" aria-selected={activeTab === "canonical"} onClick={() => { setCanonicalHitRevision(null); setActiveTab("canonical"); }}
           className="min-h-10 rounded-lg px-4 text-sm font-medium"
           style={activeTab === "canonical" ? { background: "var(--accent)", color: "#fff" } : { color: "var(--text-secondary)" }}>문서 정본</button>
         <button type="button" role="tab" aria-selected={activeTab === "files"} onClick={() => setActiveTab("files")}
@@ -920,9 +930,20 @@ export default function DocsPage() {
       </div>
 
       {activeTab === "canonical" ? (
-        <CanonicalDocuments project={canonicalProject} initialKey={canonicalDeepKey}
-          projects={data?.projects?.map((item) => item.project) || []}
-          onProjectChange={setCanonicalProject} />
+        <>
+          {canonicalHitRevision && canonicalHitRevision.project === canonicalProject
+            && canonicalHitRevision.documentKey === canonicalDeepKey && (
+            <div className="px-3 py-1.5 text-xs" style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              검색 결과에서 연 문서: {canonicalHitRevision.documentKey}
+              {canonicalHitRevision.revisionId && ` (검색된 개정 ${canonicalHitRevision.revisionId.slice(0, 8)})`}
+              {canonicalHitRevision.revision !== undefined && ` (검색된 개정 r${canonicalHitRevision.revision})`}
+              {" · 해당 개정이 아니라 최신/승인본이 열립니다"}
+            </div>
+          )}
+          <CanonicalDocuments project={canonicalProject} initialKey={canonicalDeepKey}
+            projects={data?.projects?.map((item) => item.project) || []}
+            onProjectChange={setCanonicalProject} />
+        </>
       ) : (
 
       <div ref={layoutRef} className="flex-1 flex overflow-hidden">
@@ -1155,20 +1176,23 @@ export default function DocsPage() {
                   </div>
                 ) : (
                   contentHits.map((hit, index) => {
-                    const scanned = findScannedFile(hit.path);
+                    const canonicalRef = parseCanonicalHitPath(hit.path);
+                    const scanned = canonicalRef ? null : findScannedFile(hit.path);
+                    const openable = !!canonicalRef || !!scanned;
                     return (
                       <button
                         key={`${hit.path}-${index}`}
                         onClick={() => {
-                          if (scanned) handleOpenFile(scanned.project, scanned.file);
+                          if (canonicalRef) openCanonicalHit(canonicalRef);
+                          else if (scanned) handleOpenFile(scanned.project, scanned.file);
                         }}
-                        disabled={!scanned}
+                        disabled={!openable}
                         className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                         style={{
                           background: "var(--bg-card)",
                           border: "1px solid var(--border)",
-                          cursor: scanned ? "pointer" : "default",
-                          opacity: scanned ? 1 : 0.7,
+                          cursor: openable ? "pointer" : "default",
+                          opacity: openable ? 1 : 0.7,
                         }}
                       >
                         <div className="flex items-center gap-2">
@@ -1190,7 +1214,8 @@ export default function DocsPage() {
                         </div>
                         <div className="text-[10px] mt-1 truncate" style={{ color: "var(--text-secondary)", opacity: 0.7 }}>
                           {hit.name}
-                          {!scanned && " · 목록에 없어 열 수 없습니다"}
+                          {canonicalRef && " · 정본 문서 열기"}
+                          {!openable && " · 목록에 없어 열 수 없습니다"}
                         </div>
                       </button>
                     );
