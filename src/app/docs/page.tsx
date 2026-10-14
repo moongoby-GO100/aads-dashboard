@@ -8,6 +8,13 @@ import { parseCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import { parseCanonicalHitPath, type CanonicalHitRef } from "@/lib/canonicalHitPath";
 import Link from "next/link";
 import CanonicalDocuments from "./CanonicalDocuments";
+import {
+  CONTRACT_OPEN_KEY,
+  PinnedContractCard,
+  ProjectFileFilters,
+  readStoredFlag,
+  writeStoredFlag,
+} from "./ProjectFileFilters";
 
 interface DocSearchHit {
   path: string;
@@ -564,7 +571,18 @@ export default function DocsPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [isDesktop, setIsDesktop] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [contractOpen, setContractOpen] = useState(false);
   const openedDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setContractOpen(readStoredFlag(CONTRACT_OPEN_KEY));
+  }, []);
+
+  const toggleContractOpen = () => {
+    writeStoredFlag(CONTRACT_OPEN_KEY, !contractOpen);
+    setContractOpen(!contractOpen);
+  };
 
   const fetchDocs = useCallback(async (force = false) => {
     setLoading(!dataRef.current);
@@ -778,10 +796,10 @@ export default function DocsPage() {
     return a.name.localeCompare(b.name);
   });
 
-  const electronicContractFiles = matchingFiles
+  const electronicContractAll = matchingFiles
     .filter(isElectronicContractFile)
-    .sort((a, b) => b.modified - a.modified)
-    .slice(0, 5);
+    .sort((a, b) => b.modified - a.modified);
+  const electronicContractFiles = electronicContractAll.slice(0, 5);
 
   const availableTypes = Object.keys(typeCounts).sort((a, b) => {
     const labelA = TYPE_LABELS[a] || a;
@@ -955,8 +973,8 @@ export default function DocsPage() {
           }}
         >
           <div className="flex flex-col min-w-0 h-full">
-            <div className="p-3 space-y-2" style={{ borderBottom: "1px solid var(--border)" }}>
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="p-2 space-y-1.5" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => setSelectedProject("all")}
                   className="px-2.5 py-1 text-xs rounded-lg transition-colors"
@@ -992,28 +1010,6 @@ export default function DocsPage() {
                 </button>
               </div>
 
-              <div className="flex gap-1 mb-2">
-                {([["name", "파일명"], ["content", "내용(뜻으로)"]] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    onClick={() => setSearchMode(mode)}
-                    className="px-2.5 py-1 rounded-lg text-xs"
-                    style={{
-                      background: searchMode === mode ? "var(--accent, #2563eb)" : "var(--bg-card)",
-                      color: searchMode === mode ? "#fff" : "var(--text-secondary)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                {searchMode === "content" && indexInfo && indexInfo.coverage_pct < 99 && (
-                  <span className="px-2 py-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                    색인 {indexInfo.coverage_pct}% — 아직 채우는 중입니다
-                  </span>
-                )}
-              </div>
-
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1045,112 +1041,73 @@ export default function DocsPage() {
                 </select>
               </div>
 
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setSelectedType("all")}
-                  className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                  style={
-                    selectedType === "all"
-                      ? { background: "var(--accent)", color: "#fff" }
-                      : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                  }
-                >
-                  전체 유형 {matchingFiles.length}
-                </button>
-                {availableTypes.map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedType(type)}
-                    className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                    style={
-                      selectedType === type
-                        ? { background: "var(--accent)", color: "#fff" }
-                        : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                    }
-                  >
-                    {TYPE_LABELS[type] || type} {typeCounts[type] || 0}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setSelectedFormat("all")}
-                  className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                  style={
-                    selectedFormat === "all"
-                      ? { background: "var(--accent)", color: "#fff" }
-                      : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                  }
-                >
-                  전체 포맷
-                </button>
-                {availableFormats.map((fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => setSelectedFormat(fmt)}
-                    className="px-2.5 py-1 text-xs rounded-lg transition-colors"
-                    style={
-                      selectedFormat === fmt
-                        ? { background: "var(--accent)", color: "#fff" }
-                        : { border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }
-                    }
-                  >
-                    {FORMAT_LABELS[fmt] || fmt} {formatCounts[fmt] || 0}
-                  </button>
-                ))}
-              </div>
-
-              {electronicContractFiles.length > 0 && (
-                <div
-                  className="rounded-lg p-2 space-y-1"
-                  style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-                      전자계약 문서
-                    </span>
-                    <button
-                      onClick={() => {
-                        setSelectedProject("AADS");
-                        setSelectedType("all");
-                        setSelectedFormat("all");
-                        setSearch("전자계약");
-                      }}
-                      className="px-2 py-0.5 text-xs rounded"
-                      style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-                    >
-                      전체 보기
-                    </button>
-                  </div>
-                  <div className="grid gap-1">
-                    {electronicContractFiles.map((file) => (
+              <ProjectFileFilters
+                leading={(
+                  <div className="flex shrink-0 gap-1">
+                    {([["name", "파일명"], ["content", "내용(뜻으로)"]] as const).map(([mode, label]) => (
                       <button
-                        key={`pinned-${file.project}-${file.base_path}-${file.path}`}
-                        onClick={() => handleOpenFile(file.project, file)}
-                        className="w-full text-left px-2 py-1.5 rounded transition-colors"
-                        style={{ color: "var(--text-primary)" }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--bg-hover)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent";
+                        key={mode}
+                        onClick={() => setSearchMode(mode)}
+                        className="px-2.5 py-1 rounded-lg text-xs whitespace-nowrap"
+                        style={{
+                          background: searchMode === mode ? "var(--accent, #2563eb)" : "var(--bg-card)",
+                          color: searchMode === mode ? "#fff" : "var(--text-secondary)",
+                          border: "1px solid var(--border)",
                         }}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
-                            {TYPE_LABELS[file.type] || file.type}
-                          </span>
-                          <span className="text-xs truncate">{file.name}</span>
-                        </div>
+                        {label}
                       </button>
                     ))}
                   </div>
+                )}
+                expanded={filtersOpen}
+                onToggle={() => setFiltersOpen((open) => !open)}
+                selectedType={selectedType}
+                selectedFormat={selectedFormat}
+                availableTypes={availableTypes}
+                availableFormats={availableFormats}
+                typeCounts={typeCounts}
+                formatCounts={formatCounts}
+                totalCount={matchingFiles.length}
+                typeLabels={TYPE_LABELS}
+                formatLabels={FORMAT_LABELS}
+                onTypeChange={setSelectedType}
+                onFormatChange={setSelectedFormat}
+                onReset={() => {
+                  setSelectedType("all");
+                  setSelectedFormat("all");
+                }}
+              />
+
+              {searchMode === "content" && indexInfo && indexInfo.coverage_pct < 99 && (
+                <div className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                  색인 {indexInfo.coverage_pct}% — 아직 채우는 중입니다
                 </div>
+              )}
+
+              {electronicContractFiles.length > 0 && (
+                <PinnedContractCard
+                  totalCount={electronicContractAll.length}
+                  files={electronicContractFiles.map((file) => ({
+                    key: `pinned-${file.project}-${file.base_path}-${file.path}`,
+                    name: file.name,
+                    typeLabel: TYPE_LABELS[file.type] || file.type,
+                    typeClassName: TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200",
+                    onOpen: () => handleOpenFile(file.project, file),
+                  }))}
+                  expanded={contractOpen}
+                  onToggle={toggleContractOpen}
+                  onShowAll={() => {
+                    setSelectedProject("AADS");
+                    setSelectedType("all");
+                    setSelectedFormat("all");
+                    setSearch("전자계약");
+                  }}
+                />
               )}
             </div>
 
-            <div className="flex-1 overflow-auto p-2 space-y-1">
+            <div className="flex-1 overflow-auto p-1.5 space-y-0.5">
               {searchMode === "content" ? (
                 // ── 내용 검색 결과 ──
                 contentSearching ? (
@@ -1242,7 +1199,8 @@ export default function DocsPage() {
                     <button
                       key={`${file.project}-${file.base_path}-${file.path}-${index}`}
                       onClick={() => handleOpenFile(file.project, file)}
-                      className="w-full text-left px-3 py-2 rounded-lg transition-colors"
+                      title={`${buildFullPath(file)} · ${file.label}`}
+                      className="w-full text-left px-2.5 py-1 rounded-lg transition-colors"
                       style={{
                         background: isSelected ? "var(--accent)" : "transparent",
                         color: isSelected ? "#fff" : "var(--text-primary)",
@@ -1254,32 +1212,20 @@ export default function DocsPage() {
                         if (!isSelected) e.currentTarget.style.background = "transparent";
                       }}
                     >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${PROJECT_COLORS[file.project] || "bg-gray-700 text-gray-200"}`}>
+                      <div className="text-[13px] leading-5 font-medium truncate">{file.name}</div>
+                      <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${PROJECT_COLORS[file.project] || "bg-gray-700 text-gray-200"}`}>
                           {file.project}
                         </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
+                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${TYPE_COLORS[file.type] || "bg-gray-700 text-gray-200"}`}>
                           {TYPE_LABELS[file.type] || file.type}
                         </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${FORMAT_COLORS[file.format || detectFormat(file.name)] || "bg-gray-700 text-gray-200"}`}>
+                        <span className={`shrink-0 text-[11px] leading-4 px-1.5 rounded ${FORMAT_COLORS[file.format || detectFormat(file.name)] || "bg-gray-700 text-gray-200"}`}>
                           {FORMAT_LABELS[file.format || detectFormat(file.name)] || detectFormat(file.name)}
                         </span>
-                        <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: isSelected ? "rgba(255,255,255,0.3)" : "var(--border)" }}>
-                          {file.label}
-                        </span>
-                        <span className="text-xs ml-auto" style={{ color: isSelected ? "rgba(255,255,255,0.75)" : "var(--text-secondary)" }}>
+                        <span className="ml-auto shrink-0 text-[11px] leading-4" style={{ color: isSelected ? "rgba(255,255,255,0.75)" : "var(--text-secondary)" }}>
                           {formatDate(file.modified)} · {formatSize(file.size)}
                         </span>
-                      </div>
-
-                      <div className="text-sm mt-1 font-medium break-all">{file.name}</div>
-
-                      <div
-                        className="mt-1 text-xs break-all font-mono"
-                        style={{ color: isSelected ? "rgba(255,255,255,0.75)" : "var(--text-secondary)" }}
-                        title={buildFullPath(file)}
-                      >
-                        {buildFullPath(file)}
                       </div>
                     </button>
                   );
