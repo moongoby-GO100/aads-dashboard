@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import LiveBrowserStage, { type LiveBrowserConnection } from "@/components/browser/LiveBrowserStage";
+import RecipeApprovalPanel, { explainDecisionError } from "./RecipeApprovalPanel";
 import {
   api,
   type OhvisConsoleApproval,
@@ -210,6 +211,14 @@ export default function OhvisConsolePage() {
   const recordingIdRef = useRef("");
 
   useEffect(() => setSessionId(requestedSessionId()), []);
+  // 채팅 화면의 '승인 대기' 링크(?panel=recipe-approvals)로 들어오면 모바일에서도 우측 탭을 연다.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("panel") !== "recipe-approvals" && window.location.hash !== "#recipe-approvals") return;
+    setMobileTab("right");
+    const timer = setTimeout(() => document.getElementById("recipe-approvals")?.scrollIntoView({ block: "start" }), 400);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     recordingIdRef.current = recordingId;
   }, [recordingId]);
@@ -406,7 +415,7 @@ export default function OhvisConsolePage() {
       setStreamStatus("레시피 v1 승인 완료");
       setRegistrationId("");
     } catch (reason) {
-      setError(`레시피 승인 실패: ${String(reason)}`);
+      setError(`레시피 승인 실패: ${explainDecisionError(reason).message}`);
     } finally {
       setRecordingBusy(false);
     }
@@ -851,6 +860,8 @@ export default function OhvisConsolePage() {
               minHeight: 0,
             }}
           >
+            <RecipeApprovalPanel />
+
             <div style={paneHeadStyle()}>
               자동실행 <small style={{ fontSize: 10, color: C.dim, textTransform: "none", letterSpacing: 0 }}>스케줄</small>
             </div>

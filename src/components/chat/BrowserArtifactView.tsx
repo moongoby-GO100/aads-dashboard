@@ -408,7 +408,19 @@ export default function BrowserArtifactView({ sessionId }: Props) {
       {lane === "server" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {!recording ? <button type="button" disabled={liveConnection !== "live"} onClick={() => void startRecording()} style={{ minHeight: 44 }}>학습 시작</button>
           : <button type="button" disabled={busy || stepCount === 0} onClick={() => void finishRecording()} style={{ minHeight: 44 }}>학습 종료 · 등록 요청 ({stepCount}단계)</button>}
-        {registrationId && <span role="status">레시피 등록 요청을 저장했습니다. 승인 대기 상태입니다.</span>}
+        {registrationId && (
+          <span role="status">
+            레시피 등록 요청을 저장했습니다. 승인 대기 상태입니다.{" "}
+            <a
+              href="/ohvis?panel=recipe-approvals#recipe-approvals"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: "var(--ct-accent, #3b82f6)", textDecoration: "underline", display: "inline-block", minHeight: 44, lineHeight: "44px" }}
+            >
+              승인 대기 레시피 보기
+            </a>
+          </span>
+        )}
       </div>}
       {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>이 채팅 전용 PC 탭을 조작합니다. 다른 채팅의 입력과 분리됩니다. PC 레시피 자동 학습은 아직 지원하지 않습니다.</p>}
 

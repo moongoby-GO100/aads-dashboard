@@ -74,6 +74,28 @@ export interface OhvisConsoleApproval {
   requires_confirmation: boolean;
   confirm_text: string;
 }
+export interface OhvisRecipeStepSummary {
+  seq: number;
+  phase: string;
+  action: string;
+  risk: string;
+  url_host: string;
+  selector: string;
+}
+export interface OhvisRecipeRegistration {
+  id: string;
+  status: string;
+  name: string;
+  domain: string;
+  version?: number | string | null;
+  max_risk?: string;
+  step_count?: number;
+  verify_count?: number;
+  requested_by?: string | null;
+  requested_at?: string | null;
+  screen_evidence_url?: string;
+  step_summaries?: OhvisRecipeStepSummary[];
+}
 export interface OhvisConsoleLoop {
   id: number;
   name: string;
@@ -1775,10 +1797,22 @@ export const api = {
       `/ohvis/recipes/recording/${encodeURIComponent(recordingId)}/finish`,
       { method: "POST", body: JSON.stringify({}) },
     ),
-  decideOhvisRecipeRegistration: (registrationId: string, decision: "approve" | "reject", reason = "") =>
+  listOhvisRecipeRegistrations: (status: "pending" | "approved" | "rejected" = "pending") =>
+    request<{ registrations: OhvisRecipeRegistration[] }>(
+      `/ohvis/recipes/registrations?status=${encodeURIComponent(status)}`,
+    ),
+  decideOhvisRecipeRegistration: (
+    registrationId: string,
+    decision: "approve" | "reject",
+    reason = "",
+    confirmHighRisk = false,
+  ) =>
     request<{ status: string; registration: Record<string, unknown> }>(
       `/ohvis/recipes/registrations/${encodeURIComponent(registrationId)}/decision`,
-      { method: "POST", body: JSON.stringify({ decision, reason }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ decision, reason, confirm_high_risk: confirmHighRisk }),
+      },
     ),
   /**
    * @deprecated — 기록 전용. 실행은 runOhvisConsoleCommand 를 쓸 것.
