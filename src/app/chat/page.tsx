@@ -8,6 +8,8 @@ import ChatArtifactPanel from "./ChatArtifactPanel";
 import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { GoalPanel } from "@/components/GoalPanel";
+import { MockupReviewPanel } from "@/components/MockupReviewPanel";
+import { MockupReviewBadge } from "@/components/MockupReviewBadge";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
@@ -78,6 +80,7 @@ import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusSched
 import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
 import { PANEL_BODY_FONT_PX, PANEL_SIDE_PADDING_PX, readPanelSurface } from "@/lib/chatPanelSurface";
 import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/chatDeepLink";
+import { asUuid, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -4382,6 +4385,7 @@ export default function ChatPage() {
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
   );
+  const mockupProjectKey = projectKeyFromWorkspace(activeWsObj);
   const activeWsName = activeWsObj?.display_name || activeWsObj?.name || "워크스페이스";
 
   useEffect(() => {
@@ -4478,6 +4482,27 @@ export default function ChatPage() {
     const next = stripGoalFromUrl(window.location.pathname, window.location.search, window.location.hash);
     if (next) window.history.replaceState(null, "", next);
   }, [panelGoalId]);
+
+  // 목업 검토 패널 — /chat?mockup_review=<id>&mockup_project=<P>[&mockup_revision=<rev>] 로 열린다.
+  // 서버 알림(ohvis_notifications.link)이 이 주소를 만든다. 세션 없이도 열린다.
+  const [panelMockup, setPanelMockup] = useState<MockupDeepLink | null>(null);
+  const [mockupUrlRead, setMockupUrlRead] = useState(false);
+  useEffect(() => {
+    setPanelMockup(parseMockupDeepLink(window.location.search));
+    setMockupUrlRead(true);
+  }, []);
+  useEffect(() => {
+    if (!mockupUrlRead || panelMockup) return;
+    const next = stripMockupFromUrl(window.location.pathname, window.location.search, window.location.hash);
+    if (next) window.history.replaceState(null, "", next);
+  }, [mockupUrlRead, panelMockup]);
+  const mockupSourceMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "user" && asUuid(m.id)) return m.id;
+    }
+    return null;
+  }, [messages]);
 
   useEffect(() => {
     const sid = activeSession?.id;
@@ -12615,6 +12640,11 @@ export default function ChatPage() {
         {!panelMode && <UsageBar />}
         {/* Messages */}
         <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {!panelMode && (
+          <div style={{ position: "absolute", top: 6, right: 14, zIndex: 8 }}>
+            <MockupReviewBadge project={mockupProjectKey} />
+          </div>
+        )}
         <div
           ref={messagesContainerRef}
           className="ct-messages-scroll"
@@ -12888,7 +12918,7 @@ export default function ChatPage() {
                   return (
                     <button key={g.goal_id} type="button"
                        title={`${isLead ? "주도 목표 — 이 창이 취합하고 판정합니다" : "담당 목표 — 맡은 몫을 진행합니다"}\n${g.title}${g.dispatch_note ? `\n막힘: ${g.dispatch_note}` : ""}`}
-                       onClick={() => setPanelGoalId(open ? null : g.goal_id)}
+                       onClick={() => { setPanelMockup(null); setPanelGoalId(open ? null : g.goal_id); }}
                        style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 260,
                                 flexShrink: 0,
                                 padding: isLead ? "4px 11px" : "3px 9px", borderRadius: 999,
@@ -14750,12 +14780,27 @@ export default function ChatPage() {
       {/* 목표 패널 — 띠를 누르면 열린다. 대화는 그대로 있다.
           diff 패널과 같은 자리를 쓰되, 둘이 동시에 뜨면 화면이 좁아지므로
           diff 가 뜨면 목표 패널은 물러난다. 코드 승인이 더 급하다. */}
-      {panelGoalId && !diffApproval.payload && (
+      {panelGoalId && !panelMockup && !diffApproval.payload && (
         <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 40, display: "flex", boxShadow: "-8px 0 24px rgba(0,0,0,.18)" }}>
           <GoalPanel
             goalId={panelGoalId}
             onClose={() => setPanelGoalId(null)}
             onOpenSession={(sid) => { window.location.hash = sid; }}
+          />
+        </div>
+      )}
+
+      {/* 목업 검토 패널 — 모바일(≤640px)에서는 전체 화면 시트가 된다. */}
+      {panelMockup && !diffApproval.payload && (
+        <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 45, display: "flex", boxShadow: "-8px 0 24px rgba(0,0,0,.18)" }}>
+          <MockupReviewPanel
+            key={`${panelMockup.project}:${panelMockup.reviewId}:${panelMockup.revisionId ?? ""}`}
+            project={panelMockup.project}
+            reviewId={panelMockup.reviewId}
+            revisionId={panelMockup.revisionId}
+            chatSessionId={activeSession?.id ?? null}
+            sourceMessageId={mockupSourceMessageId}
+            onClose={() => setPanelMockup(null)}
           />
         </div>
       )}
