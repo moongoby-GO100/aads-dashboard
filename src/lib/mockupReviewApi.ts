@@ -2,7 +2,7 @@
 import { getAuthHeaders } from "@/lib/api";
 import {
   describeMockupError, type ApproveBody, type ChangeBody, type MockupErrorView, type MockupNotification,
-  type MockupReview, type MockupRevision,
+  type MockupReview, type MockupReviewListResponse, type MockupRevision,
 } from "@/lib/mockupReviewModel";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -59,6 +59,15 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const mockupApi = {
+  listReviews: (project: string, opts: { status?: string; sessionId?: string; limit?: number; offset?: number } = {}, signal?: AbortSignal) => {
+    const q = new URLSearchParams();
+    if (opts.status) q.set("status", opts.status);
+    if (opts.sessionId) q.set("session_id", opts.sessionId);
+    if (opts.limit !== undefined) q.set("limit", String(opts.limit));
+    if (opts.offset !== undefined) q.set("offset", String(opts.offset));
+    const qs = q.toString();
+    return json<MockupReviewListResponse>(`${base(project)}${qs ? `?${qs}` : ""}`, { signal });
+  },
   getReview: (project: string, reviewId: string, signal?: AbortSignal) =>
     json<MockupReview>(`${base(project)}/${reviewId}`, { signal }),
   getRevision: (project: string, reviewId: string, revisionId: string, signal?: AbortSignal) =>

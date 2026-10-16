@@ -1,21 +1,29 @@
 /**
- * 채팅 상단 '목업 검토 N' 배지 — 읽지 않은 목업 검토 알림을 띄우고,
- * 항목을 누르면 서버가 정한 딥링크(item.link)로 이동하며 읽음 처리한다.
+ * 채팅 상단 '🖼 목업' 버튼 — 항상 보이며, 읽지 않은 목업 검토 알림이 있으면 숫자를 붙인다.
+ * 알림을 누르면 서버가 정한 딥링크(item.link)로 이동하며 읽음 처리하고,
+ * '목업 보관함 전체 보기'는 알림이 없어도 지난 목업을 다시 열 수 있는 목록(MockupArchivePanel)을 연다.
  */
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MockupArchivePanel } from "@/components/MockupArchivePanel";
 import { mockupApi } from "@/lib/mockupReviewApi";
 import {
-  badgeProjects, mergeBadgeNotifications, notificationKindLabel, safeChatLink, type BadgeNotification,
+  badgeProjects, mergeBadgeNotifications, notificationKindLabel, safeChatLink, type BadgeNotification, type MockupDeepLink,
 } from "@/lib/mockupReviewModel";
 
 const TOUCH = 44;
 const POLL_MS = 60_000;
 
-export function MockupReviewBadge({ project }: { project: string }) {
+export function MockupReviewBadge({ project, sessionId = null, onOpenMockup }: {
+  project: string;
+  sessionId?: string | null;
+  onOpenMockup?: (link: MockupDeepLink) => void;
+}) {
   const [items, setItems] = useState<BadgeNotification[]>([]);
   const [open, setOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const projects = useMemo(() => badgeProjects(project), [project]);
   const multi = projects.length > 1;
@@ -50,15 +58,20 @@ export function MockupReviewBadge({ project }: { project: string }) {
     else void load();
   }, [load]);
 
-  if (items.length === 0) return null;
-
   return (
     <div style={{ position: "relative" }}>
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
         style={{ minHeight: TOUCH, display: "inline-flex", alignItems: "center", gap: 6, padding: "0 14px", borderRadius: 999,
                  border: "1px solid #2563eb", background: "rgba(37,99,235,.08)", color: "#2563eb",
                  fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
-        🖼 목업 검토 {items.length} <span>{open ? "▴" : "▾"}</span>
+        🖼 목업
+        {items.length > 0 && (
+          <span aria-label={`읽지 않은 검토 ${items.length}건`}
+            style={{ minWidth: 20, padding: "0 6px", borderRadius: 999, background: "#2563eb", color: "#fff", fontSize: 11.5, lineHeight: "20px", textAlign: "center" }}>
+            {items.length}
+          </span>
+        )}
+        <span>{open ? "▴" : "▾"}</span>
       </button>
       {open && (
         <ul role="menu" style={{ position: "absolute", top: "100%", right: 0, zIndex: 30, margin: "4px 0 0", padding: 4, listStyle: "none",
@@ -78,7 +91,20 @@ export function MockupReviewBadge({ project }: { project: string }) {
               </button>
             </li>
           ))}
+          {onOpenMockup && (
+            <li role="none" style={items.length > 0 ? { borderTop: "1px solid var(--ct-border, var(--border))", marginTop: 4, paddingTop: 4 } : undefined}>
+              <button type="button" role="menuitem" onClick={() => { setOpen(false); setArchiveOpen(true); }}
+                style={{ width: "100%", minHeight: TOUCH, textAlign: "left", padding: "8px 10px", border: 0, borderRadius: 8,
+                         background: "transparent", color: "#2563eb", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
+                목업 보관함 전체 보기
+              </button>
+            </li>
+          )}
         </ul>
+      )}
+      {archiveOpen && onOpenMockup && createPortal(
+        <MockupArchivePanel project={project} sessionId={sessionId} onOpen={onOpenMockup} onClose={() => setArchiveOpen(false)} />,
+        document.body,
       )}
     </div>
   );

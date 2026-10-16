@@ -1,7 +1,7 @@
 import {
-  approveBody, asProjectKey, badgeProjects, mergeBadgeNotifications, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
+  approveBody, archiveEmptyMessage, archiveNextOffsets, archiveRevisionNumber, mergeArchiveReviews, reviewToDeepLink, asProjectKey, badgeProjects, mergeBadgeNotifications, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
   groupAssetsByScreen, panelWidthCss, parseMockupDeepLink, parsePanelWide, stepZoomIndex, zoomScale, safeChatLink, statusLabel, stripMockupFromUrl, viewportClass,
-  type MockupAsset, type MockupNotification, type MockupReview, type MockupRevision,
+  type MockupAsset, type MockupNotification, type MockupReviewListItem, type MockupReview, type MockupRevision,
 } from "./mockupReviewModel";
 
 let failed = 0;
@@ -155,6 +155,39 @@ check("merge newest first", merged.map((n) => n.id).join(",") === "3,2,1");
 check("merge source project", merged[1].sourceProject === "GO100" && merged[0].sourceProject === "AADS");
 check("merge failed project skipped", merged.length === 3);
 check("merge all failed empty", mergeBadgeNotifications([{ project: "AADS", items: null }]).length === 0);
+
+// 목업 보관함
+const item = (id: string, at: string | null, extra: Partial<MockupReviewListItem> = {}): MockupReviewListItem =>
+  ({ review_id: id, title: id, status: "approved", updated_at: at, ...extra });
+const RID2 = "11111111-2222-4333-8444-555555555555";
+const RID3 = "99999999-2222-4333-8444-555555555555";
+const arch = mergeArchiveReviews([
+  { project: "AADS", items: [item(RID, "2026-10-14T01:00:00Z"), item(RID3, null)] },
+  { project: "KIS", items: null },
+  { project: "GO100", items: [item(RID2, "2026-10-16T01:00:00Z"), item(RID2, "2026-10-16T01:00:00Z")] },
+]);
+check("archive newest first, undated last", arch.map((x) => x.review_id).join(",") === `${RID2},${RID},${RID3}`);
+check("archive source project", arch[0].sourceProject === "GO100");
+check("archive dedupes same project+id", arch.length === 3);
+check("archive all failed empty", mergeArchiveReviews([{ project: "AADS", items: null }]).length === 0);
+check("archive revision number", archiveRevisionNumber(item(RID, null, { latest_revision: 3 })) === 3);
+check("archive revision number server shape", archiveRevisionNumber(JSON.parse(`{"review_id":"${RID}","title":"t","status":"approved","latest_revision":2}`)) === 2);
+check("archive revision number non-number", archiveRevisionNumber(item(RID, null, { latest_revision: null })) === null);
+check("archive revision number missing", archiveRevisionNumber(item(RID, null)) === null);
+const link1 = reviewToDeepLink({ ...item(RID, null, { link: `/chat?mockup_review=${RID}&mockup_project=KIS&mockup_revision=${REV}#sid` }), sourceProject: "AADS" });
+check("deeplink from server link", link1?.project === "KIS" && link1.revisionId === REV && link1.reviewId === RID);
+const link2 = reviewToDeepLink({ ...item(RID, null, { link: "https://evil.example/x", latest_revision_id: REV }), sourceProject: "AADS" });
+check("deeplink falls back to fields", link2?.project === "AADS" && link2.revisionId === REV);
+check("deeplink invalid id", reviewToDeepLink({ ...item("zzz", null), sourceProject: "AADS" }) === null);
+const pg = (project: string, n: number | null, total: number) =>
+  ({ project, items: n === null ? null : Array.from({ length: n }, (_, i) => item(`${project}-${i}`, null)), total });
+const nx = archiveNextOffsets([pg("AADS", 50, 120), pg("KIS", 3, 3), pg("GO100", null, 0), pg("X", 0, 0)]);
+check("next offsets only incomplete", nx.length === 1 && nx[0].project === "AADS" && nx[0].offset === 50);
+check("next offsets none when complete", archiveNextOffsets([pg("AADS", 50, 50)]).length === 0);
+check("empty msg session", archiveEmptyMessage(true, "") === "이 세션에 연결된 목업이 없습니다");
+check("empty msg status", archiveEmptyMessage(false, "approved") === "'승인됨' 상태의 목업이 없습니다");
+check("empty msg all", archiveEmptyMessage(false, "") === "아직 목업이 없습니다");
+check("status revising/revoked", statusLabel("revising") === "수정 중" && statusLabel("revoked") === "승인 철회");
 
 // 이미지 확대 보기
 check("wide parse on", parsePanelWide("1") === true);

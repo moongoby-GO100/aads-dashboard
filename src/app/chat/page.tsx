@@ -12642,7 +12642,7 @@ export default function ChatPage() {
         <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden" }}>
         {!panelMode && (
           <div style={{ position: "absolute", top: 6, right: 14, zIndex: 8 }}>
-            <MockupReviewBadge project={mockupProjectKey} />
+            <MockupReviewBadge project={mockupProjectKey} sessionId={activeSession?.id ?? null} onOpenMockup={setPanelMockup} />
           </div>
         )}
         <div

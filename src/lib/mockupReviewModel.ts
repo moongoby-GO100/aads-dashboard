@@ -108,6 +108,85 @@ export function safeChatLink(link: string | null | undefined): string | null {
   return next === "" || next === "?" || next === "#" || next === "/" ? v : null;
 }
 
+// ---- 목업 보관함(목록) ----
+// 서버 계약: GET /projects/{p}/mockup-reviews → {items, total}(total 은 프로젝트 전체 건수). latest_revision 은 판 번호(정수).
+export type MockupReviewListItem = {
+  review_id: string; title: string; status: string;
+  project?: string; session_id?: string | null; goal_id?: string | null;
+  latest_revision_id?: string | null; latest_revision?: number | null;
+  link?: string | null; updated_at?: string | null;
+};
+export type MockupReviewListResponse = { items: MockupReviewListItem[]; total: number };
+export type ArchiveReview = MockupReviewListItem & { sourceProject: string };
+
+export const ARCHIVE_STATUS_FILTERS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "", label: "전체" },
+  { value: "review_ready", label: "검토 대기" },
+  { value: "approved", label: "승인됨" },
+];
+export const ARCHIVE_PAGE_LIMIT = 50;
+
+export type ArchiveProjectPage = { project: string; items: MockupReviewListItem[] | null; total: number };
+
+// 더 불러올 프로젝트와 다음 offset. 실패(items null)한 프로젝트는 제외하고, total 이 불확실하면 한 페이지가 꽉 찼을 때만 이어서 받는다.
+export function archiveNextOffsets(pages: ReadonlyArray<ArchiveProjectPage>): Array<{ project: string; offset: number }> {
+  const out: Array<{ project: string; offset: number }> = [];
+  for (const pg of pages) {
+    if (pg.items && pg.items.length > 0 && pg.items.length < pg.total) out.push({ project: pg.project, offset: pg.items.length });
+  }
+  return out;
+}
+
+// 프로젝트별 목록을 합쳐 최근 수정순으로 정렬한다. 실패한 프로젝트(null)는 건너뛰고, 같은 목업은 한 번만 낸다.
+export function mergeArchiveReviews(
+  results: ReadonlyArray<{ project: string; items: MockupReviewListItem[] | null }>,
+): ArchiveReview[] {
+  const seen = new Set<string>();
+  const merged: ArchiveReview[] = [];
+  for (const r of results) {
+    if (!r.items) continue;
+    for (const it of r.items) {
+      const key = `${r.project}:${it.review_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ ...it, sourceProject: it.project || r.project });
+    }
+  }
+  const time = (x: ArchiveReview) => {
+    const t = Date.parse(x.updated_at ?? "");
+    return Number.isNaN(t) ? 0 : t;
+  };
+  return merged.sort((a, b) => time(b) - time(a) || (a.review_id < b.review_id ? 1 : a.review_id > b.review_id ? -1 : 0));
+}
+
+// 가장 최근 판 번호. 모르면 null.
+export function archiveRevisionNumber(item: MockupReviewListItem): number | null {
+  const n = item.latest_revision;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+// 목록 행 → 기존 패널이 쓰는 MockupDeepLink. 서버 link 가 유효하면 그 값을, 아니면 필드로 만든다.
+export function reviewToDeepLink(item: ArchiveReview): MockupDeepLink | null {
+  const link = safeChatLink(item.link);
+  if (link) {
+    const q = link.indexOf("?");
+    if (q >= 0) {
+      const parsed = parseMockupDeepLink(link.slice(q).split("#")[0]);
+      if (parsed) return parsed;
+    }
+  }
+  const reviewId = asUuid(item.review_id);
+  const project = asProjectKey(item.sourceProject);
+  if (!reviewId || !project) return null;
+  return { reviewId, project, revisionId: asUuid(item.latest_revision_id) };
+}
+
+export function archiveEmptyMessage(sessionOnly: boolean, status: string): string {
+  if (sessionOnly) return "이 세션에 연결된 목업이 없습니다";
+  const label = ARCHIVE_STATUS_FILTERS.find((f) => f.value === status)?.label;
+  return status && label ? `'${label}' 상태의 목업이 없습니다` : "아직 목업이 없습니다";
+}
+
 export const STATUS_LABEL: Record<string, string> = {
   draft: "작성 중",
   review_ready: "검토 대기",
