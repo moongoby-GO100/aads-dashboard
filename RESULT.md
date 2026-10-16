@@ -245,3 +245,92 @@ UI는 파일 API가 주는 대로만 표시하며, 못 읽는 파일을 성공�
 ### 롤백
 
 - 위 3개 파일의 이번 diff만 되돌리면 된다. 삭제·DB 변경은 없다.
+
+
+# 승인 정책 소비 범위와 브라우저 검증 보완 — approval-consumer-scope-browser-repair
+
+2026-10-16 · AADS-APPROVAL-CONSUMER-SCOPE-BROWSER-REPAIR-20261016 · runner-10a4342b
+
+상태: 소스 패치 반영, 전체 완료기준 미충족. 배포 전 검증이다. 실제 브라우저 클릭·캡처 및 지정 운영 세션 식별은 미완료이며 성공으로 보고하지 않는다. 추가 자동 재작업/후속 제출 없음.
+
+## STEP 0 조사와 변경 전 preflight
+
+- `/root/aads/AGENTS.md` 및 저장소 AGENTS.md 열람. 최초 `git status --short`는 비어 있었다. 기존 격리 workspace HEAD와 로컬 origin/main은 모두 `311a04cfc20945342182ebc34fbd1a76e322a80f`. 원격 최신성은 네트워크 제약으로 확인하지 못했다. git worktree/checkout/reset 사용 없음.
+- 보존 커밋 `41d321ad8c33deb6c74fedb32c0ec596f907d71c`의 의도된 소스·회귀 diff에 `git apply --check` 후 적용했다. 기존 chat/page 파일 전체를 덮어쓰지 않았다. 선행 RESULT와 관계없는 파일 변경은 가져오지 않았다.
+- 변경 전 pipeline_jobs 활성 dashboard 조회 시도: Docker socket permission denied. workspace ledger 조회도 같은 차단. DB 위험 preflight는 접근 불가로 미확인. 사용자 제공 조회 결과를 현재 DB 재확인으로 간주하지 않았다. 서버 작업·DB 스키마·정책값·grants 수정 없음.
+- code_reviews.feedback 원문 DB 접근 불가. 제공된 리뷰 근거와 읽기 전용 서버 소스를 대조했다. error_book match는 `psql` 실행 파일 부재로 실패.
+- 공유 dashboard의 dirty public/reports/llm-models-current.html 및 다른 세션 파일은 수정하지 않았다.
+
+| 대상 / 접점 | 분류 | 처리 |
+|---|---|---|
+| GoalApprovalControls.tsx: supportsGoalApproval | 신규(보존 패치 복원)·수정 | 서버에 없는 KIS/GO100 allowlist 제거. 프로젝트 조회 전 변경 차단 유지 |
+| useGoalApprovalPolicy / savePolicy / retryPolicy | 신규(보존 패치 복원)·수정 | critical 확인 문구만 소비처에 맞춤. layout epoch, 요청 잠금, stale 차단, 실패 정책 보존, 200 기본값, used 초기화/해제 보존 유지 |
+| GoalApprovalControls | 신규(보존 패치 복원)·수정 | 공용 전체선택·전체해제 유지, 제안과 실행 게이트 차이 및 KIS/GO100 손실 경고 |
+| GoalPanel / load / commitCount | 수정 | 공용 컨트롤 연결 및 요약 문구. board owner/ABA, 프로젝트 조회 실패 안전성 유지 |
+| goals/page: GoalsPage / commitCount | 수정 | 기존 화면에 공용 컨트롤 연결 및 정책 범위 문구 |
+| chat/page: refreshApprovals / decideApproval / decideApprovalBulk | 수정(보존 패치 복원) | 최신 목록 ref, 세션 epoch, 중복 클릭 방지, 실패 선택 보존, 오류 재조회 유지 |
+| chat/page: GoalPanel 호출 / 세션 전환 effect | 수정(보존 패치 복원) | 세션 key/project 전달, 이전 카드 상태 초기화 유지 |
+| api.getGoalApprovalPolicy / setGoalApprovalPolicy | 유지 | tenant-scoped GET/POST 계약 변경 없음 |
+| 서버 GoalApprovalPolicyRequest, GET·POST approval-policy, 알림 | 유지·읽기 전용 | 프로젝트 allowlist 없음, viewer/member 권한, 404, 활성화시 positive max, used reset 계약 확인 |
+| 서버 next_step_proposals._goal_policy_covers / propose | 유지·읽기 전용 | 일반 다음 단계 제안 소비 확인 |
+| 서버 live_trading_guard._approval_project / goal_policy_allows / check | 유지·읽기 전용 | 실행 대상 프로젝트·위험도·횟수 및 db_safe_write 제외 확인 |
+| goals / goal_task_links / agent_permission_requests | 유지·읽기 전용 소스 조사 | DB 값 변경 없음 |
+| 스케줄러 | 유지 | 신규/변경 접점 없음 |
+| goal-approval-controls.test.mjs | 신규(보존 회귀 복원)·수정 | 32건을 보존·정정하여 36건. 5개 프로젝트 read/enable/disable 검증 |
+| tests/browser/approval-browser.test.mjs | 신규(보존 fixture 이동)·수정 | React DOM 및 실제 소스 콜백 사용. 5개 프로젝트, 오류코드 클릭 케이스 보강 |
+| package.json / package-lock.json | 수정 | playwright-core 1.59.1 정확한 dev dependency 및 별도 browser/install 명령 |
+
+삭제된 기능 없음. 인라인 중복 정책 로직은 보존 커밋대로 공용 hook으로 이동했다. 브라우저 fixture는 chat-modernization glob에서 tests/browser로 이동하여 기본 test:chat가 브라우저 설치에 의존하지 않게 했다. 지시서 외 추가 기능 파일 변경 없음. chat/page는 명시된 보존 요구(중복 클릭·epoch·실패 선택 보존)를 현재 main에 가져오기 위해 변경 전 diff를 확인하고 수정했다.
+
+## 실제 서버 소비 범위 표
+
+| 프로젝트 | GET/POST 정책 | 다음 단계 제안 | 실제 실행 게이트 |
+|---|---|---|---|
+| AADS | tenant 권한 내 조회·설정·해제 | 연결된 목표 정책 사용 | 게이트 대상인 호출에서 대상 프로젝트 일치 등 별도 검사 |
+| SF | 동일 | 동일 | 동일 |
+| NTV2 | 동일 | 동일 | 동일 |
+| KIS | 동일 | 동일 | 동일, 실매매·주문·자금 손실 위험 경고 |
+| GO100 | 동일 | 동일 | 동일, 실매매·주문·자금 손실 위험 경고 |
+
+근거: app/routers/goals.py:1005~1101, app/services/next_step_proposals.py:161~200 및 360~380, app/services/live_trading_guard.py:135~147, 460~558, 680~725.
+
+- API는 프로젝트 제한 없이 tenant-scoped 목표 조회/설정을 제공한다. 알림 문자열은 여전히 실매매 용어를 사용하지만 이 작업에서 서버 알림은 바꾸지 않았다.
+- 제안은 활성 chat_session 연결, 목표 status draft/active/blocked, 남은 횟수를 검사한다. critical은 critical 필드, 나머지 위험도는 high 필드를 본다. 제안 검사 자체는 횟수를 차감하지 않으며 프로젝트 일치 조건이 없다.
+- 실행 게이트는 check의 pass/notify 처리 이후 승인 대상에 정책을 적용한다. 목표·세션 연결, 목표 상태, 대상 프로젝트 일치, 위험도 필드와 횟수를 검사하고 사용 횟수/자동 통과 알림을 기록한다. db_safe_write 등 프로젝트 미상 도구는 이 정책으로 통과하지 않는다. 자동승인이 모든 도구 허용을 의미하지 않는다.
+- 세션/목표 프로젝트 mismatch 경고에도 두 소비처 차이를 표시했다.
+
+## 검증 실행 결과
+
+| 명령/검증 | 실제 결과 |
+|---|---|
+| node --test tests/chat-modernization/goal-approval-controls.test.mjs | PASS, 최종 실행 파일 1/1 |
+| node tests/chat-modernization/goal-approval-controls.test.mjs | PASS, 36/36 (개별 테스트 출력 확인) |
+| npm run test:chat | PASS, 17 테스트 파일, 실패/skip 0 |
+| npm run typecheck | PASS, tsc 오류 없음 |
+| 변경 4개 TSX와 2개 test ESLint | PASS, errors 0 / warnings 18 (chat 기존 경고). 최종 공용 컨트롤/테스트 재검사도 errors 0 |
+| git diff --check | PASS |
+| npm run test:approval:browser | FAIL, 고정 버전 Chromium headless_shell-1217 미설치. MODULE_NOT_FOUND는 해소 |
+| AADS_CHROMIUM_PATH=<기존 Chromium> npm run test:approval:browser | FAIL, Chromium launch setsockopt: Operation not permitted / SIGTRAP. 최종 fixture로 재실행도 실패 |
+| 실제 소스 브라우저 클릭·capture | 미완료. 브라우저 생성 전 차단, 캡처 생성 없음. VM/AST 통과를 화면 통과로 간주하지 않음 |
+| npm registry 조회 | EAI_AGAIN. npm ci 신규 다운로드 재현은 미검증 |
+| 빌드 | 미실행 — 승인 후 Runner 빌드 검증 대상 |
+
+회귀 범위: 전체선택/해제·partial·critical 취소·중복 클릭·200 기본값·used 초기화/해제 보존, AADS/SF/NTV2/KIS/GO100 기존값 조회/활성화/해제, 401/403/404/409/410 오류 및 재시도, ABA·stale 목록/정책 응답, bulk 실패/미처리 선택 보존. 이는 단위 회귀 결과이며 브라우저 성공 증거가 아니다.
+
+의존성: package/lock은 기존 설치 산출물의 version/resolved/integrity를 대조해 고정했다. 검증용 node_modules는 기존 의존성을 읽기 전용 symlink로 참조하고 playwright-core만 작업공간에 복사했다. 전역 설치·서비스 변경 없음. 재현 명령은 `npm ci` → `npm run test:approval:browser:install` → `npm run test:approval:browser`. 승인된 외부 Chromium 사용 시 공개 설정 `AADS_CHROMIUM_PATH` 지원. 전역 모듈/비밀 경로 환경변수 의존 제거. sandbox 제약 우회는 시도하지 않았다.
+
+## 지정 세션과 잔여 차단
+
+- 지정 대상: https://aads.newtalk.kr/chat#7a1b186e-e71f-41c5-bd7b-e5926f41b4d9 . HTTP 조회가 DNS 실패(curl 6), 이어서 API health도 DNS 실패, container 조회는 Docker socket permission denied. 요청된 HTTP→health→container 폴백 순서를 실행했다. 운영 장애로 단정하지 않는다.
+- 지정 session 읽기 API 시도도 DNS 단계에서 실패했다. tenant 확인 및 permission request / runner approve / 목표 정책 / next_step 카드 종류는 원인 미확정. 다른 테스트 세션을 지정 세션 증거로 보고하지 않았다. 운영 승인 POST/정책 변경은 0건.
+- pipeline_jobs/ledger/DB 위험 현재 상태 재확인 불가. code_reviews 원문 조회 불가.
+- R-001 POST /api/v1/handovers 기록 및 GET 재조회 시도 모두 DNS 실패: 핸드오버 DB 미기록. HANDOVER.md 변경 없음.
+- 확인 원인 error_book register 시도는 psql 부재로 실패: 오류 사전 DB 미기록. 확인된 원인은 UI KIS/GO100 allowlist와 next_step 정책 소비 범위의 불일치, 브라우저 dev dependency 미등록이었다.
+- 기존 RESULT.md에 추가 기록. 정본 미등록(미완료), 열람 링크 미제공.
+- runner-bde1eed0의 blocked_dependency 연결 복구 필요만 기록. done 변경/별도 후속 제출 없음.
+
+## 변경·반영·롤백·비용
+
+변경 파일: package.json, package-lock.json, src/app/chat/page.tsx, src/app/goals/page.tsx, src/components/GoalPanel.tsx, src/components/GoalApprovalControls.tsx, tests/chat-modernization/goal-approval-controls.test.mjs, tests/browser/approval-browser.test.mjs, RESULT.md.
+
+commit/push 미실행, GitHub 신규 commit URL 없음. 빌드·배포·재시작 미실행. 운영 미반영. 롤백은 Runner가 최종 선별 커밋을 생성한 뒤 해당 커밋 revert; 현재는 위 의도 파일 diff만 원복 가능하다. 외부 유료 호출 없음, 실제 총비용 미측정.

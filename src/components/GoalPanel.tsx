@@ -12,8 +12,9 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import { GoalApprovalControls, useGoalApprovalPolicy } from "@/components/GoalApprovalControls";
 import { api } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
@@ -42,7 +43,7 @@ type GoalDocument = {
   change_summary?: string | null; version_count: number;
 };
 type Board = {
-  goal: { id?: string; title: string; status: string; progress: number };
+  goal: { project?: string; id?: string; title: string; status: string; progress: number };
   halted: boolean; owners: Owner[]; milestones: Milestone[];
   documents?: GoalDocument[]; document_history?: GoalDocument[];
   has_document_history?: boolean;
@@ -77,19 +78,28 @@ function isScreenEvidence(ref: string): boolean {
   return /^https?:\/\/[^\s]+\.(?:png|jpe?g|webp)(?:\?[^\s]*)?$/i.test(ref);
 }
 
-export function GoalPanel({ goalId, onClose, onOpenSession }: {
+export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
   goalId: string;
+  sessionProject?: string;
   onClose: () => void;
   onOpenSession?: (sessionId: string) => void;
 }) {
+  const boardKey = useMemo(() => ({ id: goalId }), [goalId]);
+  const boardGoalRef = useRef(boardKey);
+  useLayoutEffect(() => {
+    boardGoalRef.current = boardKey;
+    return () => { boardGoalRef.current = { id: "" }; };
+  }, [boardKey]);
+  const [boardOwner, setBoardOwner] = useState<typeof boardKey | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
-    try { setBoard(await api.getGoalBoard(goalId)); setErr(""); }
-    catch (e) { setErr(e instanceof Error ? e.message : "목표를 불러오지 못했습니다."); }
-  }, [goalId]);
+    const owner = boardKey;
+    try { const next = await api.getGoalBoard(goalId); if (boardGoalRef.current !== owner) return; setBoard(next); setBoardOwner(boardKey); setErr(""); }
+    catch (e) { if (boardGoalRef.current !== owner) return; setBoardOwner(null); setErr(e instanceof Error ? e.message : "목표를 불러오지 못했습니다."); }
+  }, [goalId, boardKey]);
 
   useEffect(() => {
     void load();
@@ -102,46 +112,11 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
 
   // 승인 설정. 대표님이 담당과 대화하다 바로 켜고 끄실 수 있어야 한다 —
   // `/goals` 로 옮겨 가면 그 대화 맥락이 끊긴다.
-  const [policy, setPolicy] = useState<{
-    auto_approve_high: boolean; auto_approve_critical: boolean;
-    max_executions: number; used: number;
-  } | null>(null);
+  const approvalControls = useGoalApprovalPolicy(goalId, boardOwner === boardKey ? board?.goal.project : undefined);
+  const { policy, savePolicy, saving } = approvalControls;
   const [countDraft, setCountDraft] = useState("200");
+  useEffect(() => { setCountDraft(String(policy?.max_executions ?? 200)); }, [policy]);
 
-  useEffect(() => {
-    let alive = true;
-    api.getGoalApprovalPolicy(goalId)
-      .then((p) => { if (alive) setPolicy(p); })
-      .catch(() => { if (alive) setPolicy(null); });
-    return () => { alive = false; };
-  }, [goalId]);
-
-  useEffect(() => { setCountDraft(String(policy?.max_executions ?? 200)); },
-            [policy?.max_executions]);
-
-  const savePolicy = useCallback(async (patch: Partial<{
-    auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number;
-  }>) => {
-    const next = {
-      auto_approve_high: policy?.auto_approve_high ?? false,
-      auto_approve_critical: policy?.auto_approve_critical ?? false,
-      max_executions: policy?.max_executions || 200,
-      ...patch,
-    };
-    // 주문·자금은 한 번 더 묻는다. 돈이 직접 걸린다.
-    if (patch.auto_approve_critical === true &&
-        !window.confirm("주문·자금·서비스 재기동까지 이 목표 동안 묻지 않고 통과시킵니다.\n돈이 직접 걸립니다. 계속할까요?")) {
-      return;
-    }
-    try {
-      const saved = await api.setGoalApprovalPolicy(goalId, next);
-      setPolicy({ ...next, used: saved.used ?? 0 });
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "승인 설정을 저장하지 못했습니다.");
-    }
-  }, [goalId, policy]);
-
-  // 글자마다 저장하면 "200" 이 2 → 20 → 200 으로 세 번 저장된다.
   const commitCount = useCallback(async () => {
     const n = Math.min(5000, Math.max(1, Number(countDraft) || 1));
     setCountDraft(String(n));
@@ -427,9 +402,9 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
               승인 설정 · 담당 {crew.length}명{board?.documents?.length ? ` · 문서 ${board.documents.length}` : ""}
             </span>
             <span style={{ color: policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--text-secondary)" }}>
-              {policy?.auto_approve_critical ? "주문·자금까지 미리 승인"
-                : policy?.auto_approve_high ? "코드 수정 미리 승인"
-                : "변경마다 묻습니다"}
+              {policy?.auto_approve_critical ? "critical 제안·실행 게이트 사전승인"
+                : policy?.auto_approve_high ? "critical 이외 제안·high 실행 게이트 사전승인"
+                : (!approvalControls.supported ? "목표 프로젝트 확인 대기" : "목표 정책 자동승인 꺼짐")}
             </span>
           </summary>
           {/* 펼쳐도 마일스톤을 밀어내지 않도록 여기까지만 쓴다 — 이 상한이
@@ -441,26 +416,17 @@ export function GoalPanel({ goalId, onClose, onOpenSession }: {
                         border: `1px solid ${policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--border)"}`,
                         background: "var(--bg-primary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-              <strong style={{ fontSize: 11.5, color: "var(--text-primary)" }}>승인 설정</strong>
+              <strong style={{ fontSize: 11.5, color: "var(--text-primary)" }}>목표 사전승인 설정</strong>
               <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>
                 {policy && (policy.auto_approve_high || policy.auto_approve_critical)
                   ? `사용 ${policy.used}/${policy.max_executions}회`
-                  : "변경마다 묻습니다"}
+                  : (!approvalControls.supported ? "목표 프로젝트 확인 대기" : "목표 정책 자동승인 꺼짐")}
               </span>
             </div>
-            <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6, fontSize: 11, color: "var(--text-primary)", cursor: "pointer" }}>
-              <input type="checkbox" checked={!!policy?.auto_approve_high}
-                     onChange={(e) => void savePolicy({ auto_approve_high: e.target.checked })} />
-              실매매 <b>코드 수정</b> 미리 승인
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, fontSize: 11, color: "#dc2626", cursor: "pointer" }}>
-              <input type="checkbox" checked={!!policy?.auto_approve_critical}
-                     onChange={(e) => void savePolicy({ auto_approve_critical: e.target.checked })} />
-              <b>주문·자금</b>까지 미리 승인
-            </label>
+            <GoalApprovalControls {...approvalControls} project={boardOwner === boardKey ? board?.goal.project : undefined} sessionProject={sessionProject} />
             <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-secondary)", display: "flex", gap: 5, alignItems: "center" }}>
               허용
-              <input type="number" min={1} max={5000} value={countDraft}
+              <input type="number" disabled={!approvalControls.supported || !policy || saving} min={1} max={5000} value={countDraft}
                      onChange={(e) => setCountDraft(e.target.value)}
                      onBlur={() => void commitCount()}
                      onKeyDown={(e) => { if (e.key === "Enter") void commitCount(); }}

@@ -4581,6 +4581,22 @@ export default function ChatPage() {
     gate_source?: string; source_message_id?: string | null;
   }>>([]);
   const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
+  const approvalInFlightRef = useRef(new Set<string>());
+  const approvalSessionRef = useRef<string | null>(null);
+  const [approvalError, setApprovalError] = useState("");
+  const approvalViewRef = useRef({ sid: activeSession?.id || null, epoch: 0 });
+  const approvalViewToken = useMemo(() => ({ sid: activeSession?.id || null }), [activeSession?.id]);
+  const committedApprovalToken = useRef(approvalViewToken);
+  useLayoutEffect(() => {
+    committedApprovalToken.current = approvalViewToken;
+    approvalViewRef.current = { sid: approvalViewToken.sid, epoch: approvalViewRef.current.epoch + 1 };
+    approvalSessionRef.current = null;
+    return () => { approvalViewRef.current = { sid: null, epoch: approvalViewRef.current.epoch + 1 }; };
+  }, [approvalViewToken]);
+  const approvalRequestRef = useRef(0);
+  const bulkApprovalInFlightRef = useRef<number | null>(null);
+  const approvalsRef = useRef(approvals);
+  useLayoutEffect(() => { approvalsRef.current = approvals; }, [approvals]);
   // Vault 보안 입력 카드는 제출하면 서버의 승인 대기 목록에서 빠진다. 로그인 확인
   // 결과까지 보여 줘야 하므로 한 번 본 카드는 사용자가 닫을 때까지 여기에 남긴다.
   const [vaultCards, setVaultCards] = useState<VaultCredentialCardData[]>([]);
@@ -4704,6 +4720,8 @@ export default function ChatPage() {
 
   const refreshApprovals = useCallback(async (sid: string) => {
     if (!sid) { setApprovals([]); return; }
+    const epoch = approvalViewRef.current.epoch;
+    const request = ++approvalRequestRef.current;
     try {
       // 이 페이지의 관례대로 chatApi 를 쓴다 — 같은 GET 이 겹치면 합쳐진다.
       const r = await chatApi<{
@@ -4713,6 +4731,8 @@ export default function ChatPage() {
           credential_request?: { id?: string | null; host?: string; login_url?: string } | null;
         }>;
       }>(`/approvals/pending?session_id=${encodeURIComponent(sid)}`);
+      if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch || approvalRequestRef.current !== request) return;
+      setApprovalError("");
       const pending = r.pending || [];
       const regular: typeof pending = [];
       const vault: VaultCredentialCardData[] = [];
@@ -4729,6 +4749,7 @@ export default function ChatPage() {
         }
         regular.push(a);
       }
+      approvalSessionRef.current = sid;
       setApprovals(regular);
       if (vault.length > 0) {
         setVaultCards((prev) => {
@@ -4737,8 +4758,12 @@ export default function ChatPage() {
           return added.length > 0 ? [...prev, ...added] : prev;
         });
       }
-    } catch {
-      // 승인 조회 실패가 대화를 막으면 안 된다.
+    } catch (e) {
+      if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch || approvalRequestRef.current !== request) return;
+      approvalSessionRef.current = null;
+      setApprovals([]);
+      setSelectedApprovalIds(new Set());
+      setApprovalError(`승인 목록 조회 실패: ${e instanceof Error ? e.message : String(e)}. 다시 조회하세요.`);
     }
   }, []);
 
@@ -4752,6 +4777,15 @@ export default function ChatPage() {
     decision: "approved" | "rejected",
     scope: ApprovalScope = "single",
   ) => {
+    const sid = activeSessionRef.current;
+    const epoch = approvalViewRef.current.epoch;
+    const flightKey = `${epoch}:${id}`;
+    if (approvalInFlightRef.current.has(flightKey)) return false;
+    if (!sid || committedApprovalToken.current !== approvalViewToken || approvalViewRef.current.sid !== sid || approvalSessionRef.current !== sid || !approvalsRef.current.some(a => a.id === id)) {
+      setApprovalError("대화 또는 승인 목록이 변경되었습니다. 승인 목록을 다시 조회한 뒤 시도하세요.");
+      return false;
+    }
+    approvalInFlightRef.current.add(flightKey);
     setApprovalBusy(id);
     try {
       const grant = APPROVAL_GRANTS[scope] ?? APPROVAL_GRANTS.single;
@@ -4760,17 +4794,25 @@ export default function ChatPage() {
           + (scope === "single" ? "" : `&max_executions=${grant.max}`)
         : "decision=rejected";
       await chatApi(`/approvals/${encodeURIComponent(id)}/decide?${q}`, { method: "POST" });
+      if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch) return false;
+      ++approvalRequestRef.current;
+      setApprovalError("");
       setApprovals((prev) => prev.filter((a) => a.id !== id));
       // 서버가 결정을 대화에 기록하고 막힌 작업을 이어서 돌린다.
       // 유휴 세션은 메시지를 폴링하지 않으므로 여기서 직접 당겨온다 —
       // 그러지 않으면 버튼을 눌러도 화면에 아무 일도 안 일어난 것처럼 보인다.
       setApprovalDecisionTick((n) => n + 1);
-    } catch {
-      // 실패하면 목록에 그대로 남는다 — 다음 폴링에서 다시 보인다.
+      return true;
+    } catch (e) {
+      if (approvalViewRef.current.sid === sid && approvalViewRef.current.epoch === epoch) {
+        setApprovalError(`승인 처리 실패: ${e instanceof Error ? e.message : String(e)}\n인증·권한·만료·이미 처리 여부를 확인하세요. 같은 카드에서 다시 시도할 수 있습니다.`);
+      }
+      return false;
     } finally {
-      setApprovalBusy(null);
+      approvalInFlightRef.current.delete(flightKey);
+      if (approvalViewRef.current.epoch === epoch) setApprovalBusy(prev => prev === id ? null : prev);
     }
-  }, []);
+  }, [approvalViewToken]);
 
   // 체크박스로 고른 여러 건을 순서대로 처리한다. 동시 요청이 아니라
   // 순차 처리다 — 같은 세션 상태를 동시에 두 번 건드리지 않기 위함.
@@ -4780,14 +4822,22 @@ export default function ChatPage() {
     scope: "single" | "mission" = "single",
   ) => {
     if (ids.length === 0) return;
+    const sid = activeSessionRef.current;
+    const epoch = approvalViewRef.current.epoch;
+    if (bulkApprovalInFlightRef.current === epoch) return;
+    bulkApprovalInFlightRef.current = epoch;
     setBulkApprovalBusy(true);
     try {
       for (const id of ids) {
-        await decideApproval(id, decision, scope);
+        if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch) break;
+        if (!await decideApproval(id, decision, scope)) break;
+        if (approvalViewRef.current.epoch === epoch) setSelectedApprovalIds(prev => {
+          const next = new Set(prev); next.delete(id); return next;
+        });
       }
     } finally {
-      setSelectedApprovalIds(new Set());
-      setBulkApprovalBusy(false);
+      if (bulkApprovalInFlightRef.current === epoch) bulkApprovalInFlightRef.current = null;
+      if (approvalViewRef.current.epoch === epoch) setBulkApprovalBusy(false);
     }
   }, [decideApproval]);
 
@@ -4808,6 +4858,14 @@ export default function ChatPage() {
   useEffect(() => {
     const sid = activeSession?.id;
     setVaultCards([]);
+    setApprovals([]);
+    setSelectedApprovalIds(new Set());
+    setDismissedApprovalIds([]);
+    popupStickyRef.current.clear();
+    setApprovalBusy(null);
+    setBulkApprovalBusy(false);
+    setApprovalError("");
+    approvalSessionRef.current = null;
     if (!sid) { setApprovals([]); return; }
     void refreshApprovals(sid);
     const iv = window.setInterval(() => {
@@ -11559,6 +11617,9 @@ export default function ChatPage() {
       onTouchStart={onSwipeStart}
       onTouchEnd={onSwipeEnd}
     >
+      {approvalError && <div role="alert" className="shrink-0 border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
+        {approvalError} <button type="button" onClick={() => { const sid = approvalViewRef.current.sid; if (sid) void refreshApprovals(sid); }}>승인 목록 다시 조회</button>
+      </div>}
       {updateAvailable && <UpdateBanner onRefresh={doRefresh} />}
       {/* ── 라이트박스 ── */}
       {lightboxSrcs.length > 0 && (
@@ -14742,7 +14803,9 @@ export default function ChatPage() {
       {panelGoalId && !panelMockup && !diffApproval.payload && (
         <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 40, display: "flex", boxShadow: "-8px 0 24px rgba(0,0,0,.18)" }}>
           <GoalPanel
+            key={`${activeSession?.id}:${panelGoalId}`}
             goalId={panelGoalId}
+            sessionProject={projectKeyFromWorkspace(activeWsObj) || undefined}
             onClose={() => setPanelGoalId(null)}
             onOpenSession={(sid) => { window.location.hash = sid; }}
           />
