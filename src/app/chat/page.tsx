@@ -1171,6 +1171,22 @@ function normalizedMessageContent(message: ChatMessage): string {
   return (message.content || "").trim();
 }
 
+// Legacy messages may lack execution_id. A user instruction still separates
+// their turns: text overlap or a longer body is never evidence of ownership.
+function messagesBelongToSameTurn(left: ChatMessage, right: ChatMessage, context: ChatMessage[]): boolean {
+  if (left.session_id !== right.session_id || left.role !== right.role) return false;
+  if (left.execution_id && right.execution_id) return left.execution_id === right.execution_id;
+  if (left.generation_id && right.generation_id && left.generation_id !== right.generation_id) return false;
+  if (left.id === right.id || (left.render_id && left.render_id === (right.render_id || right.id))) return true;
+  const leftTime = Date.parse(left.created_at || "");
+  const rightTime = Date.parse(right.created_at || "");
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return false;
+  const start = Math.min(leftTime, rightTime);
+  const end = Math.max(leftTime, rightTime);
+  return !context.some((message) => message.session_id === left.session_id && message.role === "user"
+    && messageTime(message) > start && messageTime(message) <= end);
+}
+
 function appendSseDeltaWithoutReplayDuplication(existing: string, delta: string): string {
   if (!delta) return existing;
   if (!existing) return delta;
@@ -1205,6 +1221,14 @@ function isStreamingPlaceholderMessage(message: ChatMessage): boolean {
   if (message.intent === "streaming_placeholder") return true;
   if (!(message.id.startsWith("ai-streaming-") || message.id.startsWith("ai-partial-"))) return false;
   return !isFinalizedSyntheticAssistantMessage(message);
+}
+
+function activeStreamingMessageId(messages: ChatMessage[], sessionId?: string | null, executionId?: string | null): string | undefined {
+  const drafts = messages.filter((message) => message.session_id === sessionId && message.role === "assistant" && isStreamingPlaceholderMessage(message));
+  const exact = executionId ? drafts.filter((message) => message.execution_id === executionId) : [];
+  const candidates = exact.length ? exact : drafts.filter((message) => (!executionId || !message.execution_id)
+    && !messages.some((item) => item.session_id === sessionId && item.role === "user" && messageTime(item) > messageTime(message)));
+  return candidates.sort((a, b) => messageTime(b) - messageTime(a))[0]?.id;
 }
 
 function isAssistantDraftMessage(message: ChatMessage): boolean {
@@ -1761,12 +1785,12 @@ function keepStreamingBubbleRecovering(
 
 function surfaceDbSavedStreamingPlaceholders(
   messages: ChatMessage[],
-  options: { keepEmpty?: boolean; fallbackContent?: string } = {},
+  options: { keepEmpty?: boolean; fallbackContent?: string; executionId?: string | null } = {},
 ): ChatMessage[] {
-  const fallbackContent = options.fallbackContent || "";
   return messages
     .map((message) => {
       if (message.intent !== "streaming_placeholder") return message;
+      const fallbackContent = options.executionId && message.execution_id === options.executionId ? options.fallbackContent || "" : "";
       const persistedContent = (message.content || fallbackContent || "").trim();
       if (persistedContent.length > 0 && !isPlaceholderOnlyContent(persistedContent)) {
         // 내용 있는 placeholder는 intent 유지 → SSE 재연결이 앵커를 찾아 이어쓸 수 있음
@@ -1809,7 +1833,10 @@ function reconcileMessagesForActiveStreaming(
     .map((message, index) => ({ message, index }))
     .filter(({ message }) => {
       if (message.session_id !== options.sessionId || message.role !== "assistant") return false;
-      if (executionId) return matchesActiveExecution(message) || isStreamingPlaceholderMessage(message);
+      if (executionId) return matchesActiveExecution(message) || (
+        !message.execution_id && isStreamingPlaceholderMessage(message) &&
+        !messages.some((item) => item.session_id === options.sessionId && item.role === "user" && messageTime(item) > messageTime(message))
+      );
       return isStreamingPlaceholderMessage(message) || isTerminalIncompleteAssistantMessage(message);
     });
 
@@ -1978,6 +2005,7 @@ function findAssistantMessageIndexForFinalization(messages: ChatMessage[], final
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role !== "assistant") continue;
+    if (!messagesBelongToSameTurn(message, finalMessage, messages)) continue;
     if (finalMessage.id && message.id === finalMessage.id) return i;
     if (finalMessage.render_id && (message.render_id === finalMessage.render_id || message.id === finalMessage.render_id)) return i;
     if (finalMessage.execution_id && message.execution_id === finalMessage.execution_id) return i;
@@ -2000,6 +2028,7 @@ function findAssistantMessageIndexForFinalization(messages: ChatMessage[], final
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role !== "assistant") continue;
+      if (!messagesBelongToSameTurn(message, finalMessage, messages)) continue;
       if (message.intent === "streaming_placeholder" || message.intent === "rate_limited") continue;
       const msgContent = normalizedMessageContent(message);
       if (!msgContent || msgContent.length < 30) continue;
@@ -2084,7 +2113,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
     const message = prev[i];
     if (!finalMessage.session_id || message.session_id !== finalMessage.session_id) continue;
     if (!isStreamingPlaceholderMessage(message)) continue;
-    if (finalMessage.execution_id && message.execution_id && finalMessage.execution_id !== message.execution_id) continue;
+    if (!messagesBelongToSameTurn(message, finalMessage, prev)) continue;
     sameSessionPlaceholderIndex = i;
     break;
   }
@@ -2094,7 +2123,7 @@ function replaceStreamingPlaceholderWithFinal(prev: ChatMessage[], finalMessage:
     ));
   }
   const _dupExists = prev.some((m) =>
-    m.role === "assistant" &&
+    m.role === "assistant" && messagesBelongToSameTurn(m, finalMessage, prev) &&
     !isStreamingPlaceholderMessage(m) && (
       (m.id === finalMessage.id) ||
       (finalMessage.render_id && m.render_id && m.render_id === finalMessage.render_id) ||
@@ -2142,7 +2171,9 @@ function findLocalMatchForServerMessage(
   localMessages: ChatMessage[],
   serverMessage: ChatMessage,
   incomingMessages: ChatMessage[],
+  context: ChatMessage[] = incomingMessages,
 ): ChatMessage | undefined {
+  localMessages = localMessages.filter((message) => messagesBelongToSameTurn(message, serverMessage, context));
   if (serverMessage.execution_id) {
     const execMatch = localMessages.find((m) =>
       m.role === serverMessage.role && m.execution_id === serverMessage.execution_id
@@ -2204,6 +2235,7 @@ function mergeServerMessagesPreservingLocal(
     isLocalTransientMessage(message) &&
     (!incomingSessionId || message.session_id === incomingSessionId)
   );
+  const turnContext = [...prev, ...incomingMessages];
   const matchedLocalIds = new Set<string>();
   const incomingIds = new Set(incomingMessages.map((message) => message.id));
   const finalizedExecutionIds = new Set(
@@ -2222,8 +2254,7 @@ function mergeServerMessagesPreservingLocal(
       message.role === "assistant" &&
       message.intent !== "rate_limited" &&
       messageTime(message) >= localTime - 30000 &&
-      // execution_id가 있으면 동일 실행의 메시지만 허용 (다른 실행의 완료 메시지로 placeholder가 삭제되는 것 방지)
-      (!localMessage.execution_id || !message.execution_id || message.execution_id === localMessage.execution_id)
+      messagesBelongToSameTurn(localMessage, message, turnContext)
     );
   };
   const mergedIncoming = incomingMessages.map((serverMessage) => {
@@ -2233,6 +2264,7 @@ function mergeServerMessagesPreservingLocal(
       localMessages.filter((localMessage) => !matchedLocalIds.has(localMessage.id)),
       serverMessageWithPreservedContent,
       incomingMessages,
+      turnContext,
     );
     if (!localMatch) return serverMessageWithPreservedContent;
 
@@ -2260,17 +2292,14 @@ function mergeServerMessagesPreservingLocal(
     ),
     ...mergedIncoming,
   ].sort((a, b) => messageTime(a) - messageTime(b));
-  // ★ DEDUP: streaming_placeholder 최대 1개만 유지 (마지막 것 우선)
-  // DB에 저장된 내용 있는 placeholder를 삭제하면 새로고침 전후 버블이
-  // 사라져 보인다. 중복 placeholder는 최신 앵커 하나에 내용만 합쳐서 버블 리마운트를 막는다.
-  let seenPh = false;
+  // Collapse duplicate anchors only within their own turn. Older executions
+  // retain their own text and tools instead of donating them to a new bubble.
   for (let i = merged.length - 1; i >= 0; i--) {
     if (merged[i].intent === "streaming_placeholder" || isStreamingPlaceholderMessage(merged[i])) {
-      if (seenPh) {
+      const targetIndex = merged.findIndex((message, index) => index > i && isStreamingPlaceholderMessage(message)
+        && messagesBelongToSameTurn(merged[i], message, merged));
+      if (targetIndex >= 0) {
         if (hasMeaningfulDisplayContent(merged[i])) {
-          const targetIndex = merged.findIndex((message, index) =>
-            index > i && (message.intent === "streaming_placeholder" || isStreamingPlaceholderMessage(message))
-          );
           if (targetIndex >= 0) {
             const currentContent = merged[targetIndex].content || "";
             const duplicateContent = merged[i].content || "";
@@ -2287,8 +2316,6 @@ function mergeServerMessagesPreservingLocal(
           }
         }
         merged.splice(i, 1);
-      } else {
-        seenPh = true;
       }
     }
   }
@@ -2308,8 +2335,8 @@ function mergeServerMessagesPreservingLocal(
       _dupKey = { type: "exec", value: _m.execution_id };
     }
     if (_dupIndex === undefined && _ct.length >= 20) {
-      const _ck = _ct.slice(0, 300);
-      if (_seenCont.has(_ck)) {
+      const _ck = _ct;
+      if (_seenCont.has(_ck) && messagesBelongToSameTurn(merged[_seenCont.get(_ck)!], _m, merged)) {
         _dupIndex = _seenCont.get(_ck);
         _dupKey = { type: "content", value: _ck };
       } else {
@@ -2855,6 +2882,7 @@ interface MessageItemProps {
   }>;
   approvalBusyId?: string | null;
   onDecideApproval?: (id: string, decision: "approved" | "rejected", scope?: ApprovalScope) => void;
+  onOpenApproval?: (id: string) => void;
   /** Vault 보안 입력 카드 — 승인 버튼 대신 아이디·비밀번호 폼으로 그린다 */
   bubbleVaultCards?: VaultCredentialCardData[];
   onDismissVaultCard?: (id: string) => void;
@@ -2874,7 +2902,7 @@ const MessageItem = memo(function MessageItem({
   screenSize, mobileFontPx,
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
   onApplyPendingInterrupt, onCancelPendingInterrupt, onRetractMessage,
-  bubbleApprovals, approvalBusyId, onDecideApproval, onExtraInstruction,
+  bubbleApprovals, approvalBusyId, onDecideApproval, onOpenApproval, onExtraInstruction,
   bubbleVaultCards, onDismissVaultCard,
 }: MessageItemProps) {
   const [extraOpen, setExtraOpen] = useState(false);
@@ -3902,8 +3930,16 @@ const MessageItem = memo(function MessageItem({
                   maxHeight: 132, overflowY: "auto", marginBottom: 8,
                 }}>{a.summary}</div>
                 {a.risk === "critical" ? (
-                  <div style={{ fontSize: 11.5, color: "#f87171", fontWeight: 600 }}>
-                    ⛔ 주문·자금 등급입니다 — 실수 방지를 위해 승인 팝업에서 개별로만 받습니다.
+                  <div>
+                    <div style={{ fontSize: 11.5, color: "#f87171", fontWeight: 600, marginBottom: 8 }}>
+                      ⛔ 주문·자금 등급입니다 — 승인 창에서 내용을 확인하고 개별 승인합니다.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onOpenApproval?.(a.id)}
+                      disabled={approvalBusyId === a.id}
+                      style={{ minHeight: 44, padding: "8px 16px", borderRadius: 8, border: "1px solid #eab308", background: "transparent", color: "var(--ct-text)", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}
+                    >승인 창 열기</button>
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
@@ -4695,6 +4731,9 @@ export default function ChatPage() {
       if (dismissedApprovalIds.includes(a.id)) return false;
       // 이미 띄운 카드 — 인라인이 붙었더라도 유지한다.
       if (popupStickyRef.current.has(a.id)) return true;
+      // Critical cards have no inline decision buttons. Always offer their
+      // individual dialog, regardless of message/approval arrival order.
+      if (a.risk === "critical") return true;
       // 처음부터 붙을 버블이 화면에 있던 카드는 인라인에 맡긴다.
       if (inlineApprovalIds.has(a.id)) return false;
       popupStickyRef.current.add(a.id);
@@ -4704,12 +4743,17 @@ export default function ChatPage() {
   );
   // 대화 하단 묶음 카드도 같은 이유로 제외한다.
   const bottomApprovals = useMemo(
-    () => approvals.filter((a) => !inlineApprovalIds.has(a.id)),
+    () => approvals.filter((a) => a.risk === "critical" || !inlineApprovalIds.has(a.id)),
     [approvals, inlineApprovalIds],
   );
   const closeApprovalPopup = useCallback(() => {
     setDismissedApprovalIds(approvals.map((a) => a.id));
   }, [approvals]);
+  const openApprovalPopup = useCallback((id: string) => {
+    if (approvalSessionRef.current !== activeSessionRef.current || !approvalsRef.current.some((a) => a.id === id)) return;
+    popupStickyRef.current.add(id);
+    setDismissedApprovalIds((prev) => prev.filter((dismissed) => dismissed !== id));
+  }, []);
 
   useEffect(() => {
     if (popupApprovals.length === 0) return;
@@ -5193,8 +5237,11 @@ export default function ChatPage() {
         ? document.querySelector<HTMLElement>(`[data-message-id="${approval.source_message_id}"]`)
         : null;
       const target = card || sourceBubble;
-      if (!target) continue;
-
+      if (approval.risk === "critical" || !target) {
+        approvalJumpCursorRef.current = (index + 1) % approvals.length;
+        openApprovalPopup(approval.id);
+        return;
+      }
       approvalJumpCursorRef.current = (index + 1) % approvals.length;
       scrollMessageElementIntoView(target);
       target.focus({ preventScroll: true });
@@ -5213,7 +5260,7 @@ export default function ChatPage() {
     // DOM 갱신 직후라 아직 카드가 없으면 하단으로 이동해 사용자가 찾을 수 있게 한다.
     // 맨 아래로 가는 것이므로 요소 이동(따라가기 해제)이 아니라 '최신으로' 와 같은 경로를 쓴다.
     if (messagesEndRef.current) chatViewportController.jumpToLatest();
-  }, [approvals, chatViewportController, scrollMessageElementIntoView]);
+  }, [approvals, chatViewportController, openApprovalPopup, scrollMessageElementIntoView]);
   const scrollToMessagesBottom = useCallback((force = false) => {
     chatViewportController.requestBottom(force, force ? "user-send" : "message-commit");
   }, [chatViewportController]);
@@ -5813,6 +5860,7 @@ export default function ChatPage() {
         const processed = surfaceDbSavedStreamingPlaceholders(result.messages, {
           keepEmpty: shouldKeepPlaceholder,
           fallbackContent: bgPartialContentRef.current || "",
+          executionId: currentExecutionIdRef.current,
         });
         const finalMsgs = processed.length > 0 ? processed : result.messages;
         if (finalMsgs.some((message) => isFinalAssistantMessage(message))) {
@@ -6279,7 +6327,7 @@ export default function ChatPage() {
               return;
             } else if (ev.type === "resume_done" || ev.type === "done") {
               const fresh = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${attachSessionId}&limit=50&sort=desc&include_streaming=true`)
-                .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full }).reverse());
+                .then((msgs) => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: full, executionId: currentExecutionIdRef.current }).reverse());
               if (activeSessionRef.current !== attachSessionId) return;
               setMessagesPreservingViewport((prev) => mergeServerMessagesPreservingLocal(prev, fresh));
               mergeCooldownUntilRef.current = Date.now() + 5000;
@@ -7054,6 +7102,7 @@ export default function ChatPage() {
           const processed = surfaceDbSavedStreamingPlaceholders(msgs, {
             keepEmpty: !filterPlaceholder,
             fallbackContent: bgPartialContentRef.current || bgPartialContent,
+            executionId: currentExecutionIdRef.current,
           });
           {
             const finalMsgs = processed.length > 0 ? processed : msgs;
@@ -7511,17 +7560,24 @@ export default function ChatPage() {
   // SSE 끊김/streaming 해제 시에도 버블에 텍스트가 남아있게 보장
   useEffect(() => {
     if (!streaming) return;
+    const sessionId = activeSessionRef.current;
+    const syncContent = (prev: ChatMessage[], buf: string, thinking: string) => {
+      if (activeSessionRef.current !== sessionId) return prev;
+      const activeId = activeStreamingMessageId(prev, sessionId, currentExecutionIdRef.current);
+      return prev.map((message) => message.id === activeId
+        ? { ...message, content: buf || message.content, thinking_summary: thinking || message.thinking_summary }
+        : message);
+    };
     const syncTimer = setInterval(() => {
       const buf = streamBufRef.current;
       const thinking = thinkingBufRef.current;
       if (!buf && !thinking) return;
       startTransition(() => {
       setMessagesPreservingViewport(prev => {
-        const ph = prev.find(m => m.intent === "streaming_placeholder");
+        const activeId = activeStreamingMessageId(prev, sessionId, currentExecutionIdRef.current);
+        const ph = prev.find(m => m.id === activeId);
         if (!ph || (ph.content === buf && (ph.thinking_summary || "") === thinking)) return prev;
-        return prev.map(m =>
-          m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
-        );
+        return syncContent(prev, buf, thinking);
       });
       });
     }, 4000);
@@ -7531,9 +7587,7 @@ export default function ChatPage() {
       const buf = streamBufRef.current;
       const thinking = thinkingBufRef.current;
       if (buf || thinking) {
-        setMessagesPreservingViewport(prev => prev.map(m =>
-          m.intent === "streaming_placeholder" ? { ...m, content: buf || m.content, thinking_summary: thinking || m.thinking_summary } : m
-        ));
+        setMessagesPreservingViewport(prev => syncContent(prev, buf, thinking));
       }
     };
   }, [streaming, mergeLatestAssistantFromServer, setMessagesPreservingViewport]);
@@ -7768,7 +7822,7 @@ export default function ChatPage() {
           setStreaming(true);
           setToolStatus(normalizedStreamStatusLabel(ss, "생성중"));
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
-            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
+            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent, executionId: currentExecutionIdRef.current }).reverse());
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
           let completedAi: ChatMessage | undefined;
@@ -7860,7 +7914,7 @@ export default function ChatPage() {
           streamingSessionRef.current = null;
           setWaitingBgResponse(false); setBgPartialContent("");
           const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
-            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
+            .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent, executionId: currentExecutionIdRef.current }).reverse());
           if (cancelled) return;
           mergeCooldownUntilRef.current = Date.now() + 5000;
           if (freshMsgs && freshMsgs.length > 0) {
@@ -7944,7 +7998,7 @@ export default function ChatPage() {
           // P0-FIX: 90초(30 ticks×3s) 무변화 시 서버 finalization 트리거
           if (streamingStuckCount >= 30) {
             const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
-              .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
+              .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent, executionId: currentExecutionIdRef.current }).reverse());
             if (!cancelled && freshMsgs && freshMsgs.length > 0) {
               const latestFinal = latestFinalAssistantForExecution(freshMsgs, statusExecutionId || ss.execution_id || currentExecutionIdRef.current);
               if (latestFinal) {
@@ -7995,6 +8049,7 @@ export default function ChatPage() {
         const latest = surfaceDbSavedStreamingPlaceholders(rawLatest, {
           keepEmpty: _waitingBg || Boolean(ss?.is_streaming),
           fallbackContent: bgPartialContent,
+          executionId: currentExecutionIdRef.current,
         });
         if (latest.length === 0) return;
         if (_waitingBg) {
@@ -8010,7 +8065,7 @@ export default function ChatPage() {
             setStreaming(false); setStreamBuf("");
             try {
               const allMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${sid}&limit=50&sort=desc&include_streaming=true`)
-                .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent }).reverse());
+                .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: bgPartialContent, executionId: currentExecutionIdRef.current }).reverse());
               if (cancelled) return;
               mergeCooldownUntilRef.current = Date.now() + 5000;
               if (allMsgs && allMsgs.length > 0) {
@@ -8602,6 +8657,10 @@ export default function ChatPage() {
     setStreaming(true);
     setStreamBuf("");
     setThinkingBuf("");
+    setBgPartialContent("");
+    streamBufRef.current = "";
+    thinkingBufRef.current = "";
+    bgPartialContentRef.current = "";
     setToolLogs([]);
     streamingSessionRef.current = sessionId;
     const advertised = advertisedRuntimeCapabilitiesRef.current.get(sessionId) || [];
@@ -9396,7 +9455,7 @@ export default function ChatPage() {
           try {
             const msgs = await chatApi<ChatMessage[]>(
               `/chat/messages?session_id=${requestSessionId}&limit=5&sort=desc&include_streaming=true`
-            ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current }));
+            ).then((items) => surfaceDbSavedStreamingPlaceholders(items, { fallbackContent: streamBufRef.current, executionId: currentExecutionIdRef.current }));
             const aiMsg = msgs.find((m) => isFinalAssistantMessage(m));
             if (aiMsg) {
               setMessagesPreservingViewport((prev) => replaceStreamingPlaceholderWithFinal(prev, aiMsg));
@@ -9780,7 +9839,7 @@ export default function ChatPage() {
                 pendingResponseSessions.current.delete(_sid);
                 setWaitingBgResponse(false); setBgPartialContent("");
                 const freshMsgs = await chatApi<ChatMessage[]>(`/chat/messages?session_id=${_sid}&limit=50&sort=desc&include_streaming=true`)
-                  .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: streamBufRef.current }).reverse());
+                  .then(msgs => surfaceDbSavedStreamingPlaceholders(msgs, { fallbackContent: streamBufRef.current, executionId: currentExecutionIdRef.current }).reverse());
                 let completedAi: ChatMessage | undefined;
                 if (freshMsgs) {
                   const filtered = freshMsgs;
@@ -13028,6 +13087,7 @@ export default function ChatPage() {
               features: chatRuntimeRef.current.snapshot.features,
             });
             const historyActionsLocked = !chatCapabilities.canReplaceResponse;
+            const activeDraftId = activeStreamingMessageId(messages, activeSession?.id, currentExecutionIdRef.current);
             return display.map(({ msg, idx, hiddenMsgs, runnerGroup }) => {
               const isExpanded = expandedDupeGroups.has(msg.id);
               // 러너 진행은 한 줄로 접는다. 접지 않고 다 펼치면 대화가 러너
@@ -13048,8 +13108,8 @@ export default function ChatPage() {
                   />
                 );
               }
-              const hasActiveReplyState = msg.intent === "streaming_placeholder" && (streaming || waitingBgResponse);
-              const hasLiveStatusHint = msg.intent === "streaming_placeholder" && isLiveStreamStatusHint(toolStatus);
+              const hasActiveReplyState = msg.id === activeDraftId && (streaming || waitingBgResponse);
+              const hasLiveStatusHint = msg.id === activeDraftId && isLiveStreamStatusHint(toolStatus);
               const keepStreamingBubbleLive = hasActiveReplyState || hasLiveStatusHint;
               // P0-SINGLE-SOURCE: displayData에서 이미 필터링 — 이중 필터 제거
               return (
@@ -13129,6 +13189,7 @@ export default function ChatPage() {
                     onDismissVaultCard={dismissVaultCard}
                     approvalBusyId={approvalBusy}
                     onDecideApproval={(id, decision, scope) => void decideApproval(id, decision, scope)}
+                    onOpenApproval={openApprovalPopup}
                     onExtraInstruction={(text) => { void sendMessage(text); }}
                   />
                   {hiddenMsgs && hiddenMsgs.length > 0 && !isExpanded && (
@@ -13431,8 +13492,8 @@ export default function ChatPage() {
           {approvals.length > 0 && popupApprovals.length === 0 && typeof document !== "undefined" && createPortal(
             <button
               onClick={jumpToPendingApproval}
-              title="미승인 버블로 이동 · 반복 클릭하면 다음 항목으로 이동"
-              aria-label={`승인 대기 ${approvals.length}건 · 미승인 버블로 이동`}
+              title="미승인 버블로 이동 · 개별 승인 요청은 승인 창 다시 열기"
+              aria-label={`승인 대기 ${approvals.length}건 · 승인 확인`}
               style={{
                 position: "fixed", right: 16,
                 bottom: screenSize === "mobile" ? 104 : 118,
