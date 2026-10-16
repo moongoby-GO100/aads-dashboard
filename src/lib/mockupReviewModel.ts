@@ -388,3 +388,34 @@ export function newUuid(): string {
   const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
   return `${hex(8)}-${hex(4)}-4${hex(3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${hex(3)}-${hex(12)}`;
 }
+
+// ---------------------------------------------------------------- 이미지 확대 보기
+
+export const PANEL_WIDE_STORAGE_KEY = "aads_mockup_panel_wide";
+export const PANEL_WIDTH_NORMAL = "min(640px, 94vw)";
+export const PANEL_WIDTH_WIDE = "min(1480px, 96vw)";
+
+export function parsePanelWide(raw: string | null | undefined): boolean {
+  return raw === "1";
+}
+
+export function panelWidthCss(wide: boolean, narrow: boolean): string {
+  if (narrow) return "100vw";
+  return wide ? PANEL_WIDTH_WIDE : PANEL_WIDTH_NORMAL;
+}
+
+export type ZoomMode = "fit" | "original";
+
+/** 확대 보기에서 이미지에 곱할 배율. 화면 맞춤은 원본보다 키우지 않는다. */
+export function zoomScale(mode: ZoomMode, naturalW: number, naturalH: number, boxW: number, boxH: number): number {
+  if (!(naturalW > 0) || !(naturalH > 0)) return 1;
+  if (mode === "original") return 1;
+  if (!(boxW > 0) || !(boxH > 0)) return 1;
+  return Math.min(1, boxW / naturalW, boxH / naturalH);
+}
+
+/** 이전/다음 이동. 처음·끝에서는 멈춘다(순환하지 않는다). */
+export function stepZoomIndex(index: number, delta: -1 | 1, count: number): number {
+  if (count <= 0) return 0;
+  return Math.max(0, Math.min(count - 1, index + delta));
+}

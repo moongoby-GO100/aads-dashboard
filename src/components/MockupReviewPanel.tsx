@@ -9,9 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
   approveBody, canApprove, canRequestChanges, changeBody, changeFingerprint, changeSourceNotice, describeMockupError,
-  groupAssetsByScreen, isImageAsset, keepChangeAttempt, newUuid, phaseLabel, resolveChangeSource, statusColor,
-  statusLabel, VIEWPORT_LABEL,
-  type ChangeAttempt, type MockupAsset, type MockupErrorView, type MockupReview, type MockupRevision, type ViewportClass,
+  groupAssetsByScreen, isImageAsset, keepChangeAttempt, newUuid, PANEL_WIDE_STORAGE_KEY, panelWidthCss, parsePanelWide,
+  phaseLabel, resolveChangeSource, statusColor, statusLabel, stepZoomIndex, VIEWPORT_LABEL, zoomScale,
+  type ChangeAttempt, type MockupAsset, type MockupErrorView, type MockupReview, type MockupRevision, type ViewportClass, type ZoomMode,
 } from "@/lib/mockupReviewModel";
 
 const TOUCH = 44;
@@ -28,8 +28,19 @@ function useNarrow(maxPx = 640): boolean {
   return narrow;
 }
 
-function AssetImage({ project, reviewId, revisionId, asset }: {
+type ZoomItem = { key: string; src: string; caption: string; viewport: string };
+
+function assetKey(revisionId: string, asset: MockupAsset): string {
+  return `${revisionId}:${asset.asset_id}`;
+}
+
+function assetCaption(asset: MockupAsset): string {
+  return `${phaseLabel(asset.phase)}${asset.state && asset.state !== "default" ? ` · ${asset.state}` : ""}`;
+}
+
+function AssetImage({ project, reviewId, revisionId, asset, onSrc, onOpen }: {
   project: string; reviewId: string; revisionId: string; asset: MockupAsset;
+  onSrc: (key: string, src: string | null) => void; onOpen: (key: string, trigger: HTMLElement) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,17 +55,22 @@ function AssetImage({ project, reviewId, revisionId, asset }: {
         if (!alive) return;
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
+        onSrc(assetKey(revisionId, asset), objectUrl);
       })
       .catch((e) => {
         if (alive) setError(e instanceof MockupApiError ? e.view.message : "이미지를 불러오지 못했습니다.");
       });
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl) {
+        onSrc(assetKey(revisionId, asset), null);
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [project, reviewId, revisionId, asset.asset_id, image]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- asset 객체 대신 asset_id 로 비교한다
+  }, [project, reviewId, revisionId, asset.asset_id, image, onSrc]);
 
-  const caption = `${phaseLabel(asset.phase)}${asset.state && asset.state !== "default" ? ` · ${asset.state}` : ""}`;
+  const caption = assetCaption(asset);
   return (
     <figure style={{ margin: 0, flex: "1 1 240px", minWidth: 0 }}>
       <figcaption style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text-primary)", marginBottom: 4 }}>
@@ -65,11 +81,100 @@ function AssetImage({ project, reviewId, revisionId, asset }: {
         {image && !src && !error && <div style={{ padding: 12, fontSize: 11.5, color: "var(--text-secondary)" }}>불러오는 중…</div>}
         {error && <div role="alert" style={{ padding: 12, fontSize: 11.5, color: "#dc2626" }}>{error}</div>}
         {src && (
-          // eslint-disable-next-line @next/next/no-img-element -- 인증이 필요한 blob URL 이라 next/image 를 쓸 수 없다
-          <img src={src} alt={`${caption} ${asset.viewport ?? ""}`} style={{ display: "block", width: "100%", height: "auto" }} />
+          <button type="button" onClick={(e) => onOpen(assetKey(revisionId, asset), e.currentTarget)}
+            aria-label={`${caption} ${asset.viewport ?? ""} 크게 보기`}
+            style={{ position: "relative", display: "block", width: "100%", minHeight: TOUCH, padding: 0, border: 0, background: "transparent", cursor: "zoom-in" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- 인증이 필요한 blob URL 이라 next/image 를 쓸 수 없다 */}
+            <img src={src} alt={`${caption} ${asset.viewport ?? ""}`} style={{ display: "block", width: "100%", height: "auto" }} />
+            <span aria-hidden="true" style={{ position: "absolute", right: 6, bottom: 6, padding: "4px 9px", borderRadius: 999, background: "rgba(0,0,0,.66)", color: "#fff", fontSize: 11.5, fontWeight: 800, pointerEvents: "none" }}>
+              🔍 크게 보기
+            </span>
+          </button>
         )}
       </div>
     </figure>
+  );
+}
+
+function ImageLightbox({ items, index, onIndex, onClose }: {
+  items: ZoomItem[]; index: number; onIndex: (i: number) => void; onClose: () => void;
+}) {
+  const [mode, setMode] = useState<ZoomMode>("original");
+  const [natural, setNatural] = useState<{ key: string; w: number; h: number } | null>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const item = items[index];
+  const count = items.length;
+
+  useEffect(() => { closeRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = stageRef.current;
+      if (el) setBox({ w: el.clientWidth, h: el.clientHeight });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  useEffect(() => {
+    // 캡처 단계에서 가로채야 채팅 화면의 Esc(스트리밍 중단) 단축키가 같이 실행되지 않는다.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault(); e.stopPropagation(); onClose();
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && count > 1) {
+        const t = e.target as HTMLElement | null;
+        if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+        e.preventDefault(); e.stopPropagation();
+        onIndex(stepZoomIndex(index, e.key === "ArrowLeft" ? -1 : 1, count));
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [index, count, onIndex, onClose]);
+
+  if (!item) return null;
+  const nat = natural && natural.key === item.key ? natural : null;
+  const scale = nat ? zoomScale(mode, nat.w, nat.h, box.w, box.h) : 1;
+  const ctl = (enabled = true): React.CSSProperties => ({
+    minHeight: TOUCH, minWidth: TOUCH, padding: "0 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,.35)",
+    background: "rgba(255,255,255,.12)", color: "#fff", fontWeight: 800, fontSize: 13,
+    cursor: enabled ? "pointer" : "not-allowed", opacity: enabled ? 1 : 0.4,
+  });
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="이미지 확대 보기"
+      style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,.88)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", flexWrap: "wrap", color: "#fff" }}>
+        <div style={{ flex: "1 1 160px", minWidth: 0, fontSize: 12.5, fontWeight: 800, wordBreak: "break-word" }}>
+          {item.caption} <span style={{ fontWeight: 500, opacity: 0.8 }}>{item.viewport}</span>
+          {nat && <span style={{ fontWeight: 500, opacity: 0.8 }}> · {nat.w}×{nat.h} · {Math.round(scale * 100)}%</span>}
+        </div>
+        {count > 1 && (
+          <>
+            <button type="button" aria-label="이전 이미지" disabled={index <= 0} onClick={() => onIndex(stepZoomIndex(index, -1, count))} style={ctl(index > 0)}>←</button>
+            <span aria-live="polite" style={{ fontSize: 12, minWidth: 36, textAlign: "center" }}>{index + 1} / {count}</span>
+            <button type="button" aria-label="다음 이미지" disabled={index >= count - 1} onClick={() => onIndex(stepZoomIndex(index, 1, count))} style={ctl(index < count - 1)}>→</button>
+          </>
+        )}
+        <button type="button" aria-pressed={mode === "fit"} onClick={() => setMode(mode === "fit" ? "original" : "fit")} style={ctl()}>
+          {mode === "fit" ? "원본 크기" : "화면 맞춤"}
+        </button>
+        <button ref={closeRef} type="button" aria-label="닫기" onClick={onClose} style={ctl()}>✕ 닫기</button>
+      </div>
+      <div ref={stageRef} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        style={{ flex: "1 1 auto", minHeight: 0, overflow: "auto", display: "flex" }}>
+        {/* margin:auto 로 작은 이미지는 가운데, 큰 이미지는 스크롤 가능하게 둔다 */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- 이미 받은 blob URL 을 재사용한다 */}
+        <img key={item.key} src={item.src} alt={`${item.caption} ${item.viewport}`}
+          onLoad={(e) => setNatural({ key: item.key, w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+          style={nat
+            ? { display: "block", margin: "auto", flexShrink: 0, width: Math.round(nat.w * scale), height: Math.round(nat.h * scale), maxWidth: "none" }
+            : { display: "block", margin: "auto", maxWidth: "100%", maxHeight: "100%" }} />
+      </div>
+    </div>
   );
 }
 
@@ -115,6 +220,39 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
   const [comment, setComment] = useState("");
   const [commentScreen, setCommentScreen] = useState("");
   const [busy, setBusy] = useState(false);
+  const [wide, setWide] = useState(false);
+  const [srcMap, setSrcMap] = useState<Record<string, string>>({});
+  const [zoomKey, setZoomKey] = useState<string | null>(null);
+  const zoomTrigger = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    try { setWide(parsePanelWide(window.localStorage.getItem(PANEL_WIDE_STORAGE_KEY))); } catch { /* 저장소를 못 읽으면 기본 폭 */ }
+  }, []);
+  const toggleWide = useCallback(() => {
+    setWide((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(PANEL_WIDE_STORAGE_KEY, next ? "1" : "0"); } catch { /* 저장 실패는 무시 */ }
+      return next;
+    });
+  }, []);
+  const onAssetSrc = useCallback((key: string, src: string | null) => {
+    setSrcMap((prev) => {
+      if (src === null) {
+        if (!(key in prev)) return prev;
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      }
+      return { ...prev, [key]: src };
+    });
+  }, []);
+  const openZoom = useCallback((key: string, trigger: HTMLElement) => { zoomTrigger.current = trigger; setZoomKey(key); }, []);
+  const closeZoom = useCallback(() => {
+    setZoomKey(null);
+    const t = zoomTrigger.current;
+    zoomTrigger.current = null;
+    if (t && t.isConnected) t.focus();
+  }, []);
 
   // 판본을 연속으로 바꿔도 마지막 선택만 반영한다: 요청마다 번호를 매기고 이전 요청은 취소한다.
   const loadSeq = useRef(0);
@@ -160,6 +298,15 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
     ? (viewport && group.viewports.includes(viewport) ? viewport : group.viewports[0] ?? null)
     : null;
   const assets = group && activeViewport ? group.byViewport[activeViewport] ?? [] : [];
+
+  const zoomItems: ZoomItem[] = rev
+    ? assets.filter(isImageAsset).flatMap((a) => {
+        const key = assetKey(rev.revision_id, a);
+        const src = srcMap[key];
+        return src ? [{ key, src, caption: assetCaption(a), viewport: a.viewport ?? "" }] : [];
+      })
+    : [];
+  const zoomIndex = zoomKey ? zoomItems.findIndex((z) => z.key === zoomKey) : -1;
 
   const settled = !loading && !busy;
   const approveEnabled = canApprove(review, rev) && settled;
@@ -227,7 +374,7 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
 
   return (
     <aside aria-label="목업 검토" style={{
-      width: narrow ? "100vw" : "min(640px, 94vw)", flexShrink: 0, borderLeft: "1px solid var(--border)",
+      width: panelWidthCss(wide, narrow), flexShrink: 0, borderLeft: "1px solid var(--border)",
       background: "var(--bg-card)", display: "flex", flexDirection: "column", height: "100%",
     }}>
       <header style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
@@ -246,6 +393,13 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
           </div>
         </div>
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          {!narrow && (
+            <button type="button" onClick={toggleWide} aria-pressed={wide} title={wide ? "기본 폭으로 되돌립니다" : "패널을 넓게 펼칩니다"}
+              style={{ minHeight: TOUCH, minWidth: TOUCH, padding: "0 10px", borderRadius: 8, border: `1px solid ${wide ? "var(--accent)" : "var(--border)"}`,
+                       background: wide ? "rgba(37,99,235,.10)" : "transparent", color: wide ? "var(--accent)" : "var(--text-secondary)", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+              {wide ? "↔ 기본 폭" : "↔ 넓게 보기"}
+            </button>
+          )}
           <button type="button" onClick={() => void load(viewRevisionId)} disabled={loading} aria-label="새로고침"
             style={{ minHeight: TOUCH, minWidth: TOUCH, border: 0, background: "transparent", color: "var(--text-secondary)", fontSize: 16, cursor: loading ? "wait" : "pointer" }}>↻</button>
           <button type="button" onClick={onClose} aria-label="닫기"
@@ -344,7 +498,8 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start" }}>
                   {assets.map((a) => (
-                    <AssetImage key={`${rev!.revision_id}:${a.asset_id}`} project={project} reviewId={reviewId} revisionId={rev!.revision_id} asset={a} />
+                    <AssetImage key={`${rev!.revision_id}:${a.asset_id}`} project={project} reviewId={reviewId} revisionId={rev!.revision_id} asset={a}
+                      onSrc={onAssetSrc} onOpen={openZoom} />
                   ))}
                 </div>
               </>
@@ -398,6 +553,10 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
             </div>
           )}
         </footer>
+      )}
+
+      {zoomIndex >= 0 && (
+        <ImageLightbox items={zoomItems} index={zoomIndex} onIndex={(i) => setZoomKey(zoomItems[i]?.key ?? null)} onClose={closeZoom} />
       )}
 
       {confirming && review && rev && (

@@ -1,6 +1,6 @@
 import {
   approveBody, asProjectKey, badgeProjects, mergeBadgeNotifications, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
-  groupAssetsByScreen, parseMockupDeepLink, safeChatLink, statusLabel, stripMockupFromUrl, viewportClass,
+  groupAssetsByScreen, panelWidthCss, parseMockupDeepLink, parsePanelWide, stepZoomIndex, zoomScale, safeChatLink, statusLabel, stripMockupFromUrl, viewportClass,
   type MockupAsset, type MockupNotification, type MockupReview, type MockupRevision,
 } from "./mockupReviewModel";
 
@@ -155,6 +155,24 @@ check("merge newest first", merged.map((n) => n.id).join(",") === "3,2,1");
 check("merge source project", merged[1].sourceProject === "GO100" && merged[0].sourceProject === "AADS");
 check("merge failed project skipped", merged.length === 3);
 check("merge all failed empty", mergeBadgeNotifications([{ project: "AADS", items: null }]).length === 0);
+
+// 이미지 확대 보기
+check("wide parse on", parsePanelWide("1") === true);
+check("wide parse off", parsePanelWide(null) === false && parsePanelWide("0") === false && parsePanelWide("true") === false);
+check("panel width normal", panelWidthCss(false, false) === "min(640px, 94vw)");
+check("panel width wide", panelWidthCss(true, false) === "min(1480px, 96vw)");
+check("panel width narrow ignores wide", panelWidthCss(true, true) === "100vw" && panelWidthCss(false, true) === "100vw");
+check("zoom original is 1", zoomScale("original", 1440, 820, 800, 600) === 1);
+check("zoom fit shrinks by width", zoomScale("fit", 1440, 820, 720, 900) === 0.5);
+check("zoom fit shrinks by height", zoomScale("fit", 1440, 820, 2000, 410) === 0.5);
+check("zoom fit never upscales", zoomScale("fit", 390, 844, 2000, 2000) === 1);
+check("zoom invalid natural size", zoomScale("fit", 0, 0, 800, 600) === 1);
+check("zoom invalid box", zoomScale("fit", 1440, 820, 0, 0) === 1);
+check("step next", stepZoomIndex(0, 1, 3) === 1);
+check("step prev", stepZoomIndex(2, -1, 3) === 1);
+check("step clamps start", stepZoomIndex(0, -1, 3) === 0);
+check("step clamps end", stepZoomIndex(2, 1, 3) === 2);
+check("step empty", stepZoomIndex(0, 1, 0) === 0);
 
 if (failed > 0) {
   console.error(`${failed} mockupReviewModel selftest(s) failed`);
