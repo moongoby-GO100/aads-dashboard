@@ -213,3 +213,40 @@ test('AST extraction fails closed for missing callbacks and ignores formatting',
  assert.throws(()=>declarations('const other = 1;', ['decideApproval']));
  assert.match(declarations('/* changed indent */ const decideApproval=()=>true;', ['decideApproval']),/decideApproval/);
 });
+
+function visibleText(node) {
+ if (typeof node === 'string') return node;
+ if (!node || typeof node !== 'object') return '';
+ return [node.props?.children].flat().map(visibleText).join(' ');
+}
+const profileOptions = profile => ({
+ auto_approve_high: {label: profile === 'trading' ? '실매매 코드 수정 미리 승인' : '다음 단계 자동 진행(고위험 제외)', description: `${profile} high 서버 설명`, risk_tone: 'warning'},
+ auto_approve_critical: {label: profile === 'trading' ? '주문·자금까지 미리 승인' : '고위험 단계까지 자동 진행', description: `${profile} critical 서버 설명`, risk_tone: 'danger'},
+});
+for (const [project, profile] of [['GO100','trading'],['KIS','trading'],['AADS','general'],['NTV2','general'],['ACCT','general']]) {
+ test(`${project}: server profile labels and descriptions survive saves without entering POST body`, async () => {
+  const f=fixture(); const options=profileOptions(profile);
+  f.render('a',project); f.requests[0].resolve({...initial,profile,options}); await Promise.resolve();
+  let h=f.render('a',project);
+  for (const patch of [{auto_approve_high:false},{max_executions:300}]) {
+   const text=visibleText(f.controls({...h,project}));
+   for (const option of Object.values(options)) { assert.ok(text.includes(option.label)); assert.ok(text.includes(option.description)); }
+   assert.equal(text.includes('실제 금전 손실 위험'), profile==='trading');
+   const pending=h.savePolicy(patch);
+   assert.deepEqual(Object.keys(f.calls.at(-1).body).sort(),['auto_approve_critical','auto_approve_high','max_executions']);
+   f.calls.at(-1).resolve({}); await pending; h=f.render('a',project);
+   assert.equal(h.policy.profile,profile); assert.deepEqual(h.policy.options,options);
+  }
+ });
+}
+test('old server without options preserves the preceding approval UI wording', async () => {
+ const f=fixture(); const h=await ready(f); const text=visibleText(f.controls({...h,project:'GO100'}));
+ assert.ok(text.includes('critical 이외 다음 단계 제안 / high 실행 게이트 사전승인'));
+ assert.ok(text.includes('critical 다음 단계 제안 / 실행 게이트 사전승인'));
+ assert.ok(text.includes('실제 금전 손실 위험'));
+});
+test('both goal screens retain the shared profile controls', () => {
+ for (const path of ['src/components/GoalPanel.tsx','src/app/goals/page.tsx']) {
+  assert.match(fs.readFileSync(path,'utf8'), /<GoalApprovalControls \{\.\.\.approvalControls\}/);
+ }
+});

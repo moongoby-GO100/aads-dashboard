@@ -4,7 +4,13 @@ import { api } from "@/lib/api";
 
 export const supportsGoalApproval = (project?: string) => Boolean(project?.trim());
 
-type Policy = { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number; used: number };
+type ApprovalOption = { label: string; description: string; risk_tone: "warning" | "danger" };
+type PolicyValues = { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number };
+type Policy = PolicyValues & {
+  used: number;
+  profile?: "trading" | "general";
+  options?: Partial<Record<"auto_approve_high" | "auto_approve_critical", ApprovalOption>>;
+};
 export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
   const [state, setState] = useState<{ id: string; epoch: number; policy: Policy } | null>(null);
   const [error, setError] = useState("");
@@ -29,7 +35,7 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
     return () => { generation.current = epoch + 1; };
   }, [goalId, project, identity, reload]);
   const renderEpoch = state?.epoch;
-  const savePolicy = useCallback(async (patch: Partial<Policy>) => {
+  const savePolicy = useCallback(async (patch: Partial<PolicyValues>) => {
     if (!goalId || !policy || renderEpoch !== generation.current || lock.current || current.current !== identity) return;
     const next = {
       auto_approve_high: policy.auto_approve_high,
@@ -45,7 +51,7 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
     try {
       const saved = await api.setGoalApprovalPolicy(goalId, next);
       if (current.current === identity && generation.current === epoch)
-        setState({ id: identity, epoch, policy: { ...next, used: saved.used ?? ((next.auto_approve_high || next.auto_approve_critical) ? 0 : policy.used) } });
+        setState({ id: identity, epoch, policy: { ...policy, ...next, used: saved.used ?? ((next.auto_approve_high || next.auto_approve_critical) ? 0 : policy.used) } });
     } catch (e) {
       if (current.current === identity && generation.current === epoch)
         setError(e instanceof Error ? e.message : "승인 설정 저장 실패. 다시 시도하세요.");
@@ -58,6 +64,8 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
 
 export function GoalApprovalControls({ policy, savePolicy, saving, policyError, retryPolicy, project, sessionProject }: ReturnType<typeof useGoalApprovalPolicy> & { project?: string; sessionProject?: string }) {
   const supported = supportsGoalApproval(project);
+  const high = policy?.options?.auto_approve_high;
+  const critical = policy?.options?.auto_approve_critical;
   const all = !!policy?.auto_approve_high && !!policy?.auto_approve_critical;
   const partial = !!policy && policy.auto_approve_high !== policy.auto_approve_critical;
   return <div>
@@ -70,9 +78,11 @@ export function GoalApprovalControls({ policy, savePolicy, saving, policyError, 
     <label><input type="checkbox" checked={all} disabled={!supported && !all && !partial} ref={el => { if (el) el.indeterminate = partial; }}
       onChange={e => void savePolicy({ auto_approve_high: supported && e.target.checked, auto_approve_critical: supported && e.target.checked })} /> 전체 선택 / 전체 해제</label>
     <label style={{ display: "block" }}><input type="checkbox" disabled={!supported && !policy?.auto_approve_high} checked={!!policy?.auto_approve_high}
-      onChange={e => void savePolicy({ auto_approve_high: e.target.checked })} /> critical 이외 다음 단계 제안 / high 실행 게이트 사전승인</label>
+      onChange={e => void savePolicy({ auto_approve_high: e.target.checked })} /> {high?.label ?? "critical 이외 다음 단계 제안 / high 실행 게이트 사전승인"}
+      {high?.description && <span style={{ display: "block" }}>{high.description}</span>}</label>
     <label style={{ display: "block", color: "#dc2626" }}><input type="checkbox" disabled={!supported && !policy?.auto_approve_critical} checked={!!policy?.auto_approve_critical}
-      onChange={e => void savePolicy({ auto_approve_critical: e.target.checked })} /> critical 다음 단계 제안 / 실행 게이트 사전승인</label>
+      onChange={e => void savePolicy({ auto_approve_critical: e.target.checked })} /> {critical?.label ?? "critical 다음 단계 제안 / 실행 게이트 사전승인"}
+      {critical?.description && <span style={{ display: "block" }}>{critical.description}</span>}</label>
     {saving && <p role="status">저장 중…</p>}
   </fieldset>
     {policyError && <p role="alert">{policyError} <button type="button" disabled={saving} onClick={retryPolicy}>설정 다시 조회</button></p>}

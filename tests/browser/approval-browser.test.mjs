@@ -70,7 +70,7 @@ function App(){
 }
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`;
   const appJs=ts.transpileModule(app,{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.None}}).outputText;
-  const script=`const process={env:{NODE_ENV:'production'}};const M={${[...modules.values()].map(m=>`${m.id}:function(module,exports,R){${m.code}\n}`).join(',')}};const C={};function R(id){if(C[id])return C[id].exports;const module=C[id]={exports:{}};M[id](module,module.exports,R);return module.exports;}const React=R(${react}),ReactDOM=R(${dom});window.calls=[];window.chatCalls=[];window.chatFail=false;window.policyFail=false;const api={getGoalApprovalPolicy:async()=>({auto_approve_high:false,auto_approve_critical:false,max_executions:0,used:2}),setGoalApprovalPolicy:async(id,body)=>{window.calls.push({id,body});if(window.policyFail)throw Error(String(window.policyFail)+' fixture');return {};}};const module={exports:{}};const exports=module.exports;const require=n=>n==='react'?React:n==='react/jsx-runtime'?R(${runtime}):{api};${policy}\nconst Controls=module.exports;${appJs}`;
+  const script=`const process={env:{NODE_ENV:'production'}};const M={${[...modules.values()].map(m=>`${m.id}:function(module,exports,R){${m.code}\n}`).join(',')}};const C={};function R(id){if(C[id])return C[id].exports;const module=C[id]={exports:{}};M[id](module,module.exports,R);return module.exports;}const React=R(${react}),ReactDOM=R(${dom});window.calls=[];window.chatCalls=[];window.chatFail=false;window.policyFail=false;const api={getGoalApprovalPolicy:async()=>({auto_approve_high:false,auto_approve_critical:false,max_executions:0,used:2,...window.profileFixture}),setGoalApprovalPolicy:async(id,body)=>{window.calls.push({id,body});if(window.policyFail)throw Error(String(window.policyFail)+' fixture');return {};}};const module={exports:{}};const exports=module.exports;const require=n=>n==='react'?React:n==='react/jsx-runtime'?R(${runtime}):{api};${policy}\nconst Controls=module.exports;${appJs}`;
   let browser;
   try {
     browser=await chromium.launch({...(process.env.AADS_CHROMIUM_PATH ? {executablePath:process.env.AADS_CHROMIUM_PATH} : {}),headless:true,timeout:10000,args:['--no-sandbox']});
@@ -80,6 +80,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`;
     await page.setContent('<meta charset="utf-8"><div id="root"></div>');
     await page.addScriptTag({content:script});
     const boxes=page.getByRole('checkbox');await boxes.nth(1).waitFor();await page.waitForFunction(()=>!document.querySelector('fieldset').disabled);
+    // Render server metadata through the real shared source component, without POSTs.
+    for (const [project, profile, high, critical] of [
+      ['AADS','general','다음 단계 자동 진행(고위험 제외)','고위험 단계까지 자동 진행'],
+      ['GO100','trading','실매매 코드 수정 미리 승인','주문·자금까지 미리 승인'],
+    ]) {
+      await page.evaluate(({profile,high,critical})=>{ window.profileFixture={profile,options:{
+        auto_approve_high:{label:high,description:profile==='trading'?'실매매 코드 수정을 이 목표 달성까지 미리 승인합니다. 허용 횟수를 넘으면 다시 묻습니다.':'critical을 제외한 다음 단계 제안에 적용됩니다. 코드·도구 권한을 새로 주는 것이 아니라 다음 단계 제안 카드 승인을 생략하는 설정입니다.',risk_tone:'warning'},
+        auto_approve_critical:{label:critical,description:profile==='trading'?'주문·자금·서비스 재기동까지 미리 승인 (돈이 직접 걸립니다). 허용 횟수를 넘으면 다시 묻습니다.':'critical 단계 제안에 적용됩니다. 그 외 단계는 위의 다음 단계 자동 진행 설정을 따릅니다.',risk_tone:'danger'},
+      }}; },{profile,high,critical});
+      await page.getByRole('combobox',{name:'목표 프로젝트'}).selectOption(project);
+      await page.getByRole('checkbox',{name:new RegExp('^'+high.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).waitFor();
+      await page.getByRole('checkbox',{name:new RegExp('^'+critical)}).waitFor();
+      assert.equal(await page.getByText(/실제 금전 손실 위험/).count(),project==='GO100'?1:0);
+      await page.screenshot({path:`/tmp/목표승인카드-approval-profiles-${project}.png`,fullPage:true});
+    }
+    assert.equal(await page.evaluate(()=>window.calls.length),0);
+    await page.evaluate(()=>{window.profileFixture=undefined;});
     for (const project of ['AADS','SF','NTV2','KIS','GO100']) {
       await page.getByRole('combobox',{name:'목표 프로젝트'}).selectOption(project);
       await page.waitForFunction(()=>!document.querySelector('fieldset').disabled);
