@@ -1,7 +1,7 @@
 import {
-  approveBody, asProjectKey, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
+  approveBody, asProjectKey, badgeProjects, mergeBadgeNotifications, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
   groupAssetsByScreen, parseMockupDeepLink, safeChatLink, statusLabel, stripMockupFromUrl, viewportClass,
-  type MockupAsset, type MockupReview, type MockupRevision,
+  type MockupAsset, type MockupNotification, type MockupReview, type MockupRevision,
 } from "./mockupReviewModel";
 
 let failed = 0;
@@ -134,6 +134,27 @@ check("network error status 0", describeMockupError(0, null).status === 0);
 check("fingerprint stable", changeFingerprint(REV, MSG, " a ", "") === changeFingerprint(REV, MSG, "a", null));
 check("fingerprint differs by comment", changeFingerprint(REV, MSG, "a", null) !== changeFingerprint(REV, MSG, "b", null));
 check("fingerprint differs by revision", changeFingerprint(REV, MSG, "a", null) !== changeFingerprint("x", MSG, "a", null));
+
+// CEO 배지 — 전 프로젝트 조회·병합
+const ceoProjects = badgeProjects("CEO");
+check("badgeProjects CEO 6", ceoProjects.length === 6
+  && ["AADS", "KIS", "GO100", "SF", "NTV2", "NAS"].every((p) => ceoProjects.includes(p)));
+check("badgeProjects ceo lowercase", badgeProjects(" ceo ").length === 6);
+check("badgeProjects AADS only", JSON.stringify(badgeProjects("AADS")) === JSON.stringify(["AADS"]));
+check("badgeProjects KIS only", JSON.stringify(badgeProjects("KIS")) === JSON.stringify(["KIS"]));
+const notif = (id: number, at: string): MockupNotification => ({
+  id, kind: "review_ready", title: "t", body: "b", link: "/chat", project: "AADS",
+  review_id: null, revision_id: null, read: false, created_at: at,
+});
+const merged = mergeBadgeNotifications([
+  { project: "AADS", items: [notif(1, "2026-10-14T01:00:00Z"), notif(3, "2026-10-16T01:00:00Z")] },
+  { project: "KIS", items: null },
+  { project: "GO100", items: [notif(2, "2026-10-15T01:00:00Z")] },
+]);
+check("merge newest first", merged.map((n) => n.id).join(",") === "3,2,1");
+check("merge source project", merged[1].sourceProject === "GO100" && merged[0].sourceProject === "AADS");
+check("merge failed project skipped", merged.length === 3);
+check("merge all failed empty", mergeBadgeNotifications([{ project: "AADS", items: null }]).length === 0);
 
 if (failed > 0) {
   console.error(`${failed} mockupReviewModel selftest(s) failed`);

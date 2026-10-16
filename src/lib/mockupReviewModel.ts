@@ -73,6 +73,33 @@ export function stripMockupFromUrl(pathname: string, search: string, hash: strin
   return `${pathname}${query ? `?${query}` : ""}${hash ?? ""}`;
 }
 
+// CEO 통합 워크스페이스(project_key=CEO)는 전 프로젝트의 목업 검토 알림을 한 배지에서 본다.
+export const CEO_PROJECT_KEY = "CEO";
+export const CEO_BADGE_PROJECTS: readonly string[] = ["AADS", "KIS", "GO100", "SF", "NTV2", "NAS"];
+
+export function badgeProjects(project: string): string[] {
+  const key = (project ?? "").trim().toUpperCase();
+  return key === CEO_PROJECT_KEY ? [...CEO_BADGE_PROJECTS] : [project];
+}
+
+export type BadgeNotification = MockupNotification & { sourceProject: string };
+
+// 프로젝트별 조회 결과를 합쳐 최신순으로 정렬한다. 실패한 프로젝트(null)는 건너뛴다.
+export function mergeBadgeNotifications(
+  results: ReadonlyArray<{ project: string; items: MockupNotification[] | null }>,
+): BadgeNotification[] {
+  const merged: BadgeNotification[] = [];
+  for (const r of results) {
+    if (!r.items) continue;
+    for (const n of r.items) merged.push({ ...n, sourceProject: r.project });
+  }
+  const time = (n: BadgeNotification) => {
+    const t = Date.parse(n.created_at);
+    return Number.isNaN(t) ? 0 : t;
+  };
+  return merged.sort((a, b) => time(b) - time(a) || b.id - a.id);
+}
+
 // 알림 link 는 서버가 만든 /chat 상대 경로만 따라간다.
 export function safeChatLink(link: string | null | undefined): string | null {
   const v = (link ?? "").trim();
