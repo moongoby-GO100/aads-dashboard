@@ -10,6 +10,13 @@ import { CodePanel } from "@/components/CodePanel";
 import { GoalPanel } from "@/components/GoalPanel";
 import { MockupReviewPanel } from "@/components/MockupReviewPanel";
 import { MockupReviewBadge } from "@/components/MockupReviewBadge";
+import { GoalStrip } from "@/components/chat/GoalStrip";
+import { DormancyCard } from "@/components/chat/DormancyCard";
+import {
+  cleanupCandidates, dormancyCardState, freshSignals, mergeStripSignals, pausedAutoApprovalGoals, shouldShowGoalStrip,
+  summarizeOpenGoals,
+  type GoalSignal, type StripGoal,
+} from "@/lib/goalStrip";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
@@ -2547,13 +2554,6 @@ function StreamingCaret({ height = 14, color = "var(--ct-accent)" }: { height?: 
 const RESPONSE_OVERVIEW_MIN_CHARS = 1200;
 const RESPONSE_OVERVIEW_MAX_SECTIONS = 7;
 const RESPONSE_OVERVIEW_SOURCE_TAG_RE = /\[(?:DB\s*조회|코드\s*확인|로그|명령|도구|검증|실측|출처|공식문서|미측정)[^\]]*\]/gi;
-function shortGoalTitle(title: string): string {
-  const t = (title || "").trim();
-  const numbered = t.match(/^#\s*(\d+)/);
-  if (numbered) return `#${numbered[1]}`;
-  const noParens = t.replace(/\s*[（(][^)）]*[)）]\s*$/, "").trim();
-  return noParens.length > 12 ? `${noParens.slice(0, 12)}…` : noParens;
-}
 
 type ApprovalScope = "single" | "mission" | "session" | "project";
 
@@ -4454,11 +4454,14 @@ export default function ChatPage() {
   // 규칙은 둘이다 — `#번호` 로 시작하면 그 번호가 이름이다(대표님도 그렇게
   // 부르신다). 아니면 괄호 부연을 떼고 12자에서 자른다. 전체 제목은
   // 마우스를 올리면 나온다.
-  const [sessionGoals, setSessionGoals] = useState<Array<{
-    goal_id: string; title: string; status: string; project: string;
-    progress: number; milestone: string | null; dispatch_note: string | null;
-    is_lead?: boolean;
-  }>>([]);
+  const [sessionGoals, setSessionGoals] = useState<StripGoal[]>([]);
+  // 띠의 자동승인·마지막 활동·정리 후보는 GET /goals 의 파생 신호를 목표 id 로 합친다.
+  // 이 조회가 실패해도 띠는 기존대로 그려진다(칩만 빠진다).
+  const [goalSignals, setGoalSignals] = useState<GoalSignal[] | null>(null);
+  const [goalSignalsError, setGoalSignalsError] = useState(false);
+  const [goalSignalsRetrying, setGoalSignalsRetrying] = useState(false);
+  const [unlinkedGoalJobs, setUnlinkedGoalJobs] = useState(0);
+  const [dormancyCardOpen, setDormancyCardOpen] = useState(false);
   // 담당 목표는 기본으로 접는다. 제목이 길어 여러 개면 대화를 가린다.
   const [goalStripOpen, setGoalStripOpen] = useState(false);
   const [goalsHalted, setGoalsHalted] = useState(false);
@@ -4504,21 +4507,38 @@ export default function ChatPage() {
     return null;
   }, [messages]);
 
+  const loadGoalSignals = useCallback(async (): Promise<boolean> => {
+    try {
+      const list = await chatApi<GoalSignal[]>("/goals");
+      setGoalSignals(Array.isArray(list) ? list : []);
+      setGoalSignalsError(false);
+      return true;
+    } catch {
+      setGoalSignalsError(true);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     const sid = activeSession?.id;
-    if (!sid) { setSessionGoals([]); setGoalsHalted(false); return; }
+    if (!sid) {
+      setSessionGoals([]); setGoalsHalted(false); setUnlinkedGoalJobs(0); setDormancyCardOpen(false);
+      return;
+    }
     let alive = true;
     const load = async () => {
       try {
-        const r = await chatApi<{ halted?: boolean; goals?: typeof sessionGoals }>(
+        const r = await chatApi<{ halted?: boolean; goals?: StripGoal[]; unlinked_count?: number }>(
           `/goals/for-session/${encodeURIComponent(sid)}`,
         );
         if (!alive) return;
         setSessionGoals(r.goals || []);
         setGoalsHalted(Boolean(r.halted));
+        setUnlinkedGoalJobs(Number(r.unlinked_count || 0));
       } catch {
         // 목표 조회 실패가 대화를 막으면 안 된다.
       }
+      if (alive) await loadGoalSignals();
     };
     void load();
     const iv = window.setInterval(() => {
@@ -4526,7 +4546,21 @@ export default function ChatPage() {
       void load();
     }, 30_000);
     return () => { alive = false; window.clearInterval(iv); };
-  }, [activeSession?.id]);
+  }, [activeSession?.id, loadGoalSignals]);
+
+  // 조회가 실패하면 이전 신호는 최신이 아니다 — 자동승인·요약·정리 후보에 쓰지 않는다.
+  const liveSignals = useMemo(() => freshSignals(goalSignals, goalSignalsError), [goalSignals, goalSignalsError]);
+  const stripGoals = useMemo(() => mergeStripSignals(sessionGoals, liveSignals), [sessionGoals, liveSignals]);
+  const stripSummary = useMemo(() => summarizeOpenGoals(liveSignals), [liveSignals]);
+  const cleanupPool = useMemo(() => cleanupCandidates(liveSignals), [liveSignals]);
+  const pausedAutoApproval = useMemo(() => pausedAutoApprovalGoals(liveSignals), [liveSignals]);
+  const showGoalStrip = shouldShowGoalStrip({
+    sessionGoalCount: sessionGoals.length, cleanupTotal: cleanupPool.total, unlinkedCount: unlinkedGoalJobs,
+    signalsError: goalSignalsError,
+  }) || dormancyCardOpen;
+  const dormancyState = dormancyCardState({
+    loaded: goalSignals !== null, error: goalSignalsError, candidates: cleanupPool,
+  });
 
   // 실매매 승인 대기 — 이 대화가 올린 요청만 띄운다.
   //
@@ -12876,123 +12910,48 @@ export default function ChatPage() {
                 : "이전 대화가 더 있습니다 — 위 '이전 대화 불러오기'를 눌러 주세요"}
             </div>
           )}
-          {sessionGoals.length > 0 && (
+          {showGoalStrip && (
             // 대화 목록 맨 위에 두면 스크롤과 함께 올라가 버린다 —
             // 메시지가 150건 넘는 창에서는 사실상 보이지 않는다. 붙여 둔다.
+            // 칩 정렬·아이콘·자동승인 칩은 승인 목업 b90bbca3 대로 GoalStrip 이 그린다.
             <div style={{
               position: "sticky", top: 0, zIndex: 5,
               margin: "0 0 8px", padding: "6px 0",
               background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
-              display: "flex", flexWrap: "nowrap", gap: 6, alignItems: "flex-start",
             }}>
-              {goalsHalted && (
-                <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "3px 9px", borderRadius: 999, border: "1px solid #dc2626", flexShrink: 0, whiteSpace: "nowrap" }}>
-                  전체 정지 중 — 조사만 가능합니다
-                </span>
-              )}
-              {(() => {
-                // 주도 목표를 앞에 세운다. 이 창이 책임지는 목표와 참여만
-                // 하는 목표는 무게가 다르다 (2026-09-15 대표님 지시).
-                const lead = sessionGoals.filter((g) => g.is_lead);
-                const member = sessionGoals.filter((g) => !g.is_lead);
-                const blocked = member.filter((g) => g.dispatch_note);
-                // **기본은 펼침이다.**
-                //
-                // 처음엔 담당 목표를 접어 두게 만들었는데, 대부분 세션은
-                // 주도 목표가 없어 띠가 통째로 사라졌다 — 대표님이 바로
-                // 알아채셨다("목표버튼이 숨겨져서 안보인다"). 가리지 않는
-                // 것과 안 보이는 것은 다르다.
-                //
-                // 이름을 짧게 줄여 놓았으므로(#310·#119) 네 개까지는 한 줄에
-                // 들어간다. 그보다 많을 때만 접는다. 막힌 목표는 언제나
-                // 보인다 — 접어 두면 막힌 줄 모른다.
-                const VISIBLE_MEMBERS = 4;
-                const shown = goalStripOpen
-                  ? member
-                  : member.filter((g, i) => i < VISIBLE_MEMBERS || g.dispatch_note);
-                const hidden = member.length - shown.length;
-                const chip = (g: typeof sessionGoals[number], isLead: boolean) => {
-                  const pct = Math.round(Number(g.progress || 0) <= 1 ? Number(g.progress || 0) * 100 : Number(g.progress || 0));
-                  const c = g.dispatch_note ? "#dc2626" : isLead ? "#d97706" : g.status === "active" ? "#2563eb" : "#64748b";
-                  const open = panelGoalId === g.goal_id;
-                  return (
-                    <button key={g.goal_id} type="button"
-                       title={`${isLead ? "주도 목표 — 이 창이 취합하고 판정합니다" : "담당 목표 — 맡은 몫을 진행합니다"}\n${g.title}${g.dispatch_note ? `\n막힘: ${g.dispatch_note}` : ""}`}
-                       onClick={() => { setPanelMockup(null); setPanelGoalId(open ? null : g.goal_id); }}
-                       style={{ display: "inline-flex", alignItems: "center", gap: 5, maxWidth: 260,
-                                flexShrink: 0,
-                                padding: isLead ? "4px 11px" : "3px 9px", borderRadius: 999,
-                                border: `${isLead ? 2 : 1}px solid ${c}`,
-                                background: open ? "rgba(37,99,235,.10)" : isLead ? "rgba(217,119,6,.08)" : "var(--ct-card)",
-                                fontSize: isLead ? 11.5 : 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      <span style={{ fontWeight: 800, color: c }}>
-                        {isLead ? "👑" : "●"} {shortGoalTitle(g.title)}
-                      </span>
-                      <span style={{ color: "var(--ct-text2)" }}>{pct}%</span>
-                      {isLead && g.milestone && (
-                        <span style={{ color: "var(--ct-text)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
-                          · {g.milestone}
-                        </span>
-                      )}
-                      {g.dispatch_note && <span style={{ color: "#dc2626", fontWeight: 700 }}>· 막힘</span>}
-                      <span style={{ color: "var(--ct-text2)" }}>{open ? "▴" : "▾"}</span>
-                    </button>
-                  );
-                };
-                return (
-                  <>
-                    {/* 칩만 스크롤한다. 펼침/접기 버튼을 스크롤 영역 안에 두면
-                        칩이 늘어날수록 마지막 줄로 밀려 잘린 높이 밖으로
-                        사라진다 — 2026-09-17 대표님 지적("목표 리스트가 버튼
-                        나오는 라인보다 커서 확인이 안되고 숨겨진다").
-                        버튼은 바깥 오른쪽에 고정해 항상 보이게 한다. */}
-                    <div style={{ flex: 1, minWidth: 0, display: "flex",
-                                  // 접힌 상태는 **버튼과 같은 한 줄**이다.
-                                  //
-                                  // 줄바꿈을 허용하면 칩이 늘어날수록 띠가 버튼
-                                  // 줄보다 높아지고, 그 높이를 62px 로 자르면
-                                  // 넘친 칩이 보이지 않는 안쪽 스크롤에 숨는다.
-                                  // 스크롤바가 없으니 더 있다는 것조차 모른다
-                                  // — 2026-09-17 대표님 지적("목표 리스트가
-                                  // 버튼 나오는 라인보다 커서 확인이 안되고
-                                  // 숨겨진다").
-                                  //
-                                  // 접혔을 때는 가로로 민다. 높이가 한 줄로
-                                  // 고정되므로 띠가 버튼 줄을 넘을 수 없다.
-                                  // 펼쳤을 때만 줄을 바꾼다.
-                                  flexWrap: goalStripOpen ? "wrap" : "nowrap",
-                                  gap: 6, alignItems: "center",
-                                  maxHeight: goalStripOpen ? 132 : undefined,
-                                  overflowX: goalStripOpen ? "hidden" : "auto",
-                                  overflowY: goalStripOpen ? "auto" : "hidden" }}>
-                      {lead.map((g) => chip(g, true))}
-                      {shown.map((g) => chip(g, false))}
-                    </div>
-                    {(hidden > 0 || (goalStripOpen && member.length > VISIBLE_MEMBERS)) && (
-                      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}>
-                        {hidden > 0 && (
-                          <button type="button" onClick={() => setGoalStripOpen(true)}
-                            title={member.filter((g) => !shown.includes(g)).map((g) => g.title).join("\n")}
-                            style={{ padding: "3px 9px", borderRadius: 999, border: "1px dashed var(--ct-border)",
-                                     background: "transparent", color: "var(--ct-text2)",
-                                     fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                            담당 목표 +{hidden}
-                          </button>
-                        )}
-                        {goalStripOpen && member.length > VISIBLE_MEMBERS && (
-                          <button type="button" onClick={() => setGoalStripOpen(false)}
-                            style={{ padding: "3px 7px", borderRadius: 999, border: 0, background: "transparent",
-                                     color: "var(--ct-text2)", fontSize: 11, cursor: "pointer",
-                                     whiteSpace: "nowrap" }}>
-                            접기
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+              <GoalStrip
+                goals={stripGoals}
+                halted={goalsHalted}
+                open={goalStripOpen}
+                onOpenChange={setGoalStripOpen}
+                panelGoalId={panelGoalId}
+                onToggleGoal={(goalId) => { setPanelMockup(null); setPanelGoalId(panelGoalId === goalId ? null : goalId); }}
+                summary={stripSummary}
+                unlinkedCount={unlinkedGoalJobs}
+                cleanupTotal={cleanupPool.total}
+                cardOpen={dormancyCardOpen}
+                onToggleCard={() => setDormancyCardOpen((v) => !v)}
+                signalsError={goalSignalsError}
+                isMobile={screenSize === "mobile"}
+              />
             </div>
+          )}
+          {dormancyCardOpen && (
+            <DormancyCard
+              state={dormancyState}
+              candidates={cleanupPool}
+              pausedAutoApproval={pausedAutoApproval}
+              openGoalCount={stripSummary ? stripSummary.open : null}
+              openP0Count={stripSummary ? stripSummary.p0 : null}
+              isMobile={screenSize === "mobile"}
+              retrying={goalSignalsRetrying}
+              onRetry={() => {
+                setGoalSignalsRetrying(true);
+                void loadGoalSignals().finally(() => setGoalSignalsRetrying(false));
+              }}
+              onClose={() => setDormancyCardOpen(false)}
+              onOpenGoal={(goalId) => { setPanelMockup(null); setPanelGoalId(goalId); }}
+            />
           )}
 
           <ChatErrorBoundary>
