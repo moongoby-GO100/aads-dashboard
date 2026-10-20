@@ -129,6 +129,9 @@ DEPLOY_RUN_ID=""
 DEPLOY_RESULT="failed"
 # phase 는 "어디까지 갔는지"를 남긴다. 실패로 끝나면 이 값이 멈춘 단계가 된다.
 DEPLOY_PHASE="initializing"
+# Step 6 에서 active/standby 컨테이너의 image ID(sha256:…)를 채운다. 비어 있으면 NULL 로 기록한다.
+DEPLOY_IMAGE_DIGEST=""
+DEPLOY_STANDBY_DIGEST=""
 
 _db_exec() {
     local out rc
@@ -161,6 +164,43 @@ record_deploy_phase() {
     return 0
 }
 
+# docker inspect {{.Image}} 형식(sha256:<64hex>)만 통과시킨다. 그 외 값은 빈 문자열(→ NULL).
+_normalize_image_digest() {
+    local v="${1:-}"
+    if [[ "$v" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+        printf '%s' "$v"
+    fi
+    return 0
+}
+
+# 릴리스 계보 기록 — 실패해도 배포 결과를 바꾸지 않는다(로그만).
+# 계보 INSERT 는 deploy_runs 가 success/completed 이고 image_digest = standby_digest 일 때만 들어가므로
+# 반드시 성공 UPDATE 이후에 호출한다. 대시보드 커밋 히스토리는 STATE_DIR(aads-dashboard 저장소)에 있다.
+record_dashboard_provenance() {
+    local run_id="$1"
+    local script="${AADS_PROVENANCE_SCRIPT:-${COMPOSE_DIR}/scripts/record-release-provenance.sh}"
+    local ref="${AADS_RELEASE_SHA:-}"
+    if [ ! -x "$script" ]; then
+        log "[provenance] 건너뜀 — 스크립트 없음: ${script}"
+        return 0
+    fi
+    if [ -z "$ref" ] || [ "$ref" = "unknown" ]; then
+        log "[provenance] 건너뜀 — 릴리스 SHA 미확정"
+        return 0
+    fi
+    if timeout 120 "$script" \
+        --repo "$STATE_DIR" \
+        --deploy-run-id "$run_id" \
+        --project AADS \
+        --component dashboard \
+        --release-ref "$ref" >> "$DEPLOY_LOG_FILE" 2>&1; then
+        log "[provenance] deploy_runs #${run_id} 릴리스 계보 기록 완료"
+    else
+        log "[provenance] WARN: 릴리스 계보 기록 실패 (배포는 성공 유지)"
+    fi
+    return 0
+}
+
 record_deploy_end() {
     [ -z "${DEPLOY_RUN_ID}" ] && return 0
     local _id="$DEPLOY_RUN_ID"
@@ -169,8 +209,18 @@ record_deploy_end() {
     _msg=$(tail -n 1 "$DEPLOY_LOG_FILE" 2>/dev/null | tr -d "'" | head -c 200 || true)
     [ -n "$_msg" ] || _msg="dashboard deploy failed"
     if [ "$DEPLOY_RESULT" = "success" ]; then
-        _db_exec "UPDATE deploy_runs SET status='success', phase='completed', phase_completed_at=NOW(), updated_at=NOW() WHERE id=${_id}" >/dev/null || true
-        log "[db] deploy_runs #${_id} 성공"
+        local _img _stb
+        _img="$(_normalize_image_digest "${DEPLOY_IMAGE_DIGEST:-}")"
+        _stb="$(_normalize_image_digest "${DEPLOY_STANDBY_DIGEST:-}")"
+        if [ -z "$_img" ] || [ -z "$_stb" ]; then
+            log "[db] WARN: image digest 확인 실패 (active='${DEPLOY_IMAGE_DIGEST:-}', standby='${DEPLOY_STANDBY_DIGEST:-}') — NULL 로 기록"
+        fi
+        if _db_exec "UPDATE deploy_runs SET status='success', phase='completed', phase_completed_at=NOW(), updated_at=NOW(), image_digest=NULLIF('${_img}',''), standby_digest=NULLIF('${_stb}','') WHERE id=${_id}" >/dev/null; then
+            log "[db] deploy_runs #${_id} 성공 (image=${_img:-NULL}, standby=${_stb:-NULL})"
+            record_dashboard_provenance "$_id" || true
+        else
+            log "[db] WARN: deploy_runs #${_id} 성공 UPDATE 실패 — 계보 기록 생략"
+        fi
     else
         _db_exec "UPDATE deploy_runs SET status='failed', phase='${DEPLOY_PHASE}', phase_completed_at=NOW(), updated_at=NOW(), error_summary='${_msg}' WHERE id=${_id}" >/dev/null || true
         log "[db] deploy_runs #${_id} 실패 (${_msg})"
@@ -620,6 +670,8 @@ if [ -n "$PREV_IMAGE" ] && [ -n "$TARGET_IMAGE" ] && [ "$PREV_IMAGE" != "$TARGET
     log "FAIL: active/standby image digest 불일치 (active=${TARGET_IMAGE}, standby=${PREV_IMAGE})"
     exit 1
 fi
+DEPLOY_IMAGE_DIGEST="$TARGET_IMAGE"
+DEPLOY_STANDBY_DIGEST="$PREV_IMAGE"
 if [ -n "$PREV_RELEASE" ] && [ -n "$TARGET_RELEASE" ] && [ "$PREV_RELEASE" != "$TARGET_RELEASE" ]; then
     log "WARN: standby release 불일치 감지 (active=${TARGET_RELEASE}, standby=${PREV_RELEASE})"
 elif [ -n "$TARGET_RELEASE" ]; then
