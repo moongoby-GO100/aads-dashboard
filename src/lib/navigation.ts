@@ -63,6 +63,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/design/modifications", label: "Design Studio", icon: "🎨", adminOnly: true, group: "자동화" },
   { href: "/projects", label: "Pipeline", icon: "🔧", adminOnly: true, group: "일·프로젝트" },
   { href: "/ops", label: "운영 현황", icon: "📊", adminOnly: true, group: "운영·서버" },
+  { href: "/aag", label: "아키텍처 상태", icon: "🏗️", adminOnly: true, group: "운영·서버" },
   { href: "/ops/recovery", label: "Recovery", icon: "🔄", adminOnly: true, group: "운영·서버" },
   { href: "/ops/ai-errors", label: "AI 응답 오류", icon: "⚠️", adminOnly: true, group: "운영·서버" },
   { href: "/ops/servers", label: "Servers", icon: "🖥️", adminOnly: true, group: "운영·서버" },

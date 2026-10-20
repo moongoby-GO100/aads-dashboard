@@ -17,7 +17,8 @@
     "test:chat:docs": "node docs/chat-modernization-20260912/verify-docs.mjs",
     "test:chat:change-impact": "node docs/chat-modernization-20260912/verify-change-impact.mjs",
     "test:chat:ci": "npm run typecheck && npm run lint:chat && npm run selftest && npm run test:chat && npm run test:chat:security && npm run test:chat:baseline && npm run test:chat:docs && npm run test:chat:change-impact",
-    "test:approval:browser": "node --test tests/browser/approval-browser.test.mjs",
+    "test:aag:browser": "node --test tests/aag/aag-operations-browser.test.mjs",
+    "test:approval:browser":"node --test tests/browser/approval-browser.test.mjs",
     "test:approval:browser:install": "node node_modules/playwright-core/cli.js install chromium"
   },
   "dependencies": {
