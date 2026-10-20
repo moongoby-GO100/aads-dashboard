@@ -178,14 +178,33 @@ _normalize_image_digest() {
 # 반드시 성공 UPDATE 이후에 호출한다. 대시보드 커밋 히스토리는 STATE_DIR(aads-dashboard 저장소)에 있다.
 record_dashboard_provenance() {
     local run_id="$1"
-    local script="${AADS_PROVENANCE_SCRIPT:-${COMPOSE_DIR}/scripts/record-release-provenance.sh}"
+    local script="${AADS_PROVENANCE_SCRIPT:-}"
     local ref="${AADS_RELEASE_SHA:-}"
-    if [ ! -x "$script" ]; then
-        log "[provenance] 건너뜀 — 스크립트 없음: ${script}"
-        return 0
-    fi
+    local tmp_script=""
     if [ -z "$ref" ] || [ "$ref" = "unknown" ]; then
         log "[provenance] 건너뜀 — 릴리스 SHA 미확정"
+        return 0
+    fi
+    # 호스트 checkout 은 origin/main 과 갈라져 있을 수 있어 pull 하지 않고 origin/main 의 스크립트 사본을 직접 꺼내 실행한다.
+    if [ -z "$script" ]; then
+        local rel_path="scripts/record-release-provenance.sh"
+        tmp_script="$(mktemp "${TMPDIR:-/tmp}/record-release-provenance.XXXXXX" 2>/dev/null || true)"
+        if [ -n "$tmp_script" ] \
+            && timeout 60 git -C "$COMPOSE_DIR" fetch -q origin >> "$DEPLOY_LOG_FILE" 2>&1 \
+            && git -C "$COMPOSE_DIR" show "origin/main:${rel_path}" > "$tmp_script" 2>> "$DEPLOY_LOG_FILE" \
+            && [ -s "$tmp_script" ] \
+            && chmod +x "$tmp_script"; then
+            script="$tmp_script"
+        else
+            log "[provenance] WARN: origin/main 스크립트 사용 불가 — 로컬 사본 사용"
+            [ -z "$tmp_script" ] || rm -f "$tmp_script"
+            tmp_script=""
+            script="${COMPOSE_DIR}/${rel_path}"
+        fi
+    fi
+    if [ ! -x "$script" ]; then
+        log "[provenance] 건너뜀 — 스크립트 없음: ${script}"
+        [ -z "$tmp_script" ] || rm -f "$tmp_script"
         return 0
     fi
     if timeout 120 "$script" \
@@ -198,6 +217,7 @@ record_dashboard_provenance() {
     else
         log "[provenance] WARN: 릴리스 계보 기록 실패 (배포는 성공 유지)"
     fi
+    [ -z "$tmp_script" ] || rm -f "$tmp_script"
     return 0
 }
 
