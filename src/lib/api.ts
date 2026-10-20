@@ -780,6 +780,16 @@ export interface RunnerHostPolicySaveResult {
 
 const _meInflight = new Map<string, Promise<MeResponse | null>>();
 
+export type GoalApprovalOption = { label: string; description: string; risk_tone: "warning" | "danger" };
+export type GoalApprovalPolicy = {
+  auto_approve_high: boolean;
+  auto_approve_critical: boolean;
+  max_executions: number;
+  used: number;
+  profile?: "trading" | "general";
+  options?: Partial<Record<"auto_approve_high" | "auto_approve_critical", GoalApprovalOption>>;
+};
+
 export const api = {
   getInboxSummary: () => inboxRequest<InboxSummary>("/inbox/summary"),
   getInbox: (params: InboxListParams) => {
@@ -1706,7 +1716,7 @@ export const api = {
       body: JSON.stringify({ projects }),
     }),
   getGoalApprovalPolicy: (goalId: string) =>
-    request<any>(`/goals/${encodeURIComponent(goalId)}/approval-policy`),
+    request<GoalApprovalPolicy>(`/goals/${encodeURIComponent(goalId)}/approval-policy`),
   setGoalApprovalPolicy: (
     goalId: string,
     body: { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number },

@@ -43,7 +43,7 @@ function fixture() {
   });
   return { calls, requests, confirmations, setConfirm:v=>confirm=v,
     render(id='a', project='GO100') { cursor=0; const result=mod.exports.useGoalApprovalPolicy(id, project); effects.splice(0).forEach(fn=>fn()); return result; },
-    controls:mod.exports.GoalApprovalControls,
+    controls:mod.exports.GoalApprovalControls, summary:mod.exports.approvalSummary,
   };
 }
 const initial={auto_approve_high:true,auto_approve_critical:false,max_executions:200,used:2};
@@ -197,8 +197,10 @@ for (const project of ['AADS','SF','NTV2','KIS','GO100']) test(`${project}: exis
  const f=fixture();f.render('a',project);f.requests[0].resolve(initial);await Promise.resolve();
  let h=f.render('a',project);assert.equal(h.supported,true);assert.equal(h.policy.used,2);
  let p=h.savePolicy({auto_approve_critical:true});assert.equal(f.calls.length,1);
- assert.match(f.confirmations[0],/다음 단계 제안/);
- assert.equal(f.confirmations[0].includes('금전 손실'),['KIS','GO100'].includes(project));
+ const trading=['KIS','GO100'].includes(project);
+ assert.match(f.confirmations[0],trading?/다음 단계 제안/:/^고위험 단계 제안까지 이 목표 동안 묻지 않고 통과시킵니다\. 계속할까요\?$/);
+ assert.equal(f.confirmations[0].includes('금전 손실'),trading);
+ assert.equal(f.confirmations[0].includes('주문·자금'),trading);
  f.calls[0].resolve({});await p;h=f.render('a',project);
  p=h.savePolicy({auto_approve_high:false,auto_approve_critical:false});
  f.calls[1].resolve({});await p;h=f.render('a',project);
@@ -239,11 +241,29 @@ for (const [project, profile] of [['GO100','trading'],['KIS','trading'],['AADS',
   }
  });
 }
-test('old server without options preserves the preceding approval UI wording', async () => {
+test('old server without options falls back to neutral wording; financial warning only for trading projects', async () => {
  const f=fixture(); const h=await ready(f); const text=visibleText(f.controls({...h,project:'GO100'}));
- assert.ok(text.includes('critical 이외 다음 단계 제안 / high 실행 게이트 사전승인'));
- assert.ok(text.includes('critical 다음 단계 제안 / 실행 게이트 사전승인'));
+ assert.ok(text.includes('다음 단계 자동 진행'));
+ assert.ok(text.includes('고위험 단계까지 자동 진행'));
+ assert.equal(text.includes('주문·자금까지 미리 승인'),false);
  assert.ok(text.includes('실제 금전 손실 위험'));
+ const g=fixture(); g.render('a','AADS'); g.requests[0].resolve(initial); await Promise.resolve();
+ const general=visibleText(g.controls({...g.render('a','AADS'),project:'AADS'}));
+ assert.equal(general.includes('금전 손실'),false);
+});
+test('GoalPanel renders no order/fund/live-trading wording for general goals; trading shows server labels', async () => {
+ const panel=fs.readFileSync('src/components/GoalPanel.tsx','utf8');
+ assert.doesNotMatch(panel,/주문·자금|실매매 코드|미리 승인/);
+ for (const [project, profile] of [['AADS','general'],['ACCT','general'],['GO100','trading']]) {
+  const f=fixture(); const options=profileOptions(profile);
+  f.render('a',project); f.requests[0].resolve({...initial,auto_approve_critical:true,profile,options}); await Promise.resolve();
+  const h=f.render('a',project);
+  const text=visibleText(f.controls({...h,project}))+' '+f.summary(h.policy,true);
+  assert.equal(/주문·자금|실매매/.test(text),profile==='trading',`${project}: ${text}`);
+  if (profile==='trading') assert.ok(f.summary(h.policy,true).includes('주문·자금까지 미리 승인'));
+  else assert.equal(f.summary(h.policy,true),'고위험 단계까지 자동 진행');
+ }
+ assert.equal(fixture().summary({auto_approve_high:true,auto_approve_critical:false},true),'다음 단계 자동 진행');
 });
 test('both goal screens retain the shared profile controls', () => {
  for (const path of ['src/components/GoalPanel.tsx','src/app/goals/page.tsx']) {
