@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { GoalApprovalControls, useGoalApprovalPolicy } from "@/components/GoalApprovalControls";
+import { GoalApprovalControls, approvalSummary, useGoalApprovalPolicy } from "@/components/GoalApprovalControls";
 import { api } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
@@ -402,9 +402,7 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
               승인 설정 · 담당 {crew.length}명{board?.documents?.length ? ` · 문서 ${board.documents.length}` : ""}
             </span>
             <span style={{ color: policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--text-secondary)" }}>
-              {policy?.auto_approve_critical ? "critical 제안·실행 게이트 사전승인"
-                : policy?.auto_approve_high ? "critical 이외 제안·high 실행 게이트 사전승인"
-                : (!approvalControls.supported ? "목표 프로젝트 확인 대기" : "목표 정책 자동승인 꺼짐")}
+              {approvalSummary(policy, approvalControls.supported)}
             </span>
           </summary>
           {/* 펼쳐도 마일스톤을 밀어내지 않도록 여기까지만 쓴다 — 이 상한이

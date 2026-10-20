@@ -1,16 +1,25 @@
 "use client";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type GoalApprovalPolicy } from "@/lib/api";
 
 export const supportsGoalApproval = (project?: string) => Boolean(project?.trim());
 
-type ApprovalOption = { label: string; description: string; risk_tone: "warning" | "danger" };
+const FINANCIAL_PROJECTS = ["KIS", "GO100"];
+const NEUTRAL_HIGH_LABEL = "다음 단계 자동 진행";
+const NEUTRAL_CRITICAL_LABEL = "고위험 단계까지 자동 진행";
+const GENERAL_CRITICAL_CONFIRM = "고위험 단계 제안까지 이 목표 동안 묻지 않고 통과시킵니다. 계속할까요?";
+
+// 서버 profile 이 정본. 구서버(profile 없음)만 프로젝트명으로 실매매 여부를 추정한다.
+export const isTradingApproval = (policy: { profile?: string } | null | undefined, project?: string) =>
+  policy?.profile ? policy.profile === "trading" : FINANCIAL_PROJECTS.includes(project?.toUpperCase() || "");
+
+export const approvalSummary = (policy: Policy | null | undefined, supported: boolean) =>
+  policy?.auto_approve_critical ? (policy.options?.auto_approve_critical?.label ?? NEUTRAL_CRITICAL_LABEL)
+    : policy?.auto_approve_high ? (policy.options?.auto_approve_high?.label ?? NEUTRAL_HIGH_LABEL)
+    : (!supported ? "목표 프로젝트 확인 대기" : "목표 정책 자동승인 꺼짐");
+
 type PolicyValues = { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number };
-type Policy = PolicyValues & {
-  used: number;
-  profile?: "trading" | "general";
-  options?: Partial<Record<"auto_approve_high" | "auto_approve_critical", ApprovalOption>>;
-};
+type Policy = GoalApprovalPolicy;
 export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
   const [state, setState] = useState<{ id: string; epoch: number; policy: Policy } | null>(null);
   const [error, setError] = useState("");
@@ -45,7 +54,9 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
       ...patch,
     };
     if (patch.auto_approve_critical === true && !policy.auto_approve_critical &&
-      !window.confirm(`${project} 목표에 연결된 세션의 critical 다음 단계 제안을 미리 승인합니다.\n실행 게이트는 대상 프로젝트·위험도·횟수를 별도로 검사하며, 모든 도구 실행을 허용하지 않습니다.${["KIS", "GO100"].includes(project?.toUpperCase() || "") ? "\n실매매 서비스·주문·자금 경로에도 적용될 수 있어 실제 금전 손실 위험이 있습니다." : ""} 계속할까요?`)) return;
+      !window.confirm(isTradingApproval(policy, project)
+        ? `${project} 목표에 연결된 세션의 critical 다음 단계 제안을 미리 승인합니다.\n실행 게이트는 대상 프로젝트·위험도·횟수를 별도로 검사하며, 모든 도구 실행을 허용하지 않습니다.\n실매매 서비스·주문·자금 경로에도 적용될 수 있어 실제 금전 손실 위험이 있습니다. 계속할까요?`
+        : GENERAL_CRITICAL_CONFIRM)) return;
     const epoch = generation.current;
     lock.current = true; setSaving(true); setError("");
     try {
@@ -72,16 +83,16 @@ export function GoalApprovalControls({ policy, savePolicy, saving, policyError, 
     {project && sessionProject && project.toUpperCase() !== sessionProject.toUpperCase() && <p role="alert">현재 대화({sessionProject})와 목표 프로젝트({project})가 다릅니다. 실행 게이트는 대상 프로젝트 일치를 검사하지만, 다음 단계 제안은 목표·세션 연결을 기준으로 적용됩니다.</p>}
     <p>{!project ? "목표 프로젝트 조회 대기 중 — 승인 설정을 변경할 수 없습니다." : "연결된 세션의 다음 단계 제안에 위험도별로 적용됩니다. 실행 게이트는 대상 프로젝트·위험도·남은 횟수를 별도로 검사합니다. 모든 도구 실행을 허용하는 설정은 아닙니다."}</p>
     <p>다음 단계 제안은 활성 연결과 진행 중 목표(draft/active/blocked), 남은 횟수를 확인하며 제안 자체는 횟수를 차감하지 않습니다. critical 이외의 제안은 첫 번째 설정을 사용합니다. DB 쓰기처럼 대상 프로젝트를 확정하지 않는 실행은 이 정책으로 자동 통과하지 않습니다.</p>
-    {["KIS", "GO100"].includes(project?.toUpperCase() || "") && <p role="alert">실매매 경로 및 서비스·주문·자금 변경에도 적용될 수 있습니다. 실제 금전 손실 위험이 있습니다.</p>}
+    {isTradingApproval(policy, project) && <p role="alert">실매매 경로 및 서비스·주문·자금 변경에도 적용될 수 있습니다. 실제 금전 손실 위험이 있습니다.</p>}
     <fieldset disabled={!policy || saving} style={{ border: 0, padding: 0, marginTop: 6 }}>
     <legend>{project || "현재 목표"} 승인 범위</legend>
     <label><input type="checkbox" checked={all} disabled={!supported && !all && !partial} ref={el => { if (el) el.indeterminate = partial; }}
       onChange={e => void savePolicy({ auto_approve_high: supported && e.target.checked, auto_approve_critical: supported && e.target.checked })} /> 전체 선택 / 전체 해제</label>
     <label style={{ display: "block" }}><input type="checkbox" disabled={!supported && !policy?.auto_approve_high} checked={!!policy?.auto_approve_high}
-      onChange={e => void savePolicy({ auto_approve_high: e.target.checked })} /> {high?.label ?? "critical 이외 다음 단계 제안 / high 실행 게이트 사전승인"}
+      onChange={e => void savePolicy({ auto_approve_high: e.target.checked })} /> {high?.label ?? NEUTRAL_HIGH_LABEL}
       {high?.description && <span style={{ display: "block" }}>{high.description}</span>}</label>
     <label style={{ display: "block", color: "#dc2626" }}><input type="checkbox" disabled={!supported && !policy?.auto_approve_critical} checked={!!policy?.auto_approve_critical}
-      onChange={e => void savePolicy({ auto_approve_critical: e.target.checked })} /> {critical?.label ?? "critical 다음 단계 제안 / 실행 게이트 사전승인"}
+      onChange={e => void savePolicy({ auto_approve_critical: e.target.checked })} /> {critical?.label ?? NEUTRAL_CRITICAL_LABEL}
       {critical?.description && <span style={{ display: "block" }}>{critical.description}</span>}</label>
     {saving && <p role="status">저장 중…</p>}
   </fieldset>
