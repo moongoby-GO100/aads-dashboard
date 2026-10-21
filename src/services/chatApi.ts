@@ -163,6 +163,8 @@ export interface SSEChunk {
   max_attempts?: number;
 }
 
+export type ChatResponseMode = "quality" | "fast" | "plan";
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const chatApi = {
@@ -235,7 +237,7 @@ export const chatApi = {
     modelOverride?: string,
     signal?: AbortSignal,
     attachments?: Array<{ name: string; path: string }>,
-    responseMode: "quality" | "fast" = "quality",
+    responseMode: ChatResponseMode = "quality",
   ): Promise<ReadableStreamDefaultReader<Uint8Array>> => {
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
