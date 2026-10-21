@@ -50,6 +50,7 @@ import {
 } from "@/services/voiceAlerts";
 import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import { BASE_URL, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
+import type { ChatResponseMode } from "@/services/chatApi";
 import { processInline, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
 import { emitChatSessionTitleChange } from "@/lib/pageTitleEvents";
@@ -683,6 +684,8 @@ const DESIGN_REQUEST_TYPE_LABELS: Record<string, string> = {
   workflow_layout: "업무 흐름",
   other: "기타",
 };
+
+const RESPONSE_MODE_PLAN_HINT = "읽기·분석·계획만 수행하며 파일 수정, 명령 실행 등 실행은 차단됩니다.";
 
 const DEFAULT_ROLE_OPTIONS = [
   { id: "GeneralAssistant", label: "General" },
@@ -4432,7 +4435,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [hasInput, setHasInput] = useState(false);
   const [model, setModel] = useState(DEFAULT_RUNTIME_MODEL);
-  const [responseMode, setResponseMode] = useState<"quality" | "fast">("quality");
+  const [responseMode, setResponseMode] = useState<ChatResponseMode>("quality");
   const [savedMobileChatFontPx, setMobileChatFontPx] = useState(19);
   const mobileChatFontPx = panelMode ? PANEL_BODY_FONT_PX : savedMobileChatFontPx;
   const [roleKey, setRoleKey] = useState("CEO");
@@ -4443,7 +4446,7 @@ export default function ChatPage() {
   const [modelPreferences, setModelPreferences] = useState<ChatModelPreference[]>([]);
   useEffect(() => {
     const savedMode = localStorage.getItem("aads-chat-response-mode");
-    if (savedMode === "fast" || savedMode === "quality") {
+    if (savedMode === "fast" || savedMode === "quality" || savedMode === "plan") {
       setResponseMode(savedMode);
     }
   }, []);
@@ -10249,7 +10252,7 @@ export default function ChatPage() {
     let full = "";
     let regenGotFinal = false;
     try {
-      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate?mode=${encodeURIComponent(mode)}`, {
+      const res = await fetch(`${BASE_URL}/chat/messages/${msgId}/regenerate?mode=${encodeURIComponent(mode)}${responseModeRef.current === "plan" ? "&response_mode=plan" : ""}`, {
         method: "POST",
         credentials: "include",
         headers: { ...authHdrs() },
@@ -12622,11 +12625,14 @@ export default function ChatPage() {
           <select
             value={responseMode}
             onChange={(e) => {
-              const nextMode = e.target.value === "fast" ? "fast" : "quality";
+              const nextMode: ChatResponseMode = e.target.value === "fast" ? "fast" : e.target.value === "plan" ? "plan" : "quality";
+              responseModeRef.current = nextMode;
               setResponseMode(nextMode);
               localStorage.setItem("aads-chat-response-mode", nextMode);
             }}
-            title="응답 모드"
+            title={responseMode === "plan" ? RESPONSE_MODE_PLAN_HINT : "응답 모드"}
+            aria-label="응답 모드"
+            data-testid="chat-response-mode"
             style={{
               fontSize: "12px",
               padding: "5px 8px",
@@ -12642,6 +12648,7 @@ export default function ChatPage() {
           >
             <option value="quality">완성 우선</option>
             <option value="fast">빠른 완료</option>
+            <option value="plan">계획만</option>
           </select>
 
           <button
@@ -14497,6 +14504,15 @@ export default function ChatPage() {
           {screenSize !== "mobile" && <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", gap: "8px" }}>
             <ChatOpsDock activeSessionId={activeSession?.id || null} screenSize={screenSize} />
           </div>}
+          {responseMode === "plan" && (
+            <div
+              data-testid="chat-response-mode-plan-hint"
+              role="note"
+              style={{ fontSize: "12px", lineHeight: 1.4, color: "var(--ct-text2)", marginBottom: "6px", padding: "0 4px" }}
+            >
+              📝 계획만: {RESPONSE_MODE_PLAN_HINT}
+            </div>
+          )}
           {/* Textarea + send button — mobile: [+] [textarea [send]] */}
           <div style={{
             display: "flex",
