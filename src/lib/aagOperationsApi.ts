@@ -1,7 +1,7 @@
 // 아키텍처 상태 API. 로그인한 사용자 본인 토큰(getAuthHeaders)만 보낸다 — 읽기 전용, 쓰기/재스캔 호출 없음.
 import { getAuthHeaders } from "@/lib/api";
 import {
-  classifyApiError, isOperations, type AagErrorView, type AagFilters, type FindingsPage, type OperationsResponse,
+  classifyApiError, isMermaid, isOperations, type AagErrorView, type AagFilters, type FindingsPage, type MermaidResponse, type OperationsResponse,
 } from "@/lib/aagOperations";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -29,7 +29,7 @@ function redirectToLogin(): void {
   }
 }
 
-async function getJson<T>(url: string, endpoint: "operations" | "findings", signal?: AbortSignal): Promise<T> {
+async function getJson<T>(url: string, endpoint: "operations" | "findings" | "mermaid", signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -60,6 +60,11 @@ export function operationsUrl(f: AagFilters): string {
   return `${BASE_URL}/aag/v2/operations?${q.toString()}`;
 }
 
+export function mermaidUrl(f: AagFilters): string {
+  const q = new URLSearchParams({ project: f.project, repository_id: f.repositoryId, target_ref: f.targetRef });
+  return `${BASE_URL}/aag/v2/mermaid?${q.toString()}`;
+}
+
 export type FindingsOpts = { cursor?: string | null; pageSize?: number; stableKey?: string | null };
 
 export function findingsUrl(f: AagFilters, snapshotId: string, opts: FindingsOpts = {}): string {
@@ -75,6 +80,11 @@ export const aagApi = {
   getOperations: async (f: AagFilters, signal?: AbortSignal): Promise<OperationsResponse> => {
     const data = await getJson<unknown>(operationsUrl(f), "operations", signal);
     if (!isOperations(data)) throw new AagApiError(classifyApiError(502, null, "operations"));
+    return data;
+  },
+  getMermaid: async (f: AagFilters, signal?: AbortSignal): Promise<MermaidResponse> => {
+    const data = await getJson<unknown>(mermaidUrl(f), "mermaid", signal);
+    if (!isMermaid(data)) throw new AagApiError(classifyApiError(502, null, "mermaid"));
     return data;
   },
   getFindings: (f: AagFilters, snapshotId: string, opts: FindingsOpts = {}, signal?: AbortSignal) =>

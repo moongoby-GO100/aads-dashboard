@@ -353,6 +353,26 @@ export function buildRecoveryViews(actions: readonly RecoveryAction[] | undefine
   }];
 }
 
+// ---- 아키텍처 다이어그램 ---------------------------------------------------
+
+export type MermaidResponse = {
+  snapshot_id: string;
+  generated_at?: string | null;
+  resolved_commit_sha?: string | null;
+  node_count?: number | null;
+  edge_count?: number | null;
+  shown_namespaces?: number | null;
+  total_namespaces?: number | null;
+  truncated?: boolean;
+  mermaid: string;
+};
+
+export function isMermaid(v: unknown): v is MermaidResponse {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.mermaid === "string" && typeof o.snapshot_id === "string";
+}
+
 // ---- 오류 분류 -------------------------------------------------------------
 
 export type AagErrorKind =
@@ -380,7 +400,7 @@ export function detailText(body: unknown): string {
   return "";
 }
 
-export function classifyApiError(status: number, body: unknown, endpoint: "operations" | "findings" = "operations"): AagErrorView {
+export function classifyApiError(status: number, body: unknown, endpoint: "operations" | "findings" | "mermaid" = "operations"): AagErrorView {
   const detail = detailText(body).toLowerCase();
   const mk = (kind: AagErrorKind, title: string, message: string, action: string, retryable: boolean, loginRequired = false): AagErrorView =>
     ({ kind, status, title, message, action, retryable, loginRequired });
@@ -399,6 +419,9 @@ export function classifyApiError(status: number, body: unknown, endpoint: "opera
     }
     if (detail.includes("disabled")) {
       return mk("disabled", "아키텍처 상태 조회가 꺼져 있습니다", "서버에서 AAG v2 조회가 비활성화되어 있습니다.", "운영 담당에게 활성화 여부를 확인하세요.", true);
+    }
+    if (endpoint === "mermaid") {
+      return mk("not_scanned", "이 저장소의 스냅샷이 아직 없습니다", "검증된 최신 스냅샷이 없어 다이어그램을 그릴 수 없습니다. 결함이 없다는 뜻이 아닙니다.", "최초 스캔이 필요합니다. 스캔 실행은 운영 승인 후 진행됩니다.", true);
     }
     if (endpoint === "operations") {
       return mk("endpoint_missing", "상태 요약 API가 아직 준비되지 않았습니다", "서버가 상태 요약 경로를 알지 못합니다. 아직 배포되지 않았을 수 있습니다.", "배포 상태를 확인하세요. 이 화면은 준비되는 즉시 같은 주소로 읽습니다.", true);

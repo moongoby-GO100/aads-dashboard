@@ -1,6 +1,6 @@
 import {
   buildAxisViews, buildRecoveryViews, classifyApiError, coverageProof, filtersToSearch, findingsMatchSnapshot,
-  formatAge, isOperations, normalizeFinding, resolveFilters, summarizeAxes,
+  formatAge, isMermaid, isOperations, normalizeFinding, resolveFilters, summarizeAxes,
   DEFAULT_FILTERS, type OperationsAxes,
 } from "./aagOperations";
 
@@ -98,6 +98,15 @@ check("evidence holds raw ids", f.evidence.some(([k]) => k === "stable_finding_k
 // 스냅샷 고정
 check("snapshot match", findingsMatchSnapshot({ snapshot_id: "s1" }, "s1") && !findingsMatchSnapshot({ snapshot_id: "s2" }, "s1") && !findingsMatchSnapshot(null, "s1"));
 check("age format", formatAge(5) === "5분 전" && formatAge(120) === "2시간 전" && formatAge(null) === "경과 시간 미확인");
+
+// 아키텍처 다이어그램: 404 = 스냅샷 없음, 성공 응답 판별
+const m404 = classifyApiError(404, { detail: "aads 프로젝트의 최신 AAG v2 스냅샷이 없습니다" }, "mermaid");
+check("mermaid 404 => not_scanned with snapshot-missing title", m404.kind === "not_scanned" && m404.title === "이 저장소의 스냅샷이 아직 없습니다" && m404.retryable);
+check("mermaid 404 disabled => disabled", classifyApiError(404, { detail: "AAG v2 is disabled" }, "mermaid").kind === "disabled");
+check("mermaid 500 => server", classifyApiError(500, null, "mermaid").kind === "server");
+check("mermaid 401 => auth", classifyApiError(401, null, "mermaid").loginRequired);
+check("mermaid success shape", isMermaid({ snapshot_id: "s1", mermaid: "graph LR\n  A-->B", truncated: false }));
+check("mermaid rejects bad shape", !isMermaid(null) && !isMermaid({ snapshot_id: "s1" }) && !isMermaid({ mermaid: "x" }));
 
 if (failed > 0) {
   console.error(`${failed} aag operations selftest(s) failed`);

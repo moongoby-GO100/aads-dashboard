@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
+import ArchitectureDiagram from "@/components/aag/ArchitectureDiagram";
 import { AxisCard, ErrorPanel, FindingRow, FOCUS_RING, RecoveryList, SectionCard, TOUCH } from "@/components/aag/AagParts";
 import { AagApiError, aagApi } from "@/lib/aagOperationsApi";
 import {
@@ -45,6 +46,7 @@ function AagScreen() {
   const [findings, setFindings] = useState<FindingsState | null>(null);
   const [findingsError, setFindingsError] = useState<AagErrorView | null>(null);
   const [findingsLoading, setFindingsLoading] = useState(false);
+  const [archOpen, setArchOpen] = useState(false);
   const [pinned, setPinned] = useState<{ key: string; item: FindingView | null; missing: boolean } | null>(null);
 
   const opsAbort = useRef<AbortController | null>(null);
@@ -316,6 +318,31 @@ function AagScreen() {
               <p className="mt-3 text-sm" style={{ color: "var(--text-secondary)" }}>
                 네 상태는 하나로 합치지 않습니다. 하나라도 &lsquo;미입증&rsquo;이면 &lsquo;문제 없음&rsquo;으로 읽지 마세요.
               </p>
+            </SectionCard>
+
+            <SectionCard
+              id="aag-architecture"
+              title="아키텍처 다이어그램"
+              aside={
+                <button
+                  type="button"
+                  aria-expanded={archOpen}
+                  aria-controls="aag-architecture-panel"
+                  onClick={() => setArchOpen((v) => !v)}
+                  className={`${TOUCH} rounded-lg px-4 text-sm font-semibold ${FOCUS_RING}`}
+                  style={{ background: "#e2e8f0", color: "#0f172a" }}
+                >
+                  {archOpen ? "접기" : "펼치기"}
+                </button>
+              }
+            >
+              <div id="aag-architecture-panel" className="min-w-0">
+                {archOpen ? (
+                  <ArchitectureDiagram target={target} loginHref={loginHref} />
+                ) : (
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>펼치면 최신 스냅샷의 네임스페이스 구조도를 불러옵니다.</p>
+                )}
+              </div>
             </SectionCard>
 
             <SectionCard id="aag-recovery" title="복구 안내">
