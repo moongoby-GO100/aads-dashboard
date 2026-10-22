@@ -1186,7 +1186,10 @@ function messagesBelongToSameTurn(left: ChatMessage, right: ChatMessage, context
   if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return false;
   const start = Math.min(leftTime, rightTime);
   const end = Math.max(leftTime, rightTime);
+  // The two messages being compared are not separators of their own turn; without
+  // this, a local user echo never matched its own saved copy (duplicate bubble).
   return !context.some((message) => message.session_id === left.session_id && message.role === "user"
+    && message.id !== left.id && message.id !== right.id
     && messageTime(message) > start && messageTime(message) <= end);
 }
 
@@ -2263,7 +2266,9 @@ function mergeServerMessagesPreservingLocal(
   const mergedIncoming = incomingMessages.map((serverMessage) => {
     const existingMessage = prev.find((message) => message.id === serverMessage.id);
     const serverMessageWithPreservedContent = mergeServerMessageWithExisting(existingMessage, serverMessage);
-    const localMatch = findLocalMatchForServerMessage(
+    // A user message already on screen is not the server copy of a new local echo,
+    // even when the text is identical (intentional repeat).
+    const localMatch = existingMessage && serverMessage.role === "user" ? undefined : findLocalMatchForServerMessage(
       localMessages.filter((localMessage) => !matchedLocalIds.has(localMessage.id)),
       serverMessageWithPreservedContent,
       incomingMessages,

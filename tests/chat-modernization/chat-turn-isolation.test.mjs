@@ -87,3 +87,36 @@ test('database draft hydration cannot borrow a previous execution buffer', () =>
   const matching = surfaceDbSavedStreamingPlaceholders([empty], { fallbackContent: draft.content, executionId: draft.execution_id });
   assert.equal(matching[0].content, draft.content);
 });
+
+test('server copy of a just-sent instruction replaces its local echo bubble', () => {
+  const echo = msg('tmp-1', '버블 확인해', 20, { role: 'user' });
+  const saved = msg('user-saved', '버블 확인해', 22, { role: 'user' });
+  const result = merge([old, echo], [old, saved]);
+  assert.equal(result.filter(m => m.role === 'user').length, 1);
+  assert.equal(result.find(m => m.id === saved.id)?.render_id, echo.id);
+});
+
+test('additional instruction echo merges with its labelled server copy', () => {
+  const echo = msg('interrupt-1', '진행 보고도 해줘', 20, { role: 'user' });
+  const saved = msg('user-saved', '[추가 지시] 진행 보고도 해줘', 21, { role: 'user', intent: 'interrupt_queued' });
+  const result = merge([question, draft, echo], [question, saved]);
+  assert.equal(result.filter(m => m.role === 'user').length, 2);
+  assert.equal(result.find(m => m.id === saved.id)?.render_id, echo.id);
+});
+
+test('an intentionally repeated instruction keeps both bubbles and stable keys', () => {
+  const first = msg('user-1', '다시 확인해', 10, { role: 'user' });
+  const echo = msg('tmp-2', '다시 확인해', 20, { role: 'user' });
+  const second = msg('user-2', '다시 확인해', 21, { role: 'user' });
+  const result = merge([first, echo], [first, second]);
+  assert.equal(result.filter(m => m.role === 'user').length, 2);
+  assert.notEqual(result.find(m => m.id === first.id)?.render_id, echo.id);
+  assert.equal(result.find(m => m.id === second.id)?.render_id, echo.id);
+});
+
+test('a pending echo is not absorbed by an earlier identical saved instruction', () => {
+  const first = msg('user-1', '다시 확인해', 10, { role: 'user' });
+  const echo = msg('tmp-2', '다시 확인해', 20, { role: 'user' });
+  const result = merge([first, echo], [first]);
+  assert.deepEqual([...result.filter(m => m.role === 'user').map(m => m.id)], [first.id, echo.id]);
+});
