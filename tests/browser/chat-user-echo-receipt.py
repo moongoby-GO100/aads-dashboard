@@ -25,11 +25,7 @@ def message(id_, role, content, seconds, **extra):
 async def scenario(browser, base, width, interrupt):
     context = await browser.new_context(viewport={"width": width, "height": 900})
     await context.add_cookies([dict(name="aads_token", value="isolated-fixture", url=base)])
-    await context.add_init_script("""localStorage.setItem('aads_token','isolated-fixture');
-      const RealDate=Date;window.Date=class extends RealDate{
-        constructor(...args){super(...(args.length?args:[RealDate.now()-3600000]));}
-        static now(){return RealDate.now()-3600000;}
-      };""")
+    await context.add_init_script("localStorage.setItem('aads_token','isolated-fixture');")
     old = [message("old-user", "user", "격리 검증 시작", -20),
            message("old-answer", "assistant", "격리 응답 본문입니다. " * 8, -10)]
     rows = list(old)
@@ -110,6 +106,12 @@ async def scenario(browser, base, width, interrupt):
         composer = page.locator("textarea").first
         await composer.wait_for(timeout=30000)
         await page.locator('[data-message-id="old-user"]').wait_for(timeout=30000)
+        await page.evaluate("""() => {
+          const RealDate=Date;window.Date=class extends RealDate{
+            constructor(...args){super(...(args.length?args:[RealDate.now()-3600000]));}
+            static now(){return RealDate.now()-3600000;}
+          };
+        }""")
         if interrupt:
             await page.wait_for_timeout(1500)
         for n in range(2 if interrupt else 1):
@@ -125,6 +127,10 @@ async def scenario(browser, base, width, interrupt):
         assert not pending, f"unreconciled local copies: {pending}"
         for saved in sent:
             assert sum(row["id"] == saved["id"] for row in actual) == 1, actual
+        if interrupt:
+            assert sum(path.endswith('/interrupt') for path in calls) == 2, calls
+        else:
+            assert calls.count('/chat/messages/send') == 1, calls
         assert not errors, errors
         capture = f"/tmp/aads-user-echo-{width}-{'interrupt' if interrupt else 'normal'}.png"
         await page.screenshot(path=capture, full_page=True)
