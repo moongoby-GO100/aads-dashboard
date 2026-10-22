@@ -27,11 +27,16 @@ async def scenario(browser, base, width, interrupt):
     await context.add_cookies([dict(name="aads_token", value="isolated-fixture", url=base)])
     await context.add_init_script("localStorage.setItem('aads_token','isolated-fixture');")
     old = [message("old-user", "user", "격리 검증 시작", -20),
-           message("old-answer", "assistant", "격리 응답 본문입니다. " * 8, -10)]
+           message("old-answer", "assistant", "격리 응답 본문입니다. " * 8, -10, execution_id="execution-old")]
+    if interrupt:
+        old = [old[0], message("saved-running-draft", "assistant", "현재 응답 작성 중입니다. " * 8, -5,
+                              execution_id=EXID, intent="streaming_placeholder", model_used="streaming")]
     rows = list(old)
     session = dict(id=SID, workspace_id=WID, title="사용자 버블 접수 검증", current_model="mixture",
                    created_at=NOW.isoformat(), updated_at=NOW.isoformat(), message_count=2,
                    tags=[], pinned=False, role_key="CTO")
+    if interrupt:
+        session['current_execution_id'] = EXID
     workspace = dict(id=WID, name="[AADS] 격리 검증", project_key="AADS", icon="", color="#2563eb")
     sent = []
     calls = []
@@ -71,7 +76,13 @@ async def scenario(browser, base, width, interrupt):
                                        body="".join("data: " + json.dumps(e) + "\n\n" for e in events))
         elif path.endswith("/streaming-status"):
             payload = dict(is_streaming=interrupt, execution_id=EXID if interrupt else None,
-                           completed=not interrupt, partial_content="격리 응답 진행 중입니다. " * 8 if interrupt else "")
+                           execution_status="running" if interrupt else "completed",
+                           stream_status="generating" if interrupt else "completed",
+                           final_message_ready=False, completed=not interrupt,
+                           # The draft is provided by the history projection.
+                           # No replay cursor: a fake, closed SSE replay would
+                           # correctly put the app into its interrupted state.
+                           partial_content="")
         elif path.endswith("/last-response"):
             payload = {"message": None}
         elif path.endswith("/todos"):
@@ -106,12 +117,13 @@ async def scenario(browser, base, width, interrupt):
         composer = page.locator("textarea").first
         await composer.wait_for(timeout=30000)
         await page.locator('[data-message-id="old-user"]').wait_for(timeout=30000)
-        await page.evaluate("""() => {
+        if not interrupt:
+            await page.evaluate("""() => {
           const RealDate=Date;window.Date=class extends RealDate{
             constructor(...args){super(...(args.length?args:[RealDate.now()-3600000]));}
             static now(){return RealDate.now()-3600000;}
           };
-        }""")
+            }""")
         if interrupt:
             await page.wait_for_timeout(1500)
         for n in range(2 if interrupt else 1):
@@ -132,10 +144,12 @@ async def scenario(browser, base, width, interrupt):
         else:
             assert calls.count('/chat/messages/send') == 1, calls
         assert not errors, errors
+        await page.locator(f'[data-message-id="{sent[-1]["id"]}"]').scroll_into_view_if_needed()
         capture = f"/tmp/aads-user-echo-{width}-{'interrupt' if interrupt else 'normal'}.png"
         await page.screenshot(path=capture, full_page=True)
         print(json.dumps(dict(width=width, interrupt=interrupt, sent=len(sent),
                               saved_bubbles=len(sent), capture=capture, errors=errors,
+                              interrupt_receipts=sum(path.endswith('/interrupt') for path in calls),
                               production_api_writes=0), ensure_ascii=False))
     except Exception as error:
         print(str(error), flush=True)
