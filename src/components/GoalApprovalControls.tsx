@@ -82,7 +82,7 @@ export function GoalApprovalControls({ policy, savePolicy, saving, policyError, 
   const critical = policy?.options?.auto_approve_critical;
   const all = !!policy?.auto_approve_high && !!policy?.auto_approve_critical;
   const partial = !!policy && policy.auto_approve_high !== policy.auto_approve_critical;
-  return <div>
+  return <div style={{ color: "var(--text-primary)" }}>
     {project && sessionProject && project.toUpperCase() !== sessionProject.toUpperCase() && <p role="alert">현재 대화({sessionProject})와 목표 프로젝트({project})가 다릅니다. 실행 게이트는 대상 프로젝트 일치를 검사하지만, 다음 단계 제안은 목표·세션 연결을 기준으로 적용됩니다.</p>}
     <p>{!project ? "목표 프로젝트 조회 대기 중 — 승인 설정을 변경할 수 없습니다." : "연결된 세션의 다음 단계 제안에 위험도별로 적용됩니다. 실행 게이트는 대상 프로젝트·위험도·남은 횟수를 별도로 검사합니다. 모든 도구 실행을 허용하는 설정은 아닙니다."}</p>
     <p>다음 단계 제안은 활성 연결과 진행 중 목표(draft/active/blocked), 남은 횟수를 확인하며 제안 자체는 횟수를 차감하지 않습니다. critical 이외의 제안은 첫 번째 설정을 사용합니다. DB 쓰기처럼 대상 프로젝트를 확정하지 않는 실행은 이 정책으로 자동 통과하지 않습니다.</p>

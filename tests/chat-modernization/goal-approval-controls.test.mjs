@@ -271,3 +271,14 @@ test('both goal screens retain the shared profile controls', () => {
   assert.match(fs.readFileSync(path,'utf8'), /<GoalApprovalControls \{\.\.\.approvalControls\}/);
  }
 });
+
+test('root inherits --text-primary so labels stay readable on themed panels; risk color is unchanged', async()=>{
+ const f=fixture(); const h=await ready(f);
+ const tree=f.controls({...h,project:'AADS'});
+ assert.equal(tree.props.style.color,'var(--text-primary)');
+ const nodes=(n)=>!n||typeof n!=='object'?[]:[n,...[n.props?.children].flat().flatMap(nodes)];
+ const labels=nodes(tree).filter(n=>n.type==='label');
+ assert.equal(labels.length,3);
+ assert.deepEqual(labels.map(l=>l.props.style?.color),[undefined,undefined,'#dc2626']);
+ assert.ok(nodes(tree).filter(n=>n.type==='fieldset'||n.type==='legend').every(n=>!n.props.style?.color));
+});
