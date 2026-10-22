@@ -1,8 +1,9 @@
 import {
   activityIcon, autoApprovalChip, autoApprovalDetailRows, autoApprovalNeedsAttention, autoApprovalTooltip,
-  cleanupCandidates, cleanupChipLabel, daysSince, dormancyCardState, freshSignals, groupStripGoals, idleLabel,
-  mergeStripSignals, p0IdleDays, pausedAutoApprovalGoals, priorityBadge, shortGoalTitle, sortStripGoals, stripGroupOf,
-  shouldShowGoalStrip, summarizeOpenGoals, unlinkedChipLabel,
+  cleanupCandidates, cleanupChipLabel, daysSince, dormancyCardState, DROPDOWN_GROUP_LABEL, DROPDOWN_GROUP_ORDER,
+  dropdownGroupOf, dropdownTriggerSummary, freezeOrder, freshSignals, goalDisplayTitle, groupDropdownGoals, idleLabel,
+  mergeStripSignals, nextOptionIndex, p0IdleDays, pausedAutoApprovalGoals, priorityBadge, progressPct, shortGoalTitle,
+  shouldShowGoalStrip, sortDropdownGoals, summarizeOpenGoals, unlinkedChipLabel,
   type GoalSignal, type StripGoal,
 } from "./goalStrip";
 
@@ -16,30 +17,108 @@ const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
 const base = { progress: 0.5, milestone: null, dispatch_note: null };
 const g = (id: string, over: Partial<StripGoal>): StripGoal => ({ goal_id: id, title: id, status: "active", ...base, ...over });
 
-// 정렬: 🔄 → ⏳ → P0 → P1·P2 → 💤 (서버 strip_rank 가 있어도, 없어도 같다)
-const goals: StripGoal[] = [
-  g("dorm-p0", { priority: "P0-CRITICAL", dormant: true, strip_rank: 4 }),
-  g("p2", { priority: "P2", strip_rank: 3 }),
-  g("p0", { priority: "P0", strip_rank: 2 }),
-  g("wait", { priority: "P1", activity: "awaiting", strip_rank: 1 }),
-  g("p1", { priority: "P1", strip_rank: 3 }),
-  g("work", { priority: "P2", activity: "working", strip_rank: 0 }),
-  g("dorm-p1", { priority: "P1", dormant: true, strip_rank: 4 }),
-];
-check("sort order", sortStripGoals(goals).map((x) => x.goal_id).join(",") === "work,wait,p0,p1,p2,dorm-p0,dorm-p1",
-  sortStripGoals(goals).map((x) => x.goal_id).join(","));
-const noRank = goals.map((x) => ({ ...x, strip_rank: undefined }));
-check("sort order without server rank", sortStripGoals(noRank).map((x) => x.goal_id).join(",") === "work,wait,p0,p1,p2,dorm-p0,dorm-p1");
-check("sort keeps input", goals[0].goal_id === "dorm-p0");
-check("lead is not a sort key", sortStripGoals([g("a", { priority: "P1", strip_rank: 3 }), g("b", { priority: "P0", strip_rank: 2, is_lead: false }), g("c", { priority: "P2", strip_rank: 3, is_lead: true })])[0].goal_id === "b");
-check("dormant P0 before dormant P1", sortStripGoals([g("x", { priority: "P1", dormant: true, strip_rank: 4 }), g("y", { priority: "P0", dormant: true, strip_rank: 4 })])[0].goal_id === "y");
+// 7그룹 분류 — 서버 strip_group 이 없는 구서버 응답에서도 같은 규칙 (PRD §3, 처음 맞는 것 하나)
+check("group order", DROPDOWN_GROUP_ORDER.join() === "working,awaiting,blocked,p0,other,paused,dormant");
+check("group labels", DROPDOWN_GROUP_LABEL.working === "🔄 작업중" && DROPDOWN_GROUP_LABEL.awaiting === "⏳ 대표님 대기"
+  && DROPDOWN_GROUP_LABEL.blocked === "⛔ 막힘" && DROPDOWN_GROUP_LABEL.p0 === "P0" && DROPDOWN_GROUP_LABEL.other === "P1 · P2"
+  && DROPDOWN_GROUP_LABEL.paused === "⏸ 멈춤" && DROPDOWN_GROUP_LABEL.dormant === "💤 휴면·초안");
+check("group working", dropdownGroupOf(g("a", { activity: "working", priority: "P2" })) === "working");
+check("group awaiting", dropdownGroupOf(g("a", { activity: "awaiting" })) === "awaiting");
+check("group blocked by status", dropdownGroupOf(g("a", { status: "blocked", priority: "P0" })) === "blocked");
+check("group blocked by dispatch_note", dropdownGroupOf(g("a", { dispatch_note: "승인 대기" })) === "blocked");
+check("blank dispatch_note is not blocked", dropdownGroupOf(g("a", { dispatch_note: "   ", priority: "P1" })) === "other");
+check("group p0", dropdownGroupOf(g("a", { priority: "P0-CRITICAL" })) === "p0" && dropdownGroupOf(g("a", { priority: "P0" })) === "p0");
+check("group other", dropdownGroupOf(g("a", { priority: "P1" })) === "other" && dropdownGroupOf(g("a", {})) === "other");
+check("group paused", dropdownGroupOf(g("a", { goal_paused: true })) === "paused");
+check("group dormant", dropdownGroupOf(g("a", { dormant: true })) === "dormant");
+check("group draft is dormant", dropdownGroupOf(g("a", { status: "draft" })) === "dormant");
+check("paused beats working", dropdownGroupOf(g("a", { goal_paused: true, activity: "working" })) === "paused");
+check("working beats dormant", dropdownGroupOf(g("a", { activity: "working", dormant: true })) === "working");
+check("dormant beats blocked", dropdownGroupOf(g("a", { dormant: true, status: "blocked" })) === "dormant");
+check("draft beats blocked note", dropdownGroupOf(g("a", { status: "draft", dispatch_note: "x" })) === "dormant");
+check("blocked beats p0", dropdownGroupOf(g("a", { dispatch_note: "x", priority: "P0" })) === "blocked");
+check("server strip_group wins", dropdownGroupOf(g("a", { strip_group: "dormant", activity: "working" })) === "dormant");
+check("unknown strip_group falls back", dropdownGroupOf(g("a", { strip_group: "weird", priority: "P0" })) === "p0");
+check("null strip_group falls back", dropdownGroupOf(g("a", { strip_group: null, goal_paused: true })) === "paused");
 
-const groups = groupStripGoals(goals);
-check("groups skip empty and keep order", groups.map((x) => x.key).join(",") === "working,awaiting,p0,other,dormant");
-check("group counts", groups[3].goals.length === 2 && groups[4].goals.length === 2);
-check("group label", groups[0].label === "🔄 작업중" && groups[1].label === "⏳ 대표님 대기" && groups[4].label === "💤 휴면");
-check("no empty group", groupStripGoals([g("only", { strip_rank: 3, priority: "P1" })]).length === 1);
-check("group of unknown rank clamps", stripGroupOf({ strip_rank: 99 }) === "dormant");
+// 정렬: 서버 값이 있어도 없어도 같은 순서
+const goals: StripGoal[] = [
+  g("dorm", { priority: "P0", dormant: true }),
+  g("pause", { priority: "P1", goal_paused: true }),
+  g("p2", { priority: "P2" }),
+  g("p0", { priority: "P0" }),
+  g("blk", { priority: "P2", status: "blocked" }),
+  g("wait", { priority: "P1", activity: "awaiting" }),
+  g("p1", { priority: "P1" }),
+  g("work", { priority: "P2", activity: "working" }),
+];
+const expectOrder = "work,wait,blk,p0,p1,p2,pause,dorm";
+const idsOf = (list: StripGoal[]) => list.map((x) => x.goal_id).join(",");
+check("sort without server values", idsOf(sortDropdownGoals(goals)) === expectOrder, idsOf(sortDropdownGoals(goals)));
+const withServer = goals.map((x) => {
+  const k = dropdownGroupOf(x);
+  return { ...x, strip_group: k, strip_order: DROPDOWN_GROUP_ORDER.indexOf(k) };
+});
+check("sort with server values", idsOf(sortDropdownGoals(withServer)) === expectOrder, idsOf(sortDropdownGoals(withServer)));
+check("sort keeps input", goals[0].goal_id === "dorm");
+check("server strip_order wins over local rule", idsOf(sortDropdownGoals([
+  g("a", { priority: "P1", strip_group: "other", strip_order: 4 }),
+  g("b", { priority: "P1", strip_group: "working", strip_order: 0 }),
+])) === "b,a");
+check("lead is not a sort key", idsOf(sortDropdownGoals([g("a", { priority: "P1" }), g("b", { priority: "P0" }), g("c", { priority: "P2", is_lead: true })])) === "b,a,c");
+check("P0-CRITICAL before P0 before P1 in a group", idsOf(sortDropdownGoals([
+  g("n", { priority: "P0" }), g("m", { priority: "P0-CRITICAL" }), g("o", { priority: "P0", dispatch_note: null }),
+]).slice(0, 1)) === "m");
+check("same priority: recent activity first, none last, then title", idsOf(sortDropdownGoals([
+  g("none", { priority: "P1" }),
+  g("old", { priority: "P1", last_activity_at: ago(9) }),
+  g("new", { priority: "P1", last_activity_at: ago(1) }),
+  g("abc", { priority: "P1" }),
+])) === "new,old,abc,none", idsOf(sortDropdownGoals([
+  g("none", { priority: "P1" }), g("old", { priority: "P1", last_activity_at: ago(9) }),
+  g("new", { priority: "P1", last_activity_at: ago(1) }), g("abc", { priority: "P1" }),
+])));
+check("bad last_activity_at counts as none", idsOf(sortDropdownGoals([
+  g("bad", { priority: "P1", last_activity_at: "nope" }), g("ok", { priority: "P1", last_activity_at: ago(3) }),
+])) === "ok,bad");
+
+const groups = groupDropdownGoals(sortDropdownGoals(goals));
+check("groups cover all 7 in order", groups.map((x) => x.key).join() === DROPDOWN_GROUP_ORDER.join());
+check("group counts", groups.find((x) => x.key === "other")?.goals.length === 2 && groups.every((x) => x.key === "other" || x.goals.length === 1));
+check("group label from key", groups[2].label === "⛔ 막힘");
+check("empty groups skipped", groupDropdownGoals([g("only", { priority: "P1" })]).map((x) => x.key).join() === "other");
+check("no goals no groups", groupDropdownGoals([]).length === 0);
+
+// 버튼 요약
+const sumTop = dropdownTriggerSummary(goals);
+check("trigger summary counts", sumTop.total === 8 && sumTop.working === 1 && sumTop.awaiting === 1 && sumTop.blocked === 1, JSON.stringify({ ...sumTop, top: null }));
+check("trigger summary top is first sorted", sumTop.top?.goal_id === "work");
+check("trigger summary empty", dropdownTriggerSummary([]).total === 0 && dropdownTriggerSummary([]).top === null);
+check("trigger summary top is not the lead goal", dropdownTriggerSummary([g("lead", { priority: "P2", is_lead: true }), g("p0", { priority: "P0" })]).top?.goal_id === "p0");
+
+// 열린 동안 순서 고정 (GD-7)
+const frozen = sortDropdownGoals(goals).map((x) => x.goal_id);
+const changed = goals.map((x) => (x.goal_id === "p2" ? { ...x, activity: "working" as const, progress: 0.9 } : x));
+const kept = freezeOrder(frozen, changed);
+check("freeze keeps previous order", idsOf(kept) === expectOrder, idsOf(kept));
+check("freeze takes fresh values", kept.find((x) => x.goal_id === "p2")?.progress === 0.9 && kept.find((x) => x.goal_id === "p2")?.activity === "working");
+const added = freezeOrder(frozen, [...goals, g("new-p1", { priority: "P1" }), g("new-work", { activity: "working" }), g("new-dorm", { dormant: true })]);
+check("freeze: new goal goes to end of its own group", idsOf(added) === "work,new-work,wait,blk,p0,p1,p2,new-p1,pause,dorm,new-dorm", idsOf(added));
+const removed = freezeOrder(frozen, goals.filter((x) => x.goal_id !== "wait" && x.goal_id !== "dorm"));
+check("freeze drops vanished goals", idsOf(removed) === "work,blk,p0,p1,p2,pause", idsOf(removed));
+check("freeze from empty prev sorts", idsOf(freezeOrder([], goals)) === expectOrder);
+check("freeze ignores duplicate prev ids", freezeOrder(["work", "work"], [g("work", {})]).length === 1);
+check("freeze empty goals", freezeOrder(frozen, []).length === 0);
+
+// 진행률·키보드
+check("progress 0..1", progressPct(0.5) === 50 && progressPct(1) === 100 && progressPct(0) === 0);
+check("progress percent as is", progressPct(60) === 60 && progressPct(1.4) === 1);
+check("progress clamps and tolerates bad", progressPct(250) === 100 && progressPct(-5) === 0 && progressPct(null) === 0 && progressPct(undefined) === 0 && progressPct(NaN) === 0);
+check("keys ArrowDown/Up", nextOptionIndex("ArrowDown", 1, 5) === 2 && nextOptionIndex("ArrowUp", 1, 5) === 0);
+check("keys clamp at ends", nextOptionIndex("ArrowDown", 4, 5) === 4 && nextOptionIndex("ArrowUp", 0, 5) === 0);
+check("keys from nothing", nextOptionIndex("ArrowDown", -1, 5) === 0 && nextOptionIndex("ArrowUp", -1, 5) === 4);
+check("keys Home/End", nextOptionIndex("Home", 3, 5) === 0 && nextOptionIndex("End", 0, 5) === 4);
+check("keys other/empty", nextOptionIndex("a", 1, 5) === null && nextOptionIndex("ArrowDown", 0, 0) === null);
 
 // 아이콘
 check("icon working", activityIcon("working") === "🔄");
@@ -99,6 +178,9 @@ check("title long", shortGoalTitle("가나다라마바사아자차카타파하")
 check("title uuid hidden", shortGoalTitle("f4cfeb08-7abd-4a04-b9bc-93bbc7ced036", "AADS") === "AADS 목표");
 check("title runner id hidden", shortGoalTitle("runner-27e0fe43") === "이름 없는 목표");
 check("title empty", shortGoalTitle("", "GO100") === "GO100 목표");
+
+check("display title keeps full title", goalDisplayTitle("#119 상한가따라잡기 일일 수익률 3% 이상 달성 (1차 목표)") === "#119 상한가따라잡기 일일 수익률 3% 이상 달성 (1차 목표)");
+check("display title hides uuid/runner id", goalDisplayTitle("f4cfeb08-7abd-4a04-b9bc-93bbc7ced036", "AADS") === "AADS 목표" && goalDisplayTitle("runner-27e0fe43") === "이름 없는 목표");
 
 // 합치기
 const signals: GoalSignal[] = [

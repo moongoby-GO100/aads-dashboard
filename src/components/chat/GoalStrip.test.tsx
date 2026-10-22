@@ -1,0 +1,161 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+import { GoalStrip, type GoalStripProps } from "./GoalStrip";
+import type { StripChipGoal } from "@/lib/goalStrip";
+
+const g = (id: string, over: Partial<StripChipGoal> = {}): StripChipGoal => ({
+  goal_id: id, title: `목표 ${id}`, status: "active", progress: 0.5, milestone: null, dispatch_note: null, ...over,
+});
+
+// 서버 strip_group 이 없는 구서버 응답 — 화면이 같은 규칙으로 직접 7그룹을 판정해야 한다.
+const OLD_SERVER_GOALS: StripChipGoal[] = [
+  g("dorm", { priority: "P0", dormant: true }),
+  g("pause", { priority: "P1", goal_paused: true, goal_paused_reason: "예산 확인" }),
+  g("other", { priority: "P1" }),
+  g("p0", { priority: "P0", is_lead: true, milestone: "M2 검증" }),
+  g("blk", { priority: "P1", dispatch_note: "승인 대기 중" }),
+  g("wait", { priority: "P1", activity: "awaiting" }),
+  g("work", { priority: "P2", activity: "working", current_runner: { job_id: "runner-1", status: "running" } }),
+];
+
+const props = (over: Partial<GoalStripProps> = {}): GoalStripProps => ({
+  goals: OLD_SERVER_GOALS, halted: false, open: false, onOpenChange: vi.fn(), panelGoalId: null, onToggleGoal: vi.fn(),
+  summary: { open: 58, p0: 30 }, unlinkedCount: 0, cleanupTotal: 0, cardOpen: false, onToggleCard: vi.fn(),
+  signalsError: false, isMobile: false, ...over,
+});
+
+const html = (over: Partial<GoalStripProps> = {}) => renderToStaticMarkup(<GoalStrip {...props(over)} />);
+
+describe("GoalStrip dropdown button (closed)", () => {
+  it("is a single listbox-popup button with counts and the first-priority goal", () => {
+    const out = html();
+    expect(out).toContain('aria-haspopup="listbox"');
+    expect(out).toContain('aria-expanded="false"');
+    expect(out).toContain("aria-controls=");
+    expect(out).toContain("목표 7");
+    expect(out).toContain("🔄1");
+    expect(out).toContain("⏳1");
+    expect(out).toContain("⛔1");
+    expect(out).toContain("목표 work");
+    expect(out).toContain("▾");
+    expect(out).not.toContain('role="listbox"');
+  });
+
+  it("drops the chip row, +N and fold controls", () => {
+    const out = html();
+    expect(out).not.toContain("목표 +");
+    expect(out).not.toContain("접기");
+    expect(out).not.toContain("data-goal-chip");
+  });
+
+  it("omits zero counts and shows 목표 0 without goals", () => {
+    const out = html({ goals: [g("a", { priority: "P1" })] });
+    expect(out).not.toContain("🔄");
+    expect(out).not.toContain("⏳");
+    const none = html({ goals: [], cleanupTotal: 3 });
+    expect(none).toContain("목표 0");
+    expect(none).toContain("🧹 휴면·차단 정리 3");
+  });
+
+  it("uses the mobile height and compact copy", () => {
+    const out = html({ isMobile: true });
+    expect(out).toContain("height:36px");
+    expect(out).toContain('data-goal-strip="mobile"');
+  });
+
+  it("keeps the halted badge and the signals error chip", () => {
+    const out = html({ halted: true, signalsError: true });
+    expect(out).toContain("전체 정지 중");
+    expect(out).toContain("자동승인·정리 상태 확인 실패");
+  });
+});
+
+describe("GoalStrip dropdown list (open)", () => {
+  it("groups the old-server response into seven groups in progress-priority order", () => {
+    const out = html({ open: true });
+    expect(out).toContain('role="listbox"');
+    expect(out).toContain('aria-expanded="true"');
+    const labels = ["🔄 작업중", "⏳ 대표님 대기", "⛔ 막힘", "P0", "P1 · P2", "⏸ 멈춤", "💤 휴면·초안"];
+    const at = labels.map((l) => out.indexOf(`aria-label="${l}"`));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    const rowOrder = ["work", "wait", "blk", "p0", "other", "pause", "dorm"].map((id) => out.indexOf(`data-goal-row="${id}"`));
+    expect([...rowOrder].sort((a, b) => a - b)).toEqual(rowOrder);
+  });
+
+  it("skips empty groups", () => {
+    const out = html({ open: true, goals: [g("a", { priority: "P1" })] });
+    expect(out).toContain('aria-label="P1 · P2"');
+    expect(out).not.toContain('aria-label="🔄 작업중"');
+    expect(out).not.toContain('aria-label="⏸ 멈춤"');
+  });
+
+  it("renders option rows with aria-selected for the goal open in the panel", () => {
+    const out = html({ open: true, panelGoalId: "p0" });
+    expect(out.match(/role="option"/g)?.length).toBe(7);
+    expect(out).toMatch(/role="option" aria-selected="true"[^>]*title="주도 목표/);
+    expect(out.match(/aria-selected="true"/g)?.length).toBe(1);
+  });
+
+  it("shows the head counts, lead mark and second-line details", () => {
+    const out = html({ open: true });
+    expect(out).toContain("이 대화의 목표 7");
+    expect(out).toContain("전체 열린 목표 58");
+    expect(out).toContain("P0 <b");
+    expect(out).toContain("👑 주도");
+    expect(out).toContain("M2 검증");
+    expect(out).toContain("막힘: 승인 대기 중");
+    expect(out).toContain("⏸ 멈춤 — 예산 확인");
+    expect(out).toContain("러너 runner-1 · running");
+  });
+
+  it("falls back to 사유 없음 for a paused goal without a reason", () => {
+    expect(html({ open: true, goals: [g("p", { goal_paused: true })] })).toContain("⏸ 멈춤 — 사유 없음");
+  });
+
+  it("shows tool row: cleanup, unlinked and the /goals link", () => {
+    const out = html({ open: true, cleanupTotal: 18, unlinkedCount: 2 });
+    expect(out).toContain("🧹 휴면·차단 정리 18건");
+    expect(out).toContain("🔗 목표 미연결 2건");
+    expect(out).toContain('href="/goals"');
+    expect(out).toContain("목표 화면 전체 보기 →");
+  });
+
+  it("shows the empty guidance when no goal is linked", () => {
+    const out = html({ open: true, goals: [], cleanupTotal: 1 });
+    expect(out).toContain("이 대화에 연결된 목표가 없습니다. 목표 화면에서 담당으로 연결하면 여기에 보입니다.");
+  });
+
+  it("shows the warning line with a retry button when signals failed", () => {
+    const out = html({ open: true, signalsError: true });
+    expect(out).toContain("자동승인·정리 상태를 불러오지 못했습니다");
+    expect(out).toContain("다시 시도");
+  });
+
+  it("renders the auto-approval chip next to the option, not inside it", () => {
+    const out = html({ open: true, goals: [g("a", { priority: "P1", auto_approval: { state: "manual" } })] });
+    expect(out).toContain("자동승인 🔒 수동");
+  });
+
+  it("mobile uses a fixed scrim and bottom sheet with a close button", () => {
+    const out = html({ open: true, isMobile: true });
+    expect(out).toContain("data-goal-scrim");
+    expect(out).toContain('data-goal-dropdown="mobile"');
+    expect(out).toContain("max-height:70vh");
+    expect(out).toContain('aria-label="닫기"');
+    expect(out).toContain("min-height:52px");
+  });
+
+  it("desktop uses an absolute 440px popover that does not push the page", () => {
+    const out = html({ open: true });
+    expect(out).toContain('data-goal-dropdown="desktop"');
+    expect(out).toContain("position:absolute");
+    expect(out).toContain("width:440px");
+    expect(out).toContain("max-height:min(60vh, 520px)");
+    expect(out).not.toContain("data-goal-scrim");
+  });
+
+  it("does not render the list while closed", () => {
+    expect(html()).not.toContain("data-goal-dropdown");
+  });
+});

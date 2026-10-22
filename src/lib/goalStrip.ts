@@ -1,7 +1,9 @@
 // 채팅 상단 목표 띠 칩·휴면 정리 카드 표시 로직 (순수 함수).
 // 정본: PRD goal-priority-dormancy-autoapproval-display-prd rev5 §3·§5·§6-1,
 //       설계 aads-goal-strip-dormancy-card-mockup-v1 (승인 목업 b90bbca3 / c22f3fb1).
-// 서버가 내려준 판정(strip_rank·dormant·activity·auto_approval·cleanup_lane)을 그대로 쓰고 다시 계산하지 않는다.
+// 서버가 내려준 판정(strip_group·strip_order·dormant·activity·auto_approval·cleanup_lane)을 그대로 쓰고,
+// 서버 값이 없는 구서버 응답에서만 같은 규칙으로 직접 판정한다.
+// 드롭다운 전환: PRD aads-goal-strip-dropdown-prd rev1 GD-1~GD-13, 설계 명세 aads-goal-strip-dropdown-spec rev1 §3-1.
 
 export type StripActivity = "working" | "awaiting" | null;
 
@@ -38,6 +40,10 @@ export interface StripGoal {
   strip_rank?: number | null;
   current_runner?: { job_id: string; status: string } | null;
   goal_paused?: boolean;
+  goal_paused_reason?: string | null;
+  strip_group?: string | null;
+  strip_order?: number | null;
+  last_activity_at?: string | null;
 }
 
 /** GET /goals 의 목표 한 줄 중 띠·카드가 쓰는 부분. */
@@ -56,20 +62,7 @@ export interface GoalSignal {
 }
 
 export type StripChipGoal = StripGoal & {
-  last_activity_at?: string | null;
   auto_approval?: AutoApprovalView | null;
-};
-
-export type StripGroupKey = "working" | "awaiting" | "p0" | "other" | "dormant";
-
-export const STRIP_GROUP_ORDER: StripGroupKey[] = ["working", "awaiting", "p0", "other", "dormant"];
-
-export const STRIP_GROUP_LABEL: Record<StripGroupKey, string> = {
-  working: "🔄 작업중",
-  awaiting: "⏳ 대표님 대기",
-  p0: "P0",
-  other: "P1 · P2",
-  dormant: "💤 휴면",
 };
 
 const DAY_MS = 86_400_000;
@@ -104,6 +97,12 @@ export function shortGoalTitle(title: string, project?: string | null): string {
   return noParens.length > 12 ? `${noParens.slice(0, 12)}…` : noParens;
 }
 
+/** 목록 줄 제목: 전체 제목을 쓰되, 내부 ID 모양이면 업무명 대신 프로젝트로 대체한다. */
+export function goalDisplayTitle(title: string, project?: string | null): string {
+  const t = (title || "").trim();
+  return !t || UUID_RE.test(t) || INTERNAL_ID_RE.test(t) ? shortGoalTitle(title, project) : t;
+}
+
 export function daysSince(iso: string | null | undefined, now: number = Date.now()): number | null {
   const t = toMs(iso);
   if (t === null) return null;
@@ -128,20 +127,6 @@ export function activityIcon(activity: StripActivity | undefined): string | null
   return null;
 }
 
-/** 서버 strip_rank(🔄0 ⏳1 P0 2 P1·P2 3 💤4)를 우선하고, 없으면 같은 규칙으로 계산한다. */
-export function stripRankOf(g: Pick<StripGoal, "strip_rank" | "activity" | "dormant" | "priority">): number {
-  if (typeof g.strip_rank === "number") return g.strip_rank;
-  if (g.activity === "working") return 0;
-  if (g.activity === "awaiting") return 1;
-  if (g.dormant) return 4;
-  return isP0(g.priority) ? 2 : 3;
-}
-
-export function stripGroupOf(g: Pick<StripGoal, "strip_rank" | "activity" | "dormant" | "priority">): StripGroupKey {
-  const rank = stripRankOf(g);
-  return STRIP_GROUP_ORDER[Math.min(Math.max(rank, 0), STRIP_GROUP_ORDER.length - 1)];
-}
-
 function priorityRankOf(g: Pick<StripGoal, "priority_rank" | "priority">): number {
   if (typeof g.priority_rank === "number") return g.priority_rank;
   const p = String(g.priority || "").trim().toUpperCase();
@@ -149,27 +134,128 @@ function priorityRankOf(g: Pick<StripGoal, "priority_rank" | "priority">): numbe
   return table[p] ?? 9;
 }
 
-/** 🔄 → ⏳ → P0 → P1·P2 → 💤. 같은 그룹 안은 우선순위 순번 → 이름. 주도 여부는 정렬 키가 아니다. */
-export function sortStripGoals<T extends StripGoal>(goals: readonly T[]): T[] {
+// ── 드롭다운 목록: 7그룹·정렬·순서 고정 ─────────────────────────────────────────
+export type DropdownGroupKey = "working" | "awaiting" | "blocked" | "p0" | "other" | "paused" | "dormant";
+
+/** 서버 strip_order(0~6)와 같은 순서. */
+export const DROPDOWN_GROUP_ORDER: DropdownGroupKey[] = [
+  "working", "awaiting", "blocked", "p0", "other", "paused", "dormant",
+];
+
+export const DROPDOWN_GROUP_LABEL: Record<DropdownGroupKey, string> = {
+  working: "🔄 작업중",
+  awaiting: "⏳ 대표님 대기",
+  blocked: "⛔ 막힘",
+  p0: "P0",
+  other: "P1 · P2",
+  paused: "⏸ 멈춤",
+  dormant: "💤 휴면·초안",
+};
+
+type DropdownClassifiable = Pick<
+  StripGoal, "strip_group" | "goal_paused" | "activity" | "dormant" | "status" | "dispatch_note" | "priority"
+>;
+
+/** 서버 strip_group 이 7개 중 하나면 그대로, 아니면 처음 맞는 규칙 하나 (PRD §3). */
+export function dropdownGroupOf(g: DropdownClassifiable): DropdownGroupKey {
+  const server = g.strip_group as DropdownGroupKey | null | undefined;
+  if (server && DROPDOWN_GROUP_ORDER.includes(server)) return server;
+  if (g.goal_paused) return "paused";
+  if (g.activity === "working") return "working";
+  if (g.activity === "awaiting") return "awaiting";
+  if (g.dormant || String(g.status || "").toLowerCase() === "draft") return "dormant";
+  if (String(g.status || "").toLowerCase() === "blocked" || String(g.dispatch_note || "").trim() !== "") return "blocked";
+  return isP0(g.priority) ? "p0" : "other";
+}
+
+function groupIndexOf(g: DropdownClassifiable & Pick<StripGoal, "strip_order">): number {
+  const server = g.strip_group as DropdownGroupKey | null | undefined;
+  if (server && DROPDOWN_GROUP_ORDER.includes(server) && typeof g.strip_order === "number") return g.strip_order;
+  return DROPDOWN_GROUP_ORDER.indexOf(dropdownGroupOf(g));
+}
+
+/** 서버 strip_order 우선, 없으면 그룹 순번 → 우선순위 순번 → 마지막 활동 최근순(없으면 뒤) → 제목. */
+export function sortDropdownGoals<T extends StripGoal>(goals: readonly T[]): T[] {
   return [...goals].sort((a, b) => {
-    const r = stripRankOf(a) - stripRankOf(b);
+    const r = groupIndexOf(a) - groupIndexOf(b);
     if (r !== 0) return r;
     const p = priorityRankOf(a) - priorityRankOf(b);
     if (p !== 0) return p;
+    const ta = toMs(a.last_activity_at);
+    const tb = toMs(b.last_activity_at);
+    if (ta !== tb) {
+      if (ta === null) return 1;
+      if (tb === null) return -1;
+      return tb - ta;
+    }
     return String(a.title || "").localeCompare(String(b.title || ""), "ko");
   });
 }
 
-export interface StripGroup<T> { key: StripGroupKey; label: string; goals: T[] }
+export interface DropdownGroup<T> { key: DropdownGroupKey; label: string; goals: T[] }
 
-export function groupStripGoals<T extends StripGoal>(goals: readonly T[]): StripGroup<T>[] {
-  const sorted = sortStripGoals(goals);
-  const out: StripGroup<T>[] = [];
-  for (const key of STRIP_GROUP_ORDER) {
-    const members = sorted.filter((g) => stripGroupOf(g) === key);
-    if (members.length > 0) out.push({ key, label: STRIP_GROUP_LABEL[key], goals: members });
+/** 이미 정렬된 목록을 그룹으로 묶는다. 빈 그룹은 뺀다. keyOf 로 열린 동안 고정한 그룹을 줄 수 있다. */
+export function groupDropdownGoals<T extends StripGoal>(
+  goals: readonly T[], keyOf: (g: T) => DropdownGroupKey = dropdownGroupOf,
+): DropdownGroup<T>[] {
+  const out: DropdownGroup<T>[] = [];
+  for (const key of DROPDOWN_GROUP_ORDER) {
+    const members = goals.filter((g) => keyOf(g) === key);
+    if (members.length > 0) out.push({ key, label: DROPDOWN_GROUP_LABEL[key], goals: members });
   }
   return out;
+}
+
+export interface DropdownTriggerSummary<T> {
+  total: number; working: number; awaiting: number; blocked: number; top: T | null;
+}
+
+export function dropdownTriggerSummary<T extends StripGoal>(goals: readonly T[]): DropdownTriggerSummary<T> {
+  const sorted = sortDropdownGoals(goals);
+  const count = (k: DropdownGroupKey) => goals.filter((g) => dropdownGroupOf(g) === k).length;
+  return {
+    total: goals.length, working: count("working"), awaiting: count("awaiting"), blocked: count("blocked"),
+    top: sorted[0] ?? null,
+  };
+}
+
+/**
+ * 열린 동안 순서 고정: 이전 id 순서를 유지하고, 새 목표는 자기 그룹의 끝에 붙이며, 사라진 목표는 뺀다.
+ * 값(진행률·아이콘·막힘)은 새 goals 의 것을 쓴다.
+ */
+export function freezeOrder<T extends StripGoal>(prevIds: readonly string[], goals: readonly T[]): T[] {
+  const byId = new Map(goals.map((g) => [g.goal_id, g]));
+  const kept = prevIds.filter((id, i) => byId.has(id) && prevIds.indexOf(id) === i).map((id) => byId.get(id) as T);
+  const known = new Set(kept.map((g) => g.goal_id));
+  const fresh = sortDropdownGoals(goals.filter((g) => !known.has(g.goal_id)));
+  const out = [...kept];
+  for (const g of fresh) {
+    const gi = groupIndexOf(g);
+    let at = out.length;
+    for (let i = out.length - 1; i >= 0; i -= 1) {
+      if (groupIndexOf(out[i]) <= gi) { at = i + 1; break; }
+      at = i;
+    }
+    out.splice(at, 0, g);
+  }
+  return out;
+}
+
+/** 0~1 이면 ×100, 그 외 그대로. 0~100 으로 자르고 반올림 (기존 칩 계산과 동일). */
+export function progressPct(progress: number | null | undefined): number {
+  const n = Number(progress || 0);
+  const v = n <= 1 ? n * 100 : n;
+  return Math.min(100, Math.max(0, Math.round(Number.isFinite(v) ? v : 0)));
+}
+
+/** 목록 키보드 이동: ↑↓ Home End. 이동 키가 아니면 null. */
+export function nextOptionIndex(key: string, current: number, count: number): number | null {
+  if (count <= 0) return null;
+  if (key === "ArrowDown") return current < 0 ? 0 : Math.min(count - 1, current + 1);
+  if (key === "ArrowUp") return current < 0 ? count - 1 : Math.max(0, current - 1);
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
 }
 
 /** P0 인데 7일 이상 무활동이면 일수, 아니면 null (PR-4). 휴면으로 넘어가도 유지한다. */

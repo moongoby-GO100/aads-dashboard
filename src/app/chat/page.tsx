@@ -4501,8 +4501,9 @@ export default function ChatPage() {
   const [goalSignalsRetrying, setGoalSignalsRetrying] = useState(false);
   const [unlinkedGoalJobs, setUnlinkedGoalJobs] = useState(0);
   const [dormancyCardOpen, setDormancyCardOpen] = useState(false);
-  // 담당 목표는 기본으로 접는다. 제목이 길어 여러 개면 대화를 가린다.
+  // 목표 드롭다운은 항상 닫힌 채 시작한다. 대화(세션)가 바뀌면 다시 닫는다.
   const [goalStripOpen, setGoalStripOpen] = useState(false);
+  useEffect(() => { setGoalStripOpen(false); }, [activeSession?.id]);
   const [goalsHalted, setGoalsHalted] = useState(false);
   // 띠를 누르면 우측 패널이 열린다. 대화는 그대로 있다 — 창을 떠나지
   // 않고 근거를 보고 그 자리에서 판정하고 바로 되물을 수 있다.
@@ -13040,7 +13041,7 @@ export default function ChatPage() {
           {showGoalStrip && (
             // 대화 목록 맨 위에 두면 스크롤과 함께 올라가 버린다 —
             // 메시지가 150건 넘는 창에서는 사실상 보이지 않는다. 붙여 둔다.
-            // 칩 정렬·아이콘·자동승인 칩은 승인 목업 b90bbca3 대로 GoalStrip 이 그린다.
+            // 한 줄 드롭다운 버튼·7그룹 목록·자동승인 칩은 GoalStrip 이 그린다(목업 goal-dropdown_*).
             <div style={{
               position: "sticky", top: 0, zIndex: 5,
               margin: "0 0 8px", padding: "6px 0",
