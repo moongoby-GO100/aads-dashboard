@@ -48,7 +48,9 @@ import {
   warmUpVoiceAlerts,
   type VoiceAlertKind,
 } from "@/services/voiceAlerts";
-import { Workspace, ChatSession, ChatMessage, ChatTodoItem, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
+import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
+import TodoPanel from "./TodoPanel";
+import { useSessionTodos } from "./useSessionTodos";
 import { BASE_URL, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
 import type { ChatResponseMode } from "@/services/chatApi";
 import { processInline, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
@@ -4447,16 +4449,6 @@ export default function ChatPage() {
   }, []);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [artifactListTruncated, setArtifactListTruncated] = useState(false);
-  const [todoItems, setTodoItems] = useState<ChatTodoItem[]>([]);
-  const [todoLoading, setTodoLoading] = useState(false);
-  const [todoError, setTodoError] = useState<string | null>(null);
-  const [todoCollapsed, setTodoCollapsed] = useState(true);
-  const [showAllTodos, setShowAllTodos] = useState(false);
-  const [todoActionLoading, setTodoActionLoading] = useState<string | null>(null);
-  const [todoAdding, setTodoAdding] = useState(false);
-  const [todoAddTitle, setTodoAddTitle] = useState("");
-  const [todoEditingId, setTodoEditingId] = useState<string | null>(null);
-  const [todoEditTitle, setTodoEditTitle] = useState("");
   const activeWsObj = useMemo(
     () => workspaces.find((w) => w.id === activeWs),
     [activeWs, workspaces],
@@ -5507,34 +5499,8 @@ export default function ChatPage() {
   const activeSessionRef = useRef<string | null>(null);
   const userStopRequestedRef = useRef(false);
   const [stopRequesting, setStopRequesting] = useState(false);
-  const refreshTodos = useCallback(async (sessionId?: string | null) => {
-    const sid = sessionId || activeSessionRef.current;
-    if (!sid) {
-      setTodoItems([]);
-      setTodoError(null);
-      return;
-    }
-    setTodoLoading(true);
-    try {
-      // 여러 경로에서 불려 2초 사이 같은 125KB 를 두 번 받고 있었다.
-      const items = await chatApiThrottled<ChatTodoItem[]>(
-        `/chat/sessions/${sid}/todos?include_completed=true&cleanup_stale=true`, 2000
-      );
-      if (items === null) return;   // 방금 받았다 — 기존 목록 유지
-      if (activeSessionRef.current === sid) {
-        setTodoItems(items);
-        setTodoError(null);
-      }
-    } catch (err) {
-      if (activeSessionRef.current === sid) {
-        setTodoError(err instanceof Error ? err.message : "TODO 조회 실패");
-      }
-    } finally {
-      if (activeSessionRef.current === sid) {
-        setTodoLoading(false);
-      }
-    }
-  }, []);
+  const todos = useSessionTodos(activeSessionRef);
+  const refreshTodos = todos.refresh;
   const refreshTodosSoon = useCallback((sessionId?: string | null) => {
     const sid = sessionId || activeSessionRef.current;
     if (!sid) return;
@@ -5544,120 +5510,6 @@ export default function ChatPage() {
       }, delay);
     });
   }, [refreshTodos]);
-  const runTodoAction = useCallback(async (
-    actionKey: string,
-    path: string,
-    init: RequestInit,
-    sessionId?: string | null,
-  ) => {
-    const sid = sessionId || activeSessionRef.current;
-    if (!sid || todoActionLoading) return;
-    setTodoActionLoading(actionKey);
-    setTodoError(null);
-    try {
-      await chatApi(path, init);
-      await refreshTodos(sid);
-    } catch (err) {
-      if (activeSessionRef.current === sid) {
-        setTodoError(err instanceof Error ? err.message : "TODO 작업 실패");
-      }
-    } finally {
-      if (activeSessionRef.current === sid) {
-        setTodoActionLoading(null);
-      }
-    }
-  }, [refreshTodos, todoActionLoading]);
-  const updateTodoStatus = useCallback((item: ChatTodoItem, status: ChatTodoItem["status"]) => {
-    const sid = activeSessionRef.current;
-    if (!sid) return;
-    return runTodoAction(
-      `update:${item.id}:${status}`,
-      `/chat/sessions/${sid}/todos/${item.id}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ status, metadata: { updated_from_chat_ui: true } }),
-      },
-      sid,
-    );
-  }, [runTodoAction]);
-  const deleteTodoItem = useCallback((item: ChatTodoItem) => {
-    const sid = activeSessionRef.current;
-    if (!sid) return;
-    return runTodoAction(
-      `delete:${item.id}`,
-      `/chat/sessions/${sid}/todos/${item.id}`,
-      { method: "DELETE" },
-      sid,
-    );
-  }, [runTodoAction]);
-  const clearTodoStatuses = useCallback((statuses: ChatTodoItem["status"][]) => {
-    const sid = activeSessionRef.current;
-    if (!sid) return;
-    return runTodoAction(
-      `clear:${statuses.join(",")}`,
-      `/chat/sessions/${sid}/todos/clear`,
-      {
-        method: "POST",
-        body: JSON.stringify({ statuses }),
-      },
-      sid,
-    );
-  }, [runTodoAction]);
-  const retryFailedTodos = useCallback(() => {
-    const sid = activeSessionRef.current;
-    if (!sid) return;
-    return runTodoAction(
-      "retry-failed",
-      `/chat/sessions/${sid}/todos/retry-failed`,
-      { method: "POST" },
-      sid,
-    );
-  }, [runTodoAction]);
-
-  const createTodoItem = useCallback(async (title: string) => {
-    const sid = activeSessionRef.current;
-    if (!sid || !title.trim()) return;
-    setTodoActionLoading("create");
-    try {
-      await chatApi(`/chat/sessions/${sid}/todos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() }),
-      });
-      await refreshTodos(sid);
-    } catch (err) {
-      console.error("TODO create failed", err);
-    } finally {
-      setTodoActionLoading(null);
-      setTodoAdding(false);
-      setTodoAddTitle("");
-    }
-  }, [refreshTodos]);
-
-  const saveTodoTitle = useCallback(async (item: ChatTodoItem, newTitle: string) => {
-    const sid = activeSessionRef.current;
-    if (!sid || !newTitle.trim() || newTitle.trim() === item.title) {
-      setTodoEditingId(null);
-      setTodoEditTitle("");
-      return;
-    }
-    setTodoActionLoading("edit-" + item.id);
-    try {
-      await chatApi(`/chat/sessions/${sid}/todos/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle.trim() }),
-      });
-      await refreshTodos(sid);
-    } catch (err) {
-      console.error("TODO title edit failed", err);
-    } finally {
-      setTodoActionLoading(null);
-      setTodoEditingId(null);
-      setTodoEditTitle("");
-    }
-  }, [refreshTodos]);
-
   // BUG-2 FIX: 초기 로드와 워크스페이스 전환 구분
   const initialWsLoadRef = useRef(true);
   // BUG-REFRESH FIX: 초기 마운트 시 hash 삭제 방지
@@ -7370,21 +7222,14 @@ export default function ChatPage() {
   useEffect(() => {
     const sid = activeSession?.id;
     if (!sid) {
-      setTodoItems([]);
-      setTodoError(null);
-      setTodoLoading(false);
+      todos.reset();
       return;
     }
     refreshTodos(sid);
     const intervalMs = streaming || waitingBgResponse ? 4000 : 30000;
     const timer = window.setInterval(() => refreshTodos(sid), intervalMs);
     return () => window.clearInterval(timer);
-  }, [activeSession?.id, refreshTodos, streaming, waitingBgResponse]);
-
-  useEffect(() => {
-    setShowAllTodos(false);
-    setTodoCollapsed(true);
-  }, [activeSession?.id]);
+  }, [activeSession?.id, refreshTodos, streaming, waitingBgResponse, todos.reset]);
 
   // ── 안전장치: 메시지가 빈 배열로 렌더링될 때 500ms 후 자동 재시도 ──
   useEffect(() => {
@@ -11483,31 +11328,6 @@ export default function ChatPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [openCreateSessionModal]);
 
-  const todoCounts = useMemo(() => ({
-    active: todoItems.filter((item) => item.status === "pending" || item.status === "in_progress").length,
-    pending: todoItems.filter((item) => item.status === "pending").length,
-    inProgress: todoItems.filter((item) => item.status === "in_progress").length,
-    completed: todoItems.filter((item) => item.status === "completed").length,
-    failed: todoItems.filter((item) => item.status === "failed").length,
-    skipped: todoItems.filter((item) => item.status === "skipped").length,
-  }), [todoItems]);
-  const hiddenDoneTodoCount = todoCounts.completed + todoCounts.failed + todoCounts.skipped;
-  const visibleTodos = useMemo(() => (
-    [...todoItems]
-      .filter((item) => showAllTodos || item.status === "pending" || item.status === "in_progress")
-      .sort((a, b) => {
-        const rank = (status: ChatTodoItem["status"]) => (
-          status === "in_progress" ? 0 :
-          status === "pending" ? 1 :
-          status === "failed" ? 2 :
-          status === "skipped" ? 3 : 4
-        );
-        const byRank = rank(a.status) - rank(b.status);
-        if (byRank !== 0) return byRank;
-        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-      })
-      .slice(0, 8)
-  ), [showAllTodos, todoItems]);
   const mobileComposerContextLabels = useMemo(() => {
     const labels: string[] = [];
     if (yellowWarning && streaming) labels.push("경고");
@@ -13767,354 +13587,8 @@ export default function ChatPage() {
           {/* 메모리 & 맥락 뷰어 */}
           {screenSize !== "mobile" && <MemoryContextBar sessionId={activeSession?.id ?? null} />}
 
-          {screenSize !== "mobile" && activeSession?.id && (todoItems.length > 0 || todoLoading || todoError) && (
-            <div
-              style={{
-                marginBottom: "8px",
-                padding: "8px 10px",
-                borderRadius: "8px",
-                background: "var(--ct-card)",
-                border: "1px solid var(--ct-border)",
-                color: "var(--ct-text)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: !todoCollapsed && (visibleTodos.length || todoError) ? "6px" : 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                  <span style={{ fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap" }}>TODO</span>
-                  {!todoCollapsed && (
-                    <button
-                      onClick={() => { setTodoAdding(true); setTodoAddTitle(""); }}
-                      disabled={!!todoActionLoading}
-                      title="\uc0c8 TODO \ucd94\uac00"
-                      style={{
-                        background: "none", border: "none", cursor: todoActionLoading ? "default" : "pointer",
-                        fontSize: "14px", lineHeight: 1, padding: "0 2px", color: "var(--ct-accent)",
-                        opacity: todoActionLoading ? 0.6 : 1,
-                      }}
-                    >+</button>
-                  )}
-                  <span style={{ fontSize: "11px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
-                    진행 {todoCounts.active} · 완료 {todoCounts.completed}{todoCounts.failed ? ` · 실패 ${todoCounts.failed}` : ""}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px", flexShrink: 1, flexWrap: "wrap" }}>
-                  {hiddenDoneTodoCount > 0 && !todoCollapsed && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllTodos((prev) => !prev)}
-                      title={showAllTodos ? "진행/대기 TODO만 표시" : "완료/실패 TODO까지 표시"}
-                      style={{
-                        height: "26px",
-                        padding: "0 8px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--ct-border)",
-                        background: showAllTodos ? "var(--ct-accent)" : "var(--ct-hover)",
-                        color: showAllTodos ? "#fff" : "var(--ct-text2)",
-                        cursor: "pointer",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {showAllTodos ? "진행만" : "전체"}
-                    </button>
-                  )}
-                  {!todoCollapsed && todoCounts.failed > 0 && (
-                    <button
-                      type="button"
-                      onClick={retryFailedTodos}
-                      disabled={!!todoActionLoading}
-                      title="실패 TODO를 대기로 되돌림"
-                      style={{
-                        height: "26px",
-                        padding: "0 8px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--ct-border)",
-                        background: "var(--ct-hover)",
-                        color: "var(--ct-text2)",
-                        cursor: todoActionLoading ? "default" : "pointer",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        opacity: todoActionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      실패 재시도
-                    </button>
-                  )}
-                  {!todoCollapsed && showAllTodos && todoCounts.completed > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => clearTodoStatuses(["completed"])}
-                      disabled={!!todoActionLoading}
-                      title="완료 TODO를 목록에서 제거"
-                      style={{
-                        height: "26px",
-                        padding: "0 8px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--ct-border)",
-                        background: "var(--ct-hover)",
-                        color: "var(--ct-text2)",
-                        cursor: todoActionLoading ? "default" : "pointer",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        opacity: todoActionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      완료 비우기
-                    </button>
-                  )}
-                  {!todoCollapsed && showAllTodos && todoCounts.failed > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => clearTodoStatuses(["failed"])}
-                      disabled={!!todoActionLoading}
-                      title="실패 TODO를 목록에서 제거"
-                      style={{
-                        height: "26px",
-                        padding: "0 8px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--ct-border)",
-                        background: "var(--ct-hover)",
-                        color: "var(--ct-text2)",
-                        cursor: todoActionLoading ? "default" : "pointer",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        opacity: todoActionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      실패 비우기
-                    </button>
-                  )}
-                  {!todoCollapsed && showAllTodos && todoCounts.pending > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => clearTodoStatuses(["pending"])}
-                      disabled={!!todoActionLoading}
-                      title="대기 TODO를 목록에서 제거"
-                      style={{
-                        height: "26px",
-                        padding: "0 8px",
-                        borderRadius: "6px",
-                        border: "1px solid var(--ct-border)",
-                        background: "var(--ct-hover)",
-                        color: "var(--ct-text2)",
-                        cursor: todoActionLoading ? "default" : "pointer",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
-                        opacity: todoActionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      대기 비우기
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => refreshTodos(activeSession.id)}
-                    disabled={todoLoading}
-                    title="TODO 새로고침"
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--ct-border)",
-                      background: "var(--ct-hover)",
-                      color: "var(--ct-text2)",
-                      cursor: todoLoading ? "default" : "pointer",
-                      opacity: todoLoading ? 0.6 : 1,
-                      flexShrink: 0,
-                    }}
-                  >
-                    ↻
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTodoCollapsed((prev) => !prev)}
-                    aria-expanded={!todoCollapsed}
-                    title={todoCollapsed ? "TODO 목록 펼치기" : "TODO 목록 접기"}
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "6px",
-                      border: "1px solid var(--ct-border)",
-                      background: "var(--ct-hover)",
-                      color: "var(--ct-text2)",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {todoCollapsed ? "▾" : "▴"}
-                  </button>
-                </div>
-              </div>
-              {!todoCollapsed && todoError ? (
-                <div style={{ fontSize: "12px", color: "#ef4444" }}>{todoError}</div>
-              ) : !todoCollapsed ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  {todoAdding && (
-                    <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
-                      <input className="aads-focus-border"
-                        autoFocus
-                        value={todoAddTitle}
-                        onChange={(e) => setTodoAddTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && todoAddTitle.trim()) createTodoItem(todoAddTitle);
-                          if (e.key === "Escape") { setTodoAdding(false); setTodoAddTitle(""); }
-                        }}
-                        placeholder="\uc791\uc5c5 \uc81c\ubaa9 \uc785\ub825..."
-                        style={{
-                          flex: 1, fontSize: "11px", padding: "3px 6px", borderRadius: "4px",
-                          border: "1px solid var(--ct-border)", background: "var(--ct-input)",
-                          color: "var(--ct-text)", outline: "none", minWidth: 0,
-                        }}
-                      />
-                      <button
-                        onClick={() => todoAddTitle.trim() && createTodoItem(todoAddTitle)}
-                        disabled={!todoAddTitle.trim() || !!todoActionLoading}
-                        style={{
-                          fontSize: "11px", padding: "2px 8px", borderRadius: "4px", border: "none",
-                          background: todoAddTitle.trim() ? "var(--ct-accent)" : "var(--ct-hover)",
-                          color: todoAddTitle.trim() ? "#fff" : "var(--ct-text2)", cursor: "pointer",
-                        }}
-                      >\ucd94\uac00</button>
-                      <button
-                        onClick={() => { setTodoAdding(false); setTodoAddTitle(""); }}
-                        style={{
-                          fontSize: "11px", padding: "2px 6px", borderRadius: "4px", border: "none",
-                          background: "var(--ct-hover)", color: "var(--ct-text2)", cursor: "pointer",
-                        }}
-                      >\ucde8\uc18c</button>
-                    </div>
-                  )}
-                  {visibleTodos.length === 0 ? (
-                    <div style={{ fontSize: "12px", color: "var(--ct-text2)" }}>
-                      진행/대기 TODO 없음{hiddenDoneTodoCount > 0 ? " · 전체 보기로 완료 항목 확인 가능" : ""}
-                    </div>
-                  ) : visibleTodos.map((item) => {
-                    const isDone = item.status === "completed";
-                    const isFailed = item.status === "failed";
-                    const isActive = item.status === "in_progress";
-                    return (
-                      <div key={item.id} style={{ display: "flex", alignItems: "center", gap: "7px", minHeight: "20px" }}>
-                        <span
-                          aria-hidden
-                          style={{
-                            width: "8px",
-                            height: "8px",
-                            borderRadius: "50%",
-                            flexShrink: 0,
-                            background: isDone ? "#22c55e" : isFailed ? "#ef4444" : isActive ? "var(--ct-accent)" : "var(--ct-text2)",
-                          }}
-                        />
-                        {todoEditingId === item.id ? (
-                          <input className="aads-focus-border"
-                            autoFocus
-                            value={todoEditTitle}
-                            onChange={(e) => setTodoEditTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveTodoTitle(item, todoEditTitle);
-                              if (e.key === "Escape") { setTodoEditingId(null); setTodoEditTitle(""); }
-                            }}
-                            onBlur={() => saveTodoTitle(item, todoEditTitle)}
-                            style={{
-                              flex: 1, minWidth: 0, fontSize: "12px", padding: "1px 4px", borderRadius: "3px",
-                              border: "1px solid var(--ct-accent)", background: "var(--ct-input)",
-                              color: "var(--ct-text)", outline: "none",
-                            }}
-                          />
-                        ) : (
-                          <span
-                            onDoubleClick={() => { setTodoEditingId(item.id); setTodoEditTitle(item.title); }}
-                            title={item.title + " (\ub354\ube14\ud074\ub9ad\uc73c\ub85c \uc218\uc815)"}
-                            style={{
-                              flex: 1, minWidth: 0, fontSize: "12px",
-                              color: isDone ? "var(--ct-text2)" : "var(--ct-text)",
-                              textDecoration: isDone ? "line-through" : "none",
-                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                              cursor: "text",
-                            }}
-                          >
-                            {item.title}
-                          </span>
-                        )}
-                        <span style={{ fontSize: "10px", color: "var(--ct-text2)", whiteSpace: "nowrap" }}>
-                          {item.status === "in_progress" ? "진행" : item.status === "pending" ? "대기" : item.status === "completed" ? "완료" : item.status === "failed" ? "실패" : "제외"}
-                        </span>
-                        {isFailed && (
-                          <button
-                            type="button"
-                            onClick={() => updateTodoStatus(item, "pending")}
-                            disabled={!!todoActionLoading}
-                            title="이 실패 TODO를 대기로 되돌림"
-                            style={{
-                              height: "20px",
-                              padding: "0 6px",
-                              borderRadius: "5px",
-                              border: "1px solid var(--ct-border)",
-                              background: "var(--ct-hover)",
-                              color: "var(--ct-text2)",
-                              cursor: todoActionLoading ? "default" : "pointer",
-                              fontSize: "10px",
-                              whiteSpace: "nowrap",
-                              opacity: todoActionLoading ? 0.6 : 1,
-                            }}
-                          >
-                            재시도
-                          </button>
-                        )}
-                        {(item.status === "pending" || item.status === "in_progress") && (
-                          <button
-                            type="button"
-                            onClick={() => updateTodoStatus(item, "skipped")}
-                            disabled={!!todoActionLoading}
-                            title="이 TODO를 제외 처리"
-                            style={{
-                              height: "20px",
-                              padding: "0 6px",
-                              borderRadius: "5px",
-                              border: "1px solid var(--ct-border)",
-                              background: "var(--ct-hover)",
-                              color: "var(--ct-text2)",
-                              cursor: todoActionLoading ? "default" : "pointer",
-                              fontSize: "10px",
-                              whiteSpace: "nowrap",
-                              opacity: todoActionLoading ? 0.6 : 1,
-                            }}
-                          >
-                            제외
-                          </button>
-                        )}
-                        {(isDone || isFailed || item.status === "skipped") && (
-                          <button
-                            type="button"
-                            onClick={() => deleteTodoItem(item)}
-                            disabled={!!todoActionLoading}
-                            title="이 TODO를 목록에서 제거"
-                            style={{
-                              height: "20px",
-                              padding: "0 6px",
-                              borderRadius: "5px",
-                              border: "1px solid var(--ct-border)",
-                              background: "var(--ct-hover)",
-                              color: "var(--ct-text2)",
-                              cursor: todoActionLoading ? "default" : "pointer",
-                              fontSize: "10px",
-                              whiteSpace: "nowrap",
-                              opacity: todoActionLoading ? 0.6 : 1,
-                            }}
-                          >
-                            숨김
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
+          {activeSession?.id && (todos.items.length > 0 || todos.loading || todos.error) && (
+            <TodoPanel key={activeSession.id} todos={todos} sessionId={activeSession.id} screenSize={screenSize} />
           )}
 
           {/* AADS-190: Yellow 경고 바 */}
