@@ -47,7 +47,7 @@ function GoalRow({ goal, lane, onOpenGoal, now }: {
         {noReason && <span style={{ ...pill, color: "#f59e0b", borderColor: "rgba(245,158,11,.7)" }}>⚠️ {noReason}</span>}
         {(() => {
           const chip = autoApprovalChip(goal.auto_approval, now);
-          return chip ? <span style={pill}>자동승인 {chip.text}</span> : null;
+          return chip ? <span style={pill}>{chip.text}</span> : null;
         })()}
       </div>
     </div>

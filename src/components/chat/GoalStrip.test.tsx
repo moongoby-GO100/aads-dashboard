@@ -134,7 +134,7 @@ describe("GoalStrip dropdown list (open)", () => {
 
   it("renders the auto-approval chip next to the option, not inside it", () => {
     const out = html({ open: true, goals: [g("a", { priority: "P1", auto_approval: { state: "manual" } })] });
-    expect(out).toContain("자동승인 🔒 수동");
+    expect(out).toContain("승인: 수동");
   });
 
   it("mobile uses a fixed scrim and bottom sheet with a close button", () => {
@@ -157,5 +157,61 @@ describe("GoalStrip dropdown list (open)", () => {
 
   it("does not render the list while closed", () => {
     expect(html()).not.toContain("data-goal-dropdown");
+  });
+});
+
+describe("approval chip and progress chip are separate", () => {
+  const STATES: Array<[string, string]> = [
+    ["working", "진행: 진행중"], ["no_owner", "진행: 담당 없음"], ["awaiting_reply", "진행: 답 대기"],
+    ["answered_no_progress", "진행: 답했으나 진행 없음"], ["blocked", "진행: 막힘"], ["paused", "진행: 멈춤"], ["idle", "진행: 대기"],
+  ];
+  const one = (over: Partial<StripChipGoal>) => html({ open: true, goals: [g("row1", { priority: "P1", ...over })] });
+
+  it("renders both chips on the same row, each with its own copy", () => {
+    const out = one({ progress_state: "blocked", auto_approval: { state: "manual" } });
+    expect(out).toContain("data-goal-chips");
+    expect(out).toContain("승인: 수동");
+    expect(out).toContain("진행: 막힘");
+    expect(out).not.toContain("자동승인 🔒");
+  });
+
+  it("explains that approval is not progress in the approval chip tooltip", () => {
+    const out = one({ auto_approval: { state: "high", used: 3, max: 10 } });
+    expect(out).toContain("승인: 고위험까지 자동 3/10");
+    expect(out).toContain("위험 작업 때 대표님 승인 버튼을 띄울지 정하는 설정입니다. 진행 여부와는 별개입니다.");
+  });
+
+  it.each(STATES)("shows the %s copy and never the raw state or an id", (state, text) => {
+    const out = one({ progress_state: state });
+    expect(out).toContain(text);
+    if (state.includes("_")) expect(out).not.toContain(state);
+    expect(out).not.toContain("progress_state");
+    expect(out).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
+  });
+
+  it("marks only the stuck states as expandable chips", () => {
+    for (const [state] of STATES) {
+      const out = one({ progress_state: state });
+      const expandable = ["no_owner", "answered_no_progress", "blocked"].includes(state);
+      expect(/<button[^>]*data-progress-tone[^>]*aria-expanded="false"/.test(out)).toBe(expandable);
+    }
+  });
+
+  it("shows the substitute-dispatch copy for a no-owner goal run by the lead", () => {
+    expect(one({ progress_state: "no_owner", progress_substitute: true })).toContain("진행: 담당 없음·주도 세션 대행");
+  });
+
+  it("falls back to the old rule when progress_state is missing", () => {
+    expect(one({ activity: "working" })).toContain("진행: 진행중");
+    expect(one({ activity: "awaiting" })).toContain("진행: 답 대기");
+    expect(one({ dispatch_note: "승인 대기 중" })).toContain("진행: 막힘");
+    expect(one({ goal_paused: true })).toContain("진행: 멈춤");
+    expect(one({})).toContain("진행: 대기");
+  });
+
+  it("does not show the stuck detail until the chip is opened", () => {
+    const out = one({ progress_state: "blocked", blocked_milestones: [{ milestone_id: "m-1", title: "M2", reason: "사유" }] });
+    expect(out).not.toContain("data-goal-stuck");
+    expect(out).not.toContain("다시 보내기");
   });
 });

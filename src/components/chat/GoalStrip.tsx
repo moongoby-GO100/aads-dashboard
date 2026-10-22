@@ -5,11 +5,13 @@
 //       시안 20261022_goal_strip_dropdown/goal-dropdown_*.html (목업 검토 ba4a0f2e, rev1).
 // 분류·정렬·순서 고정은 src/lib/goalStrip.ts 의 순수 함수가 한다. 여기는 그리기와 열림·키보드만 한다.
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { MilestoneStuckActions } from "@/components/GoalStuckActions";
 import {
-  activityIcon, autoApprovalChip, autoApprovalDetailRows, autoApprovalHint, cleanupChipLabel,
+  APPROVAL_CHIP_TOOLTIP, activityIcon, autoApprovalChip, autoApprovalDetailRows, autoApprovalHint, cleanupChipLabel,
   dropdownGroupOf, dropdownTriggerSummary, freezeOrder, goalDisplayTitle, groupDropdownGoals, nextOptionIndex,
-  p0IdleDays, priorityBadge, progressPct, shortGoalTitle, sortDropdownGoals, unlinkedChipLabel,
-  type AutoApprovalChip, type DropdownGroupKey, type StripChipGoal,
+  p0IdleDays, priorityBadge, progressChip, progressPct, shortGoalTitle, sortDropdownGoals, stuckMilestonesOfGoal,
+  unlinkedChipLabel,
+  type AutoApprovalChip, type DropdownGroupKey, type ProgressChip, type ProgressTone, type StripChipGoal,
 } from "@/lib/goalStrip";
 
 const BADGE_BG: Record<string, string> = { p0: "#b91c1c", p1: "#c2410c", p2: "#475569", other: "#475569" };
@@ -22,6 +24,32 @@ const AA_STYLE: Record<AutoApprovalChip["tone"], { color: string; border: string
   info: { color: "#a5b4fc", border: "rgba(129,140,248,.55)", bg: "rgba(99,102,241,.12)" },
   paused: { color: "var(--ct-text2)", border: "var(--ct-border)", bg: "rgba(148,163,184,.12)" },
 };
+
+const PROGRESS_STYLE: Record<ProgressTone, { color: string; border: string; bg: string }> = {
+  working: { color: "#93c5fd", border: "rgba(59,130,246,.55)", bg: "rgba(59,130,246,.14)" },
+  wait: { color: "#fbbf24", border: "rgba(245,158,11,.55)", bg: "rgba(245,158,11,.12)" },
+  stuck: { color: "#fca5a5", border: "rgba(220,38,38,.65)", bg: "rgba(220,38,38,.14)" },
+  paused: { color: "var(--ct-text2)", border: "var(--ct-border)", bg: "rgba(148,163,184,.12)" },
+  idle: { color: "var(--ct-text2)", border: "var(--ct-border)", bg: "transparent" },
+};
+
+function ProgressPill({ chip, title, expanded, onToggle }: {
+  chip: ProgressChip; title: string; expanded: boolean; onToggle: () => void;
+}) {
+  const st = PROGRESS_STYLE[chip.tone];
+  const style: React.CSSProperties = {
+    flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap",
+    padding: "3px 9px", borderRadius: 999, fontSize: 10.5, fontWeight: 700,
+    color: st.color, background: st.bg, border: `1px solid ${st.border}`,
+  };
+  if (!chip.stuck) return <span data-progress-tone={chip.tone} title={title} style={style}>{chip.text}</span>;
+  return (
+    <button type="button" data-progress-tone={chip.tone} title={title} aria-expanded={expanded} onClick={onToggle}
+      style={{ ...style, cursor: "pointer", minHeight: 32 }}>
+      {chip.text} {expanded ? "▴" : "▾"}
+    </button>
+  );
+}
 
 function Badge({ priority }: { priority: string | null | undefined }) {
   const b = priorityBadge(priority);
@@ -41,7 +69,7 @@ function AutoApprovalPill({ chip, title, onClick, block }: {
   const st = AA_STYLE[chip.tone];
   return (
     <button type="button" title={title} onClick={onClick}
-      aria-label={`자동승인 ${chip.text}`}
+      aria-label={chip.text}
       style={{
         flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap",
         padding: block ? "3px 9px" : "1px 7px", borderRadius: 999, fontSize: 10.5, fontWeight: 700, cursor: "pointer",
@@ -75,6 +103,8 @@ export interface GoalStripProps {
   onToggleCard: () => void;
   signalsError: boolean;
   isMobile: boolean;
+  /** 다시 보내기·담당 지정 뒤 목표 목록을 다시 불러온다. */
+  onRefresh?: () => void;
 }
 
 type FrozenView = { ids: string[]; groups: Record<string, DropdownGroupKey> };
@@ -132,6 +162,7 @@ function detailParts(g: StripChipGoal, now: number, mobile: boolean): DetailPart
 export function GoalStrip(p: GoalStripProps) {
   const { goals, open, panelGoalId, isMobile, onOpenChange } = p;
   const [aaGoalId, setAaGoalId] = useState<string | null>(null);
+  const [stuckGoalId, setStuckGoalId] = useState<string | null>(null);
   const [frozen, setFrozen] = useState<FrozenView | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const now = useNow();
@@ -171,6 +202,7 @@ export function GoalStrip(p: GoalStripProps) {
 
   const close = (returnFocus = true) => {
     setAaGoalId(null);
+    setStuckGoalId(null);
     onOpenChange(false);
     if (returnFocus) triggerRef.current?.focus();
   };
@@ -228,27 +260,63 @@ export function GoalStrip(p: GoalStripProps) {
     const chip = autoApprovalChip(g.auto_approval, now);
     if (!chip || !g.auto_approval) return null;
     const rows = autoApprovalDetailRows(g.auto_approval, now);
-    const title = [`자동승인 — ${g.title}`, ...rows.map((r) => `${r.label}: ${r.value}`), autoApprovalHint(g.auto_approval) || ""]
+    const title = [APPROVAL_CHIP_TOOLTIP, `자동승인 — ${g.title}`, ...rows.map((r) => `${r.label}: ${r.value}`), autoApprovalHint(g.auto_approval) || ""]
       .filter(Boolean).join("\n");
     return <AutoApprovalPill chip={chip} title={title} block
       onClick={() => setAaGoalId(aaGoalId === g.goal_id ? null : g.goal_id)} />;
+  };
+
+  const openGoal = (goalId: string) => {
+    setStuckGoalId(null);
+    if (panelGoalId !== goalId) p.onToggleGoal(goalId);
+    close(true);
+  };
+
+  // 펼침: 막힌 마일스톤별 사유·막힌 시각·버튼. 내부 식별자는 쓰지 않고 버튼 호출에만 id 를 쓴다.
+  const stuckDetail = (g: StripChipGoal, chip: ProgressChip) => {
+    const items = stuckMilestonesOfGoal(g);
+    return (
+      <div data-goal-stuck={g.goal_id} style={{ padding: "0 12px 10px 37px", fontSize: 11.5, lineHeight: 1.55 }}>
+        {items.length === 0 && (
+          <>
+            <div style={{ color: BLOCKED_TEXT }}>{chip.reason || "사유가 기록되지 않았습니다."}</div>
+            <button type="button" onClick={() => openGoal(g.goal_id)}
+              style={{ marginTop: 8, minHeight: 44, padding: "0 14px", borderRadius: 8, border: "1px solid var(--ct-border)",
+                       background: "transparent", color: "var(--ct-text)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              목표 패널에서 처리
+            </button>
+          </>
+        )}
+        {items.map((m) => (
+          <div key={m.milestoneId} data-stuck-milestone style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--ct-border)" }}>
+            <div style={{ fontWeight: 700, color: "var(--ct-text)" }}>{m.title || "마일스톤"} · {m.label}</div>
+            <div style={{ color: BLOCKED_TEXT }}>{m.reason || "사유가 기록되지 않았습니다."}</div>
+            {m.blockedAt && <div style={{ color: MUTED }}>막힌 시각 {m.blockedAt}</div>}
+            <MilestoneStuckActions goalId={g.goal_id} milestoneId={m.milestoneId}
+              onChanged={p.onRefresh} onNeedOwner={() => openGoal(g.goal_id)} />
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const row = (g: StripChipGoal, group: DropdownGroupKey, idx: number) => {
     const selected = panelGoalId === g.goal_id;
     const pct = progressPct(g.progress);
     const parts = detailParts(g, now, isMobile);
+    const pchip = progressChip(g);
+    const stuckOpen = pchip.stuck && stuckGoalId === g.goal_id;
     const runner = g.activity && g.current_runner ? `\n${activityIcon(g.activity)} 러너 ${g.current_runner.job_id} · ${g.current_runner.status}` : "";
     return (
       <div key={g.goal_id} role="none" data-goal-row={g.goal_id}
-        style={{ display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid var(--ct-border)",
+        style={{ borderBottom: "1px solid var(--ct-border)",
                  background: selected ? "rgba(37,99,235,.14)" : "transparent",
                  boxShadow: selected ? "inset 3px 0 0 #2563eb" : undefined }}>
         <button type="button" role="option" aria-selected={selected} tabIndex={idx === activeIdx ? 0 : -1}
           onFocus={() => setFocusId(g.goal_id)}
           onClick={() => selectGoal(g.goal_id)}
           title={`${g.is_lead ? "주도 목표 — 이 창이 취합하고 판정합니다" : "담당 목표 — 맡은 몫을 진행합니다"}\n${g.title}${g.dormant ? "\n💤 14일 넘게 활동이 없어 휴면으로 표시됩니다" : ""}${runner}`}
-          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7, minHeight: isMobile ? 52 : 44, padding: "6px 0 6px 12px",
+          style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 7, minHeight: isMobile ? 52 : 44, padding: "6px 12px 6px 12px", width: "100%",
                    border: 0, background: "transparent", cursor: "pointer", font: "inherit", color: "var(--ct-text)", textAlign: "left" }}>
           <span aria-hidden style={{ flexShrink: 0, minWidth: 18, textAlign: "center", fontSize: 12, color: MUTED }}>{rowIcon(g, group)}</span>
           <Badge priority={g.priority} />
@@ -273,7 +341,13 @@ export function GoalStrip(p: GoalStripProps) {
           <ProgressBar pct={pct} />
           <span style={{ flexShrink: 0, minWidth: 28, textAlign: "right", fontSize: 11, color: MUTED }}>{pct}%</span>
         </button>
-        <span style={{ flexShrink: 0, paddingRight: 12 }}>{aaChip(g)}</span>
+        <div data-goal-chips style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, padding: "0 12px 8px 37px" }}>
+          <ProgressPill chip={pchip} expanded={stuckOpen}
+            title={[pchip.text, pchip.reason || ""].filter(Boolean).join("\n")}
+            onToggle={() => setStuckGoalId(stuckOpen ? null : g.goal_id)} />
+          {aaChip(g)}
+        </div>
+        {stuckOpen && stuckDetail(g, pchip)}
       </div>
     );
   };
@@ -445,8 +519,9 @@ export function GoalStrip(p: GoalStripProps) {
         : { position: "absolute", left: 70, top: "calc(100% + 6px)", zIndex: 40, width: 300, padding: "10px 12px", background: "var(--ct-card)",
             border: "1px solid var(--ct-border)", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,.35)" }}>
       <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8, color: "var(--ct-text)" }}>
-        {autoApprovalChip(aaGoal.auto_approval)?.text.split(" ")[0]} 자동승인 — {shortGoalTitle(aaGoal.title, aaGoal.project)}
+        {autoApprovalChip(aaGoal.auto_approval)?.text} — {shortGoalTitle(aaGoal.title, aaGoal.project)}
       </div>
+      <div style={{ fontSize: 11.5, color: "var(--ct-text2)", marginBottom: 8, lineHeight: 1.5 }}>{APPROVAL_CHIP_TOOLTIP}</div>
       {autoApprovalDetailRows(aaGoal.auto_approval).map((r) => (
         <div key={r.label} style={{ display: "flex", gap: 10, fontSize: 12, padding: "2px 0" }}>
           <span style={{ width: 52, color: "var(--ct-text2)", flexShrink: 0 }}>{r.label}</span>

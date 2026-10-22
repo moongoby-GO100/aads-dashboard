@@ -44,6 +44,19 @@ export interface StripGoal {
   strip_group?: string | null;
   strip_order?: number | null;
   last_activity_at?: string | null;
+  progress_state?: string | null;
+  progress_reason?: string | null;
+  progress_substitute?: boolean | null;
+  blocked_milestones?: BlockedMilestone[] | null;
+}
+
+/** for-session·board 응답의 막힌 마일스톤 한 건. */
+export interface BlockedMilestone {
+  milestone_id: string;
+  title?: string | null;
+  state?: string | null;
+  reason?: string | null;
+  blocked_at?: string | null;
 }
 
 /** GET /goals 의 목표 한 줄 중 띠·카드가 쓰는 부분. */
@@ -328,16 +341,20 @@ export function autoApprovalChip(
   const s = state as AutoApprovalState;
   const warn = autoApprovalNeedsAttention(view, now);
   switch (s) {
-    case "manual": return { state: s, text: "🔒 수동", tone: "manual", warn };
-    case "high": return { state: s, text: `🟢 고위험까지${usage(view)}`, tone: "auto", warn };
-    case "all": return { state: s, text: `🟢 전체${usage(view)}`, tone: "strong", warn };
-    case "exhausted": return { state: s, text: `⛔ 한도 소진${usage(view)}`, tone: "warn", warn: false };
-    case "off": return { state: s, text: "🔒 해제됨", tone: "off", warn: false };
-    case "delegated": return { state: s, text: "👥 위임", tone: "info", warn: false };
-    case "paused": return { state: s, text: "⏸ 정지", tone: "paused", warn: false };
-    case "expired": return { state: s, text: "⌛ 만료", tone: "warn", warn: false };
+    case "manual": return { state: s, text: "승인: 수동", tone: "manual", warn };
+    case "high": return { state: s, text: `승인: 고위험까지 자동${usage(view)}`, tone: "auto", warn };
+    case "all": return { state: s, text: `승인: 전체 자동${usage(view)}`, tone: "strong", warn };
+    case "exhausted": return { state: s, text: `승인: 한도 소진${usage(view)}`, tone: "warn", warn: false };
+    case "off": return { state: s, text: "승인: 해제됨", tone: "off", warn: false };
+    case "delegated": return { state: s, text: "승인: 위임", tone: "info", warn: false };
+    case "paused": return { state: s, text: "승인: 멈춤", tone: "paused", warn: false };
+    case "expired": return { state: s, text: "승인: 만료", tone: "warn", warn: false };
   }
 }
+
+/** 승인 칩 툴팁 첫 줄 — 승인 정책은 진행 여부와 별개라는 설명. */
+export const APPROVAL_CHIP_TOOLTIP =
+  "위험 작업 때 대표님 승인 버튼을 띄울지 정하는 설정입니다. 진행 여부와는 별개입니다.";
 
 const AA_FULL_LABEL: Record<AutoApprovalState, string> = {
   manual: "수동",
@@ -478,4 +495,202 @@ export function shouldShowGoalStrip(input: {
 }): boolean {
   return input.sessionGoalCount > 0 || input.cleanupTotal > 0 || Number(input.unlinkedCount || 0) > 0
     || Boolean(input.signalsError);
+}
+
+// ── 진행 칩 (승인 칩과 별개) ─────────────────────────────────────────────────
+// 서버 progress_state 가 있으면 그 값을, 없는 구서버 응답이면 기존 7그룹 규칙(dropdownGroupOf)으로 접는다.
+export type ProgressState =
+  | "working" | "no_owner" | "awaiting_reply" | "answered_no_progress" | "blocked" | "paused" | "idle";
+export type ProgressTone = "working" | "wait" | "stuck" | "paused" | "idle";
+
+export const PROGRESS_STATES: readonly ProgressState[] = [
+  "working", "no_owner", "awaiting_reply", "answered_no_progress", "blocked", "paused", "idle",
+];
+
+const PROGRESS_LABEL: Record<ProgressState, string> = {
+  working: "진행중",
+  no_owner: "담당 없음",
+  awaiting_reply: "답 대기",
+  answered_no_progress: "답했으나 진행 없음",
+  blocked: "막힘",
+  paused: "멈춤",
+  idle: "대기",
+};
+
+const PROGRESS_TONE: Record<ProgressState, ProgressTone> = {
+  working: "working",
+  no_owner: "wait",
+  awaiting_reply: "wait",
+  answered_no_progress: "stuck",
+  blocked: "stuck",
+  paused: "paused",
+  idle: "idle",
+};
+
+export const SUBSTITUTE_LABEL = "담당 없음·주도 세션 대행";
+
+export interface ProgressChip {
+  state: ProgressState;
+  text: string;
+  tone: ProgressTone;
+  /** 사유·막힌 시각·버튼을 보여줄 상태 (막힘 · 답했으나 진행 없음 · 담당 없음). */
+  stuck: boolean;
+  reason: string | null;
+}
+
+const UUID_ANYWHERE_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/** 화면에 내보낼 사유 문구: 내부 UUID 를 지우고 공백을 정리한다. 비면 null. */
+export function scrubReason(text: string | null | undefined): string | null {
+  const t = String(text ?? "").replace(UUID_ANYWHERE_RE, "").replace(/\s{2,}/g, " ").replace(/\(\s*\)/g, "").trim();
+  return t || null;
+}
+
+export function isProgressState(value: unknown): value is ProgressState {
+  return typeof value === "string" && (PROGRESS_STATES as readonly string[]).includes(value);
+}
+
+export function isStuckState(state: ProgressState): boolean {
+  return state === "blocked" || state === "answered_no_progress" || state === "no_owner";
+}
+
+function fallbackProgressState(g: Partial<StripGoal>): ProgressState {
+  switch (dropdownGroupOf(g as DropdownClassifiable)) {
+    case "working": return "working";
+    case "awaiting": return "awaiting_reply";
+    case "blocked": return "blocked";
+    case "paused": return "paused";
+    default: return "idle";
+  }
+}
+
+export function progressChip(g: Partial<StripGoal>): ProgressChip {
+  const state = isProgressState(g.progress_state) ? g.progress_state : fallbackProgressState(g);
+  const label = state === "no_owner" && g.progress_substitute ? SUBSTITUTE_LABEL : PROGRESS_LABEL[state];
+  return {
+    state, text: `진행: ${label}`, tone: PROGRESS_TONE[state], stuck: isStuckState(state),
+    reason: scrubReason(g.progress_reason) ?? scrubReason(g.dispatch_note),
+  };
+}
+
+/** 마일스톤 한 건의 상태 이름 (패널 사유 블록 머리말). */
+export function progressStateLabel(state: ProgressState): string {
+  return PROGRESS_LABEL[state];
+}
+
+/** 막힌 시각을 KST 로: `10/22 17:24 (KST)`. 읽을 수 없으면 null. */
+export function formatKst(iso: string | null | undefined): string | null {
+  const t = toMs(iso);
+  if (t === null) return null;
+  const d = new Date(t + 9 * 3_600_000);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return `${p2(d.getUTCMonth() + 1)}/${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())} (KST)`;
+}
+
+export interface StuckMilestoneView {
+  milestoneId: string;
+  title: string | null;
+  state: ProgressState;
+  label: string;
+  reason: string | null;
+  blockedAt: string | null;
+}
+
+/** 목표 띠(for-session)의 막힌 마일스톤 목록을 화면용으로. milestone_id 가 없는 항목은 버린다. */
+export function stuckMilestonesOfGoal(g: Pick<StripGoal, "blocked_milestones">): StuckMilestoneView[] {
+  const out: StuckMilestoneView[] = [];
+  for (const b of g.blocked_milestones || []) {
+    if (!b || !b.milestone_id) continue;
+    const state: ProgressState = isProgressState(b.state) && isStuckState(b.state) ? b.state : "blocked";
+    out.push({
+      milestoneId: b.milestone_id, title: scrubReason(b.title), state, label: PROGRESS_LABEL[state],
+      reason: scrubReason(b.reason), blockedAt: formatKst(b.blocked_at),
+    });
+  }
+  return out;
+}
+
+export interface PanelMilestoneInput {
+  id: string;
+  status: string;
+  dispatch_note?: string | null;
+  progress_state?: string | null;
+  progress_reason?: string | null;
+}
+
+/**
+ * 목표 패널의 마일스톤 한 건이 막힘·답했으나 진행 없음·담당 없음이면 그 사유 블록. 아니면 null.
+ * progress_state 가 없는 구 응답은 진행중 + dispatch_note 가 있을 때만 막힘으로 본다.
+ */
+export function stuckViewOfMilestone(
+  m: PanelMilestoneInput, blocked: readonly BlockedMilestone[] | null | undefined,
+): StuckMilestoneView | null {
+  const hit = (blocked || []).find((b) => b.milestone_id === m.id);
+  let state: ProgressState;
+  if (isProgressState(m.progress_state)) state = m.progress_state;
+  else if (m.status === "in_progress" && String(m.dispatch_note || "").trim() !== "") state = "blocked";
+  else return null;
+  if (!isStuckState(state)) return null;
+  return {
+    milestoneId: m.id, title: null, state, label: PROGRESS_LABEL[state],
+    reason: scrubReason(m.progress_reason) ?? scrubReason(hit?.reason) ?? scrubReason(m.dispatch_note),
+    blockedAt: formatKst(hit?.blocked_at),
+  };
+}
+
+// ── 다시 보내기 · 담당 지정 결과 해석 ─────────────────────────────────────────
+export const NO_DISPATCH_TARGET_MESSAGE = "보낼 담당·주도 세션이 없습니다. 먼저 담당을 지정하세요";
+
+export interface ApiFailure { status: number | null; code: string | null; message: string | null }
+
+/** api.ts request() 가 던지는 `API error 409: {"detail":{...}}` 를 상태·코드·문구로 푼다. */
+export function parseApiFailure(e: unknown): ApiFailure {
+  const raw = e instanceof Error ? e.message : String(e ?? "");
+  const m = raw.match(/API error (\d{3}):\s*([\s\S]*)$/);
+  if (!m) return { status: null, code: null, message: null };
+  const status = Number(m[1]);
+  let code: string | null = null;
+  let message: string | null = null;
+  try {
+    const detail = (JSON.parse(m[2]) as { detail?: unknown })?.detail;
+    if (typeof detail === "string") { code = detail; }
+    else if (detail && typeof detail === "object") {
+      const d = detail as { code?: unknown; message?: unknown };
+      code = typeof d.code === "string" ? d.code : null;
+      message = typeof d.message === "string" ? d.message : null;
+    }
+  } catch { /* 본문이 JSON 이 아니면 상태만 쓴다 */ }
+  return { status, code, message: scrubReason(message) };
+}
+
+export type RedispatchOutcome =
+  | { kind: "ok"; text: string }
+  | { kind: "no_target"; text: string }
+  | { kind: "not_in_progress"; text: string }
+  | { kind: "error"; text: string };
+
+export function redispatchSuccessText(goalPaused: boolean): string {
+  return goalPaused
+    ? "다시 보냈습니다. 목표가 멈춰 있어 재개하면 담당에게 전달됩니다."
+    : "다시 보냈습니다. 다음 주기에 담당에게 전달됩니다.";
+}
+
+export function redispatchFailure(e: unknown): Exclude<RedispatchOutcome, { kind: "ok" }> {
+  const f = parseApiFailure(e);
+  if (f.status === 409 && f.code === "no_dispatch_target") return { kind: "no_target", text: NO_DISPATCH_TARGET_MESSAGE };
+  if (f.status === 409 && f.code === "milestone_not_in_progress") {
+    return { kind: "not_in_progress", text: "이 마일스톤은 이미 진행 상태가 바뀌어 다시 보낼 수 없습니다. 목록을 새로고침했습니다." };
+  }
+  if (f.status === 404) return { kind: "error", text: "마일스톤을 찾지 못했습니다. 목록을 새로고침해 주세요." };
+  const tail = f.message ? ` · ${f.message}` : f.status ? ` (오류 ${f.status})` : "";
+  return { kind: "error", text: `다시 보내지 못했습니다${tail}` };
+}
+
+export function ownerAssignFailureText(e: unknown): string {
+  const f = parseApiFailure(e);
+  if (f.status === 422 && f.code === "owner_not_linked") return "이 세션은 목표에 연결돼 있지 않아 담당으로 지정할 수 없습니다.";
+  if (f.status === 403) return "다른 프로젝트의 세션은 담당으로 지정할 수 없습니다.";
+  if (f.status === 404) return "마일스톤 또는 세션을 찾지 못했습니다. 목록을 새로고침해 주세요.";
+  const tail = f.message ? ` · ${f.message}` : f.status ? ` (오류 ${f.status})` : "";
+  return `담당을 지정하지 못했습니다${tail}`;
 }

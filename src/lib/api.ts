@@ -1689,6 +1689,17 @@ export const api = {
     request<any>(`/goals/milestones/${encodeURIComponent(milestoneId)}/confirm`,
       { method: "POST", body: JSON.stringify({ ok, reason }) }),
 
+  // 막힌 마일스톤의 발송 기록만 지워 다음 주기에 다시 보낸다. 보낼 곳이 없으면 409 no_dispatch_target.
+  redispatchMilestone: (milestoneId: string) =>
+    request<{ milestone_id: string; goal_id: string; redispatched: boolean; goal_paused: boolean }>(
+      `/goals/milestones/${encodeURIComponent(milestoneId)}/redispatch`,
+      { method: "POST", body: JSON.stringify({}) }),
+  // 마일스톤 담당 세션 지정. 목표에 연결된 세션만 받는다(422 owner_not_linked).
+  setMilestoneOwner: (goalId: string, milestoneId: string, ownerSessionId: string, ownerRoleKey?: string) =>
+    request<{ goal_id: string; milestone_id: string; owner_session_id: string; changed: boolean }>(
+      `/goals/${encodeURIComponent(goalId)}/milestones/${encodeURIComponent(milestoneId)}/owner`,
+      { method: "PATCH", body: JSON.stringify({ owner_session_id: ownerSessionId, ...(ownerRoleKey ? { owner_role_key: ownerRoleKey } : {}) }) }),
+
   // 담당 붙이기 — **세션을 만들지 않는다.** 이미 있는 창을 붙일 뿐이다.
   getGoalCandidates: (goalId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/candidates`),

@@ -27,6 +27,11 @@ import {
   type WorkTreeContext,
 } from "@/components/GoalMilestoneWork";
 import { groupWorkItemsByMilestone } from "@/lib/goalMilestoneGrouping";
+import { MilestoneStuckActions } from "@/components/GoalStuckActions";
+import {
+  APPROVAL_CHIP_TOOLTIP, autoApprovalChip, progressChip, stuckViewOfMilestone,
+  type BlockedMilestone, type ProgressTone,
+} from "@/lib/goalStrip";
 
 type Milestone = {
   id: string; title: string; status: string; sequence_order: number;
@@ -34,6 +39,7 @@ type Milestone = {
   evidence: Record<string, unknown> | string | null;
   dispatch_note: string | null; owner_role_key: string;
   review_ask_count: number; open_notes: number;
+  progress_state?: string | null; progress_reason?: string | null;
 };
 type Owner = {
   session_id: string; role_key: string; title: string; state: string;
@@ -47,7 +53,18 @@ type Board = {
   documents?: GoalDocument[]; document_history?: GoalDocument[];
   has_document_history?: boolean;
   missing_design?: string[]; has_lead?: boolean;
+  progress_state?: string | null; progress_reason?: string | null; progress_substitute?: boolean | null;
+  blocked_milestones?: BlockedMilestone[] | null;
 };
+
+const PROGRESS_CHIP_STYLE: Record<ProgressTone, { color: string; border: string }> = {
+  working: { color: "#2563eb", border: "#2563eb" },
+  wait: { color: "#d97706", border: "#d97706" },
+  stuck: { color: "#dc2626", border: "#dc2626" },
+  paused: { color: "var(--text-secondary)", border: "var(--border)" },
+  idle: { color: "var(--text-secondary)", border: "var(--border)" },
+};
+const chipBase = { padding: "2px 9px", borderRadius: 999, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap" as const };
 
 const MARK: Record<string, { icon: string; color: string }> = {
   completed: { icon: "✓", color: "#16a34a" },
@@ -79,12 +96,14 @@ function isScreenEvidence(ref: string): boolean {
 
 export type GoalPanelSummary = { title?: string; status?: string; project?: string };
 
-export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProject }: {
+export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProject, onGoalsChanged }: {
   goalId: string;
   summary?: GoalPanelSummary;
   sessionProject?: string;
   onClose: () => void;
   onOpenSession?: (sessionId: string) => void;
+  /** 다시 보내기·담당 지정이 끝난 뒤 채팅 상단 목표 목록도 다시 불러오게 한다. */
+  onGoalsChanged?: () => void;
 }) {
   const boardKey = useMemo(() => ({ id: goalId }), [goalId]);
   const boardGoalRef = useRef(boardKey);
@@ -182,6 +201,11 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
     } finally { setBusy(null); }
   }, [load]);
 
+  const refreshAfterAction = useCallback(async () => {
+    await load();
+    onGoalsChanged?.();
+  }, [load, onGoalsChanged]);
+
   const done = board?.milestones.filter((m) => m.status === "completed").length ?? 0;
   const total = board?.milestones.length ?? 0;
   const lead = board?.owners.find((o) => o.is_lead) ?? null;
@@ -226,6 +250,32 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
             pausedReason={board?.goal_paused_reason} pausedAt={board?.goal.paused_at}
             milestonesDone={board ? done : undefined} milestonesTotal={board ? total : undefined}
             onChanged={load} />
+          {(board || policy) && (
+            <div data-goal-panel-chips style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {policy && approvalControls.supported && (() => {
+                const chip = autoApprovalChip({
+                  state: policy.auto_approve_critical ? "all" : policy.auto_approve_high ? "high" : "manual",
+                  used: policy.used, max: policy.max_executions,
+                });
+                return chip ? (
+                  <span data-approval-chip={chip.state} title={APPROVAL_CHIP_TOOLTIP}
+                    style={{ ...chipBase, color: "var(--text-secondary)", border: "1px solid var(--border)" }}>{chip.text}</span>
+                ) : null;
+              })()}
+              {board && (() => {
+                const chip = progressChip({
+                  progress_state: board.progress_state, progress_reason: board.progress_reason,
+                  progress_substitute: board.progress_substitute, goal_paused: Boolean(board.goal_paused),
+                  status: board.goal.status,
+                });
+                const st = PROGRESS_CHIP_STYLE[chip.tone];
+                return (
+                  <span data-progress-tone={chip.tone} title={[chip.text, chip.reason || ""].filter(Boolean).join("\n")}
+                    style={{ ...chipBase, color: st.color, border: `1px solid ${st.border}` }}>{chip.text}</span>
+                );
+              })()}
+            </div>
+          )}
           {board?.halted && (
             <div style={{ marginTop: 4, fontSize: 11.5, color: "#dc2626", fontWeight: 700 }}>전체 정지 중</div>
           )}
@@ -354,6 +404,7 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
             const ev = evidenceText(m.evidence);
             const refs = evidenceRefs(m.evidence);
             const showEvidence = (m.status === "review" || m.status === "completed") && (ev || refs.length > 0);
+            const stuck = stuckViewOfMilestone(m, board.blocked_milestones);
             return (
               <div key={m.id} style={{ marginBottom: 12 }}>
               <div style={{ padding: "9px 11px", borderRadius: 9, border: "1px solid var(--border)", borderLeft: `3px solid ${mk.color}`, background: "var(--bg-primary)" }}>
@@ -407,7 +458,19 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
                   </div>
                 )}
 
-                {m.dispatch_note && (
+                {stuck ? (
+                  <div data-milestone-stuck role="group" aria-label={`${stuck.label} 사유`}
+                    style={{ marginTop: 7, padding: "8px 10px", borderRadius: 7, border: "1px solid #dc2626", background: "rgba(220,38,38,.06)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#dc2626" }}>■ {stuck.label}</div>
+                    <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-primary)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                      {stuck.reason || "사유가 기록되지 않았습니다."}
+                    </div>
+                    {stuck.blockedAt && (
+                      <div style={{ marginTop: 2, fontSize: 10.5, color: "var(--text-secondary)" }}>막힌 시각 {stuck.blockedAt}</div>
+                    )}
+                    <MilestoneStuckActions goalId={goalId} milestoneId={m.id} owners={board.owners} onChanged={refreshAfterAction} />
+                  </div>
+                ) : m.dispatch_note && (
                   <div style={{ marginTop: 5, fontSize: 11, color: "#dc2626" }}>■ {m.dispatch_note}</div>
                 )}
                 {(m.open_notes || 0) > 0 && (

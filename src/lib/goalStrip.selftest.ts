@@ -1,4 +1,6 @@
 import {
+  APPROVAL_CHIP_TOOLTIP, NO_DISPATCH_TARGET_MESSAGE, formatKst, ownerAssignFailureText, parseApiFailure, progressChip,
+  redispatchFailure, redispatchSuccessText, scrubReason, stuckMilestonesOfGoal, stuckViewOfMilestone,
   activityIcon, autoApprovalChip, autoApprovalDetailRows, autoApprovalNeedsAttention, autoApprovalTooltip,
   cleanupCandidates, cleanupChipLabel, daysSince, dormancyCardState, DROPDOWN_GROUP_LABEL, DROPDOWN_GROUP_ORDER,
   dropdownGroupOf, dropdownTriggerSummary, freezeOrder, freshSignals, goalDisplayTitle, groupDropdownGoals, idleLabel,
@@ -141,19 +143,19 @@ check("idle label", idleLabel(ago(21), NOW) === "마지막 활동 21일 전" && 
 
 // 자동승인 칩 8종
 const aa = (o: object) => autoApprovalChip(o, NOW);
-check("aa manual", aa({ state: "manual" })?.text === "🔒 수동");
-check("aa high", aa({ state: "high", used: 3, max: 10, expires_at: ago(-20) })?.text === "🟢 고위험까지 3/10" && aa({ state: "high", used: 3, max: 10, expires_at: ago(-20) })?.warn === false);
+check("aa manual", aa({ state: "manual" })?.text === "승인: 수동");
+check("aa high", aa({ state: "high", used: 3, max: 10, expires_at: ago(-20) })?.text === "승인: 고위험까지 자동 3/10" && aa({ state: "high", used: 3, max: 10, expires_at: ago(-20) })?.warn === false);
 check("aa high 80% warn", aa({ state: "high", used: 9, max: 10, expires_at: ago(-20) })?.warn === true);
 check("aa exactly 80% no warn", aa({ state: "high", used: 8, max: 10, expires_at: ago(-20) })?.warn === false);
-check("aa all", aa({ state: "all", used: 4, max: 20 })?.text === "🟢 전체 4/20" && aa({ state: "all", used: 4, max: 20 })?.tone === "strong");
-check("aa exhausted", aa({ state: "exhausted", used: 10, max: 10 })?.text === "⛔ 한도 소진 10/10");
-check("aa off", aa({ state: "off" })?.text === "🔒 해제됨");
-check("aa delegated", aa({ state: "delegated" })?.text === "👥 위임");
-check("aa paused", aa({ state: "paused", used: 3, max: 10 })?.text === "⏸ 정지");
-check("aa expired", aa({ state: "expired" })?.text === "⌛ 만료");
+check("aa all", aa({ state: "all", used: 4, max: 20 })?.text === "승인: 전체 자동 4/20" && aa({ state: "all", used: 4, max: 20 })?.tone === "strong");
+check("aa exhausted", aa({ state: "exhausted", used: 10, max: 10 })?.text === "승인: 한도 소진 10/10");
+check("aa off", aa({ state: "off" })?.text === "승인: 해제됨");
+check("aa delegated", aa({ state: "delegated" })?.text === "승인: 위임");
+check("aa paused", aa({ state: "paused", used: 3, max: 10 })?.text === "승인: 멈춤");
+check("aa expired", aa({ state: "expired" })?.text === "승인: 만료");
 check("aa unknown state hidden", aa({ state: "weird" }) === null);
 check("aa missing view hidden", autoApprovalChip(null, NOW) === null && autoApprovalChip(undefined, NOW) === null && aa({}) === null);
-check("aa no max no usage text", aa({ state: "high" })?.text === "🟢 고위험까지");
+check("aa no max no usage text", aa({ state: "high" })?.text === "승인: 고위험까지 자동");
 check("aa expiry within 7d warn", autoApprovalNeedsAttention({ state: "high", used: 1, max: 10, expires_at: ago(-6) }, NOW) === true);
 check("aa expiry 8d no warn", autoApprovalNeedsAttention({ state: "high", used: 1, max: 10, expires_at: ago(-8) }, NOW) === false);
 check("aa paused never warn", autoApprovalNeedsAttention({ state: "paused", used: 10, max: 10 }, NOW) === false);
@@ -254,6 +256,76 @@ check("strip shown w/o session goals when unlinked", shouldShowGoalStrip({ sessi
 check("strip shown with session goals", shouldShowGoalStrip({ sessionGoalCount: 1, cleanupTotal: 0, unlinkedCount: 0 }));
 check("strip shown on signals error (retry path)", shouldShowGoalStrip({ sessionGoalCount: 0, cleanupTotal: 0, unlinkedCount: 0, signalsError: true }));
 check("strip hidden when nothing", !shouldShowGoalStrip({ sessionGoalCount: 0, cleanupTotal: 0, unlinkedCount: 0 }));
+
+// 승인 칩과 진행 칩은 별개 — 승인 문구 4종과 툴팁
+check("approval tooltip", APPROVAL_CHIP_TOOLTIP === "위험 작업 때 대표님 승인 버튼을 띄울지 정하는 설정입니다. 진행 여부와는 별개입니다.");
+check("approval chip never says 수동 as progress", !aa({ state: "manual" })?.text.includes("진행"));
+
+// 진행 칩 7가지 (서버 progress_state)
+const pc = (o: Partial<StripGoal>) => progressChip({ ...g("p", {}), ...o });
+const PROGRESS_COPY: Array<[string, string]> = [
+  ["working", "진행: 진행중"], ["no_owner", "진행: 담당 없음"], ["awaiting_reply", "진행: 답 대기"],
+  ["answered_no_progress", "진행: 답했으나 진행 없음"], ["blocked", "진행: 막힘"], ["paused", "진행: 멈춤"], ["idle", "진행: 대기"],
+];
+for (const [state, text] of PROGRESS_COPY) check(`progress ${state}`, pc({ progress_state: state }).text === text, pc({ progress_state: state }).text);
+check("progress substitute", pc({ progress_state: "no_owner", progress_substitute: true }).text === "진행: 담당 없음·주도 세션 대행");
+check("substitute flag ignored for other states", pc({ progress_state: "working", progress_substitute: true }).text === "진행: 진행중");
+check("progress stuck flags", ["blocked", "answered_no_progress", "no_owner"].every((s) => pc({ progress_state: s }).stuck)
+  && ["working", "awaiting_reply", "paused", "idle"].every((s) => !pc({ progress_state: s }).stuck));
+check("progress raw state never in text", PROGRESS_COPY.every(([s]) => !pc({ progress_state: s }).text.includes(s)));
+
+// 구 응답 폴백 — progress_state 가 없거나 모르는 값이면 기존 7그룹 규칙
+check("fallback working", pc({ activity: "working" }).text === "진행: 진행중");
+check("fallback awaiting", pc({ activity: "awaiting" }).text === "진행: 답 대기");
+check("fallback blocked by note", pc({ dispatch_note: "승인 대기 중" }).text === "진행: 막힘" && pc({ dispatch_note: "승인 대기 중" }).stuck);
+check("fallback blocked by status", pc({ status: "blocked" }).text === "진행: 막힘");
+check("fallback paused", pc({ goal_paused: true }).text === "진행: 멈춤");
+check("fallback idle", pc({ priority: "P1" }).text === "진행: 대기" && pc({ dormant: true }).text === "진행: 대기");
+check("fallback unknown server value", pc({ progress_state: "weird", activity: "working" }).text === "진행: 진행중");
+check("fallback null server value", pc({ progress_state: null }).text === "진행: 대기");
+check("progress reason from progress_reason", pc({ progress_state: "blocked", progress_reason: "M2: 3회 보냈으나 답이 확인되지 않음" }).reason === "M2: 3회 보냈으나 답이 확인되지 않음");
+check("progress reason falls back to dispatch_note", pc({ dispatch_note: "승인 대기 중" }).reason === "승인 대기 중");
+
+// 사유 정리 · 막힌 시각(KST)
+const MID = "0a1b2c3d-1111-2222-3333-444455556666";
+check("scrub uuid", scrubReason(`마일스톤 ${MID} 막힘`) === "마일스톤 막힘" && scrubReason(MID) === null && scrubReason("  ") === null);
+check("kst", formatKst("2026-10-22T08:24:00Z") === "10/22 17:24 (KST)" && formatKst("2026-10-22T15:30:00Z") === "10/23 00:30 (KST)");
+check("kst invalid", formatKst("nope") === null && formatKst(null) === null);
+const stuckList = stuckMilestonesOfGoal({ blocked_milestones: [
+  { milestone_id: MID, title: "M2 검증", state: "answered_no_progress", reason: "담당이 답했으나 진행 없음", blocked_at: "2026-10-22T08:24:00Z" },
+  { milestone_id: "", title: "버림" },
+] });
+check("stuck list", stuckList.length === 1 && stuckList[0].label === "답했으나 진행 없음" && stuckList[0].blockedAt === "10/22 17:24 (KST)"
+  && stuckList[0].milestoneId === MID && stuckList[0].title === "M2 검증");
+check("stuck list empty", stuckMilestonesOfGoal({}).length === 0 && stuckMilestonesOfGoal({ blocked_milestones: null }).length === 0);
+const panelMs = { id: MID, status: "in_progress" };
+const bm = [{ milestone_id: MID, blocked_at: "2026-10-22T08:24:00Z", reason: "3회 보냈으나 답 없음" }];
+check("panel stuck from server", stuckViewOfMilestone({ ...panelMs, progress_state: "blocked", progress_reason: "사유A" }, bm)?.reason === "사유A"
+  && stuckViewOfMilestone({ ...panelMs, progress_state: "blocked", progress_reason: "사유A" }, bm)?.blockedAt === "10/22 17:24 (KST)");
+check("panel stuck reason from blocked list", stuckViewOfMilestone({ ...panelMs, progress_state: "blocked" }, bm)?.reason === "3회 보냈으나 답 없음");
+check("panel no_owner has no time", stuckViewOfMilestone({ ...panelMs, progress_state: "no_owner", progress_reason: "담당 세션 없음" }, [])?.blockedAt === null);
+check("panel working not stuck", stuckViewOfMilestone({ ...panelMs, progress_state: "working" }, bm) === null
+  && stuckViewOfMilestone({ ...panelMs, progress_state: "awaiting_reply" }, bm) === null);
+check("panel old response uses dispatch_note", stuckViewOfMilestone({ ...panelMs, dispatch_note: "승인 대기" }, undefined)?.label === "막힘");
+check("panel old response without note", stuckViewOfMilestone(panelMs, undefined) === null
+  && stuckViewOfMilestone({ id: MID, status: "completed", dispatch_note: "x" }, undefined) === null);
+check("panel view never carries uuid text", !JSON.stringify([stuckViewOfMilestone({ ...panelMs, progress_state: "blocked", progress_reason: `${MID} 막힘` }, bm)?.reason]).includes(MID));
+
+// 다시 보내기 · 담당 지정 결과
+const apiErr = (status: number, body: unknown) => new Error(`API error ${status}: ${typeof body === "string" ? body : JSON.stringify(body)}`);
+const noTarget = apiErr(409, { detail: { code: "no_dispatch_target", message: "담당도 주도 세션도 없어 보낼 곳이 없다" } });
+check("parse api failure", parseApiFailure(noTarget).status === 409 && parseApiFailure(noTarget).code === "no_dispatch_target");
+check("parse api failure string detail", parseApiFailure(apiErr(404, { detail: "milestone_not_found" })).code === "milestone_not_found");
+check("parse api failure non-json", parseApiFailure(apiErr(502, "Bad Gateway")).status === 502 && parseApiFailure(new Error("network")).status === null);
+check("redispatch 409 no target", redispatchFailure(noTarget).kind === "no_target" && redispatchFailure(noTarget).text === NO_DISPATCH_TARGET_MESSAGE
+  && NO_DISPATCH_TARGET_MESSAGE === "보낼 담당·주도 세션이 없습니다. 먼저 담당을 지정하세요");
+check("redispatch 409 not in progress", redispatchFailure(apiErr(409, { detail: { code: "milestone_not_in_progress" } })).kind === "not_in_progress");
+check("redispatch 500 generic", redispatchFailure(apiErr(500, "boom")).kind === "error" && redispatchFailure(apiErr(500, "boom")).text.includes("오류 500"));
+check("redispatch network error", redispatchFailure(new Error("Failed to fetch")).text === "다시 보내지 못했습니다");
+check("redispatch success copy", redispatchSuccessText(false).includes("다음 주기") && redispatchSuccessText(true).includes("재개"));
+check("owner 422 not linked", ownerAssignFailureText(apiErr(422, { detail: "owner_not_linked" })).includes("연결돼 있지 않아"));
+check("owner 403", ownerAssignFailureText(apiErr(403, { detail: "cross_project" })).includes("다른 프로젝트"));
+check("owner generic", ownerAssignFailureText(new Error("x")) === "담당을 지정하지 못했습니다");
 
 if (failed > 0) {
   console.error(`${failed} goalStrip selftest(s) failed`);

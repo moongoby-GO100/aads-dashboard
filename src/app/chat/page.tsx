@@ -4531,6 +4531,7 @@ export default function ChatPage() {
   // 부르신다). 아니면 괄호 부연을 떼고 12자에서 자른다. 전체 제목은
   // 마우스를 올리면 나온다.
   const [sessionGoals, setSessionGoals] = useState<StripGoal[]>([]);
+  const [goalRefreshTick, setGoalRefreshTick] = useState(0);
   // 띠의 자동승인·마지막 활동·정리 후보는 GET /goals 의 파생 신호를 목표 id 로 합친다.
   // 이 조회가 실패해도 띠는 기존대로 그려진다(칩만 빠진다).
   const [goalSignals, setGoalSignals] = useState<GoalSignal[] | null>(null);
@@ -4623,7 +4624,7 @@ export default function ChatPage() {
       void load();
     }, 30_000);
     return () => { alive = false; window.clearInterval(iv); };
-  }, [activeSession?.id, loadGoalSignals]);
+  }, [activeSession?.id, loadGoalSignals, goalRefreshTick]);
 
   // 조회가 실패하면 이전 신호는 최신이 아니다 — 자동승인·요약·정리 후보에 쓰지 않는다.
   const liveSignals = useMemo(() => freshSignals(goalSignals, goalSignalsError), [goalSignals, goalSignalsError]);
@@ -13119,6 +13120,7 @@ export default function ChatPage() {
                 onToggleCard={() => setDormancyCardOpen((v) => !v)}
                 signalsError={goalSignalsError}
                 isMobile={screenSize === "mobile"}
+                onRefresh={() => setGoalRefreshTick((t) => t + 1)}
               />
             </div>
           )}
@@ -14945,6 +14947,7 @@ export default function ChatPage() {
             sessionProject={projectKeyFromWorkspace(activeWsObj) || undefined}
             onClose={() => setPanelGoalId(null)}
             onOpenSession={(sid) => { window.location.hash = sid; }}
+            onGoalsChanged={() => setGoalRefreshTick((t) => t + 1)}
           />
         </div>
       )}
