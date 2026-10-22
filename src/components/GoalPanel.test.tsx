@@ -15,7 +15,8 @@ describe("GoalPanel first paint", () => {
       <GoalPanel goalId="g1" summary={{ title: "채팅 목표 패널 속도", status: "active", project: "AADS" }} onClose={() => {}} />,
     );
     expect(html).toContain("채팅 목표 패널 속도");
-    expect(html).toContain("상태 active");
+    expect(html).toContain("진행 중");
+    expect(html).not.toContain("상태 active");
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("마일스톤 불러오는 중");
     expect(html).toContain("업무 계층");

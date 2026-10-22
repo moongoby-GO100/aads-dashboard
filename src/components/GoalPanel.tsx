@@ -21,6 +21,7 @@ import { goalDocumentView, type GoalDocument } from "@/lib/goalDocuments";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
 import { GrantsSection, SectionError, useGoalWorkData } from "@/components/GoalWorkHierarchy";
 import { createLatestController, errorMessage } from "@/lib/goalPanelLoad";
+import { GoalProgressControls } from "@/components/GoalProgressControls";
 import {
   MilestoneWorkTree, UnassignedWork, indexWorkItems, milestoneProgressLabel, useExpansionState,
   type WorkTreeContext,
@@ -40,7 +41,8 @@ type Owner = {
   paused_reason?: string | null; dispatch_count: number; open_notes?: number;
 };
 type Board = {
-  goal: { project?: string; id?: string; title: string; status: string; progress: number };
+  goal: { project?: string; id?: string; title: string; status: string; progress: number; paused_at?: string | null };
+  goal_paused?: boolean; goal_paused_reason?: string | null;
   halted: boolean; owners: Owner[]; milestones: Milestone[];
   documents?: GoalDocument[]; document_history?: GoalDocument[];
   has_document_history?: boolean;
@@ -210,15 +212,23 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
       background: "var(--bg-card)", display: "flex", flexDirection: "column", height: "100%",
     }}>
       <header style={{ padding: "13px 15px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text-primary)" }}>
             🎯 {board?.goal.title || summary?.title || "목표"}
           </div>
-          <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-secondary)" }}>
-            {board ? (total > 0 ? `마일스톤 ${done}/${total}` : "마일스톤 없음") : "마일스톤 불러오는 중…"}
-            {(board?.goal.status || summary?.status) && <span style={{ marginLeft: 8 }}>상태 {board?.goal.status || summary?.status}</span>}
-            {board?.halted && <span style={{ marginLeft: 8, color: "#dc2626", fontWeight: 700 }}>전체 정지 중</span>}
-          </div>
+          {!board && (
+            <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-secondary)" }}>마일스톤 불러오는 중…</div>
+          )}
+          <GoalProgressControls key={goalId} goalId={goalId}
+            status={board?.goal.status || summary?.status}
+            progress={board?.goal.progress}
+            paused={board ? Boolean(board.goal_paused) : undefined}
+            pausedReason={board?.goal_paused_reason} pausedAt={board?.goal.paused_at}
+            milestonesDone={board ? done : undefined} milestonesTotal={board ? total : undefined}
+            onChanged={load} />
+          {board?.halted && (
+            <div style={{ marginTop: 4, fontSize: 11.5, color: "#dc2626", fontWeight: 700 }}>전체 정지 중</div>
+          )}
         </div>
         <button type="button" onClick={onClose} aria-label="닫기"
           style={{ minHeight: 30, minWidth: 30, border: 0, background: "transparent", color: "var(--text-secondary)", fontSize: 17, cursor: "pointer" }}>✕</button>

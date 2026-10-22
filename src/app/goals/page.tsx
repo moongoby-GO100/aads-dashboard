@@ -18,6 +18,8 @@ import { GoalApprovalControls, useGoalApprovalPolicy } from "@/components/GoalAp
 import { api } from "@/lib/api";
 import type { GoalDetail, GoalSummary } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
+import { GoalProgressControls } from "@/components/GoalProgressControls";
+import { goalStatusLabel, normalizeProgress } from "@/lib/goalProgress";
 
 // 통합지시가 보는 프로젝트와 맞춘다. 여기만 7개로 박혀 있으면 FOOD·LAW 같은
 // 업무 워크스페이스의 목표가 화면에서 아예 안 보인다.
@@ -42,6 +44,8 @@ type GoalDoc = {
   change_summary?: string | null; version_count: number;
 };
 type Board = {
+  goal?: { id?: string; progress?: number; paused_at?: string | null };
+  goal_paused?: boolean; goal_paused_reason?: string | null;
   halted: boolean; owners: BoardOwner[]; has_lead?: boolean;
   documents?: GoalDoc[]; document_history?: GoalDoc[]; has_document_history?: boolean;
   has_design?: boolean; missing_design?: string[];
@@ -86,11 +90,6 @@ const statusColor: Record<string, string> = {
   pending: "#64748b",
   queued: "#d97706",
 };
-
-function normalizeProgress(value?: number) {
-  const n = Number(value || 0);
-  return Math.max(0, Math.min(100, n <= 1 ? n * 100 : n));
-}
 
 function StateNode({ data }: { data: { title: string; subtitle: string; status: string; kind: string } }) {
   const color = statusColor[data.status] || "#64748b";
@@ -292,6 +291,7 @@ export default function GoalsPage() {
     } finally { setOwnerBusy(null); }
   }, [selectedId, pick, linkDraft, roleKey, asLead, reloadBoard]);
 
+  const goalBoard = board?.goal?.id === selectedId ? board : null;
   const graph = useMemo(() => detail ? buildGraph(detail) : { nodes: [], edges: [] }, [detail]);
   const counts = useMemo(() => ({
     active: goals.filter((g) => g.status === "active").length,
@@ -337,7 +337,7 @@ export default function GoalsPage() {
               const pct = normalizeProgress(goal.progress);
               const color = statusColor[goal.status] || "#64748b";
               return <button key={id} onClick={() => selectGoal(id)} style={{ padding: 14, textAlign: "left", borderRadius: 12, border: `2px solid ${selectedId === id ? color : "var(--border)"}`, background: "var(--bg-card)", cursor: "pointer", minHeight: 112 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 800, color }}>{goal.project} · {goal.priority}</span><span style={{ fontSize: 11, color }}>{goal.status}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 800, color }}>{goal.project} · {goal.priority}</span><span style={{ fontSize: 11, color, display: "inline-flex", gap: 6, alignItems: "center" }}>{goal.goal_paused && <span title={goal.goal_paused_reason || undefined} style={{ fontWeight: 800, color: "#d97706" }}>⏸ 멈춤</span>}{goalStatusLabel(goal.status)}</span></div>
                 <div style={{ marginTop: 7, fontSize: 14, fontWeight: 750, color: "var(--text-primary)", lineHeight: 1.35 }}>{goal.title}</div>
                 <div style={{ marginTop: 10, height: 7, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color }} /></div>
                 <div style={{ marginTop: 5, fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>{pct.toFixed(0)}%</div>
@@ -348,8 +348,15 @@ export default function GoalsPage() {
           <section ref={detailRef} tabIndex={-1} style={{ minHeight: 880, borderRadius: 14, background: "var(--bg-card)", border: "1px solid var(--border)", overflow: "hidden", scrollMarginTop: 12 }}>
             {!detail ? <div style={{ padding: 28, color: "var(--text-secondary)" }}>왼쪽에서 목표를 선택하십시오.</div> : <>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong><span style={{ color: statusColor[detail.status] || "#64748b", fontWeight: 800 }}>{detail.status}</span></div>
-                <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>마일스톤 {detail.milestones_completed}/{detail.milestones_total} · 자동 진행은 각 완료기준과 연결 작업 상태가 모두 충족될 때만 실행됩니다.</div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><strong style={{ color: "var(--text-primary)" }}>{detail.title}</strong></div>
+                <GoalProgressControls key={detail.goal_id} goalId={detail.goal_id}
+                  status={detail.status}
+                  progress={goalBoard?.goal?.progress ?? detail.progress ?? goals.find((g) => (g.goal_id || g.id) === detail.goal_id)?.progress}
+                  paused={goalBoard ? Boolean(goalBoard.goal_paused) : undefined}
+                  pausedReason={goalBoard?.goal_paused_reason} pausedAt={goalBoard?.goal?.paused_at}
+                  milestonesDone={detail.milestones_completed} milestonesTotal={detail.milestones_total}
+                  onChanged={async () => { await Promise.all([reloadBoard(detail.goal_id), loadGoals()]); }} />
+                <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>자동 진행은 각 완료기준과 연결 작업 상태가 모두 충족될 때만 실행됩니다.</div>
               </div>
               {/* 승인 설정 — 이 목표 동안 미리 허락해 둘 범위.
                   담당 목록 안에 두었더니 스크롤 아래로 묻혔다(2026-09-15 대표님

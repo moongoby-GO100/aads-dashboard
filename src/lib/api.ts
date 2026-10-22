@@ -152,6 +152,8 @@ export interface GoalSummary {
   priority: string;
   status: string;
   progress?: number;
+  goal_paused?: boolean;
+  goal_paused_reason?: string | null;
 }
 export interface GoalTask {
   task_type: string;
@@ -1729,6 +1731,16 @@ export const api = {
     }),
   removeGoalOwner: (goalId: string, sessionId: string) =>
     request<any>(`/goals/${encodeURIComponent(goalId)}/owners/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }),
+
+  // 목표 단위 멈춤/시작 — 서버는 대표님(is_internal_admin) 권한이 아니면 403.
+  pauseGoal: (goalId: string, reason: string) =>
+    request<{ goal_paused: boolean; goal_paused_reason: string | null }>(
+      `/goals/${encodeURIComponent(goalId)}/pause`,
+      { method: "POST", body: JSON.stringify({ reason }) }),
+  resumeGoal: (goalId: string) =>
+    request<{ goal_paused: boolean; goal_paused_reason: string | null }>(
+      `/goals/${encodeURIComponent(goalId)}/pause`,
       { method: "DELETE" }),
 
   // 담당별 제어 — 멈춤은 진행 중 응답을 끊지 않는다. 끊으려면 stopSession.
