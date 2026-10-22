@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import type { GoalGovernance, GoalWorkItem, WorkItemApprovalPreview } from "@/lib/api";
+import type { GoalGovernance, GoalWorkItem } from "@/lib/api";
 import {
   averageRootProgress, countMismatches, countPendingApprovals, expansionKey, loadExpansionState,
   saveExpansionState, type GroupedWorkNode,
 } from "@/lib/goalMilestoneGrouping";
-import { ItemBody } from "@/components/GoalWorkHierarchy";
+import { ItemBody, type PreviewLoader } from "@/components/GoalWorkHierarchy";
 
 export function useExpansionState(goalId: string) {
   const [state, setState] = useState(() => ({ goalId, map: loadExpansionState(goalId) }));
@@ -22,7 +22,7 @@ export function useExpansionState(goalId: string) {
 }
 
 export interface WorkTreeContext {
-  previews: Record<string, WorkItemApprovalPreview | null>;
+  previews: PreviewLoader;
   actorSessionId: string;
   onChanged: () => Promise<void>;
   isOpen: (itemId: string, fallback: boolean) => boolean;

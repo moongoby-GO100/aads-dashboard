@@ -5,6 +5,6 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
     environment: "node",
-    include: ["src/features/chat/**/*.test.ts", "src/lib/goalMilestoneGrouping.test.ts", "src/lib/chatDeepLink.test.ts", "src/lib/canonicalProjects.test.ts", "src/app/docs/CanonicalDocuments.test.tsx", "src/app/docs/ProjectFileFilters.test.tsx", "src/lib/canonicalHitPath.test.ts", "src/lib/docFileView.test.ts", "src/app/docs/ProjectFileViews.test.tsx", "src/components/GoalDocumentChips.test.tsx"],
+    include: ["src/features/chat/**/*.test.ts", "src/lib/goalMilestoneGrouping.test.ts", "src/lib/chatDeepLink.test.ts", "src/lib/canonicalProjects.test.ts", "src/app/docs/CanonicalDocuments.test.tsx", "src/app/docs/ProjectFileFilters.test.tsx", "src/lib/canonicalHitPath.test.ts", "src/lib/docFileView.test.ts", "src/app/docs/ProjectFileViews.test.tsx", "src/components/GoalDocumentChips.test.tsx", "src/lib/goalPanelLoad.test.ts", "src/components/GoalPanel.test.tsx"],
   },
 });

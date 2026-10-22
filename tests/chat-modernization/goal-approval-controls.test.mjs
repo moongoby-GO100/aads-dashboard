@@ -39,7 +39,7 @@ function fixture() {
   const mod={exports:{}};
   const jsx=(type,props)=>({type,props});
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/GoalApprovalControls.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText, {
-    Error, exports:mod.exports, require:n=>n==='react'?react:n==='react/jsx-runtime'?{jsx,jsxs:jsx}:{api}, window:{confirm:text=>{ confirmations.push(text); return confirm; }},
+    Error, AbortController, exports:mod.exports, require:n=>n==='react'?react:n==='react/jsx-runtime'?{jsx,jsxs:jsx}:{api}, window:{confirm:text=>{ confirmations.push(text); return confirm; }},
   });
   return { calls, requests, confirmations, setConfirm:v=>confirm=v,
     render(id='a', project='GO100') { cursor=0; const result=mod.exports.useGoalApprovalPolicy(id, project); effects.splice(0).forEach(fn=>fn()); return result; },
@@ -122,13 +122,14 @@ test('stale policy load cannot populate another goal', async()=>{
  assert.equal(f.render('b').policy.auto_approve_high,true);
 });
 test('confirmation follows goal project; financial risk remains explicit', async()=>{
- const f=fixture(); await ready(f); f.setConfirm(false);
- await f.render('a','AADS').savePolicy({auto_approve_critical:true});
- assert.equal(f.confirmations.length,0);
- f.render('a','GO100'); f.requests.at(-1).resolve(initial); await Promise.resolve();
- await f.render('a','GO100').savePolicy({auto_approve_critical:true});
+ const f=fixture(); f.setConfirm(false);
+ f.render('g1','AADS'); f.requests.at(-1).resolve(initial); await Promise.resolve();
+ await f.render('g1','AADS').savePolicy({auto_approve_critical:true});
+ assert.equal(f.confirmations.length,1); assert.doesNotMatch(f.confirmations.at(-1),/주문·자금/);
+ f.render('g2','GO100'); f.requests.at(-1).resolve(initial); await Promise.resolve();
+ await f.render('g2','GO100').savePolicy({auto_approve_critical:true});
  assert.match(f.confirmations.at(-1),/주문·자금/); assert.match(f.confirmations.at(-1),/실제.*손실/);
- const tree=f.controls({...f.render('a','GO100'),project:'GO100',sessionProject:'AADS'});
+ const tree=f.controls({...f.render('g2','GO100'),project:'GO100',sessionProject:'AADS'});
  assert.equal(tree.props.children[0].props.role,'alert');
 });
 
@@ -143,7 +144,7 @@ test('confirmation follows goal project; financial risk remains explicit', async
  assert.equal(await p,false);assert.equal(f.state.ticks,0);
  });
  test('unloaded or unresolved projects cannot save policies',async()=>{
- for (const project of ['AADS','']) {const f=fixture();const h=f.render('a',project);await h.savePolicy({auto_approve_high:true});assert.equal(f.requests.length,project ? 1 : 0);assert.equal(f.calls.length,0);}
+ for (const project of ['AADS','']) {const f=fixture();const h=f.render('a',project);await h.savePolicy({auto_approve_high:true});assert.equal(f.requests.length,1);assert.equal(f.calls.length,0);}
  });
 function pendingFixture() {
  const src=fs.readFileSync('src/app/chat/page.tsx','utf8');

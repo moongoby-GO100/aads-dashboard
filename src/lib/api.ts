@@ -1647,17 +1647,19 @@ export const api = {
     request<GoalSummary[]>(`/goals${project ? `?project=${encodeURIComponent(project)}` : ""}`),
   getGoalStatus: (goalId: string) =>
     request<GoalDetail>(`/goals/${encodeURIComponent(goalId)}/status`),
-  getGoalWorkTree: (goalId: string) =>
-    request<GoalWorkTree>(`/goals/${encodeURIComponent(goalId)}/tree?include=evidence,approvals,dependencies`),
-  getGoalGovernance: (goalId: string) =>
-    request<GoalGovernance>(`/goals/${encodeURIComponent(goalId)}/governance`),
-  getGoalApprovalGrants: (goalId: string, actorSessionId: string) =>
+  getGoalWorkTree: (goalId: string, signal?: AbortSignal) =>
+    request<GoalWorkTree>(`/goals/${encodeURIComponent(goalId)}/tree?include=evidence,approvals,dependencies`, { signal }),
+  getGoalGovernance: (goalId: string, signal?: AbortSignal) =>
+    request<GoalGovernance>(`/goals/${encodeURIComponent(goalId)}/governance`, { signal }),
+  getGoalApprovalGrants: (goalId: string, actorSessionId: string, signal?: AbortSignal) =>
     request<GoalApprovalGrant[]>(`/goals/${encodeURIComponent(goalId)}/auto-approval-grants`, {
       headers: { "X-Chat-Session-ID": actorSessionId },
+      signal,
     }),
-  getWorkItemApprovalPreview: (itemId: string, actorSessionId: string) =>
+  getWorkItemApprovalPreview: (itemId: string, actorSessionId: string, signal?: AbortSignal) =>
     request<WorkItemApprovalPreview>(`/work-items/${encodeURIComponent(itemId)}/approval-preview`, {
       headers: { "X-Chat-Session-ID": actorSessionId },
+      signal,
     }),
   retryWorkItemDelivery: (itemId: string, reason: string, actorSessionId: string) =>
     request<any>(`/work-items/${encodeURIComponent(itemId)}/retry-delivery`, {
@@ -1672,8 +1674,8 @@ export const api = {
       body: JSON.stringify({ reason }),
     }),
   // 담당별 현재 상태. 창을 하나씩 열지 않아도 되게.
-  getGoalBoard: (goalId: string) =>
-    request<any>(`/goals/${encodeURIComponent(goalId)}/board`),
+  getGoalBoard: (goalId: string, signal?: AbortSignal) =>
+    request<any>(`/goals/${encodeURIComponent(goalId)}/board`, { signal }),
   // 개입 — 전체 정지 · 방향 지시 · 되돌리기
   setGoalHalt: (on: boolean, reason?: string) =>
     request<any>("/goals/halt", { method: "POST", body: JSON.stringify({ on, reason }) }),
@@ -1715,8 +1717,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ projects }),
     }),
-  getGoalApprovalPolicy: (goalId: string) =>
-    request<GoalApprovalPolicy>(`/goals/${encodeURIComponent(goalId)}/approval-policy`),
+  getGoalApprovalPolicy: (goalId: string, signal?: AbortSignal) =>
+    request<GoalApprovalPolicy>(`/goals/${encodeURIComponent(goalId)}/approval-policy`, { signal }),
   setGoalApprovalPolicy: (
     goalId: string,
     body: { auto_approve_high: boolean; auto_approve_critical: boolean; max_executions: number },

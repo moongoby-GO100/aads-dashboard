@@ -1,8 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import type { GoalApprovalGrant, GoalGovernance, GoalWorkItem, GoalWorkTree, WorkItemApprovalPreview } from "@/lib/api";
+import {
+  LOADING_SECTION, IDLE_SECTION, createLatestController, createLazyLoader, loadSectionsParallel,
+  type LazyState, type ParallelSection, type SectionState,
+} from "@/lib/goalPanelLoad";
+
+export type PreviewState = LazyState<WorkItemApprovalPreview>;
+export interface PreviewLoader {
+  states: Record<string, PreviewState>;
+  request: (itemId: string) => void;
+}
+export const NO_PREVIEWS: PreviewLoader = { states: {}, request: () => {} };
 
 const TYPE_LABEL = { epic: "Epic", story: "Story", task: "Task" } as const;
 export const STATUS_COLOR: Record<string, string> = {
@@ -13,7 +24,7 @@ export const STATUS_COLOR: Record<string, string> = {
 
 export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0, tree }: {
   item: GoalWorkItem;
-  previews: Record<string, WorkItemApprovalPreview | null>;
+  previews: PreviewLoader;
   actorSessionId?: string | null;
   onChanged: () => Promise<void>;
   depth?: number;
@@ -24,7 +35,14 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
 }) {
   const color = STATUS_COLOR[item.status] || "#64748b";
   const evidence = item.evidence;
-  const approval = previews[item.id]?.approval;
+  const previewState = previews.states[item.id];
+  const approval = previewState?.status === "ok" ? previewState.data.approval : undefined;
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const canPreview = item.pending_approval_count > 0 && !!actorSessionId;
+  const requestPreview = previews.request;
+  useEffect(() => {
+    if (previewOpen && canPreview && !previewState) requestPreview(item.id);
+  }, [previewOpen, canPreview, previewState, requestPreview, item.id]);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
   const retryDelivery = useCallback(async () => {
@@ -88,7 +106,18 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
             </a>)}
           </div>
         </details> : null}
-        {approval && <div style={{ marginTop: 8, padding: "8px 9px", borderRadius: 8, border: "1px solid #d97706", background: "rgba(217,119,6,.07)" }}>
+        {canPreview && <details style={{ marginTop: 8 }} onToggle={(event) => setPreviewOpen(event.currentTarget.open)}>
+          <summary style={{ minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#d97706", fontSize: 11, fontWeight: 800 }}>
+            승인 검토 내용 보기 · 대기 {item.pending_approval_count}건
+          </summary>
+          {previewState?.status === "loading" && <div role="status" style={{ padding: "6px 0", color: "var(--text-secondary)", fontSize: 10.5 }}>승인 검토 내용을 불러오는 중…</div>}
+          {previewState?.status === "error" && <div role="alert" style={{ padding: "6px 0", color: "#dc2626", fontSize: 10.5 }}>
+            승인 검토 내용을 불러오지 못했습니다 · {previewState.error}
+            <button type="button" onClick={() => requestPreview(item.id)}
+              style={{ marginLeft: 8, minHeight: 32, padding: "0 10px", borderRadius: 7, border: 0, background: "#dc2626", color: "white", fontWeight: 800, fontSize: 10.5, cursor: "pointer" }}>재시도</button>
+          </div>}
+          {previewState?.status === "ok" && !approval && <div style={{ padding: "6px 0", color: "var(--text-secondary)", fontSize: 10.5 }}>표시할 승인 검토 내용이 없습니다.</div>}
+          {approval && <div style={{ padding: "8px 9px", borderRadius: 8, border: "1px solid #d97706", background: "rgba(217,119,6,.07)" }}>
           <div style={{ color: "#d97706", fontSize: 11, fontWeight: 800 }}>승인 검토 · 위험 {approval.risk_tier || "미분류"}</div>
           <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5, lineHeight: 1.5 }}>
             상태 {approval.state || "pending"} · 기준 {approval.base_version ?? "—"} → 목표 {approval.target_version ?? "—"}<br />
@@ -101,6 +130,7 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
             {JSON.stringify(approval.patch, null, 2)}
           </pre> : null}
         </div>}
+        </details>}
         {item.recovery && <div style={{ marginTop: 8, padding: "8px 9px", borderRadius: 8, border: "1px solid #dc2626", background: "rgba(220,38,38,.06)" }}>
           <div style={{ color: "#dc2626", fontSize: 11, fontWeight: 800 }}>전달 복구 필요 · {item.recovery.delivery_state || item.recovery.change_set_state}</div>
           <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5, lineHeight: 1.5 }}>
@@ -126,7 +156,7 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
 
 function ItemCard(props: {
   item: GoalWorkItem;
-  previews: Record<string, WorkItemApprovalPreview | null>;
+  previews: PreviewLoader;
   actorSessionId?: string | null;
   onChanged: () => Promise<void>;
   depth?: number;
@@ -172,58 +202,131 @@ export function GrantCard({ grant, actorSessionId, onChanged }: {
   );
 }
 
-export function useGoalWorkData(goalId: string, actorSessionId?: string | null) {
-  const [tree, setTree] = useState<GoalWorkTree | null>(null);
-  const [governance, setGovernance] = useState<GoalGovernance | null>(null);
-  const [grants, setGrants] = useState<GoalApprovalGrant[]>([]);
-  const [previews, setPreviews] = useState<Record<string, WorkItemApprovalPreview | null>>({});
-  const [selectedActor, setSelectedActor] = useState(actorSessionId || "");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+type WorkKey = "tree" | "governance" | "grants";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [nextTree, nextGovernance] = await Promise.all([
-        api.getGoalWorkTree(goalId), api.getGoalGovernance(goalId),
-      ]);
-      setTree(nextTree); setGovernance(nextGovernance); setError("");
-      if (!selectedActor) { setGrants([]); setPreviews({}); return; }
-      const nextGrants = await api.getGoalApprovalGrants(goalId, selectedActor);
-      setGrants(nextGrants);
-      const flatten = (items: GoalWorkItem[]): GoalWorkItem[] => items.flatMap((item) => [item, ...flatten(item.children || [])]);
-      const pending = flatten(nextTree.items).filter((item) => item.pending_approval_count > 0);
-      const approvalRows = await Promise.all(pending.map(async (item) => {
-        try { return [item.id, await api.getWorkItemApprovalPreview(item.id, selectedActor)] as const; }
-        catch { return [item.id, null] as const; }
-      }));
-      setPreviews(Object.fromEntries(approvalRows));
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "업무 계층을 불러오지 못했습니다.";
-      setError(message.includes("404") ? "업무 계층 기능이 아직 운영 슬롯에서 활성화되지 않았습니다." : message);
-    } finally { setLoading(false); }
-  }, [goalId, selectedActor]);
-
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { setSelectedActor(actorSessionId || ""); }, [actorSessionId, goalId]);
-  const activeGrants = useMemo(() => grants.filter((grant) => grant.status === "active").length, [grants]);
-
-  return { tree, governance, grants, previews, selectedActor, setSelectedActor, loading, error, load, activeGrants };
+// 식별자가 바뀌면 이전 목표의 값은 보이지 않는다(로딩으로 초기화).
+function useScopedSection<T>(identity: string) {
+  const [held, setHeld] = useState<{ identity: string; value: SectionState<T> }>({ identity, value: LOADING_SECTION });
+  const view = held.identity === identity ? held.value : (LOADING_SECTION as SectionState<T>);
+  const update = useCallback((next: (prev: SectionState<T>) => SectionState<T>) => {
+    setHeld((prev) => ({ identity, value: next(prev.identity === identity ? prev.value : (LOADING_SECTION as SectionState<T>)) }));
+  }, [identity]);
+  return [view, update] as const;
 }
 
-export function GrantsSection({ grants, governance, actorSessionId, selectedActor, setSelectedActor, onChanged }: {
+export type WorkSectionStatus = { loading: boolean; error: string; retry: () => void };
+
+export function useGoalWorkData(goalId: string, actorSessionId?: string | null) {
+  const [selectedActor, setSelectedActor] = useState(actorSessionId || "");
+  const [treeState, setTree] = useScopedSection<GoalWorkTree>(`tree:${goalId}`);
+  const [governanceState, setGovernance] = useScopedSection<GoalGovernance>(`gov:${goalId}`);
+  const [grantsState, setGrants] = useScopedSection<GoalApprovalGrant[]>(`grants:${goalId}:${selectedActor}`);
+  const controllers = useRef({ tree: createLatestController(), governance: createLatestController(), grants: createLatestController() });
+  const [previewVersion, bump] = useReducer((n: number) => n + 1, 0);
+
+  const previewStore = useMemo(
+    () => createLazyLoader<WorkItemApprovalPreview>(
+      (itemId, signal) => api.getWorkItemApprovalPreview(itemId, selectedActor, signal), bump),
+    [selectedActor],
+  );
+  useEffect(() => { previewStore.reset(); return () => previewStore.abort(); }, [previewStore, goalId]);
+  const previewStates = useMemo(() => previewStore.snapshot(), [previewStore, previewVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const previews = useMemo<PreviewLoader>(
+    () => ({ states: previewStates, request: selectedActor ? previewStore.request : NO_PREVIEWS.request }),
+    [previewStates, previewStore, selectedActor],
+  );
+
+  const sectionFor = useCallback((key: WorkKey): ParallelSection<any> => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const signal = controllers.current[key].begin();
+    if (key === "tree") return {
+      task: (s) => api.getGoalWorkTree(goalId, s), signal,
+      onOutcome: (o) => setTree((prev) => o.ok ? { data: o.value, error: "", loading: false }
+        : { data: prev.data, error: o.error.includes("404") ? "업무 계층 기능이 아직 운영 슬롯에서 활성화되지 않았습니다." : o.error, loading: false }),
+    };
+    if (key === "governance") return {
+      task: (s) => api.getGoalGovernance(goalId, s), signal,
+      onOutcome: (o) => setGovernance((prev) => o.ok ? { data: o.value, error: "", loading: false }
+        : { data: prev.data, error: o.error, loading: false }),
+    };
+    return {
+      task: (s) => api.getGoalApprovalGrants(goalId, selectedActor, s), signal,
+      onOutcome: (o) => setGrants((prev) => o.ok ? { data: o.value, error: "", loading: false }
+        : { data: prev.data, error: o.error, loading: false }),
+    };
+  }, [goalId, selectedActor, setTree, setGovernance, setGrants]);
+
+  const start = useCallback((keys: WorkKey[]) => {
+    const active = keys.filter((key) => key !== "grants" || !!selectedActor);
+    if (active.includes("tree")) setTree((prev) => ({ ...prev, error: "", loading: true }));
+    if (active.includes("governance")) setGovernance((prev) => ({ ...prev, error: "", loading: true }));
+    if (active.includes("grants")) setGrants((prev) => ({ ...prev, error: "", loading: true }));
+    else if (keys.includes("grants")) setGrants(() => IDLE_SECTION as SectionState<GoalApprovalGrant[]>);
+    // tree · governance · grants 를 같은 틱에 시작한다. 하나가 실패해도 나머지는 그대로 채워진다.
+    return loadSectionsParallel(active.map(sectionFor));
+  }, [selectedActor, sectionFor, setTree, setGovernance, setGrants]);
+
+  useEffect(() => {
+    void start(["tree", "governance"]);
+    const c = controllers.current;
+    return () => { c.tree.abort(); c.governance.abort(); };
+  }, [goalId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    void start(["grants"]);
+    const c = controllers.current;
+    return () => c.grants.abort();
+  }, [goalId, selectedActor]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelectedActor(actorSessionId || ""); }, [actorSessionId, goalId]);
+
+  const load = useCallback(async () => {
+    previewStore.reset();
+    await start(["tree", "governance", "grants"]);
+  }, [previewStore, start]);
+
+  const grants = useMemo(() => grantsState.data ?? [], [grantsState.data]);
+  const activeGrants = useMemo(() => grants.filter((grant) => grant.status === "active").length, [grants]);
+  const status = (state: SectionState<unknown>, keys: WorkKey[]): WorkSectionStatus =>
+    ({ loading: state.loading, error: state.error, retry: () => void start(keys) });
+
+  return {
+    tree: treeState.data, governance: governanceState.data, grants, previews, selectedActor, setSelectedActor,
+    loading: treeState.loading || governanceState.loading || grantsState.loading,
+    error: treeState.error, load, activeGrants,
+    treeStatus: status(treeState, ["tree"]),
+    governanceStatus: status(governanceState, ["governance"]),
+    grantsStatus: status(grantsState, ["grants"]),
+  };
+}
+
+export function SectionError({ label, status }: { label: string; status: WorkSectionStatus }) {
+  if (!status.error) return null;
+  return (
+    <div role="alert" style={{ marginTop: 9, padding: 9, borderRadius: 8, border: "1px solid #dc2626", color: "#dc2626", fontSize: 11.5, lineHeight: 1.5 }}>
+      {label}을(를) 표시하지 못했습니다 · {status.error}
+      <div style={{ marginTop: 6 }}>
+        <button type="button" onClick={status.retry} disabled={status.loading}
+          style={{ minHeight: 36, padding: "0 12px", borderRadius: 8, border: 0, background: "#dc2626", color: "white", fontWeight: 800, fontSize: 11.5, cursor: status.loading ? "wait" : "pointer" }}>
+          재시도
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function GrantsSection({ grants, governance, actorSessionId, selectedActor, setSelectedActor, onChanged, status }: {
   grants: GoalApprovalGrant[];
   governance: GoalGovernance | null;
   actorSessionId?: string | null;
   selectedActor: string;
   setSelectedActor: (value: string) => void;
   onChanged: () => Promise<void>;
+  status?: WorkSectionStatus;
 }) {
   return (
     <details style={{ marginTop: 12 }}>
       <summary style={{ minHeight: 44, display: "flex", alignItems: "center", cursor: "pointer", color: "var(--text-primary)", fontSize: 12, fontWeight: 800 }}>
-        단계별 자동승인 권한 {grants.length}건
+        단계별 자동승인 권한 {status?.loading && !grants.length ? "불러오는 중" : `${grants.length}건`}
       </summary>
+      {status && <SectionError label="자동승인 권한" status={status} />}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 8 }}>
         {!actorSessionId && governance?.assignments.length ? <label style={{ gridColumn: "1 / -1", color: "var(--text-secondary)", fontSize: 11 }}>
           회수 권한을 확인할 담당 세션
@@ -235,7 +338,7 @@ export function GrantsSection({ grants, governance, actorSessionId, selectedActo
             </option>)}
           </select>
         </label> : null}
-        {grants.length ? grants.map((grant) => <GrantCard key={grant.id} grant={grant} actorSessionId={selectedActor} onChanged={onChanged} />)
+        {status?.error ? null : grants.length ? grants.map((grant) => <GrantCard key={grant.id} grant={grant} actorSessionId={selectedActor} onChanged={onChanged} />)
           : <div style={{ color: "var(--text-secondary)", fontSize: 11.5 }}>발급된 자동승인 권한이 없습니다. 자동승인 불가 작업은 기존 수동 승인으로 전환됩니다.</div>}
       </div>
     </details>
@@ -243,7 +346,7 @@ export function GrantsSection({ grants, governance, actorSessionId, selectedActo
 }
 
 export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; actorSessionId?: string | null }) {
-  const { tree, governance, grants, previews, selectedActor, setSelectedActor, loading, error, load, activeGrants } =
+  const { tree, governance, grants, previews, selectedActor, setSelectedActor, loading, error, load, activeGrants, governanceStatus, grantsStatus } =
     useGoalWorkData(goalId, actorSessionId);
 
   return (
@@ -268,11 +371,12 @@ export function GoalWorkHierarchy({ goalId, actorSessionId }: { goalId: string; 
       {!error && tree && tree.items.length === 0 && <div style={{ marginTop: 10, padding: 12, border: "1px dashed var(--border)", borderRadius: 9, color: "var(--text-secondary)", fontSize: 11.5 }}>
         등록된 Epic이 없습니다. 업무 계층 API에서 Epic을 생성하면 Story와 Task가 이곳에 이어집니다.
       </div>}
+      <SectionError label="거버넌스 정책" status={governanceStatus} />
       {!error && tree?.items.map((item) => <ItemCard key={item.id} item={item} previews={previews}
         actorSessionId={selectedActor} onChanged={load} />)}
       {!error && (
         <GrantsSection grants={grants} governance={governance} actorSessionId={actorSessionId}
-          selectedActor={selectedActor} setSelectedActor={setSelectedActor} onChanged={load} />
+          selectedActor={selectedActor} setSelectedActor={setSelectedActor} onChanged={load} status={grantsStatus} />
       )}
     </section>
   );

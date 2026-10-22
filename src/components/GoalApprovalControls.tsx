@@ -24,9 +24,11 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
   const [state, setState] = useState<{ id: string; epoch: number; policy: Policy } | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const current = useRef(`${goalId}:${project || ""}`);
+  // 조회는 목표 ID 만 있으면 된다. project 는 board 응답이 와야 알 수 있어서, 여기에
+  // 묶으면 board → 승인정책이 직렬이 된다. project 는 편집 가능 여부·확인 문구에만 쓴다.
+  const current = useRef(`${goalId}`);
   const generation = useRef(0);
-  const identity = `${goalId}:${project || ""}`;
+  const identity = `${goalId}`;
   const lock = useRef(false);
   const [reload, setReload] = useState(0);
   const supported = supportsGoalApproval(project);
@@ -35,14 +37,15 @@ export function useGoalApprovalPolicy(goalId: string | null, project?: string) {
     current.current = identity;
     const epoch = ++generation.current;
     setState(null); setError(""); setSaving(false); lock.current = false;
-    if (!goalId || !project) return;
-    api.getGoalApprovalPolicy(goalId).then(p => {
+    if (!goalId) return;
+    const ctrl = new AbortController();
+    api.getGoalApprovalPolicy(goalId, ctrl.signal).then(p => {
       if (generation.current === epoch) setState({ id: identity, epoch, policy: p });
     }).catch(e => {
       if (generation.current === epoch) setError(e instanceof Error ? e.message : "승인 설정 조회 실패");
     });
-    return () => { generation.current = epoch + 1; };
-  }, [goalId, project, identity, reload]);
+    return () => { generation.current = epoch + 1; ctrl.abort(); };
+  }, [goalId, identity, reload]);
   const renderEpoch = state?.epoch;
   const savePolicy = useCallback(async (patch: Partial<PolicyValues>) => {
     if (!goalId || !policy || renderEpoch !== generation.current || lock.current || current.current !== identity) return;

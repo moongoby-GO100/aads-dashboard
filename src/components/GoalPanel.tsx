@@ -19,7 +19,8 @@ import { api } from "@/lib/api";
 import { GoalDocumentChips } from "@/components/GoalDocumentChips";
 import { goalDocumentView, type GoalDocument } from "@/lib/goalDocuments";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
-import { GrantsSection, useGoalWorkData } from "@/components/GoalWorkHierarchy";
+import { GrantsSection, SectionError, useGoalWorkData } from "@/components/GoalWorkHierarchy";
+import { createLatestController, errorMessage } from "@/lib/goalPanelLoad";
 import {
   MilestoneWorkTree, UnassignedWork, indexWorkItems, milestoneProgressLabel, useExpansionState,
   type WorkTreeContext,
@@ -74,8 +75,11 @@ function isScreenEvidence(ref: string): boolean {
   return /^https?:\/\/[^\s]+\.(?:png|jpe?g|webp)(?:\?[^\s]*)?$/i.test(ref);
 }
 
-export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
+export type GoalPanelSummary = { title?: string; status?: string; project?: string };
+
+export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProject }: {
   goalId: string;
+  summary?: GoalPanelSummary;
   sessionProject?: string;
   onClose: () => void;
   onOpenSession?: (sessionId: string) => void;
@@ -90,25 +94,39 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
   const [board, setBoard] = useState<Board | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  const [boardErr, setBoardErr] = useState("");
+  const boardRequests = useRef(createLatestController());
 
+  // 다른 목표로 바뀌면 이전 목표의 board 요청은 취소되고, 늦게 온 응답은 버려진다.
   const load = useCallback(async () => {
     const owner = boardKey;
-    try { const next = await api.getGoalBoard(goalId); if (boardGoalRef.current !== owner) return; setBoard(next); setBoardOwner(boardKey); setErr(""); }
-    catch (e) { if (boardGoalRef.current !== owner) return; setBoardOwner(null); setErr(e instanceof Error ? e.message : "목표를 불러오지 못했습니다."); }
+    if (boardGoalRef.current !== owner) return;
+    const signal = boardRequests.current.begin();
+    try {
+      const next = await api.getGoalBoard(goalId, signal);
+      if (signal.aborted || boardGoalRef.current !== owner) return;
+      setBoard(next); setBoardOwner(boardKey); setBoardErr("");
+    } catch (e) {
+      if (signal.aborted || boardGoalRef.current !== owner) return;
+      setBoardOwner(null); setBoardErr(errorMessage(e, "목표를 불러오지 못했습니다."));
+    }
   }, [goalId, boardKey]);
 
   useEffect(() => {
+    const requests = boardRequests.current;
     void load();
     const t = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void load();
     }, 20_000);
-    return () => window.clearInterval(t);
+    return () => { window.clearInterval(t); requests.abort(); };
   }, [load]);
 
   // 승인 설정. 대표님이 담당과 대화하다 바로 켜고 끄실 수 있어야 한다 —
   // `/goals` 로 옮겨 가면 그 대화 맥락이 끊긴다.
-  const approvalControls = useGoalApprovalPolicy(goalId, boardOwner === boardKey ? board?.goal.project : undefined);
+  // 승인 정책 조회는 board 를 기다리지 않는다. project 는 클릭 시 가진 요약값을 먼저 쓴다.
+  const goalProject = (boardOwner === boardKey ? board?.goal.project : undefined) || summary?.project;
+  const approvalControls = useGoalApprovalPolicy(goalId, goalProject);
   const { policy, savePolicy, saving } = approvalControls;
   const [countDraft, setCountDraft] = useState("200");
   useEffect(() => { setCountDraft(String(policy?.max_executions ?? 200)); }, [policy]);
@@ -185,7 +203,7 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
   const workLoaded = !!work.tree && !work.error;
 
   return (
-    <aside aria-label="목표 진행" style={{
+    <aside aria-label="목표 진행" aria-busy={!board && !boardErr} style={{
       // 420px 에서는 마일스톤 제목이 두세 줄로 접혀 목록이 읽히지 않는다
       // (2026-09-17 대표님 "마일스톤 표시 화면이 너무 작게 나온다").
       width: "min(520px, 94vw)", flexShrink: 0, borderLeft: "1px solid var(--border)",
@@ -194,10 +212,11 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
       <header style={{ padding: "13px 15px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
         <div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text-primary)" }}>
-            🎯 {board?.goal.title || "목표"}
+            🎯 {board?.goal.title || summary?.title || "목표"}
           </div>
           <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--text-secondary)" }}>
-            {total > 0 ? `마일스톤 ${done}/${total}` : "마일스톤 없음"}
+            {board ? (total > 0 ? `마일스톤 ${done}/${total}` : "마일스톤 없음") : "마일스톤 불러오는 중…"}
+            {(board?.goal.status || summary?.status) && <span style={{ marginLeft: 8 }}>상태 {board?.goal.status || summary?.status}</span>}
             {board?.halted && <span style={{ marginLeft: 8, color: "#dc2626", fontWeight: 700 }}>전체 정지 중</span>}
           </div>
         </div>
@@ -220,6 +239,17 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "12px 15px" }}>
           {err && <div role="alert" style={{ marginBottom: 10, padding: 9, borderRadius: 8, border: "1px solid #dc2626", color: "#dc2626", fontSize: 11.5 }}>{err}</div>}
+          {boardErr && (
+            <div role="alert" style={{ marginBottom: 10, padding: 9, borderRadius: 8, border: "1px solid #dc2626", color: "#dc2626", fontSize: 11.5, lineHeight: 1.5 }}>
+              마일스톤·담당 현황을 불러오지 못했습니다 · {boardErr}
+              <div style={{ marginTop: 6 }}>
+                <button type="button" onClick={() => void load()}
+                  style={{ minHeight: 36, padding: "0 12px", borderRadius: 8, border: 0, background: "#dc2626", color: "white", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>
+                  재시도
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 주도 미지정 — 여기서 바로 붙인다. 주도가 있으면 이 칸은 사라지고,
               담당 추가는 기존대로 `/goals` 의 후보 목록에서 한다. */}
@@ -264,14 +294,21 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
             </button>
           )}
 
-          {board && (
-            <section aria-label="업무 계층과 자동승인 권한" style={{ marginBottom: 11, padding: "10px 12px", borderRadius: 10,
+          {!board && !boardErr && (
+            <div role="status" aria-label="마일스톤 불러오는 중" style={{ display: "grid", gap: 8, marginBottom: 11 }}>
+              {[0, 1].map((n) => (
+                <div key={n} style={{ height: 58, borderRadius: 9, border: "1px solid var(--border)", borderLeft: "3px solid var(--border)", background: "var(--bg-primary)", opacity: 0.6 }} />
+              ))}
+            </div>
+          )}
+
+          <section aria-label="업무 계층과 자동승인 권한" style={{ marginBottom: 11, padding: "10px 12px", borderRadius: 10,
               border: "1px solid var(--border)", background: "var(--bg-card)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <div>
                   <strong style={{ color: "var(--text-primary)", fontSize: 12.5 }}>업무 계층 · Epic → Story → Task</strong>
                   <div style={{ marginTop: 3, color: "var(--text-secondary)", fontSize: 10.5 }}>
-                    승인 대기 {work.tree?.pending_approval_count || 0} · 활성 자동승인 {work.activeGrants} · 정책 {work.governance?.policy?.mode || "미설정"}
+                    {work.tree ? `승인 대기 ${work.tree.pending_approval_count || 0}` : "승인 대기 …"} · 활성 자동승인 {work.activeGrants} · 정책 {work.governance?.policy?.mode || (work.governanceStatus.loading ? "…" : "미설정")}
                   </div>
                 </div>
                 <button type="button" onClick={() => void work.load()} disabled={work.loading}
@@ -280,28 +317,20 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
                   {work.loading ? "불러오는 중" : "다시 불러오기"}
                 </button>
               </div>
-              {work.error && (
-                <div role="alert" style={{ marginTop: 9, padding: 9, borderRadius: 8, border: "1px solid #dc2626", color: "#dc2626", fontSize: 11.5, lineHeight: 1.5 }}>
-                  업무 계층을 표시하지 못했습니다 · {work.error}
-                  <div style={{ marginTop: 6 }}>
-                    <button type="button" onClick={() => void work.load()} disabled={work.loading}
-                      style={{ minHeight: 36, padding: "0 12px", borderRadius: 8, border: 0, background: "#dc2626", color: "white", fontWeight: 800, fontSize: 11.5, cursor: work.loading ? "wait" : "pointer" }}>
-                      재시도
-                    </button>
-                  </div>
-                </div>
+              <SectionError label="업무 계층" status={work.treeStatus} />
+              <SectionError label="거버넌스 정책" status={work.governanceStatus} />
+              {!work.tree && !work.error && (
+                <div role="status" style={{ marginTop: 9, height: 40, borderRadius: 8, background: "var(--bg-primary)", opacity: 0.6 }} />
               )}
               {workLoaded && work.tree && work.tree.items.length === 0 && (
                 <div style={{ marginTop: 9, padding: 10, border: "1px dashed var(--border)", borderRadius: 8, color: "var(--text-secondary)", fontSize: 11.5 }}>
                   등록된 Epic이 없습니다. Epic을 만들면 해당 마일스톤 카드 아래에 Story와 Task가 이어집니다.
                 </div>
               )}
-              {!work.error && (
-                <GrantsSection grants={work.grants} governance={work.governance} actorSessionId={actorSessionId}
-                  selectedActor={work.selectedActor} setSelectedActor={work.setSelectedActor} onChanged={work.load} />
-              )}
-            </section>
-          )}
+              <GrantsSection grants={work.grants} governance={work.governance} actorSessionId={actorSessionId}
+                selectedActor={work.selectedActor} setSelectedActor={work.setSelectedActor} onChanged={work.load}
+                status={work.grantsStatus} />
+          </section>
 
           {board && total === 0 && (
             <div style={{ padding: "14px 12px", borderRadius: 9, border: "1px dashed var(--border)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
@@ -398,7 +427,9 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
               승인 설정 · 담당 {crew.length}명{board?.documents?.length ? ` · 문서 ${board.documents.length}` : ""}
             </span>
             <span style={{ color: policy?.auto_approve_critical ? "#dc2626" : policy?.auto_approve_high ? "#d97706" : "var(--text-secondary)" }}>
-              {approvalSummary(policy, approvalControls.supported)}
+              {approvalControls.policyError ? "승인 설정 조회 실패"
+                : !policy && approvalControls.supported ? "승인 설정 불러오는 중…"
+                : approvalSummary(policy, approvalControls.supported)}
             </span>
           </summary>
           {/* 펼쳐도 마일스톤을 밀어내지 않도록 여기까지만 쓴다 — 이 상한이

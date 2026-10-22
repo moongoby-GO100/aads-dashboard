@@ -14882,6 +14882,7 @@ export default function ChatPage() {
           <GoalPanel
             key={`${activeSession?.id}:${panelGoalId}`}
             goalId={panelGoalId}
+            summary={stripGoals.find((g) => g.goal_id === panelGoalId)}
             sessionProject={projectKeyFromWorkspace(activeWsObj) || undefined}
             onClose={() => setPanelGoalId(null)}
             onOpenSession={(sid) => { window.location.hash = sid; }}
