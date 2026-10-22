@@ -13,10 +13,11 @@ import { MockupReviewBadge } from "@/components/MockupReviewBadge";
 import { GoalStrip } from "@/components/chat/GoalStrip";
 import { DormancyCard } from "@/components/chat/DormancyCard";
 import {
-  cleanupCandidates, dormancyCardState, freshSignals, mergeStripSignals, pausedAutoApprovalGoals, shouldShowGoalStrip,
-  summarizeOpenGoals,
+  STRIP_OPEN_STATUSES, cleanupCandidates, dormancyCardState, freshSignals, mergeStripSignals, pausedAutoApprovalGoals,
+  shouldShowGoalStrip, summarizeOpenGoals,
   type GoalSignal, type StripGoal,
 } from "@/lib/goalStrip";
+import { candidatesVersionOf, type TriageApplyBody } from "@/lib/goalTriage";
 import { useDiffApproval } from "@/hooks/useDiffApproval";
 import "@/styles/code-editor.css";
 import MemoryContextBar from "@/components/chat/MemoryContextBar";
@@ -4624,6 +4625,23 @@ export default function ChatPage() {
   const stripSummary = useMemo(() => summarizeOpenGoals(liveSignals), [liveSignals]);
   const cleanupPool = useMemo(() => cleanupCandidates(liveSignals), [liveSignals]);
   const pausedAutoApproval = useMemo(() => pausedAutoApprovalGoals(liveSignals), [liveSignals]);
+  const triageOpenGoals = useMemo(
+    () => (liveSignals || []).filter((s) => STRIP_OPEN_STATUSES.includes(String(s.status || "").toLowerCase())),
+    [liveSignals],
+  );
+  const triageVersion = useMemo(() => candidatesVersionOf(liveSignals), [liveSignals]);
+  const applyGoalTriage = useCallback(
+    (body: TriageApplyBody, idempotencyKey: string) =>
+      chatApi<unknown>("/goals/triage/apply", {
+        method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body),
+      }),
+    [],
+  );
+  const finishGoalTriage = useCallback(async () => {
+    setGoalRefreshTick((t) => t + 1);
+    await loadGoalSignals();
+    setDormancyCardOpen(false);
+  }, [loadGoalSignals]);
   const showGoalStrip = shouldShowGoalStrip({
     sessionGoalCount: sessionGoals.length, cleanupTotal: cleanupPool.total, unlinkedCount: unlinkedGoalJobs,
     signalsError: goalSignalsError,
@@ -12948,6 +12966,8 @@ export default function ChatPage() {
             <DormancyCard
               state={dormancyState}
               candidates={cleanupPool}
+              openGoals={triageOpenGoals}
+              candidatesVersion={triageVersion}
               pausedAutoApproval={pausedAutoApproval}
               openGoalCount={stripSummary ? stripSummary.open : null}
               openP0Count={stripSummary ? stripSummary.p0 : null}
@@ -12959,6 +12979,9 @@ export default function ChatPage() {
               }}
               onClose={() => setDormancyCardOpen(false)}
               onOpenGoal={(goalId) => { setPanelMockup(null); setPanelGoalId(goalId); }}
+              onApply={applyGoalTriage}
+              onApplied={finishGoalTriage}
+              onRefreshCandidates={loadGoalSignals}
             />
           )}
 

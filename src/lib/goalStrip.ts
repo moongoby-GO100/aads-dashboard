@@ -72,6 +72,8 @@ export interface GoalSignal {
   dormant_reason?: string | null;
   cleanup_lane?: CleanupLane;
   auto_approval?: AutoApprovalView | null;
+  /** 정리 카드가 triage/apply 에 되돌려 보내는 후보 지문 (모든 행이 같은 값). */
+  candidates_version?: string | null;
 }
 
 export type StripChipGoal = StripGoal & {

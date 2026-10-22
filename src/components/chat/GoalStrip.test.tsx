@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { GoalStrip, type GoalStripProps } from "./GoalStrip";
-import type { StripChipGoal } from "@/lib/goalStrip";
+import { DormancyCard, type DormancyCardProps } from "./DormancyCard";
+import { cleanupCandidates, type GoalSignal, type StripChipGoal } from "@/lib/goalStrip";
 
 const g = (id: string, over: Partial<StripChipGoal> = {}): StripChipGoal => ({
   goal_id: id, title: `목표 ${id}`, status: "active", progress: 0.5, milestone: null, dispatch_note: null, ...over,
@@ -213,5 +214,57 @@ describe("approval chip and progress chip are separate", () => {
     const out = one({ progress_state: "blocked", blocked_milestones: [{ milestone_id: "m-1", title: "M2", reason: "사유" }] });
     expect(out).not.toContain("data-goal-stuck");
     expect(out).not.toContain("다시 보내기");
+  });
+});
+
+describe("DormancyCard selection UI", () => {
+  const NOW_MS = Date.now();
+  const ago = (d: number) => new Date(NOW_MS - d * 86_400_000).toISOString();
+  const sig = (id: string, over: Partial<GoalSignal> = {}): GoalSignal =>
+    ({ goal_id: id, title: `목표 ${id}`, status: "active", priority: "P0", last_activity_at: ago(1), candidates_version: "v1:abc", ...over });
+  const pool: GoalSignal[] = [
+    sig("p1"), sig("p2"), sig("p3"), sig("p4", { last_activity_at: ago(19) }),
+    sig("d1", { priority: "P1", cleanup_lane: "dormant", last_activity_at: ago(30) }),
+    sig("b1", { priority: "P1", status: "blocked", cleanup_lane: "blocked_resolution", last_activity_at: ago(20) }),
+  ];
+  const card = (over: Partial<DormancyCardProps> = {}) => renderToStaticMarkup(
+    <DormancyCard state="default" candidates={cleanupCandidates(pool)} openGoals={pool} candidatesVersion="v1:abc" pausedAutoApproval={[]}
+      openGoalCount={pool.length} openP0Count={4} isMobile={false} retrying={false} onRetry={vi.fn()} onClose={vi.fn()} onOpenGoal={vi.fn()}
+      onApply={vi.fn()} onApplied={vi.fn()} onRefreshCandidates={vi.fn()} {...over} />,
+  );
+
+  it("renders the three lanes with one checkbox per active P0 and the segments per lane", () => {
+    const out = card();
+    expect((out.match(/type="checkbox"/g) || []).length).toBe(4);
+    expect(out).toContain("진행 P0 3개 고르기");
+    expect(out).toContain("재개");
+    expect(out).toContain("차단 해소");
+    expect(out).toContain("일시정지");
+    expect(out).toContain("종료");
+    expect(out).toContain("병합");
+  });
+
+  it("shows → P1 on every unselected P0 row and a disabled apply button with the zero-selection summary", () => {
+    const out = card();
+    expect((out.match(/→ P1/g) || []).length).toBeGreaterThanOrEqual(4);
+    expect(out).toContain("① P0 0개 · ② 0건 · ③ 0건 반영");
+    expect(/<button[^>]*data-apply[^>]*disabled/.test(out)).toBe(true);
+  });
+
+  it("disables apply when there is no candidates version", () => {
+    expect(/<button[^>]*data-apply[^>]*disabled/.test(card({ candidatesVersion: null }))).toBe(true);
+  });
+
+  it("keeps every mobile control at least 44px high", () => {
+    const out = card({ isMobile: true });
+    const heights = [...out.matchAll(/<(?:button|select|label)[^>]*style="[^"]*?min-height:(\d+)px/g)].map((m) => Number(m[1]));
+    expect(heights.length).toBeGreaterThan(8);
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("keeps the loading, error and empty states", () => {
+    expect(card({ state: "loading" })).toContain('data-dormancy-card="loading"');
+    expect(card({ state: "error" })).toContain('data-dormancy-card="error"');
+    expect(card({ state: "empty", candidates: cleanupCandidates([]) })).toContain('data-dormancy-card="empty"');
   });
 });

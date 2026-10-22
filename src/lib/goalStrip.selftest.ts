@@ -8,6 +8,12 @@ import {
   shouldShowGoalStrip, sortDropdownGoals, summarizeOpenGoals, unlinkedChipLabel,
   type GoalSignal, type StripGoal,
 } from "./goalStrip";
+import {
+  EMPTY_SELECTION, applyBlockReason, buildApplyRequest, candidatesVersionOf, chooseAction, isDemotedP0, keyAfterFailure,
+  keyForAttempt, mergeTargetOptions, parseTriageFailure, reconcileSelection, requestFingerprint, requiredP0Count,
+  setMergeTarget, summarizeSelection, toggleKeepP0, triageFailureHeadline, triageFailureText, visibleCandidates,
+  type TriageSelection,
+} from "./goalTriage";
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = "") {
@@ -326,6 +332,118 @@ check("redispatch success copy", redispatchSuccessText(false).includes("다음 �
 check("owner 422 not linked", ownerAssignFailureText(apiErr(422, { detail: "owner_not_linked" })).includes("연결돼 있지 않아"));
 check("owner 403", ownerAssignFailureText(apiErr(403, { detail: "cross_project" })).includes("다른 프로젝트"));
 check("owner generic", ownerAssignFailureText(new Error("x")) === "담당을 지정하지 못했습니다");
+
+// ── 정리 카드 선택·반영 (goalTriage) ─────────────────────────────────────────────
+const tp = (id: string, over: Partial<GoalSignal> = {}): GoalSignal => ({ goal_id: id, title: id, status: "active", priority: "P0", ...over });
+const triagePool: GoalSignal[] = [
+  tp("p1", { last_activity_at: ago(1) }), tp("p2", { last_activity_at: ago(2) }), tp("p3", { last_activity_at: ago(3) }),
+  tp("p4", { last_activity_at: ago(19), cleanup_lane: "dormant" }),
+  tp("d1", { priority: "P1", cleanup_lane: "dormant", last_activity_at: ago(30) }),
+  tp("d2", { priority: "P2", cleanup_lane: "dormant", last_activity_at: ago(40) }),
+  tp("b1", { priority: "P1", status: "blocked", cleanup_lane: "blocked_resolution", last_activity_at: ago(20) }),
+  tp("t1", { priority: "P1", last_activity_at: ago(1) }),
+];
+const tc = cleanupCandidates(triagePool);
+const open = triagePool;
+const VER = "v1:abc";
+let sel: TriageSelection = EMPTY_SELECTION;
+
+check("triage required p0 count", requiredP0Count(tc) === 3 && requiredP0Count(cleanupCandidates([p0("a")])) === 1 && requiredP0Count(empty) === 0);
+check("apply blocked below 3 P0", applyBlockReason(sel, tc, VER) === "p0_count");
+sel = toggleKeepP0(toggleKeepP0(sel, "p1"), "p2");
+check("apply blocked at 2 P0", applyBlockReason(sel, tc, VER) === "p0_count" && sel.keepP0.length === 2);
+sel = toggleKeepP0(sel, "p3");
+check("apply blocked w/o choices even at 3 P0 (P0 demotion alone is a change)", applyBlockReason(sel, tc, VER) === null);
+check("4th P0 pick ignored", toggleKeepP0(sel, "p4") === sel && toggleKeepP0(sel, "p4").keepP0.length === 3);
+check("P0 pick toggles off", toggleKeepP0(sel, "p3").keepP0.join() === "p1,p2");
+check("apply blocked without version", applyBlockReason(sel, tc, null) === "no_version" && applyBlockReason(sel, tc, "") === "no_version");
+check("unpicked active P0 shows demotion, picked does not", isDemotedP0(tp("p4"), sel) && !isDemotedP0(tp("p1"), sel)
+  && !isDemotedP0(tp("b", { status: "blocked" }), sel) && !isDemotedP0(tp("d1", { priority: "P1" }), sel));
+
+// 선택·해제·줄 밖 동작
+sel = chooseAction(sel, "d1", "dormant", "resume");
+check("choose resume", sel.choices.d1?.action === "resume");
+check("choose same again clears", chooseAction(sel, "d1", "dormant", "resume").choices.d1 === undefined);
+check("unblock not allowed on dormant, resume not allowed on blocked", chooseAction(sel, "d2", "dormant", "unblock") === sel
+  && chooseAction(sel, "b1", "blocked", "resume") === sel);
+sel = chooseAction(sel, "b1", "blocked", "unblock");
+check("choose unblock on blocked", sel.choices.b1?.action === "unblock");
+sel = chooseAction(sel, "d2", "dormant", "merge");
+check("merge without target blocks apply", sel.choices.d2?.mergeInto === null && applyBlockReason(sel, tc, VER) === "merge_target");
+check("merge target excludes self and ending goals", (() => {
+  const s2 = chooseAction(sel, "d1", "dormant", "close");
+  const ids = mergeTargetOptions(open, s2, "d2").map((x) => x.goal_id);
+  return !ids.includes("d2") && !ids.includes("d1") && ids.includes("p4") && ids.includes("b1");
+})());
+check("merge target can be any open goal incl. picked P0", mergeTargetOptions(open, sel, "d2").some((x) => x.goal_id === "p1"));
+sel = setMergeTarget(sel, "d2", "p1");
+check("merge with target allowed", applyBlockReason(sel, tc, VER) === null && sel.choices.d2?.mergeInto === "p1");
+check("switching away from merge drops target", chooseAction(sel, "d2", "dormant", "pause").choices.d2?.mergeInto === null);
+check("setMergeTarget ignored when not merge", setMergeTarget(sel, "d1", "p1") === sel);
+
+// ① 에서 고른 P0 는 ②·③ 에서 빠지고 그 선택도 사라진다
+const withP4 = toggleKeepP0(chooseAction(EMPTY_SELECTION, "p4", "dormant", "close"), "p1");
+check("kept P0 leaves its row choice", withP4.choices.p4 !== undefined);
+const keptP4 = toggleKeepP0(withP4, "p4");
+check("keeping a dormant P0 hides it from ② and drops its choice", keptP4.choices.p4 === undefined
+  && !visibleCandidates(tc, keptP4).dormant.some((x) => x.goal_id === "p4") && visibleCandidates(tc, EMPTY_SELECTION).dormant.some((x) => x.goal_id === "p4"));
+
+// 요약 문구 숫자 · 요청 본문
+const sm = summarizeSelection(sel, tc);
+check("summary counts", sm.p0 === 3 && sm.dormant === 2 && sm.blocked === 1 && sm.byAction.resume === 1 && sm.byAction.merge === 1
+  && sm.byAction.unblock === 1 && sm.unselected === 1 && sm.merging === 1 && sm.closing === 0, JSON.stringify(sm));
+const req = buildApplyRequest(sel, tc, VER);
+check("request body", req.keep_p0.join() === "p1,p2,p3" && req.candidates_version === VER && req.actions.length === 3
+  && req.actions.some((a) => a.goal_id === "d2" && a.action === "merge" && a.merge_into === "p1")
+  && req.actions.some((a) => a.goal_id === "b1" && a.action === "unblock" && a.merge_into === undefined)
+  && !req.actions.some((a) => a.goal_id === "p4"), JSON.stringify(req));
+check("fingerprint order independent", requestFingerprint(req) === requestFingerprint({ ...req, keep_p0: [...req.keep_p0].reverse(), actions: [...req.actions].reverse() })
+  && requestFingerprint(req) !== requestFingerprint({ ...req, candidates_version: "v1:def" }));
+check("nothing to apply w/ ≤3 P0 and no choice", applyBlockReason(EMPTY_SELECTION, cleanupCandidates([p0("a"), p0("b")]), VER) === "p0_count"
+  && applyBlockReason(toggleKeepP0(toggleKeepP0(EMPTY_SELECTION, "a"), "b"), cleanupCandidates([p0("a"), p0("b")]), VER) === "nothing");
+
+// 후보가 바뀌면 유효한 선택만 남긴다 (stale_candidates 뒤 UI-3)
+check("reconcile keeps everything valid (same object)", reconcileSelection(sel, tc, open) === sel);
+const changedCands = cleanupCandidates(triagePool.filter((x) => x.goal_id !== "d1" && x.goal_id !== "p2")
+  .map((x) => (x.goal_id === "b1" ? { ...x, status: "active", cleanup_lane: null } : x)));
+const rec = reconcileSelection(sel, changedCands, triagePool.filter((x) => x.goal_id !== "d1" && x.goal_id !== "p2"));
+check("reconcile drops vanished/changedCands, keeps valid", rec.keepP0.join() === "p1,p3" && rec.choices.d1 === undefined && rec.choices.b1 === undefined
+  && rec.choices.d2?.action === "merge" && rec.choices.d2?.mergeInto === "p1", JSON.stringify(rec));
+const targetGone = reconcileSelection(sel, tc, open.filter((x) => x.goal_id !== "p1"));
+check("reconcile clears vanished merge target but keeps merge", targetGone.choices.d2?.action === "merge" && targetGone.choices.d2?.mergeInto === null);
+const targetEnding = reconcileSelection(chooseAction(sel, "d1", "dormant", "merge"), tc, open);
+const mergeChain = reconcileSelection(setMergeTarget(chooseAction(sel, "d1", "dormant", "merge"), "d1", "d2"), tc, open);
+check("reconcile clears merge into a goal that is itself merged", mergeChain.choices.d1?.mergeInto === null && targetEnding.choices.d1?.mergeInto === null);
+check("reconcile keeps nothing on empty candidates", reconcileSelection(sel, empty, []).keepP0.length === 0 && Object.keys(reconcileSelection(sel, empty, []).choices).length === 0);
+check("candidates version from first row", candidatesVersionOf([{ ...tp("a"), candidates_version: null }, { ...tp("b"), candidates_version: "v1:x" }]) === "v1:x" && candidatesVersionOf(null) === null);
+
+// Idempotency-Key — 카드 열 때 한 번, 재시도 재사용, 처리된 실패 뒤·내용이 바뀌면 새 키
+const k0 = { key: "k-open", fingerprint: null as string | null };
+const k1 = keyForAttempt(k0, "fp1");
+check("first attempt uses the opening key", k1.key === "k-open" && k1.fingerprint === "fp1");
+check("retry w/ same request reuses key", keyForAttempt(k1, "fp1").key === "k-open");
+check("changedCands request gets a new key", keyForAttempt(k1, "fp2").key !== "k-open");
+const f409 = parseTriageFailure(new Error('409: {"detail":{"error":"p0_cap_exceeded","cap":3,"current_p0":[{"goal_id":"a"},{"goal_id":"b"},{"goal_id":"c"},{"goal_id":"d"}]}}'));
+check("parse 409 p0 cap", f409.status === 409 && f409.code === "p0_cap_exceeded" && f409.definitive && f409.cap === 3 && f409.currentP0 === 4);
+check("new key after processed failure", keyAfterFailure(k1, f409).key !== "k-open");
+const fNet = parseTriageFailure(new TypeError("Failed to fetch"));
+const f500 = parseTriageFailure(new Error("500: boom"));
+check("same key kept when outcome unknown", !fNet.definitive && !f500.definitive && keyAfterFailure(k1, fNet) === k1 && keyAfterFailure(k1, f500) === k1);
+check("parse status prop and API error prefix", parseTriageFailure(Object.assign(new Error("403: x"), { status: 403 })).status === 403
+  && parseTriageFailure(new Error('API error 422: {"detail":[{"msg":"x"}]}')).code === null);
+
+// 실패 문구 — 헤드라인과 사람이 읽을 원인
+check("failure headline", triageFailureHeadline(f409) === "반영하지 못했습니다 — 아무것도 바뀌지 않았습니다"
+  && triageFailureHeadline(fNet) !== "반영하지 못했습니다 — 아무것도 바뀌지 않았습니다");
+check("p0 cap text", triageFailureText(f409).includes("상한 3개") && triageFailureText(f409).includes("4개") && triageFailureText(f409).includes("p0_cap_exceeded"));
+check("stale text", triageFailureText(parseTriageFailure(new Error('409: {"detail":{"error":"stale_candidates","candidates":[]}}'))).includes("최신 후보"));
+check("403 text", triageFailureText(parseTriageFailure(new Error('403: {"detail":{"error":"triage_ceo_only"}}'))).includes("대표님만"));
+check("network text warns outcome unknown", triageFailureText(fNet).includes("두 번 반영되지 않습니다"));
+check("every known code has human text", ["keep_p0_not_active_p0", "goal_not_found", "goal_already_closed", "not_blocked", "merge_into_required",
+  "invalid_merge_target", "duplicate_action", "idempotency_key_reused", "idempotency_key_required"].every((c) => {
+  const t = triageFailureText(parseTriageFailure(new Error(`422: {"detail":{"error":"${c}"}}`)));
+  return t.includes(c) && t.length > 20 && !t.startsWith("서버가 요청을 받아들이지");
+}));
 
 if (failed > 0) {
   console.error(`${failed} goalStrip selftest(s) failed`);

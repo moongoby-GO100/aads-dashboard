@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit --incremental false --pretty false",
     "lint:chat": "eslint src/app/chat/page.tsx src/app/chat/ChatInput.tsx src/app/chat/MarkdownRenderer.tsx src/app/chat/ChatArtifactPanel.tsx src/features/chat src/lib/chatScrollPolicy.ts src/lib/chatReplacementGuard.ts src/lib/chatInterruptReceipt.ts src/lib/chatInterruptReceipt.selftest.ts tests/chat-modernization --max-warnings 23",
     "test:chat": "node --test tests/chat-modernization/*.test.mjs",
-    "test:goal-strip": "vitest run src/components/chat/GoalStrip.test.tsx src/components/chat/GoalStrip.interaction.test.tsx",
+    "test:goal-strip": "vitest run src/components/chat/GoalStrip.test.tsx src/components/chat/GoalStrip.interaction.test.tsx src/lib/goalTriage.test.ts",
     "test:goal-docs": "vitest run src/components/GoalDocumentChips.test.tsx",
     "test:goal-panel": "vitest run src/lib/goalPanelLoad.test.ts src/components/GoalPanel.test.tsx src/components/GoalProgressControls.test.tsx src/lib/goalProgress.test.ts",
     "test:chat:security": "vitest run src/features/chat/rendering",
