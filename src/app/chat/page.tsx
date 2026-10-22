@@ -2179,6 +2179,18 @@ function findLocalMatchForServerMessage(
   incomingMessages: ChatMessage[],
   context: ChatMessage[] = incomingMessages,
 ): ChatMessage | undefined {
+  // User receipts belong to a request, not to an assistant execution or a
+  // client/server clock interval. Several interrupts can share an execution.
+  if (serverMessage.role === "user" && serverMessage.idempotency_key) {
+    const receiptMatch = localMessages.find((message) => message.role === "user"
+      && message.session_id === serverMessage.session_id
+      && message.idempotency_key === serverMessage.idempotency_key);
+    if (receiptMatch) return receiptMatch;
+    localMessages = localMessages.filter((message) => !message.idempotency_key);
+  }
+  if (serverMessage.role === "user" && !serverMessage.idempotency_key) {
+    localMessages = localMessages.filter((message) => !message.idempotency_key);
+  }
   localMessages = localMessages.filter((message) => messagesBelongToSameTurn(message, serverMessage, context));
   if (serverMessage.execution_id) {
     const execMatch = localMessages.find((m) =>
@@ -2214,6 +2226,22 @@ function findLocalMatchForServerMessage(
   }
 
   return undefined;
+}
+
+function promoteUserEchoByReceipt(
+  messages: ChatMessage[], localId: string, sessionId: string, savedId: string,
+): ChatMessage[] {
+  const echo = messages.find((message) => message.id === localId && message.role === "user"
+    && message.session_id === sessionId && isLocalTransientMessage(message));
+  if (!echo || !savedId || LOCAL_MESSAGE_PREFIXES.some((prefix) => savedId.startsWith(prefix))) return messages;
+  const saved = messages.find((message) => message.id === savedId && message.session_id === sessionId
+    && message.role === "user");
+  // Polling can win the race against the POST receipt. Remove its extra copy
+  // atomically while keeping the original React key, attachments and previews.
+  return messages.filter((message) => message !== saved).map((message) => message === echo ? {
+    ...echo, ...saved, id: savedId, render_id: echo.render_id || echo.id,
+    attachmentPreviews: saved?.attachmentPreviews || echo.attachmentPreviews,
+  } : message);
 }
 
 function mergeServerMessagesPreservingLocal(
@@ -2268,7 +2296,11 @@ function mergeServerMessagesPreservingLocal(
     const serverMessageWithPreservedContent = mergeServerMessageWithExisting(existingMessage, serverMessage);
     // A user message already on screen is not the server copy of a new local echo,
     // even when the text is identical (intentional repeat).
-    const localMatch = existingMessage && serverMessage.role === "user" ? undefined : findLocalMatchForServerMessage(
+    const hasExactUserReceipt = serverMessage.role === "user" && Boolean(serverMessage.idempotency_key)
+      && localMessages.some((message) => message.role === "user"
+        && message.session_id === serverMessage.session_id
+        && message.idempotency_key === serverMessage.idempotency_key);
+    const localMatch = existingMessage && serverMessage.role === "user" && !hasExactUserReceipt ? undefined : findLocalMatchForServerMessage(
       localMessages.filter((localMessage) => !matchedLocalIds.has(localMessage.id)),
       serverMessageWithPreservedContent,
       incomingMessages,
@@ -8554,12 +8586,12 @@ export default function ChatPage() {
       if (activeSessionObjRef.current?.id) {
         const interruptSessionId = activeSessionObjRef.current.id;
         const interruptPayload = { content: interruptContent, attachments: interruptAttachments };
-        runChatCommand<{ queued: boolean; message?: string }>({
+        runChatCommand<{ queued: boolean; message?: string; message_id?: string | null }>({
           sessionId: interruptSessionId,
           commandType: "interrupt",
           payload: interruptPayload,
           advertisedCapabilities: advertisedRuntimeCapabilitiesRef.current.get(interruptSessionId) || [],
-          legacyRequest: () => chatApi<{ queued: boolean; message?: string }>(
+          legacyRequest: () => chatApi<{ queued: boolean; message?: string; message_id?: string | null }>(
             `/chat/sessions/${interruptSessionId}/interrupt`,
             { method: "POST", body: JSON.stringify(interruptPayload) },
           ),
@@ -8582,6 +8614,11 @@ export default function ChatPage() {
               void sendMessage(interruptContent, undefined, undefined, interruptLocalId);
             }, 0);
             return;
+          }
+          if (res.message_id && activeSessionRef.current === interruptSessionId) {
+            setMessagesPreservingViewport((prev) => promoteUserEchoByReceipt(
+              prev, interruptLocalId, interruptSessionId, res.message_id!,
+            ));
           }
           void recordPendingDirectiveSent(interruptContent, activeSessionObjRef.current?.id || "");
           void chatApi<{ messages: ChatMessage[]; has_more: boolean; next_cursor: string | null }>(
@@ -8702,8 +8739,10 @@ export default function ChatPage() {
     const isStale = () => activeSessionRef.current !== requestSessionId;
 
     const _capturedReplyTo = replyToMessageRef.current;
+    const requestIdempotencyKey = _existingIdempotencyKey || crypto.randomUUID();
     const userMsg: ChatMessage = {
       id: _existingMsgId || `tmp-${Date.now()}`,
+      idempotency_key: requestIdempotencyKey,
       session_id: sessionId,
       role: "user",
       content,
@@ -8805,7 +8844,7 @@ export default function ChatPage() {
       const fetchHeaders: Record<string, string> = { ...authHdrs() };
       let fetchUrl = `${BASE_URL}/chat/messages/send`;
       // Stage 3: idempotency key — 502 재시도 시 동일 메시지 중복 저장 방지
-      const _idempotencyKey = _existingIdempotencyKey || crypto.randomUUID();
+      const _idempotencyKey = requestIdempotencyKey;
 
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
@@ -8931,6 +8970,20 @@ export default function ChatPage() {
             // P0-FIX: heartbeat도 timeout 리셋 — 도구 30s+ 실행 시 연결 유지 필수
             // 절대 타임아웃(300s)이 무한 연장 방지 안전망 역할
             if (ev.type === "stream_start") {
+              // stream_start follows the committed user save. Read the bounded
+              // full projection once: render/minimal intentionally omit the key.
+              // Match the request key, never the text, even after a clock skew
+              // or a competing history poll has already rendered the UUID.
+              void chatApi<{ messages: ChatMessage[] }>(
+                `/chat/messages?session_id=${requestSessionId}&limit=10&fields=full&include_streaming=true`,
+              ).then((result) => {
+                if (isStale()) return;
+                const saved = result.messages?.find((message) => message.role === "user"
+                  && message.idempotency_key === requestIdempotencyKey);
+                if (saved) setMessagesPreservingViewport((prev) => promoteUserEchoByReceipt(
+                  prev, userMsg.id, requestSessionId, saved.id,
+                ));
+              }).catch(() => { /* normal history polling remains the fallback */ });
               // SSE 재연결 프로토콜: stream_id 저장 (복구 시 사용)
               if (ev.execution_id) {
                 currentExecutionIdRef.current = ev.execution_id;
