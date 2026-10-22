@@ -8,6 +8,10 @@ import TaskCard from "@/components/tasks/TaskCard";
 import { MarkdownBlock } from "./MarkdownRenderer";
 import MermaidDiagram from "@/components/MermaidDiagram";
 import { BASE_URL, authHdrs, chatApi, ChatApiError, updateArtifact } from "./api";
+import {
+  applyRunnerJobsResult, emptyRunnerJobsState, selectRunnerJobsState, startRunnerJobsPolling,
+  type RunnerJobsState,
+} from "./runnerJobsLoader";
 import { getMe } from "@/lib/auth";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { buildCanonicalDocHref } from "@/lib/canonicalDocLinks";
@@ -1091,8 +1095,10 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const prevArtifactCountsRef = useRef<Record<string, number>>({});
 
   // Runner 작업 폴링 상태
-  const [runnerJobs, setRunnerJobs] = useState<RunnerJob[]>([]);
+  const [runnerJobsState, setRunnerJobsState] = useState<RunnerJobsState<RunnerJob>>(() => emptyRunnerJobsState<RunnerJob>());
+  const { jobs: runnerJobs, error: jobsError } = selectRunnerJobsState(runnerJobsState, sessionId);
   const [jobsLoading, setJobsLoading] = useState(false);
+  const refreshRunnerJobsRef = useRef<(() => void) | null>(null);
   const [deployStatus, setDeployStatus] = useState<DeployObservabilityStatus | null>(null);
   const [deployLoading, setDeployLoading] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -1168,22 +1174,16 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
 
   useEffect(() => {
     if (!sessionId || artifactTab !== "log") return;
-    let cancelled = false;
-    const fetchJobs = async () => {
-      try {
-        setJobsLoading(true);
-        const res = await fetch(`${BASE_URL}/pipeline/jobs?session_id=${sessionId}&limit=50`, { headers: authHdrs() });
-        if (!cancelled && res.ok) {
-          const data = await res.json();
-          setRunnerJobs(data);
-        }
-      } catch (_) {/* ignore */} finally {
-        if (!cancelled) setJobsLoading(false);
-      }
-    };
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 15000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const sid = sessionId;
+    const poller = startRunnerJobsPolling<RunnerJob>({
+      url: `${BASE_URL}/pipeline/jobs?session_id=${encodeURIComponent(sid)}&limit=50`,
+      getHeaders: authHdrs,
+      fetchFn: (url, init) => fetch(url, init),
+      onLoading: setJobsLoading,
+      onResult: (result) => setRunnerJobsState((prev) => applyRunnerJobsResult(prev, sid, result)),
+    });
+    refreshRunnerJobsRef.current = poller.refresh;
+    return () => { poller.stop(); refreshRunnerJobsRef.current = null; setJobsLoading(false); };
   }, [sessionId, artifactTab]);
 
   const errorDetailKo = (d: string | null): string => {
@@ -2517,12 +2517,38 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               ) : artifactTab === "log" ? (
                 <div style={{ padding: "4px 0" }}>
                   <RunnerHostStatus emphasis="error" />
-                  {jobsLoading && runnerJobs.length === 0 ? (
+                  {jobsError && (
+                    <div
+                      role="alert"
+                      data-testid="runner-jobs-error"
+                      style={{
+                        display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap",
+                        margin: "4px 0 8px", padding: "8px 10px", borderRadius: "6px", fontSize: "12px",
+                        color: "var(--ct-error, #f87171)", border: "1px solid var(--ct-error, #f87171)",
+                      }}
+                    >
+                      <span style={{ flex: 1, minWidth: "160px" }}>
+                        {jobsError.message}
+                        {runnerJobs.length > 0 && " 아래는 마지막으로 불러온 목록입니다."}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="runner-jobs-retry"
+                        disabled={jobsLoading}
+                        onClick={() => refreshRunnerJobsRef.current?.()}
+                        style={{
+                          fontSize: "12px", padding: "4px 10px", borderRadius: "4px", cursor: jobsLoading ? "default" : "pointer",
+                          border: "1px solid var(--ct-border)", background: "transparent", color: "var(--ct-text)",
+                        }}
+                      >{jobsLoading ? "다시 시도 중..." : "다시 시도"}</button>
+                    </div>
+                  )}
+                  {jobsLoading && runnerJobs.length === 0 && !jobsError ? (
                     <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
                       로딩 중...
                     </div>
                   ) : runnerJobs.length === 0 ? (
-                    <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
+                    jobsError ? null : <div style={{ color: "var(--ct-text2)", fontSize: "12px", padding: "16px", textAlign: "center" }}>
                       이 세션의 Runner 작업이 없습니다
                     </div>
                   ) : (() => {
