@@ -28,6 +28,7 @@ export interface ChatSession {
 
 export interface ChatMessage {
   id: string;
+  idempotency_key?: string | null;
   session_id: string;
   execution_id?: string | null;
   role: "user" | "assistant" | "system";
