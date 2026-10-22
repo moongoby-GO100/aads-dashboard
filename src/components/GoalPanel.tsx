@@ -16,7 +16,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Image from "next/image";
 import { GoalApprovalControls, approvalSummary, useGoalApprovalPolicy } from "@/components/GoalApprovalControls";
 import { api } from "@/lib/api";
-import { buildGoalDocHref } from "@/lib/documentLinks";
+import { GoalDocumentChips } from "@/components/GoalDocumentChips";
+import { goalDocumentView, type GoalDocument } from "@/lib/goalDocuments";
 import { SESSION_REF_HINT, extractSessionId } from "@/lib/sessionRef";
 import { GrantsSection, useGoalWorkData } from "@/components/GoalWorkHierarchy";
 import {
@@ -36,11 +37,6 @@ type Owner = {
   session_id: string; role_key: string; title: string; state: string;
   milestone: string | null; is_lead?: boolean; paused?: boolean;
   paused_reason?: string | null; dispatch_count: number; open_notes?: number;
-};
-type GoalDocument = {
-  id: number; kind: string; doc_path: string; title: string | null;
-  document_key: string; version: string; status: string; is_latest: boolean;
-  change_summary?: string | null; version_count: number;
 };
 type Board = {
   goal: { project?: string; id?: string; title: string; status: string; progress: number };
@@ -460,23 +456,7 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
             </>
           )}
 
-          {board?.documents && board.documents.length > 0 && (
-            <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {board.documents.map((d) => {
-                const href = buildGoalDocHref(d.doc_path);
-                const icon = d.kind === "plan" ? "📋" : d.kind === "prd" ? "📐" : d.kind === "design" ? "🛠" : "🔗";
-                const label = (d.title || "").trim() || d.doc_path.split("/").pop() || "문서";
-                // 새 탭으로 연다 — 담당과의 대화 맥락을 두고 문서만 본다.
-                return (
-                  <a key={d.id || d.doc_path} href={href || undefined} target="_blank" rel="noopener noreferrer"
-                     title={`${label} — ${d.doc_path}`}
-                     style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)", color: "var(--text-secondary)", textDecoration: "none", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {icon} {label}{d.version ? ` · 최신 v${d.version}` : ""}
-                  </a>
-                );
-              })}
-            </div>
-          )}
+          {board && <GoalDocumentChips documents={board.documents ?? []} />}
           {board?.has_document_history && board.document_history && (
             <details style={{ marginTop: 8 }}>
               <summary style={{ cursor: "pointer", fontSize: 11, color: "var(--text-secondary)" }}>
@@ -484,11 +464,10 @@ export function GoalPanel({ goalId, onClose, onOpenSession, sessionProject }: {
               </summary>
               <div style={{ marginTop: 6, display: "grid", gap: 5 }}>
                 {board.document_history.filter((d) => !d.is_latest).map((d) => {
-                  const href = buildGoalDocHref(d.doc_path);
-                  const label = (d.title || "").trim() || d.doc_path.split("/").pop() || "문서";
+                  const { href, label, key } = goalDocumentView(d);
                   return (
-                    <a key={d.id || d.doc_path} href={href || undefined} target="_blank" rel="noopener noreferrer"
-                       title={d.change_summary || d.doc_path}
+                    <a key={key} href={href || undefined} target="_blank" rel="noopener noreferrer"
+                       title={d.change_summary || d.doc_path || label}
                        style={{ fontSize: 10.5, color: "var(--text-secondary)", textDecoration: "none" }}>
                       v{d.version} · {label}
                     </a>
