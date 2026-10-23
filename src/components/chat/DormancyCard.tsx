@@ -229,7 +229,13 @@ export function DormancyCard(p: DormancyCardProps) {
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   useEffect(() => () => { mountedRef.current = false; }, []);
+  // 카드는 메시지 목록 맨 위에 붙는다. 대화 아래쪽을 보다가 칩을 누르면 카드가 화면 위쪽 밖에 열리므로 열 때 한 번 보이는 자리로 옮긴다.
+  useEffect(() => { sectionRef.current?.scrollIntoView?.({ block: "start" }); }, []);
+  const confirmRef = useRef<HTMLDivElement | null>(null);
+  // 확인 문구와 버튼은 카드 맨 아래에 열리므로 PC 처럼 카드가 목록보다 길면 화면 밖이다. 열릴 때 보이는 자리로 옮긴다.
+  useEffect(() => { if (confirming) confirmRef.current?.scrollIntoView?.({ block: "nearest" }); }, [confirming]);
 
   const summary = summarizeSelection(sel, p.candidates);
   const block = applyBlockReason(sel, p.candidates, p.candidatesVersion);
@@ -258,8 +264,10 @@ export function DormancyCard(p: DormancyCardProps) {
   };
 
   const frame = (body: React.ReactNode, footer: React.ReactNode, subtitle?: React.ReactNode, banner?: React.ReactNode) => (
-    <section data-dormancy-card={p.state} data-apply-state={failure ? "error" : submitting ? "submitting" : "idle"} aria-label="휴면·차단 목표 정리"
+    <section ref={sectionRef} data-dormancy-card={p.state} data-apply-state={failure ? "error" : submitting ? "submitting" : "idle"} aria-label="휴면·차단 목표 정리"
       style={{ margin: "8px 0 12px", border: "1px solid rgba(129,140,248,.55)", borderRadius: 14, background: "var(--ct-card)",
+               // 메시지 목록은 높이가 고정된 column flex 다. overflow:hidden 요소는 min-height:auto 가 0 이라 줄어들어 2px 로 접힌다.
+               flexShrink: 0, scrollMarginTop: 56,
                overflow: p.isMobile ? "clip" : "hidden" }}>
       <header style={{ padding: "12px 16px", borderBottom: "1px solid var(--ct-border)", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start", justifyContent: "space-between" }}>
         <div style={{ minWidth: 0 }}>
@@ -351,7 +359,7 @@ export function DormancyCard(p: DormancyCardProps) {
 
   const body = (
     <div ref={bodyRef}
-      style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14, ...(p.isMobile ? {} : { maxHeight: "56vh", overflowY: "auto" }) }}>
+      style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14, maxHeight: p.isMobile ? "min(46dvh, 420px)" : "56vh", overflowY: "auto" }}>
       {p.pausedAutoApproval.length > 0 && (
         <div style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(245,158,11,.55)", background: "rgba(245,158,11,.08)", fontSize: 12.5, color: "var(--ct-text)", lineHeight: 1.6 }}>
           ⏸ 보류 목표 {p.pausedAutoApproval.length}개의 자동승인이 정지되어 있습니다 — 자동으로 승인되지 않고 승인 대기로 바뀝니다. 재개·차단 해소한 목표만 다시 켜집니다.{" "}
@@ -450,7 +458,7 @@ export function DormancyCard(p: DormancyCardProps) {
   return frame(
     body,
     confirming ? (
-      <div role="alertdialog" aria-label="종료·병합 확인" data-confirm="1"
+      <div ref={confirmRef} role="alertdialog" aria-label="종료·병합 확인" data-confirm="1"
         style={{ flex: "1 1 100%", display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 12.5, color: "var(--ct-text)", lineHeight: 1.6 }}>
           <b>{destructiveText}</b>이 포함되어 있습니다. 종료는 &quot;취소됨&quot;, 병합은 &quot;보관됨&quot; 상태로 바뀌어 목표 목록에서 사라지고, 이 카드에서는 되돌릴 수 없습니다(데이터는 지워지지 않습니다). 반영할까요?

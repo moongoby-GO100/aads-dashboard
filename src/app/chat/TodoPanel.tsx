@@ -190,7 +190,8 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
         marginBottom: "8px", padding: "8px 10px", borderRadius: "8px",
         background: "var(--ct-card)", border: "1px solid var(--ct-border)", color: "var(--ct-text)",
         display: "flex", flexDirection: "column", minHeight: 0,
-        maxHeight: collapsed ? undefined : isMobile ? "46dvh" : "min(52dvh, 560px)",
+        // 데스크톱은 머리글·맥락 막대·입력창을 뺀 나머지만 쓴다. 52dvh 고정이면 1440x900 에서 대화창이 32px 로 접혔다.
+        maxHeight: collapsed ? undefined : isMobile ? "46dvh" : "min(52dvh, 560px, max(160px, calc(100dvh - 700px)))",
       }}
     >
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: collapsed ? 0 : "6px" }}>

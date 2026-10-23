@@ -12941,7 +12941,8 @@ export default function ChatPage() {
             // 한 줄 드롭다운 버튼·7그룹 목록·자동승인 칩은 GoalStrip 이 그린다(목업 goal-dropdown_*).
             <div style={{
               position: "sticky", top: 0, zIndex: 5,
-              margin: "0 0 8px", padding: "6px 0",
+              // 오른쪽 위에 떠 있는 '🖼 목업' 버튼(absolute, z-index 8)이 정리 칩을 덮어 클릭을 막으므로 그 자리만큼 비운다.
+              margin: "0 0 8px", padding: panelMode ? "6px 0" : "6px 136px 6px 0",
               background: "var(--ct-bg)", borderBottom: "1px solid var(--ct-border)",
             }}>
               <GoalStrip
@@ -13562,7 +13563,8 @@ export default function ChatPage() {
 
           <div ref={messagesEndRef} style={{ overflowAnchor: "none" as never, minHeight: 1 }} />
         </div>
-        {chatFollowMode === "manual" && messages.length > 0 && (
+        {/* 정리 카드가 열려 있는 동안은 카드 하단 고정 확인·취소 CTA 위에 겹치므로 숨기고, 카드가 닫히면 다시 보인다. */}
+        {chatFollowMode === "manual" && messages.length > 0 && !dormancyCardOpen && (
           <button
             data-chat-jump-to-latest="true"
             type="button"

@@ -251,6 +251,14 @@ describe("DormancyCard selection UI", () => {
     expect(/<button[^>]*data-apply[^>]*disabled/.test(out)).toBe(true);
   });
 
+  it("never lets the card collapse inside the fixed-height message column and bounds its body on both layouts", () => {
+    for (const isMobile of [false, true]) {
+      const out = card({ isMobile });
+      expect(/<section[^>]*data-dormancy-card[^>]*style="[^"]*flex-shrink:0/.test(out)).toBe(true);
+      expect(/max-height:(?:min\(46dvh, 420px\)|56vh);overflow-y:auto/.test(out)).toBe(true);
+    }
+  });
+
   it("disables apply when there is no candidates version", () => {
     expect(/<button[^>]*data-apply[^>]*disabled/.test(card({ candidatesVersion: null }))).toBe(true);
   });

@@ -66,3 +66,18 @@ test("chat input focus and CRF section chips do not scroll the message list dire
   const route = source("src/app/chat/page.tsx");
   assert.match(route, /<SectionCardContent[^>]*onScrollToSection=\{onViewportTarget\}/);
 });
+
+// AADS-CHAT-TODO-SCROLL-MOBILE-CTA-20261023: the jump-to-latest pill sits at the
+// bottom of the viewport and covered the mobile sticky confirm/cancel footer.
+test("jump-to-latest pill is hidden while the dormancy cleanup card is open", () => {
+  const route = source("src/app/chat/page.tsx");
+  assert.match(route, /chatFollowMode === "manual" && messages\.length > 0 && !dormancyCardOpen && \(\s*<button\s+data-chat-jump-to-latest="true"/);
+});
+
+test("expanded TODO panel leaves room for the message list and confirm CTAs are scrolled into view", () => {
+  const todo = source("src/app/chat/TodoPanel.tsx");
+  assert.match(todo, /min\(52dvh, 560px, max\(160px, calc\(100dvh - 700px\)\)\)/);
+  const card = source("src/components/chat/DormancyCard.tsx");
+  assert.match(card, /if \(confirming\) confirmRef\.current\?\.scrollIntoView\?\.\(\{ block: "nearest" \}\)/);
+  assert.match(card, /<div ref=\{confirmRef\} role="alertdialog"/);
+});
