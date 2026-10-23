@@ -4,7 +4,7 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatKst } from "@/lib/aiResponseErrors";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
@@ -26,6 +26,29 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
   onOpen: (link: MockupDeepLink) => void;
   onClose: () => void;
 }) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProject, setUploadProject] = useState(project === "CEO" ? "AADS" : project);
+  const uploadAttempt = useRef<{signature: string; key: string} | null>(null);
+  const upload = async (file?: File) => {
+    if (!file || uploading) return;
+    setUploadError(null);
+    if (!file.name.toLowerCase().endsWith(".html") || file.size > 2 * 1024 * 1024) {
+      setUploadError("2MB 이하의 HTML 파일을 선택해 주세요."); return;
+    }
+    setUploading(true);
+    try {
+      const html = await file.text();
+      const signature = `${uploadProject}:${sessionId}:${file.name}:${html}`;
+      if (uploadAttempt.current?.signature !== signature) uploadAttempt.current = {signature, key: crypto.randomUUID()};
+      await mockupApi.uploadHtml(uploadProject, {title: file.name.replace(/\.html$/i, ""), filename: file.name,
+        html, session_id: sessionId ?? undefined, idempotency_key: uploadAttempt.current.key});
+      setStatus(""); setSessionOnly(false); setReloadTick((n) => n + 1);
+      uploadAttempt.current = null;
+    } catch (e) { setUploadError(e instanceof Error ? e.message : "등록하지 못했습니다. 다시 시도해 주세요."); }
+    finally { setUploading(false); if (fileInput.current) fileInput.current.value = ""; }
+  };
   const projects = useMemo(() => badgeProjects(project), [project]);
   const [status, setStatus] = useState("");
   const [sessionOnly, setSessionOnly] = useState(false);
@@ -123,6 +146,14 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
           style={{ minWidth: TOUCH, minHeight: TOUCH, border: 0, background: "transparent", color: "inherit", fontSize: 18, cursor: "pointer" }}>✕</button>
       </header>
 
+      <div style={{padding: "8px 12px", display: "flex", flexWrap: "wrap", gap: 8}}>
+        <button type="button" style={chip(!status && !effectiveSessionOnly)} onClick={() => {setStatus(""); setSessionOnly(false); setReloadTick((n) => n + 1);}}>전체 리스트보기</button>
+        {projects.length > 1 && <select aria-label="등록 프로젝트" value={uploadProject} onChange={(e) => setUploadProject(e.target.value)}>{projects.map((p) => <option key={p}>{p}</option>)}</select>}
+        <input ref={fileInput} type="file" accept=".html,text/html" aria-label="HTML 목업 파일" hidden onChange={(e) => void upload(e.target.files?.[0])} />
+        <button type="button" style={chip(false)} disabled={uploading} onClick={() => fileInput.current?.click()}>{uploading ? "등록 중…" : "HTML 목업 등록"}</button>
+        <small>HTML 기본 · 등록 후 새 탭에서 열기 · 승인은 별도</small>
+        {uploadError && <p role="alert">{uploadError}</p>}
+      </div>
       <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, borderBottom: "1px solid var(--ct-border, var(--border))" }}>
         <div role="group" aria-label="상태 필터" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {ARCHIVE_STATUS_FILTERS.map((f) => (
@@ -166,8 +197,8 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
                   const rev = archiveRevisionNumber(r);
                   return (
                     <li key={`${r.sourceProject}:${r.review_id}`}>
-                      <button type="button" onClick={() => open(r)} disabled={!reviewToDeepLink(r)}
-                        style={{ width: "100%", minHeight: TOUCH, textAlign: "left", padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                      <a target="_blank" rel="noopener noreferrer" href={`/mockups/view?project=${encodeURIComponent(r.sourceProject)}&review=${encodeURIComponent(r.review_id)}`}
+                        style={{ display: "block", textDecoration: "none", width: "100%", boxSizing: "border-box", minHeight: TOUCH, textAlign: "left", padding: "10px 12px", borderRadius: 8, cursor: "pointer",
                                  border: "1px solid var(--ct-border, var(--border))", background: "transparent", color: "inherit" }}>
                         <div style={{ fontSize: 13.5, fontWeight: 800, wordBreak: "break-word", overflowWrap: "anywhere" }}>{r.title || "(제목 없음)"}</div>
                         <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 8px", fontSize: 11.5 }}>
@@ -178,7 +209,8 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
                           <span style={{ color: "var(--ct-text2, var(--text-secondary))" }}>{rev !== null ? `v${rev}` : "판 -"}</span>
                           <span style={{ color: "var(--ct-text2, var(--text-secondary))" }}>{formatKst(r.updated_at)} KST</span>
                         </div>
-                      </button>
+                      </a>
+                      <button type="button" onClick={() => open(r)} style={chip(false)}>검토 · 승인 보기</button>
                     </li>
                   );
                 })}

@@ -60,7 +60,7 @@ export function MockupReviewBadge({ project, sessionId = null, onOpenMockup }: {
 
   return (
     <div style={{ position: "relative" }}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
+      <button type="button" aria-expanded={archiveOpen} onClick={() => { setOpen(false); setArchiveOpen((v) => !v); }}
         style={{ minHeight: TOUCH, display: "inline-flex", alignItems: "center", gap: 6, padding: "0 14px", borderRadius: 999,
                  border: "1px solid #2563eb", background: "rgba(37,99,235,.08)", color: "#2563eb",
                  fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -71,7 +71,7 @@ export function MockupReviewBadge({ project, sessionId = null, onOpenMockup }: {
             {items.length}
           </span>
         )}
-        <span>{open ? "▴" : "▾"}</span>
+        <span>{archiveOpen ? "▴" : "▾"}</span>
       </button>
       {open && (
         <ul role="menu" style={{ position: "absolute", top: "100%", right: 0, zIndex: 30, margin: "4px 0 0", padding: 4, listStyle: "none",

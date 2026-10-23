@@ -59,6 +59,8 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const mockupApi = {
+  uploadHtml: (project: string, body: {title: string; filename: string; html: string; session_id?: string; idempotency_key: string}) =>
+    json<{review_id: string; revision_id: string; asset_id: string}>(`${base(project)}/html`, {method: "POST", body: JSON.stringify(body)}),
   listReviews: (project: string, opts: { status?: string; sessionId?: string; limit?: number; offset?: number } = {}, signal?: AbortSignal) => {
     const q = new URLSearchParams();
     if (opts.status) q.set("status", opts.status);
