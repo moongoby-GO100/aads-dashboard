@@ -382,6 +382,28 @@ def scenario_pagination(browser):
     ctx.close()
 
 
+def scenario_load_more_from_active(browser):
+    for width, height, screen in ((1280, 720, "desktop"), (390, 844, "mobile")):
+        ctx = browser.new_context(viewport={"width": width, "height": height})
+        page = open_page(ctx, session="s-big", screen=screen)
+        expand(page)
+        check(f"L1 {screen} 기본 진행 필터 30행", page.locator("[data-testid=todo-row]").count() == 30)
+        previous = set(page.locator("[data-testid=todo-row]").evaluate_all("rows => rows.map(r => r.dataset.todoId)"))
+        # Include hidden first-page rows so the anchor must be from page two.
+        previous.update(it["id"] for it in ordered(STATE["s-big"])[:200])
+        page.click("[data-testid=todo-load-more]")
+        page.wait_for_function("document.querySelectorAll('[data-testid=todo-row]').length === 400")
+        check(f"L2 {screen} 더 불러오기 후 완료 항목도 표시", page.locator("[data-testid=todo-filter-toggle]").get_attribute("aria-pressed") == "true")
+        added_id = next(row for row in page.locator("[data-testid=todo-row]").evaluate_all("rows => rows.map(r => r.dataset.todoId)") if row not in previous)
+        visible = page.locator(f"[data-todo-id='{added_id}']").evaluate("""row => {
+            const r = row.getBoundingClientRect(), s = row.closest('[data-testid=todo-scroll]').getBoundingClientRect();
+            return r.top >= s.top - 1 && r.top < s.bottom && s.height > 0;
+        }""")
+        check(f"L3 {screen} 새 페이지 첫 항목 실제 가시", visible)
+        page.screenshot(path=str(EVIDENCE / f"{screen}-load-more-visible.png"))
+        ctx.close()
+
+
 def scenario_edit(browser):
     ctx = browser.new_context(viewport={"width": 1280, "height": 720})
     page = open_page(ctx)
@@ -472,7 +494,7 @@ def main():
     reset_state()
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        for scenario in (scenario_desktop, scenario_mobile, scenario_pagination, scenario_edit, scenario_isolation):
+        for scenario in (scenario_desktop, scenario_mobile, scenario_pagination, scenario_load_more_from_active, scenario_edit, scenario_isolation):
             reset_state()
             try:
                 scenario(browser)

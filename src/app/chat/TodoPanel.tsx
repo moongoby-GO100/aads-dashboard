@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatTodoItem, ScreenSize } from "./types";
 import type { SessionTodos } from "./useSessionTodos";
 import { TODO_PAGE_SIZE, countTodos, formatTodoCreatedAt, selectVisibleTodos, todoStatusLabel } from "./todoView";
@@ -159,11 +159,36 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
   const [adding, setAdding] = useState(false);
   const [addTitle, setAddTitle] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const beforeLoadRef = useRef<Set<string> | null>(null);
 
   const counts = useMemo(() => countTodos(todos.items), [todos.items]);
   const hiddenDone = counts.completed + counts.failed + counts.skipped;
   const visible = useMemo(() => selectVisibleTodos(todos.items, showAll), [todos.items, showAll]);
   const busy = !!todos.actionLoading;
+
+  // Pagination includes completed/failed rows too. Reveal them and keep the
+  // first new row in view, even when status sorting inserts it above the button.
+  useLayoutEffect(() => {
+    const previous = beforeLoadRef.current;
+    if (!previous || todos.moreLoading) return;
+    const added = visible.find((item) => !previous.has(item.id));
+    if (added && scrollRef.current) {
+      const scroller = scrollRef.current;
+      const row = Array.from(scroller.querySelectorAll<HTMLElement>("[data-todo-id]"))
+        .find((element) => element.dataset.todoId === added.id);
+      if (row) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      beforeLoadRef.current = null;
+    } else if (todos.moreError || !todos.hasMore) {
+      beforeLoadRef.current = null;
+    }
+  }, [visible, todos.moreLoading, todos.moreError, todos.hasMore]);
+
+  const loadMore = () => {
+    beforeLoadRef.current = new Set(todos.items.map((item) => item.id));
+    setShowAll(true);
+    void todos.loadMore();
+  };
 
   const toggleExpand = (id: string) => setExpandedIds((prev) => {
     const next = new Set(prev);
@@ -260,6 +285,7 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
             <div data-testid="todo-error" role="alert" style={{ flexShrink: 0, fontSize: "12px", color: "#ef4444", marginBottom: "4px", overflowWrap: "anywhere" }}>{todos.error}</div>
           )}
           <div
+            ref={scrollRef}
             data-testid="todo-scroll"
             role="region"
             aria-label="TODO 목록"
@@ -320,7 +346,7 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
                 <button
                   type="button"
                   data-testid="todo-load-more"
-                  onClick={() => void todos.loadMore()}
+                  onClick={loadMore}
                   disabled={todos.moreLoading}
                   style={{ ...headerButton, width: isMobile ? "100%" : undefined, cursor: todos.moreLoading ? "default" : "pointer", opacity: todos.moreLoading ? 0.6 : 1 }}
                 >
