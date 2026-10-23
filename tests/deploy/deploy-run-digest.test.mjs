@@ -11,6 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const deploySh = fs.readFileSync(path.join(root, "deploy.sh"), "utf8");
 const IMG = `sha256:${"a".repeat(64)}`;
 const STB = `sha256:${"b".repeat(64)}`;
+const SRC = "/srv/release-worktree";
 
 function extractFunction(name) {
   const lines = deploySh.split("\n");
@@ -47,7 +48,13 @@ function makeComposeFixture(dir, { remote = "ok" }) {
   return compose;
 }
 
-function runEnd({ result = "success", image = IMG, standby = STB, provenanceBody = "exit 0", dbFails = false, remote = null, override = true }) {
+function readonlyLine(name) {
+  const line = deploySh.split("\n").find((l) => l.startsWith(`readonly ${name}=`));
+  assert.ok(line, `readonly ${name} not found in deploy.sh`);
+  return line;
+}
+
+function runEnd({ result = "success", image = IMG, standby = IMG, monitorSeconds = 300, provenanceBody = "exit 0", dbFails = false, remote = null, override = true }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deploy-digest-"));
   const sqlFile = path.join(dir, "sql.log");
   const argsFile = path.join(dir, "prov.args");
@@ -57,6 +64,9 @@ function runEnd({ result = "success", image = IMG, standby = STB, provenanceBody
 set -euo pipefail
 DEPLOY_LOG_FILE='${dir}/deploy.log'; : > "$DEPLOY_LOG_FILE"
 STATE_DIR=/root/aads/aads-dashboard
+SOURCE_DIR='${SRC}'
+${readonlyLine("MONITOR_MIN_SECONDS")}
+DEPLOY_MONITOR_ELAPSED_SECONDS='${monitorSeconds}'
 AADS_RELEASE_SHA=abcdef123456
 ${override ? `AADS_PROVENANCE_SCRIPT='${prov}'` : ""}
 ${remote ? `COMPOSE_DIR='${makeComposeFixture(dir, { remote })}'` : ""}
@@ -84,17 +94,12 @@ test("deploy.sh passes bash syntax check", () => {
   execFileSync("bash", ["-n", path.join(root, "deploy.sh")]);
 });
 
-test("Step 6 stores active/standby image IDs for the ledger", () => {
-  assert.match(deploySh, /DEPLOY_IMAGE_DIGEST="\$TARGET_IMAGE"/);
-  assert.match(deploySh, /DEPLOY_STANDBY_DIGEST="\$PREV_IMAGE"/);
-});
-
 test("success UPDATE writes full sha256 image_digest and standby_digest", () => {
   const r = runEnd({});
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.sql, /status='success'/);
-  assert.ok(r.sql.includes(`image_digest=NULLIF('${IMG}','')`), r.sql);
-  assert.ok(r.sql.includes(`standby_digest=NULLIF('${STB}','')`), r.sql);
+  assert.ok(r.sql.includes(`image_digest='${IMG}'`), r.sql);
+  assert.ok(r.sql.includes(`standby_digest='${IMG}'`), r.sql);
 });
 
 test("failure UPDATE does not touch digests and skips provenance", () => {
@@ -105,20 +110,33 @@ test("failure UPDATE does not touch digests and skips provenance", () => {
   assert.equal(r.args, "");
 });
 
-test("missing or malformed digest becomes NULL and never fails the deploy", () => {
-  const r = runEnd({ image: "", standby: "not-a-digest'; DROP TABLE x;--" });
-  assert.equal(r.status, 0, r.stderr);
-  assert.ok(r.sql.includes("image_digest=NULLIF('','')"), r.sql);
-  assert.ok(r.sql.includes("standby_digest=NULLIF('','')"), r.sql);
-  assert.doesNotMatch(r.sql, /DROP TABLE/);
-  assert.match(r.log, /image digest 확인 실패/);
-});
+// fail closed: 성공으로 끝났어도 인증 게이트를 통과하지 못하면 success 원장과 계보를 쓰지 않는다.
+for (const [name, opts, logRe] of [
+  ["empty active digest", { image: "" }, /image digest 확인 실패/],
+  ["empty standby digest", { standby: "" }, /image digest 확인 실패/],
+  ["malformed digest", { image: "not-a-digest'; DROP TABLE x;--" }, /image digest 확인 실패/],
+  ["active/standby mismatch", { standby: STB }, /image digest 불일치/],
+  ["monitoring below 300s", { monitorSeconds: 299 }, /감시 299초 < 300초/],
+  ["monitoring never ran", { monitorSeconds: 0 }, /감시 0초 < 300초/],
+]) {
+  test(`success is blocked when ${name}`, () => {
+    const r = runEnd(opts);
+    assert.equal(r.status, 0, r.stderr);
+    assert.doesNotMatch(r.sql, /status='success'/);
+    assert.match(r.sql, /status='failed'/);
+    assert.match(r.sql, /release certification gate/);
+    assert.doesNotMatch(r.sql, /image_digest=/);
+    assert.equal((r.sql.match(/'/g) || []).length % 2, 0, `unbalanced quotes — SQL injection risk: ${r.sql}`);
+    assert.equal(r.args, "", "provenance must not run");
+    assert.match(r.log, logRe);
+  });
+}
 
 test("provenance is called with dashboard repo/component after success", () => {
   const r = runEnd({});
   const args = r.args.trim().split("\n");
   const val = (flag) => args[args.indexOf(flag) + 1];
-  assert.equal(val("--repo"), "/root/aads/aads-dashboard");
+  assert.equal(val("--repo"), SRC);
   assert.equal(val("--deploy-run-id"), "77");
   assert.equal(val("--project"), "AADS");
   assert.equal(val("--component"), "dashboard");
@@ -147,7 +165,7 @@ test("without override, provenance runs the origin/main copy and removes the tem
   assert.ok(!fs.existsSync(tmp), `temp script left behind: ${tmp}`);
   assert.doesNotMatch(r.log, /WARN: origin\/main/);
   const args = r.args.trim().split("\n");
-  assert.equal(args[args.indexOf("--repo") + 1], "/root/aads/aads-dashboard");
+  assert.equal(args[args.indexOf("--repo") + 1], SRC);
   assert.match(r.log, /릴리스 계보 기록 완료/);
 });
 
