@@ -253,9 +253,6 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
               실패 재시도
             </button>
           )}
-          {!collapsed && showAll && counts.completed > 0 && bulkButton("완료 비우기", "완료 TODO를 목록에서 제거", ["completed"], "todo-clear-completed")}
-          {!collapsed && showAll && counts.failed > 0 && bulkButton("실패 비우기", "실패 TODO를 목록에서 제거", ["failed"], "todo-clear-failed")}
-          {!collapsed && showAll && counts.pending > 0 && bulkButton("대기 비우기", "대기 TODO를 목록에서 제거", ["pending"], "todo-clear-pending")}
           <button
             type="button"
             onClick={() => void todos.refresh(sessionId, { force: true })}
@@ -276,14 +273,6 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
 
       {!collapsed && (
         <>
-          <div data-testid="todo-summary" style={{ flexShrink: 0, fontSize: "10px", color: "var(--ct-text2)", marginBottom: "4px", overflowWrap: "anywhere" }}>
-            표시 {visible.length}건 · 불러온 {todos.items.length}건 · 보기 {showAll ? "전체" : "진행/대기만"}
-            {!showAll && hiddenDone > 0 ? ` · 완료 ${counts.completed}·실패 ${counts.failed}·제외 ${counts.skipped}건은 '전체'에서 확인` : ""}
-            {todos.hasMore ? ` · 서버가 ${TODO_PAGE_SIZE}건씩 응답 — 더 불러올 항목 있음` : ""}
-          </div>
-          {todos.error && (
-            <div data-testid="todo-error" role="alert" style={{ flexShrink: 0, fontSize: "12px", color: "#ef4444", marginBottom: "4px", overflowWrap: "anywhere" }}>{todos.error}</div>
-          )}
           <div
             ref={scrollRef}
             data-testid="todo-scroll"
@@ -296,6 +285,21 @@ function TodoPanel({ todos, sessionId, screenSize }: { todos: SessionTodos; sess
               paddingRight: "2px",
             }}
           >
+            <div data-testid="todo-summary" style={{ fontSize: "10px", color: "var(--ct-text2)", marginBottom: "4px", overflowWrap: "anywhere" }}>
+              표시 {visible.length}건 · 불러온 {todos.items.length}건 · 보기 {showAll ? "전체" : "진행/대기만"}
+              {!showAll && hiddenDone > 0 ? ` · 완료 ${counts.completed}·실패 ${counts.failed}·제외 ${counts.skipped}건은 '전체'에서 확인` : ""}
+              {todos.hasMore ? ` · 서버가 ${TODO_PAGE_SIZE}건씩 응답 — 더 불러올 항목 있음` : ""}
+            </div>
+            {todos.error && (
+              <div data-testid="todo-error" role="alert" style={{ fontSize: "12px", color: "#ef4444", marginBottom: "4px", overflowWrap: "anywhere" }}>{todos.error}</div>
+            )}
+            {showAll && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "6px" }}>
+                {counts.completed > 0 && bulkButton("완료 비우기", "완료 TODO를 목록에서 제거", ["completed"], "todo-clear-completed")}
+                {counts.failed > 0 && bulkButton("실패 비우기", "실패 TODO를 목록에서 제거", ["failed"], "todo-clear-failed")}
+                {counts.pending > 0 && bulkButton("대기 비우기", "대기 TODO를 목록에서 제거", ["pending"], "todo-clear-pending")}
+              </div>
+            )}
             {adding && (
               <div style={{ marginBottom: "6px" }}>
                 <div style={{ display: "flex", gap: "4px" }}>

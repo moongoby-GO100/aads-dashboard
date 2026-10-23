@@ -97,6 +97,7 @@ def reset_state():
     STATE.update({
         "s-main": build_main(),
         "s-big": build_big(),
+        "s-large": [make_item("s-large", n, "pending" if n <= 12 else "failed" if n <= 196 else "completed", n, iso(-n % 50)) for n in range(1, 1601)],
         "s-old": build_big()[:260],
         "s-other": [make_item("s-other", i, "pending", i, iso(-i)) for i in range(1, 4)],
         "s-slow": [make_item("s-slow", i, "pending", i, iso(-i)) for i in range(1, 4)],
@@ -404,6 +405,23 @@ def scenario_load_more_from_active(browser):
         ctx.close()
 
 
+def scenario_large_narrow_list(browser):
+    ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+    page = open_page(ctx, session="s-large")
+    # Real chat shares its width with both the session and artifact sidebars.
+    page.locator("#root").evaluate("e => e.style.width = '560px'")
+    expand(page)
+    for total in range(400, 1601, 200):
+        page.click("[data-testid=todo-load-more]")
+        page.wait_for_function("n => document.querySelectorAll('[data-testid=todo-row]').length === n", arg=total)
+        scroller = page.locator("[data-testid=todo-scroll]")
+        actual_height = scroller.evaluate("e => e.clientHeight")
+        check(f"N{total} 좁은 채팅에서도 목록 공간 확보", actual_height >= 64, f"height={actual_height}")
+    page.screenshot(path=str(EVIDENCE / "desktop-1600-narrow.png"))
+    check("N1600 입력창 유지", layout_ok(metrics(page)))
+    ctx.close()
+
+
 def scenario_edit(browser):
     ctx = browser.new_context(viewport={"width": 1280, "height": 720})
     page = open_page(ctx)
@@ -494,7 +512,7 @@ def main():
     reset_state()
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        for scenario in (scenario_desktop, scenario_mobile, scenario_pagination, scenario_load_more_from_active, scenario_edit, scenario_isolation):
+        for scenario in (scenario_desktop, scenario_mobile, scenario_pagination, scenario_load_more_from_active, scenario_large_narrow_list, scenario_edit, scenario_isolation):
             reset_state()
             try:
                 scenario(browser)
