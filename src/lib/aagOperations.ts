@@ -400,7 +400,7 @@ export function detailText(body: unknown): string {
   return "";
 }
 
-export function classifyApiError(status: number, body: unknown, endpoint: "operations" | "findings" | "mermaid" = "operations"): AagErrorView {
+export function classifyApiError(status: number, body: unknown, endpoint: "operations" | "findings" | "mermaid" | "impact" = "operations"): AagErrorView {
   const detail = detailText(body).toLowerCase();
   const mk = (kind: AagErrorKind, title: string, message: string, action: string, retryable: boolean, loginRequired = false): AagErrorView =>
     ({ kind, status, title, message, action, retryable, loginRequired });
@@ -419,6 +419,9 @@ export function classifyApiError(status: number, body: unknown, endpoint: "opera
     }
     if (detail.includes("disabled")) {
       return mk("disabled", "아키텍처 상태 조회가 꺼져 있습니다", "서버에서 AAG v2 조회가 비활성화되어 있습니다.", "운영 담당에게 활성화 여부를 확인하세요.", true);
+    }
+    if (endpoint === "impact") {
+      return mk("not_scanned", "영향범위를 확인할 수 없습니다", "요청한 파일이나 스냅샷 또는 조회 경로를 찾지 못했습니다. 영향이 없다는 뜻이 아닙니다.", "대상과 파일 경로를 확인한 뒤 다시 시도하세요.", true);
     }
     if (endpoint === "mermaid") {
       return mk("not_scanned", "이 저장소의 스냅샷이 아직 없습니다", "검증된 최신 스냅샷이 없어 다이어그램을 그릴 수 없습니다. 결함이 없다는 뜻이 아닙니다.", "최초 스캔이 필요합니다. 스캔 실행은 운영 승인 후 진행됩니다.", true);
@@ -520,3 +523,38 @@ export function findingsMatchSnapshot(page: FindingsPage | null | undefined, sna
 export const EVIDENCE_DOCS: ReadonlyArray<{ label: string; project: string; documentKey: string; note: string }> = [
   { label: "AAG 소비자 목록", project: "GO100", documentKey: "aag-consumer-inventory", note: "초안 · 승인 여부 미확인" },
 ];
+
+
+export type ImpactQuery = { path: string; depth?: number; governanceScope?: string };
+export type ImpactResponse = {
+  nodes: Array<{ id: string; kind: string; distance: number }>;
+  edges: Array<{ from: string; to: string; kind: string }>;
+  snapshot_id: string;
+  repository_id: string;
+  target_ref: string;
+  resolved_commit_sha: string;
+  truncated: boolean;
+  limitations: string[];
+  conclusion: string;
+};
+
+export function isImpact(value: unknown): value is ImpactResponse {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  const str = (x: unknown) => typeof x === "string";
+  return [v.snapshot_id, v.repository_id, v.target_ref, v.resolved_commit_sha, v.conclusion].every(str)
+    && typeof v.truncated === "boolean" && Array.isArray(v.limitations) && v.limitations.every(str)
+    && Array.isArray(v.nodes) && v.nodes.every(n => n && str(n.id) && str(n.kind) && Number.isInteger(n.distance) && n.distance >= 0)
+    && Array.isArray(v.edges) && v.edges.every(e => e && str(e.from) && str(e.to) && str(e.kind));
+}
+
+const IMPACT_KIND_LABELS = new Map<string, string>([
+  ["file", "파일"], ["module", "모듈"], ["function", "함수"],
+  ["endpoint", "API 경로"], ["route", "화면 경로"], ["test", "테스트"],
+  ["imports", "가져오기 의존"], ["calls", "호출 관계"],
+  ["depends_on", "의존 관계"], ["contains", "포함 관계"],
+]);
+
+export function impactKindLabel(kind: string): string {
+  return IMPACT_KIND_LABELS.get(kind) ?? `기타 관계·대상 (${kind})`;
+}

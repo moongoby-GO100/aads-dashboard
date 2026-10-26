@@ -1,7 +1,7 @@
 // 아키텍처 상태 API. 로그인한 사용자 본인 토큰(getAuthHeaders)만 보낸다 — 읽기 전용, 쓰기/재스캔 호출 없음.
 import { getAuthHeaders } from "@/lib/api";
 import {
-  classifyApiError, isMermaid, isOperations, type AagErrorView, type AagFilters, type FindingsPage, type MermaidResponse, type OperationsResponse,
+  classifyApiError, isImpact, type ImpactQuery, type ImpactResponse, isMermaid, isOperations, type AagErrorView, type AagFilters, type FindingsPage, type MermaidResponse, type OperationsResponse,
 } from "@/lib/aagOperations";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -29,7 +29,7 @@ function redirectToLogin(): void {
   }
 }
 
-async function getJson<T>(url: string, endpoint: "operations" | "findings" | "mermaid", signal?: AbortSignal): Promise<T> {
+async function getJson<T>(url: string, endpoint: "operations" | "findings" | "mermaid" | "impact", signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -76,7 +76,22 @@ export function findingsUrl(f: AagFilters, snapshotId: string, opts: FindingsOpt
   return `${BASE_URL}/aag/v2/findings?${q.toString()}`;
 }
 
+export function impactUrl(f: AagFilters, query: ImpactQuery): string {
+  const depth = query.depth ?? 2;
+  if (!Number.isInteger(depth) || depth < 1 || depth > 5 || !query.path.trim()) throw new Error("파일 경로와 탐색 단계(1~5)를 확인하세요.");
+  const q = new URLSearchParams({ project: f.project, repository_id: f.repositoryId, target_ref: f.targetRef, path: query.path.trim(), depth: String(depth) });
+  if (query.governanceScope?.trim()) q.set("governance_scope", query.governanceScope.trim());
+  return `${BASE_URL}/aag/v2/impact?${q.toString()}`;
+}
+
 export const aagApi = {
+  getImpact: async (f: AagFilters, query: ImpactQuery, signal?: AbortSignal): Promise<ImpactResponse> => {
+    const data = await getJson<unknown>(impactUrl(f, query), "impact", signal);
+    if (!isImpact(data) || data.repository_id !== f.repositoryId || data.target_ref !== f.targetRef) {
+      throw new AagApiError(classifyApiError(502, null, "impact"));
+    }
+    return data;
+  },
   getOperations: async (f: AagFilters, signal?: AbortSignal): Promise<OperationsResponse> => {
     const data = await getJson<unknown>(operationsUrl(f), "operations", signal);
     if (!isOperations(data)) throw new AagApiError(classifyApiError(502, null, "operations"));

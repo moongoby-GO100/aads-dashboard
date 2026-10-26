@@ -64,9 +64,9 @@ async function session(device, handlers = {}) {
     if (p === "/auth/me") {
       return route.fulfill({ json: { user_id: "u1", email: "ceo@fixture.test", is_admin: true, is_internal_admin: true } });
     }
-    if (p === "/aag/v2/operations" || p === "/aag/v2/findings") {
+    if (p === "/aag/v2/operations" || p === "/aag/v2/findings" || p === "/aag/v2/impact") {
       calls.push({ path: p, search: u.search, params: Object.fromEntries(u.searchParams), headers: route.request().headers() });
-      const kind = p.endsWith("operations") ? "ops" : "findings";
+      const kind = p.endsWith("impact") ? "impact" : p.endsWith("operations") ? "ops" : "findings";
       const handler = handlers[kind] ?? (kind === "ops" ? () => ({ status: 200, body: operations() }) : (url2) => ({ status: 200, body: findingsPage(url2) }));
       const out = await handler(u, calls.filter((c) => c.path === p).length);
       if (out === "abort") return route.abort("connectionrefused");
@@ -385,4 +385,97 @@ test("모바일: 키보드만으로 주요 컨트롤에 닿고 포커스 표시�
   assert.ok(seen.some((x) => /^P1 \d/.test(x.label)));
   assert.deepEqual(seen.filter((x) => !x.outline).map((x) => x.label), [], "포커스 표시(outline) 없는 컨트롤");
   await s.context.close();
+});
+
+
+const impactFixture = (u) => ({ nodes: [{ id: "src/" + "long-path/".repeat(12) + "a.ts", kind: "file", distance: 1 }], edges: [{ from: "src/a.ts", to: "src/b.ts", kind: "imports" }], snapshot_id: "mock-impact", repository_id: u.searchParams.get("repository_id"), target_ref: u.searchParams.get("target_ref"), resolved_commit_sha: "mock-abc123", truncated: true, limitations: ["일부 파일만 검사"], conclusion: "관측된 범위만 확인" });
+const impactSubmit = async (page) => {
+  await page.getByLabel("변경할 파일 경로").fill("src/app/aag/page.tsx");
+  await page.getByRole("button", { name: "영향범위 조회", exact: true }).click();
+};
+
+test("impact: 모바일 성공·범위 한계·터치·대상 변경 격리", { timeout: 120000 }, async () => {
+  const { context, page, calls } = await session(MOBILE, { impact: u => ({ status: 200, body: impactFixture(u) }) });
+  await open(page);
+  await impactSubmit(page);
+  await page.getByText("확인된 연관 대상 1개", { exact: true }).waitFor();
+  const panel = page.locator("section[aria-labelledby=aag-impact]");
+  assert.match(await panel.innerText(), /일부 생략/);
+  assert.match(await panel.innerText(), /연관 거리 1단계/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  assert.equal(await page.getByRole("button", { name: "영향범위 조회", exact: true }).evaluate(e => e.getBoundingClientRect().height >= 44), true);
+  const call = calls.find(c => c.path.endsWith("impact"));
+  assert.equal(call.params.depth, "2");
+  assert.equal(call.headers.authorization, "Bearer fixture-token");
+  await shot(page, "impact-mobile-mock-success");
+  await page.locator("#aag-project").selectOption("AADS");
+  assert.doesNotMatch(await panel.innerText(), /확인된 연관 대상 1개/);
+  assert.equal(await page.getByLabel("변경할 파일 경로").inputValue(), "");
+  await context.close();
+});
+
+for (const status of [404, 403, 401, 0]) {
+  test(`impact: 오류 ${status} 및 복구`, { timeout: 120000 }, async () => {
+    let attempt = 0;
+    const { context, page } = await session(DESKTOP, { impact: u => {
+      attempt++;
+      if (attempt === 1) return status === 0 ? "abort" : { status, body: {} };
+      return { status: 200, body: { ...impactFixture(u), nodes: [], edges: [] } };
+    } });
+    await open(page);
+    await impactSubmit(page);
+    if (status === 401) {
+      await page.waitForURL(/login.*session_expired/);
+      await shot(page, "impact-mock-session-recovery");
+    } else {
+      const panel = page.locator("section[aria-labelledby=aag-impact]");
+      await panel.getByRole("alert").waitFor();
+      await shot(page, `impact-mock-error-${status}`);
+      if (status !== 403) {
+        await panel.getByRole("button", { name: "다시 시도", exact: true }).click();
+        await panel.getByText(/이 조회에서 확인된 연관 대상이 없습니다/).waitFor();
+        await shot(page, `impact-mock-empty-recovered-${status}`);
+      }
+    }
+    await context.close();
+  });
+}
+
+test("impact: 이전 요청의 늦은 응답과 ref 변경 격리", { timeout: 120000 }, async () => {
+  let release;
+  let started;
+  const ready = new Promise(r => { started = r; });
+  const delayed = new Promise(r => { release = r; });
+  const { context, page } = await session(DESKTOP, { impact: async u => { started(); await delayed; return { status: 200, body: impactFixture(u) }; } });
+  await open(page);
+  await impactSubmit(page);
+  await ready;
+  await page.getByText("대상 설정 (저장소·브랜치)", { exact: true }).click();
+  await page.getByLabel("브랜치 (refs/heads/…)").fill("refs/heads/other");
+  await page.getByRole("button", { name: "이 대상으로 보기" }).click();
+  release();
+  await page.waitForTimeout(300);
+  assert.doesNotMatch(await page.locator("section[aria-labelledby=aag-impact]").innerText(), /확인된 연관 대상 1개/);
+  await context.close();
+});
+
+test("impact: 상속 속성 이름과 미지 kind도 실제 화면에 문자열로 표시", { timeout: 120000 }, async () => {
+  const kinds = ["__proto__", "constructor", "toString", "unknown-kind"];
+  const { context, page, errors } = await session(MOBILE, { impact: u => ({ status: 200, body: {
+    ...impactFixture(u),
+    nodes: kinds.map(kind => ({ id: kind, kind, distance: 1 })),
+    edges: kinds.map(kind => ({ from: "a", to: "b", kind })),
+  } }) });
+  try {
+    await open(page);
+    await impactSubmit(page);
+    const panel = page.locator("section[aria-labelledby=aag-impact]");
+    await panel.getByText("확인된 연관 대상 4개", { exact: true }).waitFor();
+    for (const kind of kinds) assert.equal((await panel.innerText()).split(`기타 관계·대상 (${kind})`).length - 1, 2);
+    assert.deepEqual(errors, []);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await shot(page, "impact-mobile-mock-unknown-kinds");
+  } finally {
+    await context.close();
+  }
 });

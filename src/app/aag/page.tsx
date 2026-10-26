@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
+import ImpactPanel from "@/components/aag/ImpactPanel";
 import ArchitectureDiagram from "@/components/aag/ArchitectureDiagram";
 import { AxisCard, ErrorPanel, FindingRow, FOCUS_RING, RecoveryList, SectionCard, TOUCH } from "@/components/aag/AagParts";
 import { AagApiError, aagApi } from "@/lib/aagOperationsApi";
@@ -266,6 +267,8 @@ function AagScreen() {
             </div>
           </form>
         </details>
+
+        <ImpactPanel key={targetKey} target={target} loginHref={loginHref} />
 
         {init.rejected.length > 0 && (
           <p role="status" className="text-sm" style={{ color: "#fde68a" }}>

@@ -1,5 +1,5 @@
 import {
-  buildAxisViews, buildRecoveryViews, classifyApiError, coverageProof, filtersToSearch, findingsMatchSnapshot,
+  isImpact, impactKindLabel, buildAxisViews, buildRecoveryViews, classifyApiError, coverageProof, filtersToSearch, findingsMatchSnapshot,
   formatAge, isMermaid, isOperations, normalizeFinding, resolveFilters, summarizeAxes,
   DEFAULT_FILTERS, type OperationsAxes,
 } from "./aagOperations";
@@ -107,6 +107,19 @@ check("mermaid 500 => server", classifyApiError(500, null, "mermaid").kind === "
 check("mermaid 401 => auth", classifyApiError(401, null, "mermaid").loginRequired);
 check("mermaid success shape", isMermaid({ snapshot_id: "s1", mermaid: "graph LR\n  A-->B", truncated: false }));
 check("mermaid rejects bad shape", !isMermaid(null) && !isMermaid({ snapshot_id: "s1" }) && !isMermaid({ mermaid: "x" }));
+
+const impact = { nodes: [{ id: "src/a.ts", kind: "file", distance: 0 }], edges: [], snapshot_id: "s1", repository_id: "aads-dashboard", target_ref: "refs/heads/main", resolved_commit_sha: "abc", truncated: false, limitations: [], conclusion: "observed" };
+check("impact contract", isImpact(impact));
+check("impact missing provenance", !isImpact({ ...impact, resolved_commit_sha: null }));
+check("impact malformed node", !isImpact({ ...impact, nodes: [{ id: "a", kind: "file", distance: -1 }] }));
+check("impact malformed edge", !isImpact({ ...impact, edges: [{ from: "a" }] }));
+for (const kind of ["__proto__", "constructor", "toString", "unknown-kind"]) {
+  check(`impact unknown label ${kind}`, impactKindLabel(kind) === `기타 관계·대상 (${kind})`);
+}
+check("impact Korean labels", impactKindLabel("calls") === "호출 관계");
+check("impact 404 not no-impact", classifyApiError(404, null, "impact").message.includes("영향이 없다는 뜻이 아닙니다"));
+check("impact auth", classifyApiError(401, null, "impact").loginRequired);
+check("impact forbidden", classifyApiError(403, null, "impact").kind === "forbidden");
 
 if (failed > 0) {
   console.error(`${failed} aag operations selftest(s) failed`);
