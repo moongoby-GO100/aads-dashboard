@@ -485,6 +485,16 @@ export interface CanonicalDocument {
   status: string;
 }
 export interface CanonicalDocumentDetail {
+  approval_card?: {
+    type: "canonical_document_approval";
+    schema_version: 1;
+    project: string;
+    document_key: string;
+    revision_id: string;
+    revision: number;
+    generation: number;
+    can_approve: boolean;
+  } | null;
   document: CanonicalDocument;
   revision: { id: string; version: string; title: string; content: string; change_summary: string | null } | null;
   status: string;

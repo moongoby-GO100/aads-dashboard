@@ -1,5 +1,7 @@
 // AADS-dashboard-rebuild: refactored
 "use client";
+import CanonicalApprovalCards, { canonicalReferencesFromTools } from "@/components/chat/CanonicalApprovalCards";
+
 import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import ChatInput, { ChatInputHandle } from "./ChatInput";
@@ -6197,6 +6199,11 @@ export default function ChatPage() {
               setToolStatus(`${icon} ${ev.tool_name} 실행 중...`);
             } else if (ev.type === "tool_result" && ev.tool_name) {
               const toolName = ev.tool_name;
+              const canonicalRefs = canonicalReferencesFromTools([ev]);
+              if (canonicalRefs.length && activeSessionRef.current === attachSessionId) {
+                setStreamCanonicalRefs(previous => ({ sessionId: attachSessionId,
+                  documents: [...(previous?.sessionId === attachSessionId ? previous.documents : []), ...canonicalRefs].slice(-100) }));
+              }
               const resultPreview = ev.content ? String(ev.content).slice(0, 60).replace(/\n/g, " ") : "";
               setToolLogs(prev => {
                 const updated = [...prev];
@@ -9144,6 +9151,11 @@ export default function ChatPage() {
               }
             } else if (ev.type === "tool_result" && ev.tool_name) {
               const toolName = ev.tool_name;
+              const canonicalRefs = canonicalReferencesFromTools([ev]);
+              if (canonicalRefs.length && !isStale()) {
+                setStreamCanonicalRefs(previous => ({ sessionId: requestSessionId,
+                  documents: [...(previous?.sessionId === requestSessionId ? previous.documents : []), ...canonicalRefs].slice(-100) }));
+              }
               accumulatedToolCalls = [
                 ...accumulatedToolCalls,
                 ...normalizeToolEventsForRender([{
@@ -9151,6 +9163,7 @@ export default function ChatPage() {
                   tool_name: ev.tool_name,
                   tool_use_id: ev.tool_use_id || "",
                   content: ev.content || "",
+                  canonical_document_cards: ev.canonical_document_cards,
                   is_error: ev.is_error,
                   error_type: ev.error_type,
                   cancel_scope: ev.cancel_scope,
@@ -11223,6 +11236,10 @@ export default function ChatPage() {
     source?: string; source_label?: string; repo?: string; view_url?: string | null;
   }>>([]);
   const [sessionOtherFiles, setSessionOtherFiles] = useState(0);
+  const [streamCanonicalRefs, setStreamCanonicalRefs] = useState<{
+    sessionId: string; documents: Array<{ project: string; document_key: string }>;
+  } | null>(null);
+  const [canonicalDocsSession, setCanonicalDocsSession] = useState<string | null>(null);
   const [sessionCanonicalDocs, setSessionCanonicalDocs] = useState<Array<{
     project: string; document_key: string; revision?: number | null;
     title?: string | null; approved?: boolean; at?: string | null;
@@ -11231,6 +11248,7 @@ export default function ChatPage() {
   useEffect(() => {
     const sid = activeSession?.id;
     if (!sid) { setSessionDocs([]); setSessionOtherFiles(0); setSessionCanonicalDocs([]); return; }
+    setSessionCanonicalDocs([]);
     let alive = true;
     const load = async () => {
       try {
@@ -11243,6 +11261,7 @@ export default function ChatPage() {
         setSessionDocs(r.documents || []);
         setSessionOtherFiles(r.other_files || 0);
         setSessionCanonicalDocs(r.canonical_documents || []);
+        setCanonicalDocsSession(sid);
       } catch { /* 목록 조회 실패가 대화를 막지 않는다 */ }
     };
     void load();
@@ -13561,6 +13580,12 @@ export default function ChatPage() {
             </div>
           )}
 
+          {activeSession && <CanonicalApprovalCards key={activeSession.id} documents={[
+            ...(canonicalDocsSession === activeSession.id ? sessionCanonicalDocs : []),
+            ...(streamCanonicalRefs?.sessionId === activeSession.id ? streamCanonicalRefs.documents : []),
+            ...messages.filter(message => message.session_id === activeSession.id)
+              .flatMap(message => canonicalReferencesFromTools(message.tools_called)),
+          ]} />}
           <div ref={messagesEndRef} style={{ overflowAnchor: "none" as never, minHeight: 1 }} />
         </div>
         {/* 정리 카드가 열려 있는 동안은 카드 하단 고정 확인·취소 CTA 위에 겹치므로 숨기고, 카드가 닫히면 다시 보인다. */}
