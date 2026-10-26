@@ -5,6 +5,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MockupHtmlLinks } from "@/components/MockupHtmlLinks";
 import { formatKst } from "@/lib/aiResponseErrors";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
@@ -197,7 +198,7 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
                   const rev = archiveRevisionNumber(r);
                   return (
                     <li key={`${r.sourceProject}:${r.review_id}`}>
-                      <a target="_blank" rel="noopener noreferrer" href={`/mockups/view?project=${encodeURIComponent(r.sourceProject)}&review=${encodeURIComponent(r.review_id)}`}
+                      <button type="button" onClick={() => open(r)}
                         style={{ display: "block", textDecoration: "none", width: "100%", boxSizing: "border-box", minHeight: TOUCH, textAlign: "left", padding: "10px 12px", borderRadius: 8, cursor: "pointer",
                                  border: "1px solid var(--ct-border, var(--border))", background: "transparent", color: "inherit" }}>
                         <div style={{ fontSize: 13.5, fontWeight: 800, wordBreak: "break-word", overflowWrap: "anywhere" }}>{r.title || "(제목 없음)"}</div>
@@ -209,7 +210,8 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
                           <span style={{ color: "var(--ct-text2, var(--text-secondary))" }}>{rev !== null ? `v${rev}` : "판 -"}</span>
                           <span style={{ color: "var(--ct-text2, var(--text-secondary))" }}>{formatKst(r.updated_at)} KST</span>
                         </div>
-                      </a>
+                      </button>
+                      <MockupHtmlLinks project={r.sourceProject} reviewId={r.review_id} />
                       <button type="button" onClick={() => open(r)} style={chip(false)}>검토 · 승인 보기</button>
                     </li>
                   );

@@ -20,7 +20,8 @@ export default function MockupHtmlView() {
         const revisionId = params.get("revision") || review.latest_revision?.revision_id;
         if (!revisionId) throw new Error("등록된 판본이 없습니다. 검토 화면에서 확인해 주세요.");
         const revision = await mockupApi.getRevision(project, reviewId, revisionId);
-        const asset = revision.manifest.assets.find((a) => a.mime === "text/html");
+        const assetId = params.get("asset");
+        const asset = revision.manifest.assets.find((a) => a.mime.split(";")[0].trim().toLowerCase() === "text/html" && (!assetId || a.asset_id === assetId));
         if (!asset) throw new Error("HTML 파일이 없는 목업입니다. 검토 화면에서 이미지를 확인해 주세요.");
         const blob = await mockupApi.getAssetBlob(project, reviewId, revisionId, asset.asset_id);
         const text = await blob.text();

@@ -1,3 +1,4 @@
+import { mockupHtmlFilename, mockupHtmlLink } from "./mockupReviewModel";
 import {
   approveBody, archiveEmptyMessage, archiveNextOffsets, archiveRevisionNumber, mergeArchiveReviews, reviewToDeepLink, asProjectKey, badgeProjects, mergeBadgeNotifications, changeFingerprint, changeSourceNotice, keepChangeAttempt, resolveChangeSource, asUuid, canApprove, canRequestChanges, changeBody, describeMockupError,
   groupAssetsByScreen, panelWidthCss, parseMockupDeepLink, parsePanelWide, stepZoomIndex, zoomScale, safeChatLink, statusLabel, stripMockupFromUrl, viewportClass,
@@ -206,6 +207,12 @@ check("step prev", stepZoomIndex(2, -1, 3) === 1);
 check("step clamps start", stepZoomIndex(0, -1, 3) === 0);
 check("step clamps end", stepZoomIndex(2, 1, 3) === 2);
 check("step empty", stepZoomIndex(0, 1, 0) === 0);
+
+const htmlChild = { ...asset("html-child", "s1", "mockup", "1440x900", "default", "child"), mime: "text/html", uri: "internal://mockup_assets/final/목업-목록과-HTML-등록.html" };
+check("HTML child uses registered filename", mockupHtmlFilename(htmlChild) === "목업-목록과-HTML-등록.html");
+check("HTML link uses isolated viewer", mockupHtmlLink("AADS", RID, REV, "html-child").startsWith("/mockups/view?"));
+check("HTML link pins selected asset", new URL(mockupHtmlLink("AADS", RID, REV, "a&b"), "https://example.test").searchParams.get("asset") === "a&b");
+check("HTML malformed filename is safe", mockupHtmlFilename({...htmlChild, filename: "%oops.html"}) === "%oops.html");
 
 if (failed > 0) {
   console.error(`${failed} mockupReviewModel selftest(s) failed`);

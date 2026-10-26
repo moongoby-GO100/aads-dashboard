@@ -25,7 +25,7 @@ export type MockupReview = {
 };
 export type MockupScreen = { screen_id: string; title: string; route: string };
 export type MockupAsset = {
-  asset_id: string; role: "primary" | "child"; mime: string; url?: string;
+  asset_id: string; role: "primary" | "child"; mime: string; url?: string; uri?: string; filename?: string;
   screen_id: string | null; phase: string | null; viewport: string | null; state: string | null;
 };
 export type MockupRevision = {
@@ -497,4 +497,13 @@ export function zoomScale(mode: ZoomMode, naturalW: number, naturalH: number, bo
 export function stepZoomIndex(index: number, delta: -1 | 1, count: number): number {
   if (count <= 0) return 0;
   return Math.max(0, Math.min(count - 1, index + delta));
+}
+
+// URI is used only as a display name; browser navigation always uses the authenticated viewer.
+export function mockupHtmlFilename(asset: MockupAsset): string {
+  const name = asset.filename || (asset.uri || asset.url || "").split(/[?#]/)[0].split("/").pop() || asset.asset_id;
+  try { return decodeURIComponent(name); } catch { return name; }
+}
+export function mockupHtmlLink(project: string, review: string, revision: string, asset: string): string {
+  return `/mockups/view?${new URLSearchParams({ project, review, revision, asset })}`;
 }

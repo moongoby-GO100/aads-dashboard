@@ -6,6 +6,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MockupHtmlLinks } from "@/components/MockupHtmlLinks";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
   approveBody, canApprove, canRequestChanges, changeBody, changeFingerprint, changeSourceNotice, describeMockupError,
@@ -450,6 +451,8 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
             아직 제출된 판본이 없습니다. 담당이 시안을 올리면 여기에 나옵니다.
           </div>
         )}
+
+        {rev && <MockupHtmlLinks project={project} reviewId={reviewId} revision={rev} />}
 
         {rev && groups.length === 0 && (
           <div style={{ padding: 14, borderRadius: 9, border: "1px dashed var(--border)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
