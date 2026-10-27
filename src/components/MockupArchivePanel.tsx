@@ -45,18 +45,25 @@ export function MockupArchivePanel({ project, sessionId, onOpen, onClose }: {
       if (uploadAttempt.current?.signature !== signature) uploadAttempt.current = {signature, key: crypto.randomUUID()};
       await mockupApi.uploadHtml(uploadProject, {title: file.name.replace(/\.html$/i, ""), filename: file.name,
         html, session_id: sessionId ?? undefined, idempotency_key: uploadAttempt.current.key});
-      setStatus(""); setSessionOnly(false); setReloadTick((n) => n + 1);
+      setStatus(""); setReloadTick((n) => n + 1);
       uploadAttempt.current = null;
     } catch (e) { setUploadError(e instanceof Error ? e.message : "등록하지 못했습니다. 다시 시도해 주세요."); }
     finally { setUploading(false); if (fileInput.current) fileInput.current.value = ""; }
   };
   const projects = useMemo(() => badgeProjects(project), [project]);
   const [status, setStatus] = useState("");
-  const [sessionOnly, setSessionOnly] = useState(false);
+  const [sessionOnly, setSessionOnly] = useState(!!sessionId);
+  const [filterSessionId, setFilterSessionId] = useState(sessionId);
   const [loaded, setLoaded] = useState<{ key: string; state: LoadState } | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [moreKey, setMoreKey] = useState<string | null>(null);
   const [moreFailed, setMoreFailed] = useState(false);
+
+  // Reset before committing a session change so its first request uses the default filter.
+  if (filterSessionId !== sessionId) {
+    setFilterSessionId(sessionId);
+    setSessionOnly(!!sessionId);
+  }
 
   const effectiveSessionOnly = sessionOnly && !!sessionId;
   const sessionFilter = effectiveSessionOnly ? sessionId ?? undefined : undefined;
