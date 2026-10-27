@@ -213,6 +213,10 @@ check("HTML child uses registered filename", mockupHtmlFilename(htmlChild) === "
 check("HTML link uses isolated viewer", mockupHtmlLink("AADS", RID, REV, "html-child").startsWith("/mockups/view?"));
 check("HTML link pins selected asset", new URL(mockupHtmlLink("AADS", RID, REV, "a&b"), "https://example.test").searchParams.get("asset") === "a&b");
 check("HTML malformed filename is safe", mockupHtmlFilename({...htmlChild, filename: "%oops.html"}) === "%oops.html");
+for (const filename of ["수정 디자인 첫번째.html", "수정 디자인 두번째.html", "비율%20유지.html"]) {
+  check(`uploaded original filename survives generic URI: ${filename}`,
+    mockupHtmlFilename({...htmlChild, uri: "internal://uploaded_mockups/uuid/mockup.html", filename}) === filename);
+}
 
 if (failed > 0) {
   console.error(`${failed} mockupReviewModel selftest(s) failed`);

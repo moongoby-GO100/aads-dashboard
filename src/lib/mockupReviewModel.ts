@@ -501,7 +501,8 @@ export function stepZoomIndex(index: number, delta: -1 | 1, count: number): numb
 
 // URI is used only as a display name; browser navigation always uses the authenticated viewer.
 export function mockupHtmlFilename(asset: MockupAsset): string {
-  const name = asset.filename || (asset.uri || asset.url || "").split(/[?#]/)[0].split("/").pop() || asset.asset_id;
+  if (asset.filename) return asset.filename;
+  const name = (asset.uri || asset.url || "").split(/[?#]/)[0].split("/").pop() || asset.asset_id;
   try { return decodeURIComponent(name); } catch { return name; }
 }
 export function mockupHtmlLink(project: string, review: string, revision: string, asset: string): string {
