@@ -150,6 +150,7 @@ export interface GoalSummary {
   title: string;
   project: string;
   priority: string;
+  priority_order?: number | null;
   status: string;
   progress?: number;
   goal_paused?: boolean;
@@ -1657,6 +1658,11 @@ export const api = {
   // Goal Control — goal -> milestone -> task execution timeline
   getGoals: (project?: string) =>
     request<GoalSummary[]>(`/goals${project ? `?project=${encodeURIComponent(project)}` : ""}`),
+  reorderGoals: (goalIds: string[]) =>
+    request<{ reordered: number; goal_ids: string[] }>("/goals/reorder", {
+      method: "POST",
+      body: JSON.stringify({ goal_ids: goalIds }),
+    }),
   getGoalStatus: (goalId: string) =>
     request<GoalDetail>(`/goals/${encodeURIComponent(goalId)}/status`),
   getGoalWorkTree: (goalId: string, signal?: AbortSignal) =>

@@ -20,6 +20,9 @@ import type { GoalDetail, GoalSummary } from "@/lib/api";
 import { buildGoalDocHref } from "@/lib/documentLinks";
 import { GoalProgressControls } from "@/components/GoalProgressControls";
 import { goalStatusLabel, normalizeProgress } from "@/lib/goalProgress";
+import { GoalOrderControls, GoalOrderError } from "@/components/GoalOrderControls";
+import { goalIdOf, hasOrder, moveGoal, neighborOf, sortGoalsByOrder, swapOrders } from "@/lib/goalOrder";
+import type { MoveDirection } from "@/lib/goalOrder";
 
 // 통합지시가 보는 프로젝트와 맞춘다. 여기만 7개로 박혀 있으면 FOOD·LAW 같은
 // 업무 워크스페이스의 목표가 화면에서 아예 안 보인다.
@@ -293,6 +296,31 @@ export default function GoalsPage() {
 
   const goalBoard = board?.goal?.id === selectedId ? board : null;
   const graph = useMemo(() => detail ? buildGraph(detail) : { nodes: [], edges: [] }, [detail]);
+  const sortedGoals = useMemo(() => sortGoalsByOrder(goals), [goals]);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [orderError, setOrderError] = useState<{ goalId: string; dir: MoveDirection; message: string } | null>(null);
+
+  const moveOrder = useCallback(async (goalId: string, dir: MoveDirection) => {
+    if (orderBusy) return;
+    const neighbor = neighborOf(sortGoalsByOrder(goals), goalId, dir);
+    if (!neighbor) return;
+    setOrderBusy(true);
+    setOrderError(null);
+    setGoals(swapOrders(goals, goalId, goalIdOf(neighbor)));
+    const result = await moveGoal(goals, project !== "ALL", goalId, dir, {
+      fetchAll: () => api.getGoals(),
+      reorder: (ids) => api.reorderGoals(ids),
+    });
+    if (result.ok) {
+      setOrderBusy(false);
+      void loadGoals();
+    } else {
+      setGoals(result.goals);
+      setOrderError({ goalId, dir, message: result.error });
+      setOrderBusy(false);
+    }
+  }, [orderBusy, goals, project, loadGoals]);
+
   const counts = useMemo(() => ({
     active: goals.filter((g) => g.status === "active").length,
     blocked: goals.filter((g) => ["blocked", "failed", "error"].includes(g.status)).length,
@@ -332,16 +360,26 @@ export default function GoalsPage() {
           <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {loading && <div style={{ padding: 24, color: "var(--text-secondary)" }}>목표 상태를 불러오는 중입니다.</div>}
             {!loading && goals.length === 0 && <div style={{ padding: 24, borderRadius: 12, border: "1px dashed var(--border)", color: "var(--text-secondary)" }}>등록된 목표가 없습니다.</div>}
-            {goals.map((goal) => {
+            {sortedGoals.map((goal) => {
               const id = goal.goal_id || goal.id || "";
               const pct = normalizeProgress(goal.progress);
               const color = statusColor[goal.status] || "#64748b";
-              return <button key={id} onClick={() => selectGoal(id)} style={{ padding: 14, textAlign: "left", borderRadius: 12, border: `2px solid ${selectedId === id ? color : "var(--border)"}`, background: "var(--bg-card)", cursor: "pointer", minHeight: 112 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 800, color }}>{goal.project} · {goal.priority}</span><span style={{ fontSize: 11, color, display: "inline-flex", gap: 6, alignItems: "center" }}>{goal.goal_paused && <span title={goal.goal_paused_reason || undefined} style={{ fontWeight: 800, color: "#d97706" }}>⏸ 멈춤</span>}{goalStatusLabel(goal.status)}</span></div>
+              const ordered = hasOrder(goal);
+              const failed = orderError?.goalId === id ? orderError : null;
+              return <div key={id}>
+                <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                <button onClick={() => selectGoal(id)} style={{ flex: 1, minWidth: 0, padding: 14, textAlign: "left", borderRadius: 12, border: `2px solid ${selectedId === id ? color : "var(--border)"}`, background: "var(--bg-card)", cursor: "pointer", minHeight: 112 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 800, color }}>{goal.project} · {goal.priority}{ordered && <span data-testid="goal-order-label"> · 순서 {goal.priority_order}</span>}</span><span style={{ fontSize: 11, color, display: "inline-flex", gap: 6, alignItems: "center" }}>{goal.goal_paused && <span title={goal.goal_paused_reason || undefined} style={{ fontWeight: 800, color: "#d97706" }}>⏸ 멈춤</span>}{goalStatusLabel(goal.status)}</span></div>
                 <div style={{ marginTop: 7, fontSize: 14, fontWeight: 750, color: "var(--text-primary)", lineHeight: 1.35 }}>{goal.title}</div>
                 <div style={{ marginTop: 10, height: 7, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color }} /></div>
                 <div style={{ marginTop: 5, fontSize: 11, color: "var(--text-secondary)", textAlign: "right" }}>{pct.toFixed(0)}%</div>
-              </button>;
+                </button>
+                {ordered && <GoalOrderControls goalId={id} busy={orderBusy}
+                  canUp={neighborOf(sortedGoals, id, "up") !== null} canDown={neighborOf(sortedGoals, id, "down") !== null}
+                  onMove={(gid, dir) => void moveOrder(gid, dir)} />}
+                </div>
+                {failed && <GoalOrderError goalId={id} error={failed.message} onRetry={() => void moveOrder(id, failed.dir)} />}
+              </div>;
             })}
           </section>
 

@@ -34,6 +34,7 @@ export interface StripGoal {
   is_lead?: boolean;
   priority?: string | null;
   priority_rank?: number | null;
+  priority_order?: number | null;
   dormant?: boolean;
   dormant_reason?: string | null;
   activity?: StripActivity;
@@ -142,7 +143,7 @@ export function activityIcon(activity: StripActivity | undefined): string | null
   return null;
 }
 
-function priorityRankOf(g: Pick<StripGoal, "priority_rank" | "priority">): number {
+export function priorityRankOf(g: Pick<StripGoal, "priority_rank" | "priority">): number {
   if (typeof g.priority_rank === "number") return g.priority_rank;
   const p = String(g.priority || "").trim().toUpperCase();
   const table: Record<string, number> = { "P0-CRITICAL": 0, P0: 1, P1: 2, P2: 3, P3: 4 };
@@ -189,13 +190,25 @@ function groupIndexOf(g: DropdownClassifiable & Pick<StripGoal, "strip_order">):
   return DROPDOWN_GROUP_ORDER.indexOf(dropdownGroupOf(g));
 }
 
-/** 서버 strip_order 우선, 없으면 그룹 순번 → 우선순위 순번 → 마지막 활동 최근순(없으면 뒤) → 제목. */
+/** priority_order 비교: 작을수록 먼저, 값이 없으면 뒤, 둘 다 없으면 0 (무한대끼리 빼면 NaN 이라 직접 비교). */
+export function compareOrderValue(a: number | null | undefined, b: number | null | undefined): number {
+  const ha = typeof a === "number" && Number.isFinite(a);
+  const hb = typeof b === "number" && Number.isFinite(b);
+  if (ha && hb) return (a as number) - (b as number);
+  if (ha) return -1;
+  if (hb) return 1;
+  return 0;
+}
+
+/** 서버 strip_order 우선, 없으면 그룹 순번 → 우선순위 순번 → 처리 순서(priority_order, 없으면 뒤) → 마지막 활동 최근순(없으면 뒤) → 제목. */
 export function sortDropdownGoals<T extends StripGoal>(goals: readonly T[]): T[] {
   return [...goals].sort((a, b) => {
     const r = groupIndexOf(a) - groupIndexOf(b);
     if (r !== 0) return r;
     const p = priorityRankOf(a) - priorityRankOf(b);
     if (p !== 0) return p;
+    const o = compareOrderValue(a.priority_order, b.priority_order);
+    if (o !== 0) return o;
     const ta = toMs(a.last_activity_at);
     const tb = toMs(b.last_activity_at);
     if (ta !== tb) {
