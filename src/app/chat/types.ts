@@ -43,6 +43,8 @@ export interface ChatMessage {
   content_version?: string | number | null;
   content_completeness?: "minimal" | "preview" | "render" | "full";
   model_used?: string;
+  /** 이 메시지를 보낸 화면의 접속 환경(서버 client_context 또는 전송 직전 client_env). 없으면 미확인. */
+  client_context?: Record<string, unknown> | null;
   requested_model?: string | null;   // AADS: CEO가 선택한 요청 모델
   fallback_reason?: string | null;   // AADS: 실행 모델이 바뀐 사유
   intent?: string;

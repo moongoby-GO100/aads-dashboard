@@ -93,6 +93,7 @@ import type { ExecutionPhase } from "@/features/chat/domain/runtimeTypes";
 import { createChatRuntime } from "@/features/chat/runtime/createChatRuntime";
 import { SingleFlightStatusScheduler } from "@/features/chat/runtime/statusScheduler";
 import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
+import { collectClientEnv } from "@/lib/clientEnv";
 import { PANEL_BODY_FONT_PX, PANEL_SIDE_PADDING_PX, readPanelSurface } from "@/lib/chatPanelSurface";
 import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/chatDeepLink";
 import { asUuid, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
@@ -8472,6 +8473,9 @@ export default function ChatPage() {
     const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
+    // 메시지마다 현재 접속 환경을 새로 계산한다(PC·모바일 혼용). 어느 return 분기보다 먼저 수집해
+    // 스트리밍 중 추가 지시(interrupt)에도 같은 값이 실린다. 실패하면 필드를 생략한다.
+    const _clientEnv = collectClientEnv();
     sessionSwitchRef.current = false;
     suppressOlderLoadUntilRef.current = Date.now() + 8000;
     isInitialLoadRef.current = false;
@@ -8554,13 +8558,14 @@ export default function ChatPage() {
           content: displayContent,
           intent: "queued_interrupt",
           created_at: new Date().toISOString(),
+          ...(_clientEnv ? { client_context: { ..._clientEnv } } : {}),
         }];
       });
       scrollToMessagesBottom(true);
       // 백엔드 인터럽트 큐에 push (첨부파일 포함)
       if (activeSessionObjRef.current?.id) {
         const interruptSessionId = activeSessionObjRef.current.id;
-        const interruptPayload = { content: interruptContent, attachments: interruptAttachments };
+        const interruptPayload = { content: interruptContent, attachments: interruptAttachments, ...(_clientEnv ? { client_env: _clientEnv } : {}) };
         runChatCommand<{ queued: boolean; message?: string; message_id?: string | null }>({
           sessionId: interruptSessionId,
           commandType: "interrupt",
@@ -8722,6 +8727,7 @@ export default function ChatPage() {
       role: "user",
       content,
       created_at: new Date().toISOString(),
+      ...(_clientEnv ? { client_context: { ..._clientEnv } } : {}),
       attachmentPreviews: _previewUrls.length > 0 ? _previewUrls : undefined,
       ...(_capturedReplyTo ? { reply_to_id: _capturedReplyTo.id } : {}),
       ...(_capturedBranch ? { branch_point_id: _capturedBranch.id, branch_id: `tmp-branch-${Date.now()}` } : {}),
@@ -8824,7 +8830,7 @@ export default function ChatPage() {
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey });
+        fetchBody = JSON.stringify({ content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}) });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
       } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
@@ -8836,11 +8842,12 @@ export default function ChatPage() {
         rawFiles.forEach((f) => formData.append("files", f));
         if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
         formData.append("idempotency_key", _idempotencyKey);
+        if (_clientEnv) formData.append("client_env", JSON.stringify(_clientEnv));
         fetchBody = formData;
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}), ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(fetchUrl, {

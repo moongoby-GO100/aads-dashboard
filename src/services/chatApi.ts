@@ -3,6 +3,8 @@
  * AADS-170 백엔드 /api/v1/chat/* 엔드포인트 연결
  */
 
+import { collectClientEnv } from "@/lib/clientEnv";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 
 function getAuthHeaders(): Record<string, string> {
@@ -239,6 +241,7 @@ export const chatApi = {
     attachments?: Array<{ name: string; path: string }>,
     responseMode: ChatResponseMode = "quality",
   ): Promise<ReadableStreamDefaultReader<Uint8Array>> => {
+    const clientEnv = collectClientEnv();
     const res = await fetch(`${BASE_URL}/chat/messages/send`, {
       method: "POST",
       signal,
@@ -253,6 +256,7 @@ export const chatApi = {
         model_override: modelOverride || null,
         response_mode: responseMode,
         attachments: attachments || [],
+        ...(clientEnv ? { client_env: clientEnv } : {}),
       }),
     });
     if (!res.ok || !res.body) throw new Error(`Stream error ${res.status}`);
