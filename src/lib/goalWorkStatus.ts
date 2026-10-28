@@ -70,11 +70,13 @@ export function milestoneWorkCounts(
   return out;
 }
 
-/** `Epic 1/2 · Story 3/5 · Task 8/14 완료 · 막힘 2`. 업무가 없으면 "업무 없음". */
+/** Task 기준 막힘 수. 업무가 없으면 "업무 없음". */
 export function milestoneWorkLabel(summary: GoalWorkSummary | null | undefined, roots: GoalWorkItem[]): string {
   const counts = milestoneWorkCounts(summary, roots);
   if (KINDS.every(([kind]) => counts[kind].total === 0)) return "업무 없음";
-  const blocked = KINDS.reduce((sum, [kind]) => sum + counts[kind].blocked, 0);
+  const blocked = counts.task.total > 0 ? counts.task.blocked
+    : counts.story.total > 0 ? counts.story.blocked
+      : counts.epic.blocked;
   const done = KINDS.map(([kind, label]) => `${label} ${counts[kind].completed}/${counts[kind].total}`).join(" · ");
   return `${done} 완료${blocked ? ` · 막힘 ${blocked}` : ""}`;
 }

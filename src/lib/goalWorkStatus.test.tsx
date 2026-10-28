@@ -55,7 +55,23 @@ describe("task aggregation", () => {
       story: { total: 5, completed: 3, in_progress: 1, blocked: 1 },
       task: { total: 14, completed: 8, in_progress: 3, blocked: 1 },
     };
-    expect(milestoneWorkLabel(summary, [epic])).toBe("Epic 1/2 · Story 3/5 · Task 8/14 완료 · 막힘 2");
+    expect(milestoneWorkLabel(summary, [epic])).toBe("Epic 1/2 · Story 3/5 · Task 8/14 완료 · 막힘 1");
+  });
+  it("counts blocked tasks once when their story and epic are also blocked", () => {
+    const blockedTaskEpic = work({ type: "epic", status: "blocked", children: [
+      work({ type: "story", status: "blocked", children: [
+        work({ id: "blocked-task", status: "blocked" }),
+        work({ id: "active-task", status: "in_progress" }),
+      ] }),
+    ] });
+    expect(milestoneWorkLabel(null, [blockedTaskEpic])).toContain("막힘 1");
+  });
+  it("falls back to blocked stories when the milestone has no tasks", () => {
+    const storyOnlyRoots = [
+      work({ id: "story-1", type: "story", status: "blocked" }),
+      work({ id: "story-2", type: "story", status: "in_progress" }),
+    ];
+    expect(milestoneWorkLabel(null, storyOnlyRoots)).toContain("막힘 1");
   });
   it("falls back to the client count and omits 막힘 when zero", () => {
     expect(milestoneWorkLabel(null, [epic])).toBe("Epic 0/1 · Story 0/1 · Task 2/5 완료 · 막힘 1");
