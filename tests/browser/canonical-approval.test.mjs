@@ -14,7 +14,8 @@ function script() {
   }
   const react = bundle(require.resolve('react')), dom = bundle(require.resolve('react-dom/client'));
   const source = fs.readFileSync('src/components/chat/CanonicalApprovalCards.tsx', 'utf8').replace(/^import .*;\n/gm, '').replace(/export default /g, '').replace(/export /g, '');
-  const app = `const {useEffect,useRef,useState}=React;
+  const app = `const {useCallback,useEffect,useRef,useState}=React;
+const canTransitionDocument=(status,action,hasRevision)=>hasRevision&&status==='review';
 const CANONICAL_NAV_PROJECTS=['AADS'];
 function DocBadge({children}){return <span>{children}</span>}const statusTone=x=>x;
 window.calls=[];window.events=[];
@@ -22,7 +23,7 @@ const seed=()=>({document:{document_key:'ohvis-ui-ux-design-profile-contract',ti
 window.current=seed();window.postError=0;window.getError=0;
 const api={getCanonicalDocument:async(p,k)=>{window.calls.push({method:'GET',p,k});if(window.getError)throw Error('API error '+window.getError);return structuredClone(window.current)},decideCanonicalDocument:async(p,k,action,r,g)=>{window.calls.push({method:'POST',p,k,action,r,g});await new Promise(r=>setTimeout(r,30));if(window.postError)throw Error('API error '+window.postError);window.current.document.approved_revision_id=r;window.current.status='approved';window.current.approval_card.can_approve=false;window.events.push({action:'approved',actor:'isolated-human',revision:r})}};
 ${source}
-ReactClient.createRoot(document.getElementById('root')).render(<CanonicalApprovalCards documents={[{project:'AADS',document_key:'ohvis-ui-ux-design-profile-contract',endpoint:'https://evil.invalid/approve'},{project:'OTHER',document_key:'ohvis-ui-ux-design-profile-contract'},{project:'AADS',document_key:'unlisted'}]}/>);`;
+ReactClient.createRoot(document.getElementById('root')).render(<CanonicalApprovalCards documents={[{project:'AADS',document_key:'ohvis-ui-ux-design-profile-contract',endpoint:'https://evil.invalid/approve'},{project:'OTHER',document_key:'ohvis-ui-ux-design-profile-contract'},{project:'AADS',document_key:'../unlisted'}]}/>);`;
   return `const process={env:{NODE_ENV:'production'}};const M={${[...modules.values()].map(m=>`${m.id}:function(module,exports,R){${m.code}\n}`).join(',')}};const C={};function R(id){if(C[id])return C[id].exports;const m=C[id]={exports:{}};M[id](m,m.exports,R);return m.exports;}const React=R(${react}),ReactClient=R(${dom});${ts.transpileModule(app,{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText}`;
 }
 test('canonical chat cards: isolated human approval, stale, duplicate, denial and recovery at desktop/mobile', {timeout:60000}, async()=>{
@@ -37,7 +38,7 @@ test('canonical chat cards: isolated human approval, stale, duplicate, denial an
       const refresh=()=>page.getByRole('button',{name:'새로고침',exact:true}).click();
       const open=()=>page.getByText('내용 보기 · 승인할 본문 확인',{exact:true}).click();
       await mount();assert.equal(await page.getByRole('article').count(),1);assert.equal(await approve().isDisabled(),true);
-      await open();await approve().click();await page.getByText('정본 승인 상태를 확인했습니다.').waitFor();
+      await open();await approve().click();await page.getByText('승인되었습니다. 잠시 후 이 카드는 닫힙니다.').waitFor();
       assert.equal(await approve().isDisabled(),true);
       assert.equal(await page.evaluate(()=>calls.filter(x=>x.method==='POST').length),1);
       assert.deepEqual(await page.evaluate(()=>events),[{action:'approved',actor:'isolated-human',revision:'r11'}]);
@@ -46,15 +47,17 @@ test('canonical chat cards: isolated human approval, stale, duplicate, denial an
       await approve().click();
       await page.getByText('판본이 변경되었습니다. 최신 내용을 다시 열어 확인한 후 승인하세요.').waitFor();
       assert.equal(await approve().isDisabled(),true);assert.equal(await page.evaluate(()=>calls.filter(x=>x.method==='POST').length),0);
-      await open();await approve().click();await page.getByText('정본 승인 상태를 확인했습니다.').waitFor();
+      await open();await approve().click();await page.getByText('승인되었습니다. 잠시 후 이 카드는 닫힙니다.').waitFor();
       for(const status of [401,403,404,409,500]) {
         await mount();await open();await page.evaluate(s=>{window.postError=s},status);await approve().click();
         await page.waitForFunction(()=>document.querySelector('[role=status]')?.textContent);
         assert.equal(await approve().isDisabled(),true);
-        await page.evaluate(()=>{postError=0});await refresh();await page.getByText('판본: 11 · v11.0.0',{exact:true}).waitFor();await open();await approve().click();await page.getByText('정본 승인 상태를 확인했습니다.').waitFor();
+        await page.evaluate(()=>{postError=0});await refresh();await page.getByText('판본: 11 · v11.0.0',{exact:true}).waitFor();await open();await approve().click();await page.getByText('승인되었습니다. 잠시 후 이 카드는 닫힙니다.').waitFor();
       }
       for(const mode of ['denied','removed','unknown']){
-        await mount();await page.evaluate(mode=>{if(mode==='denied')current.approval_card.can_approve=false;if(mode==='removed')current.status='removed';if(mode==='unknown')delete current.approval_card.can_approve},mode);await refresh();await page.getByText('판본: 11 · v11.0.0',{exact:true}).waitFor();await open();assert.equal(await approve().isDisabled(),true);
+        await mount();await page.evaluate(mode=>{if(mode==='denied')current.approval_card.can_approve=false;if(mode==='removed')current.status='removed';if(mode==='unknown')delete current.approval_card.can_approve},mode);await refresh();
+        if(mode==='removed'){await page.waitForFunction(()=>!document.querySelector('article'));continue;}
+        await page.getByText('판본: 11 · v11.0.0',{exact:true}).waitFor();await open();assert.equal(await approve().isDisabled(),true);
       }
       assert.deepEqual(errors,[]);console.log(JSON.stringify({width,capture,productionRequests:0,evidence:'isolated component; mocked API/event, not deployed /chat or DB audit'}));await page.close();
     }
