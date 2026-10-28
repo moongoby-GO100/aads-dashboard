@@ -99,6 +99,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { href: "/admin/app-settings", label: "오비스 앱 설정", icon: "📱", adminOnly: true, group: "관리자" },
   { href: "/admin/loops", label: "루프 관리", icon: "🔁", adminOnly: true, group: "관리자" },
   { href: "/admin/sessions", label: "세션 리플레이", icon: "📹", adminOnly: true, group: "관리자" },
+  { href: "/skills", label: "스킬", icon: "🛠️", adminOnly: true, group: "관리자" },
   { href: "/admin/emergency", label: "Emergency", icon: "🚨", adminOnly: true, group: "관리자" },
 ];
 

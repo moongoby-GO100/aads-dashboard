@@ -588,7 +588,7 @@ export function getAuthHeaders(): Record<string, string> {
 
 // AADS-AUTH-401: 401 응답 시 토큰 정리 + 로그인 페이지 리다이렉트 (중복 실행 방지)
 let _redirecting401 = false;
-function handle401Redirect(): void {
+export function handle401Redirect(): void {
   if (typeof window === "undefined") return;
   if (_redirecting401) return;
   _redirecting401 = true;
