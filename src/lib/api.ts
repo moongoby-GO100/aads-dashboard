@@ -93,6 +93,9 @@ export interface OhvisRecipeRegistration {
   verify_count?: number;
   requested_by?: string | null;
   requested_at?: string | null;
+  decided_at?: string | null;
+  rejection_reason?: string | null;
+  decision_reason?: string | null;
   screen_evidence_url?: string;
   step_summaries?: OhvisRecipeStepSummary[];
 }

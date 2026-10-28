@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * 승인 대기 레시피 패널.
+ * 레시피 승인 패널 — 승인 대기 · 승인됨 · 반려됨 탭.
  *
- * 녹화 직후 state(registrationId)와 무관하게 서버의 pending 목록을 직접 불러온다.
+ * 승인 대기 탭은 녹화 직후 state(registrationId)와 무관하게 서버의 pending 목록을 직접 불러온다.
  * 새로고침·레인 전환·채팅에서 등록한 건도 여기서 결정할 수 있다.
+ * 승인됨·반려됨 탭은 같은 API 를 status 만 바꿔 조회하는 읽기 전용 목록이다(결정 버튼 없음).
  * 결정 주체·자기승인·고위험 확인은 서버가 강제한다 — 이 화면은 그 거부를 읽을 수 있는
  * 문구로 바꿔 보여 줄 뿐이다.
  */
@@ -222,10 +223,90 @@ function StepList({ steps }: { steps: OhvisRecipeStepSummary[] }) {
 }
 
 type Notice = { kind: "ok" | "err"; text: string } | null;
+type RegistrationStatus = "pending" | "approved" | "rejected";
+
+const STATUS_TABS: { key: RegistrationStatus; label: string }[] = [
+  { key: "pending", label: "승인 대기" },
+  { key: "approved", label: "승인됨" },
+  { key: "rejected", label: "반려됨" },
+];
+
+const EMPTY_TEXT: Record<RegistrationStatus, string> = {
+  pending: "승인을 기다리는 레시피가 없습니다.",
+  approved: "승인된 레시피가 없습니다",
+  rejected: "반려된 레시피가 없습니다",
+};
+
+function DecidedCard({ item, status, expanded, onToggle }: {
+  item: OhvisRecipeRegistration;
+  status: "approved" | "rejected";
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const steps = item.step_summaries ?? [];
+  const approved = status === "approved";
+  const reason = String(item.rejection_reason || item.decision_reason || "").trim();
+  return (
+    <article
+      style={{
+        margin: "8px 10px",
+        background: approved ? "#08170f" : "#1c0d0d",
+        border: `1px solid ${approved ? "#166534" : "#7f1d1d"}`,
+        borderRadius: 8,
+        padding: "9px 11px",
+        minWidth: 0,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "flex-start" }}>
+        <h4 style={{ fontSize: 13, color: C.text, margin: 0, wordBreak: "break-word", minWidth: 0 }}>
+          {item.name || "이름 없는 레시피"}
+          {item.version ? <span style={{ color: C.muted, fontWeight: 400 }}> · v{item.version}</span> : null}
+        </h4>
+        <span style={badgeStyle(riskTone(item.max_risk))}>{riskText(item.max_risk)}</span>
+      </div>
+      <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: "3px 0 0", wordBreak: "break-all" }}>
+        {item.domain || "도메인 없음"} · {item.step_count ?? steps.length}단계
+        {item.verify_count ? ` + 검증 ${item.verify_count}` : ""}
+      </p>
+      <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, margin: 0, wordBreak: "break-all" }} title={item.requested_by || ""}>
+        요청 세션 {item.requested_by ? String(item.requested_by).slice(0, 40) : "-"} · 요청 {requestedAtLabel(item.requested_at)}
+      </p>
+      {item.decided_at && (
+        <p style={{ fontSize: 11, color: approved ? "#6ee7b7" : "#fca5a5", lineHeight: 1.6, margin: 0 }}>
+          {approved ? "승인" : "반려"} {requestedAtLabel(item.decided_at)}
+        </p>
+      )}
+      {!approved && (
+        <p style={{ fontSize: 12, color: C.text, lineHeight: 1.5, margin: "4px 0 0", wordBreak: "break-word" }}>
+          <span style={{ color: C.muted }}>반려 사유 </span>
+          {reason || "사유가 기록되지 않았습니다"}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        style={{ marginTop: 5, background: "transparent", border: "none", color: C.accent, fontSize: 12, padding: "6px 0", cursor: "pointer", minHeight: 32 }}
+      >
+        {expanded ? "단계 접기 ▲" : `단계 미리보기 (${steps.length}) ▼`}
+      </button>
+      {expanded && <StepList steps={steps} />}
+    </article>
+  );
+}
 
 export default function RecipeApprovalPanel() {
-  const [items, setItems] = useState<OhvisRecipeRegistration[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tab, setTab] = useState<RegistrationStatus>("pending");
+  const [lists, setLists] = useState<Record<RegistrationStatus, OhvisRecipeRegistration[] | null>>({
+    pending: null,
+    approved: null,
+    rejected: null,
+  });
+  const [loadErrors, setLoadErrors] = useState<Record<RegistrationStatus, string | null>>({
+    pending: null,
+    approved: null,
+    rejected: null,
+  });
   const [notice, setNotice] = useState<Notice>(null);
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -238,27 +319,49 @@ export default function RecipeApprovalPanel() {
   const [batchReason, setBatchReason] = useState("");
   const [batchBusy, setBatchBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadStatus = useCallback(async (status: RegistrationStatus) => {
     try {
-      const data = await api.listOhvisRecipeRegistrations("pending");
+      const data = await api.listOhvisRecipeRegistrations(status);
       const list = Array.isArray(data?.registrations) ? data.registrations : [];
-      setItems(list);
-      setSelected((prev) => {
-        const alive = new Set(list.map((entry) => entry.id));
-        const next = new Set([...prev].filter((id) => alive.has(id)));
-        return next.size === prev.size ? prev : next;
-      });
-      setLoadError(null);
+      setLists((prev) => ({ ...prev, [status]: list }));
+      if (status === "pending") {
+        setSelected((prev) => {
+          const alive = new Set(list.map((entry) => entry.id));
+          const next = new Set([...prev].filter((id) => alive.has(id)));
+          return next.size === prev.size ? prev : next;
+        });
+      }
+      setLoadErrors((prev) => ({ ...prev, [status]: null }));
     } catch (reason) {
-      setLoadError(explainDecisionError(reason).message);
+      setLoadErrors((prev) => ({ ...prev, [status]: explainDecisionError(reason).message }));
     }
   }, []);
 
+  const load = useCallback(() => loadStatus(tab), [loadStatus, tab]);
+
+  // 결정 직후에는 세 탭의 건수가 모두 바뀐다.
+  const loadAll = useCallback(
+    () => Promise.all(STATUS_TABS.map((entry) => loadStatus(entry.key))).then(() => undefined),
+    [loadStatus],
+  );
+
   useEffect(() => {
-    void load();
+    void loadAll();
+  }, [loadAll]);
+
+  useEffect(() => {
     const id = setInterval(() => void load(), POLL_MS);
     return () => clearInterval(id);
   }, [load]);
+
+  const switchTab = (next: RegistrationStatus) => {
+    if (next === tab) return;
+    setTab(next);
+    setExpanded(null);
+    setRejecting(null);
+    setRejectReason("");
+    void loadStatus(next);
+  };
 
   const setItemError = (id: string, text: string | null) =>
     setItemErrors((prev) => {
@@ -283,7 +386,7 @@ export default function RecipeApprovalPanel() {
       setRejecting(null);
       setRejectReason("");
       if (expanded === item.id) setExpanded(null);
-      await load();
+      await loadAll();
     } catch (failureReason) {
       const failure = explainDecisionError(failureReason);
       setItemError(item.id, failure.message);
@@ -293,7 +396,7 @@ export default function RecipeApprovalPanel() {
       } else {
         setConfirming(null);
       }
-      if (failure.stale) await load();
+      if (failure.stale) await loadAll();
     } finally {
       setBusyId(null);
     }
@@ -347,16 +450,19 @@ export default function RecipeApprovalPanel() {
     });
     if (failures.length === 0) setBatchReason("");
     setBatchBusy(false);
-    await load();
+    await loadAll();
   };
 
   const now = Date.now();
+  const items = lists.pending;
   const count = items?.length ?? 0;
+  const current = lists[tab];
+  const loadError = loadErrors[tab];
   const staleIds = (items ?? []).filter((entry) => isStale(entry.requested_at, now)).map((entry) => entry.id);
   const highSteps = (confirming?.step_summaries ?? []).filter((step) => isHighRisk(step.risk));
 
   return (
-    <section id="recipe-approvals" aria-label="승인 대기 레시피" style={{ scrollMarginTop: 8 }}>
+    <section id="recipe-approvals" aria-label="레시피 승인" style={{ scrollMarginTop: 8 }}>
       <div
         style={{
           padding: "9px 14px",
@@ -371,10 +477,7 @@ export default function RecipeApprovalPanel() {
           gap: 8,
         }}
       >
-        <span>
-          승인 대기 레시피{" "}
-          <span style={{ color: count > 0 ? "#fbbf24" : C.dim }}>{items === null ? "" : `${count}건`}</span>
-        </span>
+        <span>레시피 승인</span>
         <button
           type="button"
           onClick={() => void load()}
@@ -382,6 +485,39 @@ export default function RecipeApprovalPanel() {
         >
           새로고침
         </button>
+      </div>
+
+      <div role="tablist" aria-label="레시피 승인 상태" style={{ display: "flex", gap: 4, padding: "8px 10px 0", flexWrap: "wrap" }}>
+        {STATUS_TABS.map((entry) => {
+          const active = tab === entry.key;
+          const list = lists[entry.key];
+          return (
+            <button
+              key={entry.key}
+              type="button"
+              role="tab"
+              id={`recipe-tab-${entry.key}`}
+              aria-selected={active}
+              onClick={() => switchTab(entry.key)}
+              style={{
+                flex: "1 1 0",
+                minHeight: 36,
+                padding: "0 8px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                cursor: "pointer",
+                background: active ? C.accent : C.card,
+                color: active ? "#fff" : C.muted,
+                border: `1px solid ${active ? C.accent : C.borderSoft}`,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {entry.label}
+              {list === null ? "" : ` (${list.length})`}
+            </button>
+          );
+        })}
       </div>
 
       {notice && (
@@ -405,16 +541,27 @@ export default function RecipeApprovalPanel() {
           목록을 불러오지 못했습니다. {loadError}
         </div>
       )}
-      {items === null && !loadError && (
+      {current === null && !loadError && (
         <div style={{ margin: "8px 10px", fontSize: 11, color: C.dim }}>불러오는 중…</div>
       )}
-      {items !== null && items.length === 0 && !loadError && (
+      {current !== null && current.length === 0 && !loadError && (
         <div style={{ margin: "8px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 11px" }}>
-          <p style={{ fontSize: 11, color: C.dim, lineHeight: 1.5 }}>승인을 기다리는 레시피가 없습니다.</p>
+          <p style={{ fontSize: 11, color: C.dim, lineHeight: 1.5 }}>{EMPTY_TEXT[tab]}</p>
         </div>
       )}
 
-      {count > 0 && (
+      {tab !== "pending" &&
+        (current ?? []).map((item) => (
+          <DecidedCard
+            key={item.id}
+            item={item}
+            status={tab}
+            expanded={expanded === item.id}
+            onToggle={() => setExpanded(expanded === item.id ? null : item.id)}
+          />
+        ))}
+
+      {tab === "pending" && count > 0 && (
         <div style={{ margin: "8px 10px 0", background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: C.muted }}>
             <span>선택 {selected.size}건</span>
@@ -470,7 +617,7 @@ export default function RecipeApprovalPanel() {
         </div>
       )}
 
-      {(items ?? []).map((item) => {
+      {tab === "pending" && (items ?? []).map((item) => {
         const isOpen = expanded === item.id;
         const steps = item.step_summaries ?? [];
         const image = safeImageSrc(item.screen_evidence_url);
