@@ -25,3 +25,10 @@ export const BADGE: React.CSSProperties = {
 };
 
 export const MUTED: React.CSSProperties = { color: "var(--text-secondary)" };
+
+export const NOT_WRITTEN = "안내 미작성";
+
+export const NOTICE: React.CSSProperties = {
+  margin: 0, padding: "8px 10px", borderRadius: 8, fontSize: 13, lineHeight: 1.5, overflowWrap: "anywhere",
+  border: "1px solid var(--warning)", color: "var(--text-primary)", background: "var(--bg-primary)",
+};

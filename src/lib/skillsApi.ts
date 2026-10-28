@@ -12,6 +12,25 @@ export interface SkillSharingFields {
   owner_label?: string | null;
 }
 
+// 한글 사용 안내(guide)와 실행 가능 여부. 이전 API 호환을 위해 모두 옵셔널.
+export interface SkillGuideApi {
+  title_ko?: string;
+  summary_ko?: string;
+  what_it_does?: string[];
+  use_when?: string[];
+  inputs?: Array<{ name?: string; description?: string; example?: unknown; required?: boolean }>;
+  outputs?: string;
+  approval_ko?: string;
+  related_tools?: string[];
+}
+
+export interface SkillGuideFields {
+  guide?: SkillGuideApi | null;
+  executor?: string | null;
+  executable?: boolean;
+  not_executable_reason_ko?: string | null;
+}
+
 export type SkillCallResult<T> = { ok: true; data: T } | ({ ok: false } & SkillApiFailure);
 
 function failureFrom(status: number, body: unknown): SkillApiFailure {

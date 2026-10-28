@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  activeVersionView, buildExecuteBody, buildPromoteBody, buildRollbackBody, describeRunResult, EMPTY_PROMOTE_FORM,
+  activeVersionView, buildExecuteBody, displayTitle, buildPromoteBody, buildRollbackBody, describeRunResult, EMPTY_PROMOTE_FORM,
   formatLatency, promoteTarget, riskLabel, runStatusColor, runStatusLabel, skillErrorMessage, versionStatusLabel,
   type PromoteForm, type RunResultView, type SkillDetail,
 } from "@/lib/skillCatalog";
 import { skillsApi } from "@/lib/skillsApi";
-import { BUTTON_DANGER, BUTTON_PLAIN, BUTTON_PRIMARY, INPUT, MUTED } from "./skillStyles";
+import { GuideInputList } from "./SkillDetail";
+import { BUTTON_DANGER, BUTTON_PLAIN, BUTTON_PRIMARY, INPUT, MUTED, NOTICE } from "./skillStyles";
 
 export type DialogRequest =
   | { kind: "execute" }
@@ -82,6 +83,7 @@ export default function SkillDialog({
     setError("");
     let result;
     if (request.kind === "execute") {
+      if (!skill.executable) return setError(skill.notExecutableReason || "이 스킬은 지금 실행할 수 없습니다.");
       if (!active) return setError("활성 버전이 없어 실행할 수 없습니다.");
       const built = buildExecuteBody(active.version, inputText, active.manifest, newId);
       if (!built.ok) return setError(built.error);
@@ -89,7 +91,7 @@ export default function SkillDialog({
       result = await skillsApi.execute(skill.skillId, built.body);
       setBusy(false);
       if (result.ok) {
-        const run = describeRunResult(result.data);
+        const run = describeRunResult(result.data, undefined, built.body.input);
         setOutcome({ tone: run.status === "succeeded" ? "ok" : "warn", text: `실행 결과: ${runStatusLabel(run.status)}`, run });
       }
     } else if (request.kind === "validate") {
@@ -136,7 +138,7 @@ export default function SkillDialog({
     if (!result) return;
     if (result.ok) onChanged();
     else setError(skillErrorMessage(result));
-  }, [active, busy, done, inputText, onChanged, promoteForm, reason, request, skill.skillId]);
+  }, [active, busy, done, inputText, onChanged, promoteForm, reason, request, skill.skillId, skill.executable, skill.notExecutableReason]);
 
   const required = active?.manifest.inputRequired ?? [];
 
@@ -159,7 +161,7 @@ export default function SkillDialog({
       >
         <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>{TITLE[request.kind]}</h2>
         <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: "var(--text-primary)", overflowWrap: "anywhere" }}>
-          <strong>{skill.title}</strong> ({riskLabel(skill.riskTier)})
+          <strong>{displayTitle(skill)}</strong> ({riskLabel(skill.riskTier)})
           {"version" in request ? ` · 버전 ${request.version} (${versionStatusLabel(skill.versions.find((v) => v.version === request.version)?.status)})` : ""}
         </p>
 
@@ -168,6 +170,12 @@ export default function SkillDialog({
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, ...MUTED }}>
               활성 버전 {active?.version ?? "-"}을(를) 지금 실행합니다. 조회 전용 스킬이지만 실행 기록이 남습니다.
             </p>
+            {skill.guide && skill.guide.inputs.length > 0 && (
+              <div data-testid="skill-execute-guide" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, ...MUTED }}>넣는 값 안내</div>
+                <GuideInputList inputs={skill.guide.inputs} />
+              </div>
+            )}
             <Field label={`입력값 (JSON)${required.length ? ` — 필수: ${required.join(", ")}` : ""}`}>
               <textarea
                 data-testid="skill-execute-input"
@@ -242,7 +250,11 @@ export default function SkillDialog({
                   상태 {runStatusLabel(outcome.run.status)} · 지연 {formatLatency(outcome.run.latencyMs)}
                 </div>
                 {outcome.run.error && <div style={{ color: "var(--danger)" }}>오류: {outcome.run.error}</div>}
-                {outcome.run.outputText && (
+                {outcome.run.noResult ? (
+                  <p data-testid="skill-run-no-result" style={{ ...NOTICE, marginTop: 6 }}>
+                    결과 없음 — 이 스킬은 실제 동작이 연결되지 않았습니다.
+                  </p>
+                ) : outcome.run.outputText && (
                   <pre data-testid="skill-run-output" style={{ margin: "6px 0 0", padding: 10, borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", fontSize: 12, whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>
                     {outcome.run.outputText}
                   </pre>

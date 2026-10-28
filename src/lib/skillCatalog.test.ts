@@ -206,3 +206,18 @@ describe("messages and formatting", () => {
     expect(run.outputText).toContain('"queue": 3');
   });
 });
+
+describe("describeRunResult noResult", () => {
+  const input = { q: "a" };
+  const run = (output: unknown, status = "succeeded") => describeRunResult({ status, output }, undefined, input).noResult;
+
+  it("flags empty output and echoed input, not real output or failures", () => {
+    expect(run(null)).toBe(true);
+    expect(run({})).toBe(true);
+    expect(run({ input })).toBe(true);
+    expect(run({ q: "a" })).toBe(true);
+    expect(run({ queue: 3 })).toBe(false);
+    expect(run({ input: { q: "b" } })).toBe(false);
+    expect(run({}, "failed")).toBe(false);
+  });
+});

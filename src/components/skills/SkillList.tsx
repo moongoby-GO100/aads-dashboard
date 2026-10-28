@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  hasActiveFilter, latestRunText, SHARED_LABEL, RISK_TIERS, riskColor, riskLabel, runStatusColor,
+  displayTitle, hasActiveFilter, latestRunText, SHARED_LABEL, RISK_TIERS, riskColor, riskLabel, runStatusColor,
   type EnabledFilter, type SkillFilters, type SkillSummary, type SourceFilter,
 } from "@/lib/skillCatalog";
 import { BADGE, CARD, INPUT, MUTED } from "./skillStyles";
@@ -42,7 +42,7 @@ export function FilterBar({
   );
 }
 
-export function SkillBadges({ skill }: { skill: Pick<SkillSummary, "riskTier" | "enabled" | "source" | "fileDrift"> & Partial<Pick<SkillSummary, "readOnly" | "ownerLabel">> }) {
+export function SkillBadges({ skill }: { skill: Pick<SkillSummary, "riskTier" | "enabled" | "source" | "fileDrift"> & Partial<Pick<SkillSummary, "readOnly" | "ownerLabel" | "executable">> }) {
   const color = riskColor(skill.riskTier);
   return (
     <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
@@ -52,6 +52,9 @@ export function SkillBadges({ skill }: { skill: Pick<SkillSummary, "riskTier" | 
         </span>
       )}
       <span data-testid="skill-risk-badge" style={{ ...BADGE, color, border: `1px solid ${color}` }}>{riskLabel(skill.riskTier)}</span>
+      {skill.executable === false && (
+        <span data-testid="skill-not-executable-badge" style={{ ...BADGE, color: "var(--danger)", border: "1px solid var(--danger)" }}>실행 불가</span>
+      )}
       {!skill.enabled && <span style={{ ...BADGE, ...MUTED, border: "1px solid var(--border)" }}>사용 안 함</span>}
       <span style={{ ...BADGE, ...MUTED, border: "1px solid var(--border)" }}>{skill.source === "file" ? "파일" : "DB"}</span>
       {skill.fileDrift && (
@@ -79,11 +82,15 @@ export function SkillListItem({
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ flex: "1 1 160px", minWidth: 0, fontSize: 15, fontWeight: 700, color: "var(--text-primary)", overflowWrap: "anywhere" }}>
-            {skill.title}
+            {displayTitle(skill)}
           </span>
           <SkillBadges skill={skill} />
         </div>
-        {skill.description && (
+        {skill.guide?.summaryKo ? (
+          <p data-testid="skill-list-summary" style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, ...MUTED, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {skill.guide.summaryKo}
+          </p>
+        ) : skill.description && (
           <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, ...MUTED, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
             {skill.description}
           </p>

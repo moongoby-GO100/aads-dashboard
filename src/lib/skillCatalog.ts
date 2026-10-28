@@ -71,6 +71,25 @@ export interface SkillLatestRun {
   startedAt: string | null;
 }
 
+export interface SkillGuideInput {
+  name: string;
+  description: string;
+  example: string | null;
+  required: boolean;
+}
+
+/** 서버가 내려주는 한글 사용 안내. 이전 API 응답에는 없다. */
+export interface SkillGuide {
+  titleKo: string;
+  summaryKo: string;
+  whatItDoes: string[];
+  useWhen: string[];
+  inputs: SkillGuideInput[];
+  outputs: string;
+  approvalKo: string;
+  relatedTools: string[];
+}
+
 export interface SkillSummary {
   skillId: string;
   slug: string;
@@ -88,6 +107,10 @@ export interface SkillSummary {
   scope: SkillScope;
   readOnly: boolean;
   ownerLabel: string | null;
+  guide: SkillGuide | null;
+  executor: string | null;
+  executable: boolean;
+  notExecutableReason: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -134,6 +157,57 @@ function parseSharing(raw: Obj): Pick<SkillSummary, "scope" | "readOnly" | "owne
   };
 }
 
+function exampleText(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseGuideInputs(value: unknown): SkillGuideInput[] {
+  if (!Array.isArray(value)) return [];
+  const items: SkillGuideInput[] = [];
+  for (const raw of value) {
+    if (!isObj(raw)) continue;
+    const name = str(raw.name);
+    if (!name) continue;
+    items.push({ name, description: str(raw.description), example: exampleText(raw.example), required: raw.required === true });
+  }
+  return items;
+}
+
+export function parseGuide(value: unknown): SkillGuide | null {
+  if (!isObj(value)) return null;
+  return {
+    titleKo: str(value.title_ko),
+    summaryKo: str(value.summary_ko),
+    whatItDoes: strList(value.what_it_does),
+    useWhen: strList(value.use_when),
+    inputs: parseGuideInputs(value.inputs),
+    outputs: str(value.outputs),
+    approvalKo: str(value.approval_ko),
+    relatedTools: strList(value.related_tools),
+  };
+}
+
+/** 안내·실행 가능 여부. 이전 API 응답에는 없으므로 없으면 안내 없음·실행 가능으로 본다. */
+function parseGuideFields(raw: Obj): Pick<SkillSummary, "guide" | "executor" | "executable" | "notExecutableReason"> {
+  return {
+    guide: parseGuide(raw.guide),
+    executor: strOrNull(raw.executor),
+    executable: raw.executable !== false,
+    notExecutableReason: strOrNull(raw.not_executable_reason_ko),
+  };
+}
+
+/** 화면에 보일 이름: 한글 안내 제목이 있으면 그것, 없으면 기존 title. */
+export function displayTitle(skill: Pick<SkillSummary, "title" | "guide">): string {
+  return skill.guide?.titleKo || skill.title;
+}
+
 /** 서버 목록은 버전 1건당 1행이다. 스킬(skill_id) 단위로 묶는다. 형식이 틀리면 null. */
 export function parseSkillList(data: unknown): SkillSummary[] | null {
   if (!isObj(data) || !Array.isArray(data.items)) return null;
@@ -158,9 +232,10 @@ export function parseSkillList(data: unknown): SkillSummary[] | null {
       source: raw.source === "file" ? "file" : "db",
       fileDrift: raw.file_drift === true,
       ...parseSharing(raw),
+      ...parseGuideFields(raw),
     });
   }
-  return [...bySkill.values()].sort((a, b) => a.title.localeCompare(b.title, "ko"));
+  return [...bySkill.values()].sort((a, b) => displayTitle(a).localeCompare(displayTitle(b), "ko"));
 }
 
 export type EnabledFilter = "all" | "on" | "off";
@@ -191,7 +266,7 @@ export function filterSkills(skills: SkillSummary[], filters: SkillFilters): Ski
     if (filters.enabled === "off" && skill.enabled) return false;
     if (filters.source !== "all" && skill.source !== filters.source) return false;
     if (query) {
-      const haystack = `${skill.title} ${skill.slug} ${skill.description}`.toLowerCase();
+      const haystack = `${displayTitle(skill)} ${skill.title} ${skill.slug} ${skill.description} ${skill.guide?.summaryKo ?? ""}`.toLowerCase();
       if (!haystack.includes(query)) return false;
     }
     return true;
@@ -303,6 +378,7 @@ export function parseSkillDetail(data: unknown): SkillDetail | null {
     source: data.source === "file" ? "file" : "db",
     fileDrift: data.file_drift === true,
     ...parseSharing(data),
+    ...parseGuideFields(data),
     filePath: strOrNull(data.file_path),
     allowedTools: strList(data.allowed_tools),
     versions,
@@ -581,10 +657,32 @@ export interface RunResultView {
   error: string | null;
   outputText: string;
   latencyMs: number | null;
+  noResult: boolean;
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/** 출력이 비었거나, 보낸 입력을 그대로 돌려준(에코) 경우 실제 동작이 없었다고 본다. */
+export function isNoResultOutput(output: unknown, input?: Record<string, unknown>): boolean {
+  if (output === undefined || output === null) return true;
+  if (typeof output === "string") return output.trim() === "";
+  if (Array.isArray(output)) return output.length === 0;
+  if (!isObj(output)) return false;
+  const keys = Object.keys(output);
+  if (keys.length === 0) return true;
+  if (input === undefined) return false;
+  if (sameJson(output, input)) return true;
+  return keys.length === 1 && keys[0] === "input" && sameJson(output.input, input);
 }
 
 /** 실행 API 응답(ops_skill_runs 한 행)을 화면용으로 줄인다. */
-export function describeRunResult(data: unknown, limit = 1500): RunResultView {
+export function describeRunResult(data: unknown, limit = 1500, input?: Record<string, unknown>): RunResultView {
   const run = isObj(data) ? data : {};
   let outputText = "";
   if (run.output !== undefined && run.output !== null) {
@@ -600,5 +698,6 @@ export function describeRunResult(data: unknown, limit = 1500): RunResultView {
     error: strOrNull(run.error),
     outputText,
     latencyMs: numOrNull(run.latency_ms),
+    noResult: str(run.status) === "succeeded" && isNoResultOutput(run.output, input),
   };
 }
