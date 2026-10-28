@@ -7,6 +7,7 @@ import {
   LOADING_SECTION, IDLE_SECTION, createLatestController, createLazyLoader, loadSectionsParallel,
   type LazyState, type ParallelSection, type SectionState,
 } from "@/lib/goalPanelLoad";
+import { itemActivityText, itemProgressText, itemTaskCounts, ownerDisplay, percentOf, workStatusLabel } from "@/lib/goalWorkStatus";
 
 export type PreviewState = LazyState<WorkItemApprovalPreview>;
 export interface PreviewLoader {
@@ -34,6 +35,8 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
   };
 }) {
   const color = STATUS_COLOR[item.status] || "#64748b";
+  const taskCounts = item.type !== "task" ? itemTaskCounts(item) : null;
+  const owner = tree ? ownerDisplay(item.effective_owner, tree.assigneeLabel) : null;
   const evidence = item.evidence;
   const previewState = previews.states[item.id];
   const approval = previewState?.status === "ok" ? previewState.data.approval : undefined;
@@ -69,19 +72,19 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
             <span aria-hidden style={{ width: 12, color: "var(--text-secondary)", fontSize: 10 }}>{tree.expanded ? "▼" : "▶"}</span>
             <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase" }}>{TYPE_LABEL[item.type]}</span>
             <strong style={{ flex: 1, minWidth: 120, color: "var(--text-primary)", fontSize: 12.5, overflowWrap: "anywhere" }}>{item.title}</strong>
-            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
+            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{workStatusLabel(item.status)}</span>
           </button>
         ) : (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase" }}>{TYPE_LABEL[item.type]}</span>
             <strong style={{ flex: 1, minWidth: 140, color: "var(--text-primary)", fontSize: 12.5 }}>{item.title}</strong>
-            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{item.status}</span>
+            <span style={{ color, fontSize: 10.5, fontWeight: 800 }}>{workStatusLabel(item.status)}</span>
           </div>
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5 }}>
           {!tree && item.milestone_title && <span>마일스톤 {item.milestone_sequence ?? "—"} · {item.milestone_title}</span>}
           {tree && <span>우선순위 {item.priority || "—"}</span>}
-          {tree && <span>담당 {tree.assigneeLabel || "미지정"}</span>}
+          {owner && <span style={owner.warn ? { color: "#d97706", fontWeight: 800 } : undefined}>{owner.text}</span>}
           <span>진행 {Number(item.progress || 0).toFixed(0)}%</span>
           <span>버전 {item.version}</span>
           {tree && tree.childCount > 0 && <span>하위 {tree.childCount}</span>}
@@ -90,6 +93,13 @@ export function ItemBody({ item, previews, actorSessionId, onChanged, depth = 0,
           {(item.dependencies?.length || 0) > 0 && <span>의존 {item.dependencies?.length}</span>}
           {item.status === "blocked" && <span style={{ color: "#dc2626", fontWeight: 800 }}>차단됨</span>}
         </div>
+        {taskCounts && <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5 }}>
+          <span>{itemProgressText(taskCounts)}</span>
+          {taskCounts.total > 0 && <span aria-hidden style={{ width: 64, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", width: `${percentOf(taskCounts.completed, taskCounts.total)}%`, background: STATUS_COLOR.completed }} />
+          </span>}
+          <span style={taskCounts.blocked > 0 ? { color: "#dc2626", fontWeight: 800 } : undefined}>{itemActivityText(taskCounts)}</span>
+        </div>}
         {tree?.warning && <div role="alert" style={{ marginTop: 7, color: "#d97706", fontSize: 11 }}>⚠ {tree.warning}</div>}
         {item.last_error && <div role="alert" style={{ marginTop: 7, color: "#dc2626", fontSize: 11 }}>마지막 오류 · {item.last_error}</div>}
         {tree?.expanded && tree.dependencyLabels?.length ? <div style={{ marginTop: 6, color: "var(--text-secondary)", fontSize: 10.5, overflowWrap: "anywhere" }}>

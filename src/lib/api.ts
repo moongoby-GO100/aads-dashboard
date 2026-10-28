@@ -177,6 +177,27 @@ export interface GoalDetail extends GoalSummary {
   milestones_completed: number;
   milestones: GoalMilestone[];
 }
+export interface GoalWorkTaskCounts {
+  total: number; completed: number; in_progress: number; blocked: number;
+  draft?: number; ready?: number; in_review?: number; cancelled?: number;
+}
+export interface GoalWorkOwner {
+  source: "assigned" | "milestone_owner" | "goal_lead" | "none";
+  session_id?: string | null;
+  session_title?: string | null;
+  role_key?: string | null;
+}
+export interface GoalWorkSummary {
+  epic: GoalWorkTaskCounts; story: GoalWorkTaskCounts; task: GoalWorkTaskCounts;
+}
+export interface GoalWorkMilestoneSummary {
+  milestone_id: string;
+  title?: string;
+  sequence_order?: number;
+  status?: string;
+  owner?: GoalWorkOwner | null;
+  work_summary?: GoalWorkSummary | null;
+}
 export interface GoalWorkItem {
   id: string;
   goal_id: string;
@@ -217,6 +238,9 @@ export interface GoalWorkItem {
     can_retry: boolean;
   } | null;
   dependencies?: Array<{ work_item_id: string; type: string }>;
+  effective_owner?: GoalWorkOwner | null;
+  child_status_counts?: Record<string, number>;
+  task_counts?: GoalWorkTaskCounts;
   children: GoalWorkItem[];
 }
 export interface GoalWorkTree {
@@ -226,6 +250,7 @@ export interface GoalWorkTree {
   last_error?: string | null;
   pending_approval_count: number;
   items: GoalWorkItem[];
+  milestones?: GoalWorkMilestoneSummary[];
 }
 export interface GoalGovernance {
   goal_id: string;

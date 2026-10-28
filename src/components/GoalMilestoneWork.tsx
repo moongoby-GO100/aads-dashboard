@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import type { GoalGovernance, GoalWorkItem } from "@/lib/api";
+import type { GoalGovernance, GoalWorkItem, GoalWorkSummary } from "@/lib/api";
+import { milestoneWorkLabel } from "@/lib/goalWorkStatus";
 import {
-  averageRootProgress, countMismatches, countPendingApprovals, expansionKey, loadExpansionState,
+  countMismatches, countPendingApprovals, expansionKey, loadExpansionState,
   saveExpansionState, type GroupedWorkNode,
 } from "@/lib/goalMilestoneGrouping";
 import { ItemBody, type PreviewLoader } from "@/components/GoalWorkHierarchy";
@@ -122,7 +123,6 @@ export function UnassignedWork({ roots, count, ctx }: {
   );
 }
 
-export function milestoneProgressLabel(roots: GroupedWorkNode[]): string {
-  const percent = averageRootProgress(roots);
-  return percent === null ? "업무 없음" : `업무 진행 ${percent}%`;
+export function milestoneProgressLabel(roots: GroupedWorkNode[], summary?: GoalWorkSummary | null): string {
+  return milestoneWorkLabel(summary, roots.map((node) => node.item));
 }

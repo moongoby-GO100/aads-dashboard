@@ -418,7 +418,7 @@ export function GoalPanel({ goalId, summary, onClose, onOpenSession, sessionProj
 
                 <div style={{ marginTop: 5, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 10.5, color: "var(--text-secondary)" }}>
                   <span>상태 {m.status}</span>
-                  {workLoaded && <span>{milestoneProgressLabel(grouping.byMilestone[m.id]?.roots ?? [])}</span>}
+                  {workLoaded && <span>{milestoneProgressLabel(grouping.byMilestone[m.id]?.roots ?? [], work.tree?.milestones?.find((x) => x.milestone_id === m.id)?.work_summary)}</span>}
                   {(board?.owners ?? []).filter((o) => o.milestone && (o.milestone === m.id || o.milestone === m.title)).map((o) => (
                     <span key={o.session_id}>담당 세션 {o.title}</span>
                   ))}
