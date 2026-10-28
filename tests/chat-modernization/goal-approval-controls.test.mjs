@@ -81,21 +81,28 @@ test('session/goal switch ignores old save and old load responses; reload reads 
  assert.equal(f.render('b').policy.auto_approve_high,true);
 });
 
-function decisionFixture(status) {
+function decisionFixture(status, detail) {
  const src=fs.readFileSync('src/app/chat/page.tsx','utf8');
  let finish;
- const pending=new Promise((resolve,reject)=>{finish=()=>status?reject(new Error(`${status} fixture`)):resolve({});});
- const f={activeSessionRef:{current:'a'},approvalSessionRef:{current:'a'},approvalViewRef:{current:{sid:'a',epoch:0}},approvalRequestRef:{current:0},approvals:[{id:'card'}],approvalInFlightRef:{current:new Set()},alerts:[],calls:0,ticks:0,busy:null};
+ const pending=new Promise((resolve,reject)=>{finish=()=>status?reject(Object.assign(new Error(`${status}: ${detail??'fixture'}`),{status})):resolve({});});
+ const f={activeSessionRef:{current:'a'},approvalSessionRef:{current:'a'},approvalViewRef:{current:{sid:'a',epoch:0}},approvalRequestRef:{current:0},approvals:[{id:'card',tool:'t',summary:'s',risk:'high'}],approvalInFlightRef:{current:new Set()},alerts:[],cardErrors:{},queue:[],refreshes:0,paths:[],calls:0,ticks:0,busy:null};
  const token={};
- const context={...f, approvalsRef:{get current(){return f.approvals;}}, committedApprovalToken:{current:token}, approvalViewToken:token, APPROVAL_GRANTS:{single:{hours:2,max:1}}, useCallback:fn=>fn,
+ const lib={exports:{}};
+ const context={...f, exports:lib.exports, approvalsRef:{get current(){return f.approvals;}}, committedApprovalToken:{current:token}, approvalViewToken:token, APPROVAL_GRANTS:{single:{hours:2,max:1}}, useCallback:fn=>fn,
    setApprovalError:t=>f.alerts.push(t),
+   setApprovalNotice:t=>{if(t)f.alerts.push(t);},
+   setApprovalCardError:(id,m)=>{if(m){f.cardErrors[id]=m;f.alerts.push(m);}else delete f.cardErrors[id];},
+   setHighRiskQueue:fn=>{f.queue=fn(f.queue);},
+   refreshApprovals:async()=>{f.refreshes++;},
    setApprovalBusy:v=>{f.busy=typeof v==='function'?v(f.busy):v;},
-   chatApi:()=>{f.calls++;return pending;},
+   chatApi:(path)=>{f.calls++;f.paths.push(path);return pending;},
    setApprovals:fn=>{f.approvals=fn(f.approvals);},setApprovalDecisionTick:()=>f.ticks++,window:{alert:t=>f.alerts.push(t)},
  };
  vm.createContext(context);
- vm.runInContext(ts.transpileModule(declarations(src,['decideApproval'])+'\nglobalThis.decide=decideApproval;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
- return {...f,state:f,decide:context.decide,finish};
+ vm.runInContext(ts.transpileModule(fs.readFileSync('src/lib/approvalDecision.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context);
+ Object.assign(context,{enqueueHighRisk:lib.exports.enqueueHighRisk,runApprovalDecision:lib.exports.runApprovalDecision});
+ vm.runInContext(ts.transpileModule(declarations(src,['decideApprovalCore','decideApproval'])+'\nglobalThis.decide=decideApproval;globalThis.core=decideApprovalCore;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+ return {...f,state:f,decide:context.decide,core:context.core,finish};
 }
 for (const status of [401,403,404,409,410]) test(`HTTP ${status}: visible error, card retained, busy released, retry allowed`,async()=>{
  const f=decisionFixture(status);const p=f.decide('card','approved');
@@ -167,7 +174,7 @@ for(const status of [401,403,404,409,410]) test(`policy HTTP ${status} preserves
 });
 test('bulk removes only successes; failed and unprocessed items remain selected',async()=>{
  const src=fs.readFileSync('src/app/chat/page.tsx','utf8');
- const f={selected:new Set(['ok','failed','later']),calls:[],busy:false};const ctx={bulkApprovalInFlightRef:{current:null},useCallback:fn=>fn,activeSessionRef:{current:'a'},approvalViewRef:{current:{sid:'a',epoch:0}},decideApproval:async id=>{f.calls.push(id);return id==='ok';},setBulkApprovalBusy:v=>f.busy=v,setSelectedApprovalIds:fn=>f.selected=fn(f.selected)};
+ const f={selected:new Set(['ok','failed','later']),calls:[],busy:false};const ctx={bulkApprovalInFlightRef:{current:null},useCallback:fn=>fn,activeSessionRef:{current:'a'},approvalViewRef:{current:{sid:'a',epoch:0}},decideApprovalCore:async id=>{f.calls.push(id);return id==='ok'?'ok':'failed';},setBulkApprovalBusy:v=>f.busy=v,setSelectedApprovalIds:fn=>f.selected=fn(f.selected)};
  vm.createContext(ctx);vm.runInContext(ts.transpileModule(declarations(src,['decideApprovalBulk'])+'\nglobalThis.bulk=decideApprovalBulk;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,ctx);
  await Promise.all([ctx.bulk(['ok','failed','later'],'approved'),ctx.bulk(['ok','failed','later'],'approved')]);assert.deepEqual(f.calls,['ok','failed']);assert.deepEqual([...f.selected],['failed','later']);assert.equal(f.busy,false);
 });

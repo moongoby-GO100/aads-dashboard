@@ -1275,14 +1275,15 @@ export const api = {
     id: string,
     decision: "approved" | "rejected",
     reason = "",
-    opts: { scope?: "single" | "mission"; hours?: number; maxExecutions?: number } = {},
+    opts: { scope?: "single" | "mission"; hours?: number; maxExecutions?: number; confirmHighRisk?: boolean } = {},
   ) =>
     request<any>(
       `/approvals/${encodeURIComponent(id)}/decide?decision=${decision}` +
       `&scope=${opts.scope || "single"}` +
       `&hours=${opts.hours ?? 12}` +
       `&max_executions=${opts.maxExecutions ?? (opts.scope === "mission" ? 20 : 1)}` +
-      (reason ? `&reason=${encodeURIComponent(reason)}` : ""),
+      (reason ? `&reason=${encodeURIComponent(reason)}` : "") +
+      (opts.confirmHighRisk === true && decision === "approved" ? "&confirm_high_risk=true" : ""),
       { method: "POST" },
     ),
   // 막지 않고 알린 것들 — 이미 실행된 일이다. 승인이 아니라 읽음 표시를 한다.

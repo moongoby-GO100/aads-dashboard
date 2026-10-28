@@ -26,6 +26,8 @@ import MemoryContextBar from "@/components/chat/MemoryContextBar";
 import SessionSummaryCard from "@/components/chat/SessionSummaryCard";
 import ConfidenceBadge from "@/components/chat/ConfidenceBadge";
 import VaultCredentialCard, { type VaultCredentialCardData } from "@/components/chat/VaultCredentialCard";
+import { ApprovalCardError, HighRiskConfirmDialog } from "@/components/chat/ApprovalHighRisk";
+import { enqueueHighRisk, pruneHighRisk, runApprovalDecision, type HighRiskRequest } from "@/lib/approvalDecision";
 import AutomationDraftCard from "@/components/chat/AutomationDraftCard";
 import { useAutomationDraftCards } from "@/features/chat/automation/useAutomationDraftCards";
 import { parseRunConfirmationText, type RunConfirmation } from "@/lib/automationRunConfirm";
@@ -2926,6 +2928,10 @@ interface MessageItemProps {
     gate_source?: string; source_message_id?: string | null;
   }>;
   approvalBusyId?: string | null;
+  /** 카드별 실패 안내 — 해당 카드 안쪽에 role=alert 로 그린다 */
+  approvalErrors?: Record<string, string>;
+  onDismissApprovalError?: (id: string) => void;
+  onRefreshApprovals?: () => void;
   onDecideApproval?: (id: string, decision: "approved" | "rejected", scope?: ApprovalScope) => void;
   onOpenApproval?: (id: string) => void;
   /** Vault 보안 입력 카드 — 승인 버튼 대신 아이디·비밀번호 폼으로 그린다 */
@@ -2947,7 +2953,7 @@ const MessageItem = memo(function MessageItem({
   screenSize, mobileFontPx,
   appliedInterrupts, interruptUnresolved = false, onJumpToMessage, onResendInterrupt,
   onApplyPendingInterrupt, onCancelPendingInterrupt, onRetractMessage,
-  bubbleApprovals, approvalBusyId, onDecideApproval, onOpenApproval, onExtraInstruction,
+  bubbleApprovals, approvalBusyId, approvalErrors, onDismissApprovalError, onRefreshApprovals, onDecideApproval, onOpenApproval, onExtraInstruction,
   bubbleVaultCards, onDismissVaultCard,
 }: MessageItemProps) {
   const [extraOpen, setExtraOpen] = useState(false);
@@ -4030,6 +4036,11 @@ const MessageItem = memo(function MessageItem({
                     >거절</button>
                   </div>
                 )}
+                <ApprovalCardError
+                  message={approvalErrors?.[a.id]}
+                  onRefresh={onRefreshApprovals}
+                  onDismiss={() => onDismissApprovalError?.(a.id)}
+                />
               </div>
             ))}
             {extraOpen && (
@@ -4674,6 +4685,15 @@ export default function ChatPage() {
   const approvalInFlightRef = useRef(new Set<string>());
   const approvalSessionRef = useRef<string | null>(null);
   const [approvalError, setApprovalError] = useState("");
+  // 결정 실패는 해당 카드 안에 붙인다. 카드가 사라진 뒤에도 남겨야 하는 안내
+  // (만료·이미 처리됨)는 approvalNotice 로 화면 고정 영역에 둔다.
+  const [approvalCardErrors, setApprovalCardErrors] = useState<Record<string, string>>({});
+  const [approvalNotice, setApprovalNotice] = useState("");
+  const [highRiskQueue, setHighRiskQueue] = useState<HighRiskRequest[]>([]);
+  const [highRiskBusy, setHighRiskBusy] = useState(false);
+  const highRiskQueueRef = useRef<HighRiskRequest[]>([]);
+  const highRiskSubmittingRef = useRef(false);
+  useLayoutEffect(() => { highRiskQueueRef.current = highRiskQueue; }, [highRiskQueue]);
   const approvalViewRef = useRef({ sid: activeSession?.id || null, epoch: 0 });
   const approvalViewToken = useMemo(() => ({ sid: activeSession?.id || null }), [activeSession?.id]);
   const committedApprovalToken = useRef(approvalViewToken);
@@ -4870,50 +4890,118 @@ export default function ChatPage() {
   // 2026-09-15. 그전에는 승인이 무조건 1회·2시간이었다. 같은 작업을 이어서
   // 하려면 대표님이 매번 다시 누르셔야 했고, 그 피로가 곧 승인 지연이었다.
   // 미션 승인도 무제한은 아니다 — 횟수 상한과 시간 상한을 둘 다 건다.
-  const decideApproval = useCallback(async (
+  const setApprovalCardError = useCallback((id: string, message: string) => {
+    setApprovalCardErrors((prev) => {
+      if (!message) {
+        if (!(id in prev)) return prev;
+        const next = { ...prev }; delete next[id]; return next;
+      }
+      return prev[id] === message ? prev : { ...prev, [id]: message };
+    });
+  }, []);
+  const dismissApprovalCardError = useCallback((id: string) => setApprovalCardError(id, ""), [setApprovalCardError]);
+  const refreshActiveApprovals = useCallback(() => {
+    const sid = approvalViewRef.current.sid;
+    if (sid) void refreshApprovals(sid);
+  }, [refreshApprovals]);
+
+  // 외부 쓰기 포함(WRITE_EXTERNAL 이상) 레시피 승인은 서버가 409
+  // high_risk_confirmation_required 로 한 번 되돌린다. 이 경우에만 재확인
+  // 대화상자를 열고, 사용자가 확인한 그 카드 한 건에만 confirm_high_risk=true 를 보낸다.
+  const decideApprovalCore = useCallback(async (
     id: string,
     decision: "approved" | "rejected",
     scope: ApprovalScope = "single",
-  ) => {
+    confirmHighRisk = false,
+  ): Promise<"ok" | "needs_confirm" | "failed" | "stopped" | "skipped"> => {
     const sid = activeSessionRef.current;
     const epoch = approvalViewRef.current.epoch;
     const flightKey = `${epoch}:${id}`;
-    if (approvalInFlightRef.current.has(flightKey)) return false;
+    if (approvalInFlightRef.current.has(flightKey)) return "skipped";
     if (!sid || committedApprovalToken.current !== approvalViewToken || approvalViewRef.current.sid !== sid || approvalSessionRef.current !== sid || !approvalsRef.current.some(a => a.id === id)) {
-      setApprovalError("대화 또는 승인 목록이 변경되었습니다. 승인 목록을 다시 조회한 뒤 시도하세요.");
-      return false;
+      setApprovalNotice("대화 또는 승인 목록이 변경되었습니다. 승인 목록을 다시 조회한 뒤 시도하세요.");
+      return "stopped";
     }
+    const card = approvalsRef.current.find(a => a.id === id);
     approvalInFlightRef.current.add(flightKey);
     setApprovalBusy(id);
+    setApprovalCardError(id, "");
     try {
       const grant = APPROVAL_GRANTS[scope] ?? APPROVAL_GRANTS.single;
-      const q = decision === "approved"
-        ? `decision=approved&scope=${scope}&hours=${grant.hours}`
-          + (scope === "single" ? "" : `&max_executions=${grant.max}`)
-        : "decision=rejected";
-      await chatApi(`/approvals/${encodeURIComponent(id)}/decide?${q}`, { method: "POST" });
-      if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch) return false;
-      ++approvalRequestRef.current;
-      setApprovalError("");
-      setApprovals((prev) => prev.filter((a) => a.id !== id));
-      // 서버가 결정을 대화에 기록하고 막힌 작업을 이어서 돌린다.
-      // 유휴 세션은 메시지를 폴링하지 않으므로 여기서 직접 당겨온다 —
-      // 그러지 않으면 버튼을 눌러도 화면에 아무 일도 안 일어난 것처럼 보인다.
-      setApprovalDecisionTick((n) => n + 1);
-      return true;
-    } catch (e) {
-      if (approvalViewRef.current.sid === sid && approvalViewRef.current.epoch === epoch) {
-        setApprovalError(`승인 처리 실패: ${e instanceof Error ? e.message : String(e)}\n인증·권한·만료·이미 처리 여부를 확인하세요. 같은 카드에서 다시 시도할 수 있습니다.`);
+      const outcome = await runApprovalDecision(
+        (path) => chatApi(path, { method: "POST" }),
+        { id, decision, grant: { scope, hours: grant.hours, max: grant.max }, confirmHighRisk },
+      );
+      if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch) return "stopped";
+      if (outcome.status === "ok") {
+        ++approvalRequestRef.current;
+        setApprovalError("");
+        setApprovals((prev) => prev.filter((a) => a.id !== id));
+        setHighRiskQueue((prev) => prev.filter((q) => q.id !== id));
+        // 서버가 결정을 대화에 기록하고 막힌 작업을 이어서 돌린다.
+        // 유휴 세션은 메시지를 폴링하지 않으므로 여기서 직접 당겨온다 —
+        // 그러지 않으면 버튼을 눌러도 화면에 아무 일도 안 일어난 것처럼 보인다.
+        setApprovalDecisionTick((n) => n + 1);
+        return "ok";
       }
-      return false;
+      const { failure } = outcome;
+      if (outcome.status === "needs_confirm" && card) {
+        setHighRiskQueue((prev) => enqueueHighRisk(prev, {
+          id, epoch, scope, tool: card.tool, summary: card.summary, risk: card.risk,
+        }));
+        setApprovalCardError(id, failure.message);
+        return "needs_confirm";
+      }
+      if (failure.refresh) {
+        setApprovalCardError(id, "");
+        setApprovalNotice(failure.message);
+        void refreshApprovals(sid);
+      } else {
+        setApprovalCardError(id, failure.message);
+      }
+      return failure.stopBatch ? "stopped" : "failed";
     } finally {
       approvalInFlightRef.current.delete(flightKey);
       if (approvalViewRef.current.epoch === epoch) setApprovalBusy(prev => prev === id ? null : prev);
     }
-  }, [approvalViewToken]);
+  }, [approvalViewToken, refreshApprovals, setApprovalCardError]);
+
+  const decideApproval = useCallback(async (
+    id: string,
+    decision: "approved" | "rejected",
+    scope: ApprovalScope = "single",
+  ) => (await decideApprovalCore(id, decision, scope)) === "ok", [decideApprovalCore]);
+
+  const confirmHighRiskApproval = useCallback(async () => {
+    const req = highRiskQueueRef.current[0];
+    if (!req || highRiskSubmittingRef.current) return;
+    if (req.epoch !== approvalViewRef.current.epoch || !approvalsRef.current.some((a) => a.id === req.id)) {
+      setHighRiskQueue((prev) => prev.filter((q) => q.id !== req.id));
+      setApprovalNotice("확인 요청이 만료되어 닫았습니다. 승인 목록을 다시 조회한 뒤 시도하세요.");
+      return;
+    }
+    highRiskSubmittingRef.current = true;
+    setHighRiskBusy(true);
+    try {
+      await decideApprovalCore(req.id, "approved", req.scope as ApprovalScope, true);
+    } finally {
+      highRiskSubmittingRef.current = false;
+      setHighRiskBusy(false);
+      setHighRiskQueue((prev) => prev.filter((q) => q.id !== req.id));
+    }
+  }, [decideApprovalCore]);
+
+  const cancelHighRiskApproval = useCallback(() => {
+    if (highRiskSubmittingRef.current) return;
+    const req = highRiskQueueRef.current[0];
+    if (!req) return;
+    setHighRiskQueue((prev) => prev.filter((q) => q.id !== req.id));
+    setApprovalCardError(req.id, "");
+  }, [setApprovalCardError]);
 
   // 체크박스로 고른 여러 건을 순서대로 처리한다. 동시 요청이 아니라
   // 순차 처리다 — 같은 세션 상태를 동시에 두 번 건드리지 않기 위함.
+  // 재확인이 필요한 건은 일괄 승인하지 않고 개별 확인 대화상자로 넘긴다.
   const decideApprovalBulk = useCallback(async (
     ids: string[],
     decision: "approved" | "rejected",
@@ -4928,16 +5016,18 @@ export default function ChatPage() {
     try {
       for (const id of ids) {
         if (approvalViewRef.current.sid !== sid || approvalViewRef.current.epoch !== epoch) break;
-        if (!await decideApproval(id, decision, scope)) break;
-        if (approvalViewRef.current.epoch === epoch) setSelectedApprovalIds(prev => {
-          const next = new Set(prev); next.delete(id); return next;
-        });
+        const result = await decideApprovalCore(id, decision, scope);
+        if (result === "ok") {
+          if (approvalViewRef.current.epoch === epoch) setSelectedApprovalIds(prev => {
+            const next = new Set(prev); next.delete(id); return next;
+          });
+        } else if (result !== "needs_confirm") break;
       }
     } finally {
       if (bulkApprovalInFlightRef.current === epoch) bulkApprovalInFlightRef.current = null;
       if (approvalViewRef.current.epoch === epoch) setBulkApprovalBusy(false);
     }
-  }, [decideApproval]);
+  }, [decideApprovalCore]);
 
   // 이미 결정됐거나 만료돼 목록에서 빠진 항목은 선택에서도 지운다.
   useEffect(() => {
@@ -4951,6 +5041,15 @@ export default function ChatPage() {
       });
       return changed ? next : prev;
     });
+    const live = new Set(approvals.map((a) => a.id));
+    setHighRiskQueue((prev) => pruneHighRisk(prev, approvalViewRef.current.epoch, live));
+    setApprovalCardErrors((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.every((k) => live.has(k))) return prev;
+      const next: Record<string, string> = {};
+      for (const k of keys) if (live.has(k)) next[k] = prev[k];
+      return next;
+    });
   }, [approvals]);
 
   useEffect(() => {
@@ -4963,6 +5062,11 @@ export default function ChatPage() {
     setApprovalBusy(null);
     setBulkApprovalBusy(false);
     setApprovalError("");
+    setApprovalNotice("");
+    setApprovalCardErrors({});
+    setHighRiskQueue([]);
+    setHighRiskBusy(false);
+    highRiskSubmittingRef.current = false;
     approvalSessionRef.current = null;
     if (!sid) { setApprovals([]); return; }
     void refreshApprovals(sid);
@@ -11596,9 +11700,44 @@ export default function ChatPage() {
       onTouchStart={onSwipeStart}
       onTouchEnd={onSwipeEnd}
     >
-      {approvalError && <div role="alert" className="shrink-0 border-b border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
-        {approvalError} <button type="button" onClick={() => { const sid = approvalViewRef.current.sid; if (sid) void refreshApprovals(sid); }}>승인 목록 다시 조회</button>
-      </div>}
+      {(approvalError || approvalNotice) && (
+        <div
+          data-approval-banner
+          style={{
+            position: "fixed", zIndex: 10060, left: 12, right: 12, margin: "0 auto", maxWidth: 560,
+            top: "calc(8px + env(safe-area-inset-top, 0px))", maxHeight: "36dvh", overflowY: "auto",
+            display: "flex", flexDirection: "column", gap: 6, pointerEvents: "none",
+          }}
+        >
+          {[approvalNotice, approvalError].filter(Boolean).map((text, i) => (
+            <div
+              key={i}
+              role="alert"
+              style={{
+                pointerEvents: "auto", boxSizing: "border-box", minWidth: 0, padding: "8px 12px", borderRadius: 10,
+                border: "1px solid rgba(239,68,68,.5)", background: "var(--ct-bg)", color: "var(--ct-text)",
+                boxShadow: "0 8px 24px rgba(0,0,0,.3)", fontSize: 12.5, lineHeight: 1.55,
+                whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "break-word",
+              }}
+            >
+              <span>{text}</span>
+              <span style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                <button type="button" onClick={refreshActiveApprovals} style={{ minHeight: 32, padding: "4px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "1px solid var(--ct-border)", background: "transparent", color: "var(--ct-text)", cursor: "pointer" }}>승인 목록 다시 조회</button>
+                <button type="button" onClick={() => { setApprovalNotice(""); setApprovalError(""); }} style={{ minHeight: 32, padding: "4px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, border: "1px solid var(--ct-border)", background: "transparent", color: "var(--ct-text)", cursor: "pointer" }}>닫기</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {highRiskQueue.length > 0 && (
+        <HighRiskConfirmDialog
+          request={highRiskQueue[0]}
+          pendingCount={highRiskQueue.length}
+          busy={highRiskBusy}
+          onConfirm={() => void confirmHighRiskApproval()}
+          onCancel={cancelHighRiskApproval}
+        />
+      )}
       {updateAvailable && <UpdateBanner onRefresh={doRefresh} />}
       {/* ── 라이트박스 ── */}
       {lightboxSrcs.length > 0 && (
@@ -13119,6 +13258,9 @@ export default function ChatPage() {
                     bubbleVaultCards={vaultCardsByMessage.get(msg.id)}
                     onDismissVaultCard={dismissVaultCard}
                     approvalBusyId={approvalBusy}
+                    approvalErrors={approvalCardErrors}
+                    onDismissApprovalError={dismissApprovalCardError}
+                    onRefreshApprovals={refreshActiveApprovals}
                     onDecideApproval={(id, decision, scope) => void decideApproval(id, decision, scope)}
                     onOpenApproval={openApprovalPopup}
                     onExtraInstruction={(text) => { void sendMessage(text); }}
@@ -13400,6 +13542,11 @@ export default function ChatPage() {
                         거절
                       </button>
                     </div>
+                    <ApprovalCardError
+                      message={approvalCardErrors[a.id]}
+                      onRefresh={refreshActiveApprovals}
+                      onDismiss={() => dismissApprovalCardError(a.id)}
+                    />
                   </div>
                 ))}
                 <button
@@ -13575,6 +13722,11 @@ export default function ChatPage() {
                       거절
                     </button>
                   </div>
+                  <ApprovalCardError
+                    message={approvalCardErrors[a.id]}
+                    onRefresh={refreshActiveApprovals}
+                    onDismiss={() => dismissApprovalCardError(a.id)}
+                  />
                 </div>
               ))}
             </div>

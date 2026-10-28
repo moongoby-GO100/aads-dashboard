@@ -21,6 +21,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
+import { ApprovalCardError, HighRiskConfirmDialog } from "@/components/chat/ApprovalHighRisk";
+import { classifyApprovalError, type HighRiskRequest } from "@/lib/approvalDecision";
 
 interface Pending {
   id: string;
@@ -77,6 +79,8 @@ export default function ApprovalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Record<string, string>>({});
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+  const [highRisk, setHighRisk] = useState<(HighRiskRequest & { mission: boolean }) | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -129,25 +133,54 @@ export default function ApprovalsPage() {
     } catch { /* 저장 못 해도 이번 조작은 그대로 먹는다 */ }
   }, []);
 
+  const setCardError = useCallback((id: string, message: string) => {
+    setCardErrors((p) => {
+      if (!message) {
+        if (!(id in p)) return p;
+        const n = { ...p }; delete n[id]; return n;
+      }
+      return { ...p, [id]: message };
+    });
+  }, []);
+
+  // 외부 쓰기 포함 레시피 승인은 서버가 409 high_risk_confirmation_required 로 한 번 되돌린다.
+  // 그 경우에만 재확인 대화상자를 열고, 확인한 그 한 건에만 confirm_high_risk=true 를 보낸다.
   const decide = useCallback(async (
     id: string,
     decision: "approved" | "rejected",
     scope: "single" | "mission" = "single",
+    confirmHighRisk = false,
   ) => {
     setBusy(id);
+    setCardError(id, "");
     try {
       await api.decideApproval(id, decision, "", {
         scope, hours: grantHours,
         maxExecutions: scope === "mission" ? grantCount : 1,
+        confirmHighRisk,
       });
       setDone((p) => ({ ...p, [id]: decision === "rejected" ? "거부" : scope === "mission" ? "미션 승인" : "승인" }));
       setItems((p) => p.filter((x) => x.id !== id));
+      setHighRisk((h) => (h && h.id === id ? null : h));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "처리하지 못했습니다");
+      const failure = classifyApprovalError(e);
+      if (failure.kind === "high_risk_confirmation" && decision === "approved" && !confirmHighRisk) {
+        const it = items.find((x) => x.id === id);
+        setHighRisk({ id, epoch: 0, scope, mission: scope === "mission", tool: it?.tool || "", summary: it?.summary || "", risk: it?.risk });
+        setCardError(id, failure.message);
+      } else if (failure.kind === "high_risk_confirmation") {
+        setCardError(id, "서버가 확인 후에도 이 승인을 받아들이지 않았습니다. 목록을 새로 불러온 뒤 확인해 주세요.");
+        setHighRisk(null);
+        void load();
+      } else {
+        setCardError(id, failure.message);
+        setHighRisk(null);
+        if (failure.refresh) void load();
+      }
     } finally {
       setBusy(null);
     }
-  }, [grantHours, grantCount]);
+  }, [grantHours, grantCount, items, load, setCardError]);
 
   const ackAll = useCallback(async () => {
     setBusy("ack-all");
@@ -244,6 +277,16 @@ export default function ApprovalsPage() {
           </div>
         )}
 
+        {highRisk && (
+          <HighRiskConfirmDialog
+            request={highRisk}
+            pendingCount={1}
+            busy={busy === highRisk.id}
+            onConfirm={() => void decide(highRisk.id, "approved", highRisk.mission ? "mission" : "single", true)}
+            onCancel={() => { setCardError(highRisk.id, ""); setHighRisk(null); }}
+          />
+        )}
+
         {items.map((it) => {
           const rk = riskOf(it.risk);
           return (
@@ -315,6 +358,11 @@ export default function ApprovalsPage() {
                   거부
                 </button>
               </div>
+              <ApprovalCardError
+                message={cardErrors[it.id]}
+                onRefresh={() => void load()}
+                onDismiss={() => setCardError(it.id, "")}
+              />
             </div>
           );
         })}

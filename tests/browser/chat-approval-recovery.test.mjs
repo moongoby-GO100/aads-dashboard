@@ -52,6 +52,7 @@ function App(){
  const decideApproval=(id,decision,scope)=>{window.decisions.push({id,decision,scope});};
  const decideApprovalBulk=()=>{throw Error('Critical approval must never use bulk');};
  const toggleApprovalSelected=()=>{};
+ const approvalCardErrors={},dismissApprovalCardError=()=>{},refreshActiveApprovals=()=>{},ApprovalCardError=()=>null;
  const onOpenApproval=openApprovalPopup;
  window.fixture={message:()=>setHasMessage(true),approval:()=>setApprovals([fixture]),reset:()=>{setApprovals([]);setHasMessage(false);setDismissedApprovalIds([]);popupStickyRef.current.clear();},stale:()=>{approvalSessionRef.current='other-session';}};
  return <main style={{padding:24}}><h1>승인창 복구 격리 검증</h1>
