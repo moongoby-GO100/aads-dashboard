@@ -5,6 +5,13 @@ import type { SkillApiFailure } from "@/lib/skillCatalog";
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 const ROOT = "/ohvis/harness/skills";
 
+// 목록·상세 응답의 공용 스킬 필드. 이전 API 호환을 위해 모두 옵셔널.
+export interface SkillSharingFields {
+  scope?: "tenant" | "shared";
+  read_only?: boolean;
+  owner_label?: string | null;
+}
+
 export type SkillCallResult<T> = { ok: true; data: T } | ({ ok: false } & SkillApiFailure);
 
 function failureFrom(status: number, body: unknown): SkillApiFailure {

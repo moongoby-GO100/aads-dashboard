@@ -62,6 +62,10 @@ export function runStatusColor(status: string | null | undefined): string {
 
 // ── 목록 ────────────────────────────────────────────────────────────────
 
+export type SkillScope = "tenant" | "shared";
+
+export const SHARED_LABEL = "공용";
+
 export interface SkillLatestRun {
   status: string;
   startedAt: string | null;
@@ -81,6 +85,9 @@ export interface SkillSummary {
   latestRun: SkillLatestRun | null;
   source: "db" | "file";
   fileDrift: boolean;
+  scope: SkillScope;
+  readOnly: boolean;
+  ownerLabel: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -118,6 +125,15 @@ function parseLatestRun(value: unknown): SkillLatestRun | null {
   return status ? { status, startedAt: strOrNull(value.started_at) } : null;
 }
 
+/** 공용 스킬 표시 정보. 이전 API 응답에는 없으므로 없으면 일반(수정 가능) 스킬로 본다. */
+function parseSharing(raw: Obj): Pick<SkillSummary, "scope" | "readOnly" | "ownerLabel"> {
+  return {
+    scope: raw.scope === "shared" ? "shared" : "tenant",
+    readOnly: raw.read_only === true,
+    ownerLabel: strOrNull(raw.owner_label),
+  };
+}
+
 /** 서버 목록은 버전 1건당 1행이다. 스킬(skill_id) 단위로 묶는다. 형식이 틀리면 null. */
 export function parseSkillList(data: unknown): SkillSummary[] | null {
   if (!isObj(data) || !Array.isArray(data.items)) return null;
@@ -141,6 +157,7 @@ export function parseSkillList(data: unknown): SkillSummary[] | null {
       latestRun: parseLatestRun(raw.latest_run),
       source: raw.source === "file" ? "file" : "db",
       fileDrift: raw.file_drift === true,
+      ...parseSharing(raw),
     });
   }
   return [...bySkill.values()].sort((a, b) => a.title.localeCompare(b.title, "ko"));
@@ -285,6 +302,7 @@ export function parseSkillDetail(data: unknown): SkillDetail | null {
     runCount: num(data.run_count),
     source: data.source === "file" ? "file" : "db",
     fileDrift: data.file_drift === true,
+    ...parseSharing(data),
     filePath: strOrNull(data.file_path),
     allowedTools: strList(data.allowed_tools),
     versions,

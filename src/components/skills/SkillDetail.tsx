@@ -8,6 +8,7 @@ import { SkillBadges } from "./SkillList";
 import { BADGE, BUTTON_DANGER, BUTTON_PLAIN, BUTTON_PRIMARY, CARD, MUTED } from "./skillStyles";
 
 const ACTION_LABEL: Record<SkillAction, string> = { execute: "실행", rollback: "되돌리기", disable: "비활성" };
+const READONLY_NOTICE = "공용 스킬은 조회만 가능합니다";
 const VERSION_ACTION_LABEL: Record<VersionAction, string> = { validate: "검증", promote: "승격" };
 
 function Section({ title, children, testId }: { title: string; children: React.ReactNode; testId?: string }) {
@@ -39,6 +40,7 @@ export function SkillDetailView({
   onBack?: () => void;
 }) {
   const actions = skillActions(detail, perms, hasRollbackTarget(detail));
+  const locked = detail.readOnly;
   const reference = referenceVersion(detail);
   const active = activeVersionView(detail);
   const rules = reference?.manifest;
@@ -75,14 +77,17 @@ export function SkillDetailView({
                 key={action}
                 type="button"
                 data-testid={`skill-action-${action}`}
-                disabled={busy}
+                disabled={busy || locked}
                 onClick={() => onAction(action)}
-                style={{ ...(action === "execute" ? BUTTON_PRIMARY : action === "disable" ? BUTTON_DANGER : BUTTON_PLAIN), flex: "1 1 110px", opacity: busy ? 0.55 : 1 }}
+                style={{ ...(action === "execute" ? BUTTON_PRIMARY : action === "disable" ? BUTTON_DANGER : BUTTON_PLAIN), flex: "1 1 110px", opacity: busy || locked ? 0.55 : 1, cursor: locked ? "not-allowed" : "pointer" }}
               >
                 {ACTION_LABEL[action]}
               </button>
             ))}
           </div>
+        )}
+        {locked && (
+          <p data-testid="skill-readonly-notice" style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.5, ...MUTED }}>{READONLY_NOTICE}</p>
         )}
         {detail.riskTier === "read" && perms.canExecute && detail.enabled && !detail.activeVersion && (
           <p style={{ margin: "10px 0 0", fontSize: 13, ...MUTED }}>활성 버전이 없어 실행할 수 없습니다.</p>
@@ -135,9 +140,9 @@ export function SkillDetailView({
                           key={action}
                           type="button"
                           data-testid={`skill-version-${action}`}
-                          disabled={busy}
+                          disabled={busy || locked}
                           onClick={() => onVersionAction(v.version, action)}
-                          style={{ ...(action === "promote" ? BUTTON_PRIMARY : BUTTON_PLAIN), flex: "1 1 100px", opacity: busy ? 0.55 : 1 }}
+                          style={{ ...(action === "promote" ? BUTTON_PRIMARY : BUTTON_PLAIN), flex: "1 1 100px", opacity: busy || locked ? 0.55 : 1, cursor: locked ? "not-allowed" : "pointer" }}
                         >
                           {VERSION_ACTION_LABEL[action]}
                         </button>

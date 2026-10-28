@@ -98,8 +98,12 @@ export default function SkillsPage() {
     if (selectedRef.current) void loadDetail(selectedRef.current, true);
   }, [loadDetail, loadList]);
 
-  const openAction = useCallback((action: SkillAction) => setDialog({ kind: action }), []);
+  const openAction = useCallback((action: SkillAction) => {
+    if (detail.data?.readOnly) return;
+    setDialog({ kind: action });
+  }, [detail.data]);
   const openVersionAction = useCallback((version: string, action: VersionAction) => {
+    if (detail.data?.readOnly) return;
     const fromStatus = detail.data?.versions.find((v) => v.version === version)?.status ?? "";
     setDialog(action === "validate" ? { kind: "validate", version } : { kind: "promote", version, fromStatus });
   }, [detail.data]);

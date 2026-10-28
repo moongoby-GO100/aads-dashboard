@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  hasActiveFilter, latestRunText, RISK_TIERS, riskColor, riskLabel, runStatusColor,
+  hasActiveFilter, latestRunText, SHARED_LABEL, RISK_TIERS, riskColor, riskLabel, runStatusColor,
   type EnabledFilter, type SkillFilters, type SkillSummary, type SourceFilter,
 } from "@/lib/skillCatalog";
 import { BADGE, CARD, INPUT, MUTED } from "./skillStyles";
@@ -42,10 +42,15 @@ export function FilterBar({
   );
 }
 
-export function SkillBadges({ skill }: { skill: Pick<SkillSummary, "riskTier" | "enabled" | "source" | "fileDrift"> }) {
+export function SkillBadges({ skill }: { skill: Pick<SkillSummary, "riskTier" | "enabled" | "source" | "fileDrift"> & Partial<Pick<SkillSummary, "readOnly" | "ownerLabel">> }) {
   const color = riskColor(skill.riskTier);
   return (
     <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
+      {skill.readOnly && (
+        <span data-testid="skill-shared-badge" style={{ ...BADGE, color: "var(--accent)", border: "1px solid var(--accent)" }}>
+          {skill.ownerLabel || SHARED_LABEL}
+        </span>
+      )}
       <span data-testid="skill-risk-badge" style={{ ...BADGE, color, border: `1px solid ${color}` }}>{riskLabel(skill.riskTier)}</span>
       {!skill.enabled && <span style={{ ...BADGE, ...MUTED, border: "1px solid var(--border)" }}>사용 안 함</span>}
       <span style={{ ...BADGE, ...MUTED, border: "1px solid var(--border)" }}>{skill.source === "file" ? "파일" : "DB"}</span>
