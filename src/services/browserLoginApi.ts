@@ -5,12 +5,17 @@ export type AuthScope = {
   work_key: string; lane: "server" | "pc"; target: string; recipe_name: string;
   recipe_version: number; checkpoint: number; expires_at: string;
 };
+export type AuthEvidence = {
+  artifact_id: string; captured_at: string; origin: "server_observation"; verified: true;
+};
 export type LoginTask = {
   id: string; status: string; target_url?: string; error?: string;
   result?: { auth_scope?: AuthScope; reason?: string };
 };
 const BASE = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
 const messages: Record<string, string> = {
+  auth_scope_expired: "인증 시간이 만료되었습니다. 새 접속 확인을 요청하세요.",
+  auth_evidence_rate_limited: "요청이 너무 잦습니다. 10초 후 다시 시도하세요.",
   auth_scope_mismatch: "사업자 또는 계정 정보가 변경되었습니다. 상태를 다시 확인하세요.",
   auth_wait_already_consumed: "이미 처리한 인증 요청입니다. 상태를 다시 확인하세요.",
   auth_task_not_found: "인증 작업을 찾을 수 없습니다. 현재 계정과 채팅을 확인하세요.",
@@ -33,6 +38,7 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (response.status === 401) handle401Redirect();
+  if (response.status === 429) throw new Error(loginError("auth_evidence_rate_limited"));
   const data = await response.json();
   if (!response.ok) throw new Error(loginError(typeof data.detail === "string" ? data.detail : ""));
   return data as T;
@@ -40,6 +46,7 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 const taskPath = (id: string) => `/browser-tasks/${encodeURIComponent(id)}`;
 export const browserLoginApi = {
   get: (id: string) => request<LoginTask>(taskPath(id)),
+  evidence: (id: string, scope: AuthScope) => request<AuthEvidence>(`${taskPath(id)}/auth-evidence`, { scope }),
   resume: (id: string, scope: AuthScope, artifact_id: string) => request<LoginTask>(`${taskPath(id)}/auth-resume`, { scope, artifact_id }),
   cancel: (id: string, scope: AuthScope) => request<LoginTask>(`${taskPath(id)}/auth-cancel`, { scope }),
 };
