@@ -34,7 +34,7 @@ export function reviewable(detail: CanonicalDocumentDetail): boolean {
     && detail.revision.id === detail.document.latest_revision_id
     && detail.document.approved_revision_id !== detail.revision.id;
 }
-// Only named lookup tool results supply references; never execute persisted URLs or bodies.
+// Only named canonical document tool results supply references; never execute persisted URLs or bodies.
 export function canonicalReferencesFromTools(value: unknown): Reference[] {
   let events: unknown = value;
   if (typeof events === "string") {
@@ -43,7 +43,9 @@ export function canonicalReferencesFromTools(value: unknown): Reference[] {
   if (!Array.isArray(events)) return [];
   const refs: Reference[] = [];
   for (const event of events.slice(-200)) {
-    if (!event || event.type !== "tool_result" || event.tool_name !== "canonical_document_lookup" || event.is_error) continue;
+    if (!event || event.type !== "tool_result"
+        || !["canonical_document_lookup", "canonical_document_review"].includes(event.tool_name)
+        || event.is_error) continue;
     let cards: unknown = event.canonical_document_cards;
     if (!Array.isArray(cards) && typeof event.content === "string" && event.content.length <= 32000) {
       try {
