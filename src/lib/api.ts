@@ -1,5 +1,12 @@
 // AADS-OHVIS-CONSOLE: 오비스 창(/ohvis) — GET /ohvis/console/summary 한 번으로
 // 화면 다섯 칸을 채운다. 백엔드 app/api/ohvis_console.py 의 SECTION_KEYS 와 짝이다.
+export type OhvisCredentialScope = Record<string, { credential_id: string; field: "username" | "password" }>;
+export type OhvisRecordingContext = {
+  lane?: "server" | "pc";
+  browser_work_key?: string;
+  credential_scope?: OhvisCredentialScope;
+};
+
 export interface OhvisConsoleMessage {
   id: string;
   session_id: string | null;
@@ -1882,15 +1889,15 @@ export const api = {
   // 상태·코드로 돌려줘서 카드 안에서 다시 시도할 수 있게 한다.
   runOhvisConsoleCommandConfirmed: (data: { title: string; confirmed_draft_id: string; session_id?: string }) =>
     automationCall<OhvisConsoleCommandResult>("/ohvis/console/command", { method: "POST", body: data }),
-  startOhvisRecipeRecording: (data: { name: string; domain: string }) =>
+  startOhvisRecipeRecording: (data: { name: string; domain: string } & OhvisRecordingContext) =>
     request<{ recording_id: string; name: string; domain: string; step_count: number }>(
       "/ohvis/recipes/recording",
       { method: "POST", body: JSON.stringify(data) },
     ),
-  recordOhvisRecipeStep: (recordingId: string, payload: Record<string, unknown>) =>
+  recordOhvisRecipeStep: (recordingId: string, payload: Record<string, unknown>, context?: OhvisRecordingContext) =>
     request<{ recording_id: string; step: Record<string, unknown> | null; step_count: number }>(
       `/ohvis/recipes/recording/${encodeURIComponent(recordingId)}/steps`,
-      { method: "POST", body: JSON.stringify({ payload, succeeded: true }) },
+      { method: "POST", body: JSON.stringify({ payload, succeeded: true, ...context }) },
     ),
   finishOhvisRecipeRecording: (recordingId: string) =>
     request<{ status: string; registration: Record<string, unknown> }>(

@@ -5,7 +5,8 @@ import LiveBrowserStage, { type LiveBrowserConnection, type LiveBrowserLane } fr
 import LoginProgressCard from "@/components/browser/LoginProgressCard";
 import { loginLabel } from "@/components/browser/LoginProgressCard";
 import { browserLoginApi, type AuthScope } from "@/services/browserLoginApi";
-import { api } from "@/lib/api";
+import { api, type OhvisCredentialScope, type OhvisRecordingContext } from "@/lib/api";
+import { canStartRecording, completeRecordingStart, recordingContext, recordingPage, sameRecordingIdentity } from "@/lib/browserRecording";
 
 type BrowserTask = {
   id: string;
@@ -53,7 +54,7 @@ type ArtifactStatus = {
   can_retry?: boolean;
 };
 
-type Props = { sessionId?: string };
+type Props = { sessionId?: string; credentialScope?: OhvisCredentialScope };
 
 type LiveAgent = {
   agent_id: string;
@@ -97,7 +98,7 @@ function time(value?: string): string {
   }).format(new Date(value));
 }
 
-export default function BrowserArtifactView({ sessionId }: Props) {
+export default function BrowserArtifactView({ sessionId, credentialScope }: Props) {
   const [tasks, setTasks] = useState<BrowserTask[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [frame, setFrame] = useState<LiveFrame | null>(null);
@@ -110,7 +111,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   currentSession.current = sessionId;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [pcNavigation, setPcNavigation] = useState({ url: "", key: 0, session: sessionId });
+  const [pcNavigation, setPcNavigation] = useState({ url: "", key: 0, session: sessionId, agentId: "" });
   const [lane, setLane] = useState<LiveBrowserLane>("server");
   const [agents, setAgents] = useState<LiveAgent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -118,6 +119,9 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [liveConnection, setLiveConnection] = useState<LiveBrowserConnection>("idle");
   const recordingRef = useRef<Promise<string> | null>(null);
+  const recordingContextRef = useRef<OhvisRecordingContext>({});
+  const [startingRecording, setStartingRecording] = useState(false);
+  const [pcObservedUrl, setPcObservedUrl] = useState({ url: "", session: sessionId, agentId: "" });
   const [recording, setRecording] = useState(false);
   const [stepCount, setStepCount] = useState(0);
   const [registrationId, setRegistrationId] = useState("");
@@ -128,6 +132,11 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   }, [sessionId, tasks]);
 
   const selected = visibleTasks.find((task) => task.id === selectedId) || visibleTasks[0] || null;
+
+  const recordingAgentId = lane === "pc" ? selectedAgentId : undefined;
+  const recordingIdentity = { sessionId, lane, selectedId: selected?.id, agentId: recordingAgentId };
+  const recordingIdentityRef = useRef(recordingIdentity);
+  recordingIdentityRef.current = recordingIdentity;
 
   const selectedTaskRef = useRef(selected?.id);
   selectedTaskRef.current = selected?.id;
@@ -211,26 +220,47 @@ export default function BrowserArtifactView({ sessionId }: Props) {
     };
   }, [liveConnection, loadLive, selected?.id]);
 
-  useEffect(() => { recordingRef.current = null; setRecording(false); setStepCount(0); setRegistrationId(""); }, [sessionId, selected?.id, lane]);
+  useEffect(() => { recordingRef.current = null; setRecording(false); setStartingRecording(false); setStepCount(0); setRegistrationId(""); }, [sessionId, selected?.id, lane, recordingAgentId]);
 
   const startRecording = async () => {
-    if (!selected || lane !== "server") return;
-    const domain = new URL(frame?.current_url || selected.target_url).hostname;
-    const request = api.startOhvisRecipeRecording({ name: `${domain} 채팅 브라우저 조작`, domain }).then((result) => result.recording_id);
-    recordingRef.current = request;
-    try {
-      const id = await request;
-      const saved = await api.recordOhvisRecipeStep(id, { action: "navigate", url: frame?.current_url || selected.target_url, risk: "READ", description: "학습 시작 페이지" });
-      setRecording(true); setStepCount(saved.step_count); setRegistrationId("");
+    const identity = { ...recordingIdentity };
+    if (!canStartRecording(identity, liveConnection, Boolean(recordingRef.current))) return;
+    let url = frame?.current_url || selected?.target_url || "";
+    if (lane === "pc") {
+      url = "";
+      if (pcObservedUrl.session === sessionId && pcObservedUrl.agentId === selectedAgentId) url = pcObservedUrl.url;
+      if (!url && pcNavigation.session === sessionId && pcNavigation.agentId === selectedAgentId) url = pcNavigation.url;
     }
-    catch (reason) { recordingRef.current = null; setError(String(reason)); }
+    const page = recordingPage(url);
+    if (!page) {
+      setError("현재 페이지 주소를 확인할 수 없습니다. 위 주소 입력란에 http 또는 https 주소를 입력하고 ‘열기’를 누른 뒤 학습을 시작하세요.");
+      return;
+    }
+    const context = recordingContext(identity, selected?.work_key, credentialScope);
+    const request = api.startOhvisRecipeRecording({ name: `${page.domain} 채팅 브라우저 조작`, domain: page.domain, ...context }).then((result) => result.recording_id);
+    recordingRef.current = request;
+    recordingContextRef.current = context;
+    setStartingRecording(true);
+    const isCurrent = () => recordingRef.current === request && sameRecordingIdentity(identity, recordingIdentityRef.current);
+    try {
+      await completeRecordingStart(request, isCurrent,
+        (id) => api.recordOhvisRecipeStep(id, { action: "navigate", url: page.url, risk: "READ", description: "학습 시작 페이지" }, context),
+        (saved) => {
+          setRecording(true); setStepCount(saved.step_count); setRegistrationId("");
+          setError("");
+        });
+    }
+    catch (reason) { if (isCurrent()) { recordingRef.current = null; setError(String(reason)); } }
+    finally { if (sameRecordingIdentity(identity, recordingIdentityRef.current)) setStartingRecording(false); }
   };
 
   const recordRecipeStep = useCallback((step: Record<string, unknown>) => {
     const active = recordingRef.current;
     if (!active) return;
+    const context = recordingContextRef.current;
     stepQueueRef.current = stepQueueRef.current.then(async () => {
-      const saved = await api.recordOhvisRecipeStep(await active, step);
+      if (recordingRef.current !== active) return;
+      const saved = await api.recordOhvisRecipeStep(await active, step, context);
       if (recordingRef.current === active) setStepCount(saved.step_count);
     }).catch((reason) => setError(`레시피 단계 기록 실패: ${String(reason)}`));
     return stepQueueRef.current;
@@ -275,7 +305,8 @@ export default function BrowserArtifactView({ sessionId }: Props) {
       try { if (!["https:", "http:"].includes(new URL(url).protocol)) throw new Error(); }
       catch { setError("http 또는 https 주소를 입력하세요."); return; }
       if (!sessionId || !selectedAgentId) { setError("채팅과 온라인 PC를 먼저 선택하세요."); return; }
-      setError(""); setPcNavigation((previous) => ({ url, key: previous.key + 1, session: sessionId }));
+      setPcObservedUrl({ url: "", session: sessionId, agentId: selectedAgentId });
+      setError(""); setPcNavigation((previous) => ({ url, key: previous.key + 1, session: sessionId, agentId: selectedAgentId }));
       return;
     }
     setBusy(true);
@@ -418,20 +449,24 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         lane={lane}
         taskId={lane === "server" ? selected?.id : undefined}
         chatSessionId={sessionId}
-        pcUrl={pcNavigation.session === sessionId ? pcNavigation.url : ""}
+        pcUrl={pcNavigation.session === sessionId && pcNavigation.agentId === selectedAgentId ? pcNavigation.url : ""}
         agentId={selectedAgentId}
         interactive={Boolean((lane === "server" && selected?.id) || (lane === "pc" && sessionId && selectedAgentId))}
         fallbackSrc={lane === "server" ? imageSrc : ""}
         emptyMessage="브라우저 작업을 시작하면 현재 화면이 여기에 표시됩니다."
         onConnectionChange={setLiveConnection}
         onControlError={(message) => setError(`브라우저 조작 실패: ${message}`)}
+        onPageUrl={(url) => setPcObservedUrl((previous) => {
+          if (previous.url === url && previous.session === sessionId && previous.agentId === selectedAgentId) return previous;
+          return { url, session: sessionId, agentId: selectedAgentId };
+        })}
         onRecipeStep={recordRecipeStep}
       />
       </div>
 
-      {lane === "server" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        {!recording ? <button type="button" disabled={liveConnection !== "live"} onClick={() => void startRecording()} style={{ minHeight: 44 }}>학습 시작</button>
-          : <button type="button" disabled={busy || stepCount === 0} onClick={() => void finishRecording()} style={{ minHeight: 44 }}>학습 종료 · 등록 요청 ({stepCount}단계)</button>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {!recording ? <button type="button" disabled={startingRecording || !canStartRecording(recordingIdentity, liveConnection, Boolean(recordingRef.current))} onClick={() => void startRecording()} style={{ minHeight: 44 }}>학습 시작</button>
+          : <button type="button" disabled={busy || stepCount === 0} onClick={() => void finishRecording()} style={{ minHeight: 44 }}>학습 종료 · 등록 요청 ({stepCount}{lane === "pc" ? "단계 · 시작 페이지만" : "단계"})</button>}
         {registrationId && (
           <span role="status">
             레시피 등록 요청을 저장했습니다. 승인 대기 상태입니다.{" "}
@@ -445,8 +480,8 @@ export default function BrowserArtifactView({ sessionId }: Props) {
             </a>
           </span>
         )}
-      </div>}
-      {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>이 채팅 전용 PC 탭을 조작합니다. 다른 채팅의 입력과 분리됩니다. PC 레시피 자동 학습은 아직 지원하지 않습니다.</p>}
+      </div>
+      {lane === "pc" && <p style={{ fontSize: 11, color: "var(--ct-text2)" }}>이 채팅 전용 PC 탭을 조작합니다. 다른 채팅의 입력과 분리됩니다. PC 수동 학습은 시작 페이지 1단계만 저장합니다. 클릭·입력·이동은 현재 단계로 기록되지 않습니다. 현재 주소가 확인되지 않으면 위 주소 입력란에서 페이지를 다시 여세요.</p>}
 
       {liveConnection === "failed" && lane === "server" && (
         <button onClick={() => void loadLive(true)} disabled={!selected || busy} style={{ alignSelf: "flex-end", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 8, padding: "7px 10px", background: "var(--ct-card)", color: "var(--ct-text)", fontSize: 11, cursor: selected ? "pointer" : "not-allowed" }}>

@@ -21,6 +21,7 @@ type Props = {
   interactive?: boolean;
   fallbackSrc?: string;
   emptyMessage?: string;
+  onPageUrl?: (url: string) => void;
   onControlAck?: (result: ControlResult) => void;
   onControlError?: (message: string) => void;
   onRecipeStep?: (step: Record<string, unknown>) => void | Promise<void>;
@@ -43,6 +44,7 @@ export default function LiveBrowserStage({
   interactive = false,
   fallbackSrc = "",
   emptyMessage = "실시간 화면을 기다리고 있습니다.",
+  onPageUrl,
   onControlAck,
   onControlError,
   onRecipeStep,
@@ -60,8 +62,8 @@ export default function LiveBrowserStage({
   const pendingRef = useRef<{ id: string; resolve: (ok: boolean) => void; timer: number } | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
-  const handlersRef = useRef({ onControlAck, onControlError, onRecipeStep, onConnectionChange });
-  handlersRef.current = { onControlAck, onControlError, onRecipeStep, onConnectionChange };
+  const handlersRef = useRef({ onPageUrl, onControlAck, onControlError, onRecipeStep, onConnectionChange });
+  handlersRef.current = { onPageUrl, onControlAck, onControlError, onRecipeStep, onConnectionChange };
 
   const updateConnection = useCallback((next: LiveBrowserConnection) => {
     setConnection(next);
@@ -119,6 +121,7 @@ export default function LiveBrowserStage({
             window.clearTimeout(frameTimer);
             updateConnection("live");
             frameIdRef.current = String(message.frame_id || "");
+            if (pcTab && typeof message.url === "string") handlersRef.current.onPageUrl?.(message.url);
             if (pcTab) frameTimer = window.setTimeout(() => ws.close(), 5000);
             setFrameSrc(`data:${message.media_type || "image/jpeg"};base64,${message.frame}`);
             setViewport({ width: Number(message.width) || 1366, height: Number(message.height) || 768 });
