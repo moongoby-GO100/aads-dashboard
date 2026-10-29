@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LiveBrowserStage, { type LiveBrowserConnection, type LiveBrowserLane } from "@/components/browser/LiveBrowserStage";
+import LoginProgressCard from "@/components/browser/LoginProgressCard";
+import { loginLabel } from "@/components/browser/LoginProgressCard";
+import { browserLoginApi, type AuthScope } from "@/services/browserLoginApi";
 import { api } from "@/lib/api";
 
 type BrowserTask = {
   id: string;
+  result?: { auth_scope?: AuthScope };
   session_id?: string | null;
   work_key: string;
   target_url: string;
@@ -60,7 +64,7 @@ type LiveAgent = {
 };
 
 const COUPANGEATS_URL = "https://store.coupangeats.com/merchant/login";
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const TERMINAL = new Set(["completed", "failed", "cancelled", "expired"]);
 
 function frameSource(frame: LiveFrame | null): string {
   const source = frame?.metadata?.source;
@@ -110,6 +114,8 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const [lane, setLane] = useState<LiveBrowserLane>("server");
   const [agents, setAgents] = useState<LiveAgent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [reconnectKey, setReconnectKey] = useState(0);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [liveConnection, setLiveConnection] = useState<LiveBrowserConnection>("idle");
   const recordingRef = useRef<Promise<string> | null>(null);
   const [recording, setRecording] = useState(false);
@@ -245,9 +251,11 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   };
 
   const retryTask = async () => {
-    if (!selected?.id || !artifactStatus?.can_retry) return;
+    if (!selected?.id || selected.result?.auth_scope || !artifactStatus?.can_retry) return;
     setBusy(true);
     try {
+      const current = await browserLoginApi.get(selected.id);
+      if (current.result?.auth_scope) { setError("인증 상태 카드에서 계속 또는 중단을 선택하세요."); return; }
       await api.retryBrowserTask(selected.id);
       await Promise.all([loadTasks(), loadLive(false)]);
       setError("");
@@ -261,6 +269,8 @@ export default function BrowserArtifactView({ sessionId }: Props) {
   const createTask = async (presetUrl?: string) => {
     const url = (presetUrl || targetUrl).trim();
     if (!url) return;
+    const existing = visibleTasks.find((task) => task.target_url === url && !["failed", "cancelled", "expired"].includes(task.status));
+    if (lane === "server" && existing) { setSelectedId(existing.id); return; }
     if (lane === "pc") {
       try { if (!["https:", "http:"].includes(new URL(url).protocol)) throw new Error(); }
       catch { setError("http 또는 https 주소를 입력하세요."); return; }
@@ -374,7 +384,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
       {lane === "server" && artifactStatus?.last_error && (
         <div role="alert" style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, background: "rgba(239,68,68,.12)", color: "#ef4444", fontSize: 12 }}>
           <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{artifactStatus.last_error}</span>
-          {artifactStatus.can_retry && (
+          {artifactStatus.can_retry && !selected?.result?.auth_scope && (
             <button onClick={() => void retryTask()} disabled={busy} style={{ minHeight: 44, minWidth: 72, border: 0, borderRadius: 8, background: "#ef4444", color: "#fff", fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
               다시 시도
             </button>
@@ -384,13 +394,26 @@ export default function BrowserArtifactView({ sessionId }: Props) {
 
       {lane === "server" && visibleTasks.length > 0 && (
         <select value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)} style={{ width: "100%", minHeight: 44, border: "1px solid var(--ct-border)", borderRadius: 7, padding: 8, background: "var(--ct-input)", color: "var(--ct-text)", fontSize: 12 }}>
-          {visibleTasks.map((task) => <option key={task.id} value={task.id}>{task.status} · {task.current_step || task.target_url}</option>)}
+          {visibleTasks.map((task) => <option key={task.id} value={task.id}>{loginLabel(task)} · {task.target_url}</option>)}
         </select>
       )}
 
 
 
+      {selected && <LoginProgressCard
+        key={selected.id}
+        taskId={selected.id}
+        artifactId={frame?.metadata?.origin === "server_observation" && frame.metadata.verified === true && typeof frame.metadata.artifact_id === "string" ? frame.metadata.artifact_id : undefined}
+        pcConnected={agents.length > 0}
+        onOpen={() => {
+          setLane(selected.result?.auth_scope?.lane || "server");
+          stageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+        onReconnect={() => { setReconnectKey((value) => value + 1); void loadLive(false); void loadTasks(); }}
+      />}
+      <div ref={stageRef}>
       <LiveBrowserStage
+        reconnectSignal={reconnectKey}
         key={`${sessionId}:${lane}:${lane === "server" ? selected?.id : pcNavigation.key}:${selectedAgentId}`}
         lane={lane}
         taskId={lane === "server" ? selected?.id : undefined}
@@ -404,6 +427,7 @@ export default function BrowserArtifactView({ sessionId }: Props) {
         onControlError={(message) => setError(`브라우저 조작 실패: ${message}`)}
         onRecipeStep={recordRecipeStep}
       />
+      </div>
 
       {lane === "server" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {!recording ? <button type="button" disabled={liveConnection !== "live"} onClick={() => void startRecording()} style={{ minHeight: 44 }}>학습 시작</button>

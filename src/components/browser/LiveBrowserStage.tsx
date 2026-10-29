@@ -12,6 +12,7 @@ export type LiveBrowserConnection = "idle" | "connecting" | "live" | "failed";
 type ControlResult = Record<string, unknown> & { recipe_step?: Record<string, unknown> };
 
 type Props = {
+  reconnectSignal?: number;
   lane: LiveBrowserLane;
   taskId?: string;
   agentId?: string;
@@ -34,6 +35,7 @@ export function websocketUrl(path: string, token: string): string {
 
 export default function LiveBrowserStage({
   lane,
+  reconnectSignal = 0,
   taskId,
   agentId,
   chatSessionId,
@@ -172,7 +174,7 @@ export default function LiveBrowserStage({
       if (socketRef.current) socketRef.current.close();
       socketRef.current = null;
     };
-  }, [agentId, lane, taskId, chatSessionId, pcUrl, pcTab, reconnectKey, updateConnection]);
+  }, [agentId, lane, taskId, chatSessionId, pcUrl, pcTab, reconnectKey, reconnectSignal, updateConnection]);
 
   const sendControl = async (payload: Record<string, unknown>): Promise<boolean> => {
     if (!interactive || connection !== "live" || controlBusy) return false;
