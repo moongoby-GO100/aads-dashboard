@@ -9,11 +9,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MockupHtmlLinks } from "@/components/MockupHtmlLinks";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
-  approveBody, canApprove, canRequestChanges, changeBody, changeFingerprint, changeSourceNotice, describeMockupError,
-  groupAssetsByScreen, isImageAsset, keepChangeAttempt, newUuid, PANEL_WIDE_STORAGE_KEY, panelWidthCss, parsePanelWide,
-  phaseLabel, resolveChangeSource, statusColor, statusLabel, stepZoomIndex, VIEWPORT_LABEL, zoomScale,
-  type ChangeAttempt, type MockupAsset, type MockupErrorView, type MockupReview, type MockupRevision, type ViewportClass, type ZoomMode,
+  approveBody, canApprove, canRequestChanges, describeMockupError, docRefLabel,
+  groupAssetsByScreen, isImageAsset, newUuid, outcomeLabel, pairWithPreviousRevision, PANEL_WIDE_STORAGE_KEY, panelWidthCss, parsePanelWide,
+  phaseLabel, statusColor, statusLabel, stepZoomIndex, VIEWPORT_LABEL, zoomScale,
+  type MockupAsset, type MockupChangeReport, type MockupErrorView, type MockupReview, type MockupRevision, type MockupTarget, type ViewportClass, type ZoomMode,
 } from "@/lib/mockupReviewModel";
+import { mockupTargetStore, useMockupTarget } from "@/lib/mockupTargetStore";
 
 const TOUCH = 44;
 
@@ -31,16 +32,18 @@ function useNarrow(maxPx = 640): boolean {
 
 type ZoomItem = { key: string; src: string; caption: string; viewport: string };
 
-function assetKey(revisionId: string, asset: MockupAsset): string {
-  return `${revisionId}:${asset.asset_id}`;
+function assetKey(revisionId: string, asset: MockupAsset, scope = ""): string {
+  return `${scope}${revisionId}:${asset.asset_id}`;
 }
 
 function assetCaption(asset: MockupAsset): string {
   return `${phaseLabel(asset.phase)}${asset.state && asset.state !== "default" ? ` · ${asset.state}` : ""}`;
 }
 
-function AssetImage({ project, reviewId, revisionId, asset, onSrc, onOpen }: {
+function AssetImage({ project, reviewId, revisionId, asset, scope = "", onSrc, onOpen }: {
   project: string; reviewId: string; revisionId: string; asset: MockupAsset;
+  /** 같은 이미지를 한 화면에 두 번 보여줄 때 확대 보기 키가 겹치지 않게 하는 접두어. */
+  scope?: string;
   onSrc: (key: string, src: string | null) => void; onOpen: (key: string, trigger: HTMLElement) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -56,7 +59,7 @@ function AssetImage({ project, reviewId, revisionId, asset, onSrc, onOpen }: {
         if (!alive) return;
         objectUrl = URL.createObjectURL(blob);
         setSrc(objectUrl);
-        onSrc(assetKey(revisionId, asset), objectUrl);
+        onSrc(assetKey(revisionId, asset, scope), objectUrl);
       })
       .catch((e) => {
         if (alive) setError(e instanceof MockupApiError ? e.view.message : "이미지를 불러오지 못했습니다.");
@@ -64,12 +67,12 @@ function AssetImage({ project, reviewId, revisionId, asset, onSrc, onOpen }: {
     return () => {
       alive = false;
       if (objectUrl) {
-        onSrc(assetKey(revisionId, asset), null);
+        onSrc(assetKey(revisionId, asset, scope), null);
         URL.revokeObjectURL(objectUrl);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- asset 객체 대신 asset_id 로 비교한다
-  }, [project, reviewId, revisionId, asset.asset_id, image, onSrc]);
+  }, [project, reviewId, revisionId, asset.asset_id, image, onSrc, scope]);
 
   const caption = assetCaption(asset);
   return (
@@ -82,7 +85,7 @@ function AssetImage({ project, reviewId, revisionId, asset, onSrc, onOpen }: {
         {image && !src && !error && <div style={{ padding: 12, fontSize: 11.5, color: "var(--text-secondary)" }}>불러오는 중…</div>}
         {error && <div role="alert" style={{ padding: 12, fontSize: 11.5, color: "#dc2626" }}>{error}</div>}
         {src && (
-          <button type="button" onClick={(e) => onOpen(assetKey(revisionId, asset), e.currentTarget)}
+          <button type="button" onClick={(e) => onOpen(assetKey(revisionId, asset, scope), e.currentTarget)}
             aria-label={`${caption} ${asset.viewport ?? ""} 크게 보기`}
             style={{ position: "relative", display: "block", width: "100%", minHeight: TOUCH, padding: 0, border: 0, background: "transparent", cursor: "zoom-in" }}>
             {/* eslint-disable-next-line @next/next/no-img-element -- 인증이 필요한 blob URL 이라 next/image 를 쓸 수 없다 */}
@@ -199,13 +202,18 @@ function ErrorBox({ err, onRefresh }: { err: MockupErrorView; onRefresh: () => v
   );
 }
 
-export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId, sourceMessageId, onClose }: {
+export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId, artifactId, embedded = false, onRequestChange, onClose }: {
   project: string;
   reviewId: string;
   revisionId: string | null;
   chatSessionId?: string | null;
-  sourceMessageId?: string | null;
-  onClose: () => void;
+  /** 채팅 카드(아티팩트)에서 열었으면 그 아티팩트 id. 수정 요청 대상 확인에 쓴다. */
+  artifactId?: string | null;
+  /** 아티팩트 패널 안에 그대로 끼워 넣는다(폭·높이는 바깥 패널을 따른다). */
+  embedded?: boolean;
+  /** 수정 요청 모드가 켜진 뒤 입력창으로 옮겨 주는 콜백(모바일에서는 패널을 접는다). */
+  onRequestChange?: () => void;
+  onClose?: () => void;
 }) {
   const narrow = useNarrow();
   const [review, setReview] = useState<MockupReview | null>(null);
@@ -218,9 +226,12 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
   const [viewport, setViewport] = useState<ViewportClass | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
-  const [comment, setComment] = useState("");
   const [commentScreen, setCommentScreen] = useState("");
   const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<MockupChangeReport | null>(null);
+  const [prevRev, setPrevRev] = useState<MockupRevision | null>(null);
+  const [compare, setCompare] = useState(false);
+  const store = useMockupTarget();
   const [wide, setWide] = useState(false);
   const [srcMap, setSrcMap] = useState<Record<string, string>>({});
   const [zoomKey, setZoomKey] = useState<string | null>(null);
@@ -275,6 +286,14 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
       const target = known ?? r.latest_revision?.revision_id ?? null;
       const v = target ? await mockupApi.getRevision(project, reviewId, target, ctl.signal) : null;
       if (stale()) return;
+      // 변경 보고·직전 판은 보조 정보다 — 실패해도 검토·승인 화면은 그대로 쓴다.
+      const [rep, parent] = await Promise.all([
+        mockupApi.changeReport(project, reviewId, ctl.signal).catch(() => null),
+        v?.parent_revision_id ? mockupApi.getRevision(project, reviewId, v.parent_revision_id, ctl.signal).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (stale()) return;
+      setReport(rep);
+      setPrevRev(parent);
       setReview(r);
       setRev(v);
       shownRevisionId.current = v?.revision_id ?? null;
@@ -307,14 +326,46 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
         return src ? [{ key, src, caption: assetCaption(a), viewport: a.viewport ?? "" }] : [];
       })
     : [];
+  const comparePairs = compare && rev && prevRev && group && activeViewport
+    ? pairWithPreviousRevision(rev, prevRev, group.screen.screen_id, activeViewport) : [];
+  for (const pr of comparePairs) {
+    for (const [revId, a] of [[prevRev!.revision_id, pr.prev], [rev!.revision_id, pr.cur]] as const) {
+      if (!a) continue;
+      const key = assetKey(revId, a, "cmp:");
+      const src = srcMap[key];
+      if (src) zoomItems.push({ key, src, caption: `${revId === rev!.revision_id ? "이번" : "이전"} ${assetCaption(a)}`, viewport: a.viewport ?? "" });
+    }
+  }
   const zoomIndex = zoomKey ? zoomItems.findIndex((z) => z.key === zoomKey) : -1;
 
   const settled = !loading && !busy;
   const approveEnabled = canApprove(review, rev) && settled;
-  const changeSource = resolveChangeSource(review, chatSessionId ?? null, sourceMessageId ?? null);
-  const changeEnabled = canRequestChanges(review, rev) && settled && changeSource.ok;
-  const changeAttempt = useRef<ChangeAttempt | null>(null);
+  const sameSession = !review?.session_id || review.session_id === (chatSessionId ?? null);
+  const changeEnabled = canRequestChanges(review, rev) && settled && sameSession && !!chatSessionId;
   const viewingOld = !!review && !!rev && review.latest_revision?.revision_id !== rev.revision_id;
+  const armedHere = store.armed?.reviewId === reviewId && store.armed.project === project;
+
+  const target: MockupTarget | null = review && rev && chatSessionId
+    ? { sessionId: chatSessionId, project, reviewId, revisionId: rev.revision_id, artifactId: artifactId ?? null,
+        screenId: commentScreen || null, title: review.title, generation: review.generation }
+    : null;
+  // 열려 있는 검토 건을 "지금 보고 있는 대상"으로 알린다(답장·후보와 충돌하면 입력창이 되묻는다).
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  const targetKeyStr = target ? `${target.sessionId}:${target.reviewId}:${target.revisionId}:${target.generation}` : "";
+  useEffect(() => {
+    if (!chatSessionId) return;
+    mockupTargetStore.setPanel(chatSessionId, targetRef.current);
+    return () => mockupTargetStore.setPanel(chatSessionId, null);
+  }, [chatSessionId, targetKeyStr]);
+
+  const startChange = useCallback(() => {
+    if (!target || !changeEnabled) return;
+    mockupTargetStore.arm(target);
+    setChanging(false);
+    setNotice("");
+    onRequestChange?.();
+  }, [target, changeEnabled, onRequestChange]);
 
   const doApprove = useCallback(async () => {
     if (!review || !rev || !approveEnabled) return;
@@ -333,37 +384,14 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
     }
   }, [review, rev, approveEnabled, project, reviewId, load]);
 
-  const doChange = useCallback(async () => {
-    if (!review || !rev || !comment.trim() || !changeEnabled || !changeSource.ok) return;
-    // 같은 내용의 재전송(응답 유실 후 재시도)은 같은 요청 ID·본문을 그대로 다시 보내 서버가 중복 없이 처리하게 한다.
-    const fingerprint = changeFingerprint(rev.revision_id, changeSource.messageId, comment, commentScreen || null);
-    let attempt = changeAttempt.current;
-    if (!attempt || attempt.fingerprint !== fingerprint) {
-      attempt = {
-        fingerprint,
-        body: changeBody(review, rev, { comment, screenId: commentScreen || null },
-          { changeRequestId: newUuid(), sourceMessageId: changeSource.messageId, idempotencyKey: newUuid() }),
-      };
-      changeAttempt.current = attempt;
+  const noticeAt = store.notice?.kind === "registered" ? store.notice.at : 0;
+  const seenNoticeAt = useRef(noticeAt);
+  useEffect(() => {
+    if (noticeAt && noticeAt !== seenNoticeAt.current) {
+      seenNoticeAt.current = noticeAt;
+      void load(null);
     }
-    setBusy(true);
-    setNotice("");
-    try {
-      await mockupApi.requestChanges(project, reviewId, attempt.body);
-      changeAttempt.current = null;
-      setComment("");
-      setCommentScreen("");
-      setChanging(false);
-      setNotice("수정 요청을 접수했습니다.");
-      await load(rev.revision_id);
-    } catch (e) {
-      const view = e instanceof MockupApiError ? e.view : describeMockupError(0, null);
-      if (!keepChangeAttempt(view.status)) changeAttempt.current = null;
-      setErr(view);
-    } finally {
-      setBusy(false);
-    }
-  }, [review, rev, comment, commentScreen, changeEnabled, changeSource, project, reviewId, load]);
+  }, [noticeAt, load]);
 
   const btn = (primary: boolean, enabled: boolean): React.CSSProperties => ({
     minHeight: TOUCH, minWidth: TOUCH, padding: "0 16px", borderRadius: 8, fontWeight: 800, fontSize: 13,
@@ -374,7 +402,9 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
   });
 
   return (
-    <aside aria-label="목업 검토" style={{
+    <aside aria-label="목업 검토" data-embedded={embedded ? "1" : undefined} style={embedded ? {
+      width: "100%", minWidth: 0, background: "var(--bg-card)", display: "flex", flexDirection: "column", minHeight: 480,
+    } : {
       width: panelWidthCss(wide, narrow), flexShrink: 0, borderLeft: "1px solid var(--border)",
       background: "var(--bg-card)", display: "flex", flexDirection: "column", height: "100%",
     }}>
@@ -394,7 +424,7 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
           </div>
         </div>
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-          {!narrow && (
+          {!narrow && !embedded && (
             <button type="button" onClick={toggleWide} aria-pressed={wide} title={wide ? "기본 폭으로 되돌립니다" : "패널을 넓게 펼칩니다"}
               style={{ minHeight: TOUCH, minWidth: TOUCH, padding: "0 10px", borderRadius: 8, border: `1px solid ${wide ? "var(--accent)" : "var(--border)"}`,
                        background: wide ? "rgba(37,99,235,.10)" : "transparent", color: wide ? "var(--accent)" : "var(--text-secondary)", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
@@ -403,12 +433,14 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
           )}
           <button type="button" onClick={() => void load(viewRevisionId)} disabled={loading} aria-label="새로고침"
             style={{ minHeight: TOUCH, minWidth: TOUCH, border: 0, background: "transparent", color: "var(--text-secondary)", fontSize: 16, cursor: loading ? "wait" : "pointer" }}>↻</button>
-          <button type="button" onClick={onClose} aria-label="닫기"
-            style={{ minHeight: TOUCH, minWidth: TOUCH, border: 0, background: "transparent", color: "var(--text-secondary)", fontSize: 17, cursor: "pointer" }}>✕</button>
+          {onClose && (
+            <button type="button" onClick={onClose} aria-label="닫기"
+              style={{ minHeight: TOUCH, minWidth: TOUCH, border: 0, background: "transparent", color: "var(--text-secondary)", fontSize: 17, cursor: "pointer" }}>✕</button>
+          )}
         </div>
       </header>
 
-      <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "12px 14px" }}>
+      <div style={embedded ? { flex: "1 1 auto", padding: "12px 4px" } : { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "12px 14px" }}>
         {err && <ErrorBox err={err} onRefresh={() => void load(null)} />}
         {notice && <div role="status" style={{ marginBottom: 10, padding: 9, borderRadius: 8, border: "1px solid #16a34a", color: "#16a34a", fontSize: 12, fontWeight: 700 }}>{notice}</div>}
         {loading && !review && <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>불러오는 중…</div>}
@@ -509,38 +541,139 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
             )}
           </>
         )}
+
+        {rev && group && activeViewport && (
+          <section aria-label="이전 판 비교" style={{ marginTop: 14 }}>
+            {rev.parent_revision_id && prevRev ? (
+              <>
+                <button type="button" aria-pressed={compare} onClick={() => setCompare((v) => !v)}
+                  style={{ minHeight: TOUCH, padding: "0 14px", borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: "pointer",
+                           border: `1px solid ${compare ? "var(--accent)" : "var(--border)"}`, background: compare ? "rgba(37,99,235,.10)" : "transparent",
+                           color: compare ? "var(--accent)" : "var(--text-primary)" }}>
+                  {compare ? "이전 판 비교 닫기" : `이전 판(v${prevRev.revision})과 비교`}
+                </button>
+                {compare && (() => {
+                  const pairs = pairWithPreviousRevision(rev, prevRev, group.screen.screen_id, activeViewport);
+                  if (pairs.length === 0) return <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)" }}>이 화면·크기에는 비교할 목업 이미지가 없습니다.</div>;
+                  return (
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 14 }}>
+                      {pairs.map((pr) => (
+                        <div key={pr.cur.asset_id}>
+                          <div style={{ fontSize: 11.5, fontWeight: 800, marginBottom: 4, color: pr.changed ? "#d97706" : "var(--text-secondary)" }}>
+                            {pr.state === "default" ? "기본 상태" : pr.state} · {pr.changed ? "바뀐 화면" : "변경 없음"}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start" }}>
+                            {pr.prev ? (
+                              <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>이전 v{prevRev.revision}</div>
+                                <AssetImage project={project} reviewId={reviewId} revisionId={prevRev.revision_id} asset={pr.prev} scope="cmp:" onSrc={onAssetSrc} onOpen={openZoom} />
+                              </div>
+                            ) : (
+                              <div style={{ flex: "1 1 240px", fontSize: 12, color: "var(--text-secondary)" }}>이전 판에는 이 화면이 없었습니다.</div>
+                            )}
+                            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>이번 v{rev.revision}</div>
+                              <AssetImage project={project} reviewId={reviewId} revisionId={rev.revision_id} asset={pr.cur} scope="cmp:" onSrc={onAssetSrc} onOpen={openZoom} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                {rev.parent_revision_id ? "직전 판을 불러오지 못해 비교할 수 없습니다." : "첫 판이라 비교할 이전 판이 없습니다."}
+              </div>
+            )}
+          </section>
+        )}
+
+        {rev && (
+          <section aria-label="수정 문서와 변경 이력" style={{ marginTop: 14 }}>
+            <details>
+              <summary style={{ cursor: "pointer", minHeight: TOUCH, display: "flex", alignItems: "center", fontSize: 12.5, fontWeight: 800, color: "var(--text-primary)" }}>
+                수정 문서·변경 이력
+              </summary>
+              <div style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-primary)" }}>
+                <div style={{ fontWeight: 800, marginTop: 4 }}>연결 문서 (판본 v{rev.revision})</div>
+                {rev.doc_refs && rev.doc_refs.length > 0 ? (
+                  <ul style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
+                    {rev.doc_refs.map((d, i) => <li key={`${d.role}:${i}`}>{docRefLabel(d)}</li>)}
+                  </ul>
+                ) : <div style={{ margin: "4px 0 8px", color: "var(--text-secondary)" }}>연결된 문서가 없습니다.</div>}
+                <div style={{ fontWeight: 800 }}>수정 요청과 반영 결과</div>
+                {report && report.change_requests.length > 0 ? (
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                    {report.change_requests.map((c) => (
+                      <li key={c.change_request_id} style={{ marginBottom: 6 }}>
+                        <span style={{ fontWeight: 800, color: c.outcome === "applied" ? "#16a34a" : c.outcome === "not_applied" ? "#dc2626" : "#d97706" }}>
+                          {outcomeLabel(c)}
+                        </span>
+                        {" · "}{c.screen_id ? `[${c.screen_id}] ` : ""}{c.original_text}
+                        {c.outcome_reason && <div style={{ color: "var(--text-secondary)" }}>사유: {c.outcome_reason}</div>}
+                        {c.new_revision && (
+                          <button type="button" onClick={() => void load(c.new_revision!.revision_id)}
+                            style={{ minHeight: TOUCH, padding: "0 10px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--accent)", fontWeight: 800, cursor: "pointer" }}>
+                            반영된 v{c.new_revision.revision ?? "?"} 보기
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : <div style={{ margin: "4px 0 0", color: "var(--text-secondary)" }}>{report ? "접수된 수정 요청이 없습니다." : "변경 이력을 불러오지 못했습니다."}</div>}
+              </div>
+            </details>
+          </section>
+        )}
       </div>
 
       {rev && (
-        <footer style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <footer style={{ borderTop: "1px solid var(--border)", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8,
+                         ...(embedded ? { position: "sticky", bottom: 0, background: "var(--bg-card)" } : {}) }}>
           {changing && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+                수정 요청은 아래 <b>채팅 입력창</b>에 쓴 내 메시지가 근거로 남습니다. 대상을 고정한 뒤 입력창에서 보내세요.
+              </div>
               <select aria-label="대상 화면" value={commentScreen} onChange={(e) => setCommentScreen(e.target.value)}
                 style={{ minHeight: TOUCH, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", padding: "0 8px" }}>
                 <option value="">전체(화면 지정 안 함)</option>
                 {groups.map((g) => <option key={g.screen.screen_id} value={g.screen.screen_id}>{g.screen.title}</option>)}
               </select>
-              <textarea aria-label="수정 요청 내용" value={comment} maxLength={4000} rows={4}
-                onChange={(e) => setComment(e.target.value)} placeholder="고칠 내용을 적어 주세요"
-                style={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-primary)", color: "var(--text-primary)", padding: 10, fontSize: 13, resize: "vertical" }} />
               <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" onClick={() => void doChange()} disabled={!comment.trim() || !changeEnabled}
-                  style={{ ...btn(true, !!comment.trim() && changeEnabled), background: comment.trim() && changeEnabled ? "#d97706" : "#9ca3af", flex: 1 }}>
-                  {busy ? "보내는 중…" : "수정 요청 보내기"}
+                <button type="button" onClick={startChange} disabled={!changeEnabled}
+                  style={{ ...btn(true, changeEnabled), background: changeEnabled ? "#d97706" : "#9ca3af", flex: 1 }}>
+                  입력창에 수정 요청 쓰기
                 </button>
                 <button type="button" onClick={() => setChanging(false)} style={btn(false, true)}>취소</button>
               </div>
             </div>
           )}
-          {!changeSource.ok && canRequestChanges(review, rev) && (
+          {armedHere && !changing && (
+            <div role="status" style={{ fontSize: 11.5, lineHeight: 1.55, color: "#d97706", fontWeight: 700 }}>
+              수정 요청 모드 — 입력창에 보낸 다음 메시지가 이 목업(v{rev.revision})의 수정 요청으로 접수됩니다.
+              <button type="button" onClick={() => mockupTargetStore.disarm()}
+                style={{ marginLeft: 8, minHeight: TOUCH, padding: "0 12px", borderRadius: 8, border: "1px solid #d97706", background: "transparent", color: "#d97706", fontWeight: 800, cursor: "pointer" }}>
+                해제
+              </button>
+            </div>
+          )}
+          {canRequestChanges(review, rev) && !sameSession && (
             <div role="note" style={{ fontSize: 11.5, lineHeight: 1.55, color: "var(--text-secondary)" }}>
-              {changeSourceNotice(changeSource.reason)}
-              {changeSource.reason === "other_session" && review?.session_id && (
+              이 목업은 다른 채팅창에 연결돼 있어 여기서는 수정 요청을 보낼 수 없습니다. 승인도 연결된 채팅창에서 확인하세요.
+              {review?.session_id && (
                 <a href={`/chat?mockup_review=${encodeURIComponent(reviewId)}&mockup_project=${encodeURIComponent(project)}${revisionId ? `&mockup_revision=${encodeURIComponent(revisionId)}` : ""}#${review.session_id}`}
                   style={{ display: "inline-flex", alignItems: "center", minHeight: TOUCH, marginLeft: 8, color: "var(--accent)", fontWeight: 800 }}>
                   연결된 채팅창 열기
                 </a>
               )}
+            </div>
+          )}
+          {canRequestChanges(review, rev) && sameSession && !chatSessionId && (
+            <div role="note" style={{ fontSize: 11.5, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+              채팅 세션을 연 상태에서만 수정 요청을 보낼 수 있습니다.
             </div>
           )}
           {!changing && (
@@ -550,7 +683,7 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
                 승인
               </button>
               <button type="button" disabled={!changeEnabled} onClick={() => setChanging(true)} style={{ ...btn(false, changeEnabled), flex: 1 }}
-                title={changeSource.ok ? undefined : changeSourceNotice(changeSource.reason)}>
+                title={changeEnabled ? undefined : "최신 판본·연결된 채팅창에서만 수정 요청을 보낼 수 있습니다"}>
                 수정 요청
               </button>
             </div>

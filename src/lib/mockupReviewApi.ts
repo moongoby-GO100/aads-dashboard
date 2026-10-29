@@ -1,8 +1,8 @@
 // 목업 검토 API. 로그인한 사용자 본인 토큰(getAuthHeaders)만 보낸다 — 시스템 토큰 없음.
 import { getAuthHeaders } from "@/lib/api";
 import {
-  describeMockupError, type ApproveBody, type ChangeBody, type MockupErrorView, type MockupNotification,
-  type MockupReview, type MockupReviewListResponse, type MockupRevision,
+  describeMockupError, type ApproveBody, type ChangeBody, type IntakeBody, type MockupChangeReport, type MockupErrorView,
+  type MockupNotification, type MockupReview, type MockupReviewListResponse, type MockupRevision,
 } from "@/lib/mockupReviewModel";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -77,6 +77,11 @@ export const mockupApi = {
   // img src 에 URL 을 직접 걸 수 없다(토큰 필요) — blob 으로 받아 object URL 을 만든다.
   getAssetBlob: async (project: string, reviewId: string, revisionId: string, assetId: string): Promise<Blob> =>
     (await send(`${base(project)}/${reviewId}/revisions/${revisionId}/assets/${encodeURIComponent(assetId)}`)).blob(),
+  changeReport: (project: string, reviewId: string, signal?: AbortSignal) =>
+    json<MockupChangeReport>(`${base(project)}/${reviewId}/change-report`, { signal }),
+  // 채팅 메시지를 수정 요청으로 접수한다. 승인도 구현 명령도 아니다.
+  intakeChange: (project: string, body: IntakeBody) =>
+    json<Record<string, unknown>>(`${base(project)}/change-intake`, { method: "POST", body: JSON.stringify(body) }),
   approve: (project: string, reviewId: string, body: ApproveBody) =>
     json<Record<string, unknown>>(`${base(project)}/${reviewId}/approve`, { method: "POST", body: JSON.stringify(body) }),
   requestChanges: (project: string, reviewId: string, body: ChangeBody) =>

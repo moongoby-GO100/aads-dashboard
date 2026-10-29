@@ -11,6 +11,10 @@ import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { GoalPanel } from "@/components/GoalPanel";
 import { MockupReviewPanel } from "@/components/MockupReviewPanel";
+import { returnToMockupComposer } from "@/lib/mockupComposerReturn";
+import { MockupTargetBar } from "@/components/MockupTargetBar";
+import { mockupTargetStore, registerMockupChangeAfterSend, captureMockupUiFence } from "@/lib/mockupTargetStore";
+import { useMockupChatTargets } from "@/app/chat/useMockupChatTargets";
 import { MockupReviewBadge } from "@/components/MockupReviewBadge";
 import { GoalStrip } from "@/components/chat/GoalStrip";
 import { DormancyCard } from "@/components/chat/DormancyCard";
@@ -96,7 +100,7 @@ import { runChatCommand } from "@/features/chat/commands/durableCommandClient";
 import { collectClientEnv } from "@/lib/clientEnv";
 import { PANEL_BODY_FONT_PX, PANEL_SIDE_PADDING_PX, readPanelSurface } from "@/lib/chatPanelSurface";
 import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/chatDeepLink";
-import { asUuid, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
+import { findMockupArtifact, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
@@ -4584,13 +4588,6 @@ export default function ChatPage() {
     const next = stripMockupFromUrl(window.location.pathname, window.location.search, window.location.hash);
     if (next) window.history.replaceState(null, "", next);
   }, [mockupUrlRead, panelMockup]);
-  const mockupSourceMessageId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "user" && asUuid(m.id)) return m.id;
-    }
-    return null;
-  }, [messages]);
 
   const loadGoalSignals = useCallback(async (): Promise<boolean> => {
     try {
@@ -8476,6 +8473,12 @@ export default function ChatPage() {
     // 메시지마다 현재 접속 환경을 새로 계산한다(PC·모바일 혼용). 어느 return 분기보다 먼저 수집해
     // 스트리밍 중 추가 지시(interrupt)에도 같은 값이 실린다. 실패하면 필드를 생략한다.
     const _clientEnv = collectClientEnv();
+    if (mockupTargetStore.sendResolution().kind === "ambiguous") {
+      setYellowWarning("수정 요청 대상이 둘 이상입니다. 입력창 위에서 대상을 고른 뒤 다시 보내 주세요.");
+      if (yellowWarningTimerRef.current) clearTimeout(yellowWarningTimerRef.current);
+      yellowWarningTimerRef.current = setTimeout(() => setYellowWarning(null), 5000);
+      return;
+    }
     sessionSwitchRef.current = false;
     suppressOlderLoadUntilRef.current = Date.now() + 8000;
     isInitialLoadRef.current = false;
@@ -8720,6 +8723,14 @@ export default function ChatPage() {
 
     const _capturedReplyTo = replyToMessageRef.current;
     const requestIdempotencyKey = _existingIdempotencyKey || crypto.randomUUID();
+    const _mockupTarget = (() => {
+      const r = mockupTargetStore.sendResolution();
+      return r.kind === "target" && r.target.sessionId === requestSessionId ? r.target : null;
+    })();
+    const _mockupSentAt = Date.now();
+    // 수정 요청 모드는 한 번만 쓴다 — 접수 결과를 기다리는 동안 다음 메시지가 또 수정 요청이 되지 않게 바로 푼다.
+    if (_mockupTarget) mockupTargetStore.disarm();
+    const _mockupUiFence = _mockupTarget ? captureMockupUiFence(_mockupTarget.sessionId) : undefined;
     const userMsg: ChatMessage = {
       id: _existingMsgId || `tmp-${Date.now()}`,
       idempotency_key: requestIdempotencyKey,
@@ -8803,6 +8814,16 @@ export default function ChatPage() {
     let full = "";
     let _invisibleRecoveryActivated = false;
     let streamGotFinal = false;
+    // 수정 요청 접수는 스트림이 어떻게 끝나든(완료·중단·오류) 한 번 시도한다. 저장된 내 메시지를 못 찾으면 실패 안내가 뜬다.
+    const registerMockupIntake = () => {
+      if (!_mockupTarget || !requestSessionId) return;
+      const sid = requestSessionId;
+      void registerMockupChangeAfterSend({
+        uiFence: _mockupUiFence, target: _mockupTarget, content, sentAt: _mockupSentAt, replyToId: _capturedReplyTo?.id ?? null,
+        loadMessages: async () => (await chatApi<{ messages: Array<{ id: string; role: string; content: string; created_at?: string }> }>(
+          `/chat/messages?session_id=${sid}&limit=30&fields=render`)).messages,
+      });
+    };
     try {
       // 히든 스크린 컨텍스트: 화면 관련 키워드 있을 때 첨부
       const SCREEN_KEYWORDS = ["화면", "보이지", "버튼", "UI", "여기", "이거", "이것", "클릭", "탭", "창", "팝업", "오른쪽", "왼쪽"];
@@ -9797,6 +9818,7 @@ export default function ChatPage() {
     } finally {
       clearTimeout(sseTimeout);
       clearTimeout(maxStreamTimeout);
+      registerMockupIntake();
       // Invisible Recovery: waitingBgResponse 활성화 중이면 streaming 유지 (버블 보존)
       // 폴링이 just_completed 감지 시 streaming을 해제함
       const _isInvisibleRecovery = !streamGotFinal && (_invisibleRecoveryActivated || waitingBgRef.current);  // B3-FIX: 완료 시 항상 cleanup
@@ -11686,6 +11708,27 @@ export default function ChatPage() {
     for (const a of artifacts) map.set(a.id, a);
     return map;
   }, [artifacts]);
+
+  useMockupChatTargets({
+    sessionId: activeSession?.id ?? null,
+    replyArtifactId: replyToMessage?.artifact_id ?? null,
+    artifacts,
+    workspaceProject: mockupProjectKey,
+  });
+
+  // 알림 링크로 들어왔을 때, 이 대화에 같은 검토 건의 카드가 있으면 같은 아티팩트 패널에서 연다. 없으면 고정 패널로 연다.
+  // 링크의 mockup_revision 은 카드를 열 때도 보존한다(과거 판은 볼 수 있고 승인은 패널이 막는다).
+  const [mockupRevisionHint, setMockupRevisionHint] = useState<MockupDeepLink | null>(null);
+  useEffect(() => {
+    if (!panelMockup) return;
+    const hit = findMockupArtifact(artifacts, panelMockup);
+    if (!hit) return;
+    setMockupRevisionHint(panelMockup);
+    handleViewArtifactStable(hit.id);
+    if (screenSize !== "desktop") setMobileOverlay("artifact");
+    setPanelMockup(null);
+  }, [panelMockup, artifacts, handleViewArtifactStable, screenSize]);
+  useEffect(() => { setMockupRevisionHint(null); }, [activeSession?.id]);
 
   // ══════════════════════════════════════════════════════════════════
   // Render
@@ -13908,6 +13951,8 @@ export default function ChatPage() {
             </div>
           )}
 
+          <MockupTargetBar sessionId={activeSession?.id ?? null} onOpen={(t) => setPanelMockup({ reviewId: t.reviewId, project: t.project, revisionId: null })} />
+
           {/* Reply-to 인용 미리보기 바 */}
           {replyToMessage && (screenSize !== "mobile" || showMobileComposerContext) && (
             <div style={{
@@ -14644,7 +14689,7 @@ export default function ChatPage() {
             reviewId={panelMockup.reviewId}
             revisionId={panelMockup.revisionId}
             chatSessionId={activeSession?.id ?? null}
-            sourceMessageId={mockupSourceMessageId}
+            onRequestChange={() => returnToMockupComposer(() => setPanelMockup(null), () => setMobileOverlay(null), () => chatInputRef.current?.focus())}
             onClose={() => setPanelMockup(null)}
           />
         </div>
@@ -14691,6 +14736,8 @@ export default function ChatPage() {
         regenerateDirective={regenerateDirective}
         deleteDirective={deleteDirective}
         sessionId={activeSession?.id ?? ""}
+        mockupRevisionHint={mockupRevisionHint}
+        onFocusComposer={() => returnToMockupComposer(() => setPanelMockup(null), () => setMobileOverlay(null), () => chatInputRef.current?.focus())}
       />}
 
       {/* P2-10: 프롬프트 템플릿 모달 */}

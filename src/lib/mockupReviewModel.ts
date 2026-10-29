@@ -23,14 +23,27 @@ export type MockupReview = {
   revisions: MockupRevisionRow[];
   unresolved_change_requests: MockupChangeRequest[];
 };
+export type MockupChangeReportItem = {
+  change_request_id: string; sequence: number; source_message_id: string; screen_id: string | null;
+  original_text: string; status: string; queued?: boolean; requested_at?: string;
+  base_revision: { revision_id: string; revision: number | null } | null;
+  new_revision: { revision_id: string; revision: number | null } | null;
+  outcome: string | null; outcome_reason: string | null;
+};
+export type MockupChangeReport = { review_id: string; status: string; generation: number; change_requests: MockupChangeReportItem[] };
 export type MockupScreen = { screen_id: string; title: string; route: string };
 export type MockupAsset = {
-  asset_id: string; role: "primary" | "child"; mime: string; url?: string; uri?: string; filename?: string;
+  asset_id: string; role: "primary" | "child"; mime: string; url?: string; uri?: string; filename?: string; sha256?: string;
   screen_id: string | null; phase: string | null; viewport: string | null; state: string | null;
+};
+export type MockupDocRef = {
+  role: string; document_key?: string | null; revision_id?: string | null; content_hash?: string | null;
+  exempt_reason?: string | null; exempt_policy_ref?: string | null;
 };
 export type MockupRevision = {
   revision_id: string; revision: number; status: string; manifest_hash: string;
   is_latest: boolean; is_approved: boolean;
+  parent_revision_id?: string | null; doc_refs?: MockupDocRef[];
   manifest: { screens: MockupScreen[]; assets: MockupAsset[] };
 };
 export type MockupNotification = {
@@ -289,6 +302,8 @@ export type MockupErrorView = {
   details: string[];
   /** 서버 상태가 앞서 나갔으므로 화면을 다시 받아야 한다. */
   needsRefresh: boolean;
+  /** 대상이 둘 이상이라 서버가 거절했을 때 후보 review_id. */
+  candidates: string[];
 };
 
 const MISSING_LABEL: Record<string, string> = {
@@ -335,6 +350,15 @@ const CODE_MESSAGE: Record<string, string> = {
   review_not_found: "목업 검토 건을 찾을 수 없습니다.",
   revision_not_found: "해당 판본을 찾을 수 없습니다.",
   asset_not_found: "해당 시안 파일을 찾을 수 없습니다.",
+  session_not_found: "채팅 세션을 찾을 수 없습니다. 세션을 다시 열어 주세요.",
+  reply_target_not_found: "답장한 메시지를 서버에서 찾지 못했습니다.",
+  reply_target_session_mismatch: "답장한 메시지가 이 채팅창의 것이 아닙니다.",
+  review_target_conflict: "답장·선택한 목업과 수정 요청 대상이 서로 달라 접수하지 않았습니다. 대상을 다시 고르세요.",
+  artifact_not_a_mockup: "선택한 아티팩트는 목업 검토 건이 아닙니다.",
+  artifact_not_found: "선택한 아티팩트를 찾을 수 없습니다.",
+  review_session_mismatch: "이 목업은 다른 채팅창에 연결돼 있어 접수하지 않았습니다.",
+  review_target_not_found: "이 채팅창에서 수정할 수 있는 목업을 찾지 못했습니다.",
+  ambiguous_review_target: "수정할 수 있는 목업이 둘 이상입니다. 대상 목업을 골라 주세요.",
 };
 
 const STATUS_MESSAGE: Record<number, string> = {
@@ -385,7 +409,9 @@ export function describeMockupError(status: number, body: unknown): MockupErrorV
     else message = `요청에 실패했습니다 (HTTP ${status}).`;
   }
   const needsRefresh = status === 409 || code === "missing_artifacts" || code === "invalid_state" || code === "stale_revision";
-  return { status, code, message, details, needsRefresh };
+  const candidates = d && Array.isArray(d.candidates) ? d.candidates.filter((c): c is string => typeof c === "string") : [];
+  if (candidates.length) details.push(`후보 ${candidates.length}건`);
+  return { status, code, message, details, needsRefresh, candidates };
 }
 
 // ---------------------------------------------------------------- 요청 본문
@@ -507,4 +533,136 @@ export function mockupHtmlFilename(asset: MockupAsset): string {
 }
 export function mockupHtmlLink(project: string, review: string, revision: string, asset: string): string {
   return `/mockups/view?${new URLSearchParams({ project, review, revision, asset })}`;
+}
+
+// ---------------------------------------------------------------- 채팅 카드 → 같은 아티팩트 패널
+
+export type MockupBinding = { project: string; reviewId: string; revisionId: string | null };
+
+// 채팅 아티팩트 metadata 가 목업 검토 건을 가리키면 같은 아티팩트 패널에서 검토 화면으로 연다.
+// 서버 resolve_change_target 이 읽는 키와 같다(metadata.mockup_review_id).
+export function mockupBindingFromArtifact(metadata: Record<string, unknown> | null | undefined): MockupBinding | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const reviewId = asUuid(typeof metadata.mockup_review_id === "string" ? metadata.mockup_review_id : null);
+  const project = asProjectKey(typeof metadata.mockup_project === "string" ? metadata.mockup_project : null);
+  if (!reviewId || !project) return null;
+  return { project, reviewId, revisionId: asUuid(typeof metadata.mockup_revision_id === "string" ? metadata.mockup_revision_id : null) };
+}
+
+// 딥링크가 가리키는 검토 건의 카드. 같은 검토 건·같은 프로젝트일 때만 찾는다(링크 값만으로 다른 건에 붙이지 않는다).
+export function findMockupArtifact<T extends { metadata?: Record<string, unknown> | null }>(
+  artifacts: readonly T[], link: Pick<MockupDeepLink, "reviewId" | "project">,
+): T | undefined {
+  return artifacts.find((a) => {
+    const b = mockupBindingFromArtifact(a.metadata);
+    return !!b && b.reviewId === link.reviewId && b.project === link.project;
+  });
+}
+
+// 카드가 열 판. 딥링크의 mockup_revision 이 같은 검토 건을 가리키면 그 판, 아니면 카드 metadata 의 판.
+export function bindingRevisionFor(
+  binding: MockupBinding, hint: { reviewId: string; project: string; revisionId: string | null } | null | undefined,
+): string | null {
+  if (hint && hint.revisionId && hint.reviewId === binding.reviewId && hint.project === binding.project) return hint.revisionId;
+  return binding.revisionId;
+}
+
+// ---------------------------------------------------------------- 전후 비교·수정 문서
+
+export type ComparePair = { state: string; cur: MockupAsset; prev: MockupAsset | null; changed: boolean };
+
+// 같은 화면·크기에서 이 판의 목업 이미지와 직전 판의 같은 상태 이미지를 짝지운다. 해시를 모르면 바뀐 것으로 본다.
+export function pairWithPreviousRevision(
+  cur: Pick<MockupRevision, "manifest">, prev: Pick<MockupRevision, "manifest"> | null, screenId: string, viewport: ViewportClass,
+): ComparePair[] {
+  const pick = (rev: Pick<MockupRevision, "manifest">) => (rev.manifest?.assets ?? []).filter((a) =>
+    a.role === "primary" && a.screen_id === screenId && viewportClass(a.viewport) === viewport
+    && (a.phase === "mockup" || a.phase === "implemented") && isImageAsset(a));
+  const before = prev ? pick(prev) : [];
+  return pick(cur).map((a) => {
+    const state = a.state ?? "default";
+    const match = before.find((b) => (b.state ?? "default") === state && b.phase === a.phase) ?? null;
+    const changed = !match || !match.sha256 || !a.sha256 || match.sha256 !== a.sha256;
+    return { state, cur: a, prev: match, changed };
+  });
+}
+
+export const DOC_ROLE_LABEL: Record<string, string> = { plan: "계획서", prd: "PRD", spec: "명세서" };
+
+export function docRefLabel(ref: MockupDocRef): string {
+  const role = DOC_ROLE_LABEL[ref.role] ?? ref.role;
+  if (ref.exempt_reason) return `${role} · 면제: ${ref.exempt_reason}`;
+  return `${role} · ${ref.document_key ?? "문서 키 없음"}${ref.content_hash ? ` · ${ref.content_hash.slice(0, 8)}` : ""}`;
+}
+
+export function outcomeLabel(item: Pick<MockupChangeReportItem, "outcome" | "status">): string {
+  if (item.outcome === "applied") return "반영됨";
+  if (item.outcome === "not_applied") return "미반영";
+  return item.status === "resolved" ? "처리됨" : "대기·진행 중";
+}
+
+// ---------------------------------------------------------------- 수정 요청 대상 고정
+
+export type MockupTarget = {
+  sessionId: string; project: string; reviewId: string; revisionId: string | null;
+  artifactId: string | null; screenId: string | null; title: string;
+  /** 대상을 고른 시점의 서버 generation. 그 뒤 새 판이 올라왔으면 서버가 구버전으로 거절한다. */
+  generation: number | null;
+};
+export type TargetVia = "reply" | "panel" | "chosen";
+export type TargetResolution =
+  | { kind: "none" }
+  | { kind: "target"; target: MockupTarget; via: TargetVia }
+  | { kind: "ambiguous"; reason: "reply_vs_panel" | "choose"; candidates: MockupTarget[] };
+
+export function targetKey(t: Pick<MockupTarget, "project" | "reviewId">): string {
+  return `${t.project}:${t.reviewId}`;
+}
+
+// 답장한 메시지의 카드 > 열려 있는 패널 > 직접 고른 후보. 다른 세션의 대상은 쓰지 않고, 후보가 하나뿐이어도 자동으로 고르지 않는다.
+export function resolveMockupTarget(input: {
+  sessionId: string; reply: MockupTarget | null; panel: MockupTarget | null;
+  candidates: readonly MockupTarget[]; chosenKey: string | null;
+}): TargetResolution {
+  const inSession = (t: MockupTarget | null) => (t && t.sessionId === input.sessionId ? t : null);
+  const reply = inSession(input.reply);
+  const panel = inSession(input.panel);
+  const candidates = input.candidates.filter((c) => c.sessionId === input.sessionId);
+  const chosen = input.chosenKey ? [reply, panel, ...candidates].find((c) => c && targetKey(c) === input.chosenKey) ?? null : null;
+  if (reply && panel && targetKey(reply) !== targetKey(panel)) {
+    return chosen ? { kind: "target", target: chosen, via: "chosen" } : { kind: "ambiguous", reason: "reply_vs_panel", candidates: [reply, panel] };
+  }
+  if (reply) return { kind: "target", target: reply, via: "reply" };
+  if (panel) return { kind: "target", target: panel, via: "panel" };
+  if (chosen) return { kind: "target", target: chosen, via: "chosen" };
+  return candidates.length ? { kind: "ambiguous", reason: "choose", candidates } : { kind: "none" };
+}
+
+export type IntakeBody = {
+  idempotency_key: string; expected_generation: number | null; change_request_id: string;
+  session_id: string; source_message_id: string; comment: string;
+  review_id: string; artifact_id: string | null; reply_to_id: string | null; screen_id: string | null;
+};
+
+// 서버 /change-intake 본문. 대상 review 는 항상 명시하고, 서버가 답장·아티팩트 단서와 어긋나면 거절한다.
+export function intakeBody(
+  target: MockupTarget, ids: { changeRequestId: string; idempotencyKey: string; sourceMessageId: string },
+  comment: string, replyToId: string | null,
+): IntakeBody {
+  return {
+    idempotency_key: ids.idempotencyKey, expected_generation: target.generation, change_request_id: ids.changeRequestId,
+    session_id: target.sessionId, source_message_id: ids.sourceMessageId, comment: comment.trim(),
+    review_id: target.reviewId, artifact_id: asUuid(target.artifactId), reply_to_id: asUuid(replyToId), screen_id: target.screenId,
+  };
+}
+
+export type PersistedUserMessage = { id: string; role: string; content: string; created_at?: string };
+
+// 전송 직후 저장된 내 메시지를 찾는다. 같은 내용의 가장 최근 메시지만 인정하고, 못 찾으면 null(등록하지 않는다).
+export function findPersistedUserMessage(messages: readonly PersistedUserMessage[], content: string, sentAtMs: number): PersistedUserMessage | null {
+  const since = sentAtMs - 10_000;
+  const hits = messages
+    .filter((m) => m.role === "user" && m.content === content && asUuid(m.id) && (!m.created_at || Date.parse(m.created_at) >= since))
+    .sort((a, b) => (Date.parse(b.created_at ?? "") || 0) - (Date.parse(a.created_at ?? "") || 0));
+  return hits[0] ?? null;
 }

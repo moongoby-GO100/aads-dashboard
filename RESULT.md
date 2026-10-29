@@ -334,3 +334,68 @@ UI는 파일 API가 주는 대로만 표시하며, 못 읽는 파일을 성공�
 변경 파일: package.json, package-lock.json, src/app/chat/page.tsx, src/app/goals/page.tsx, src/components/GoalPanel.tsx, src/components/GoalApprovalControls.tsx, tests/chat-modernization/goal-approval-controls.test.mjs, tests/browser/approval-browser.test.mjs, RESULT.md.
 
 commit/push 미실행, GitHub 신규 commit URL 없음. 빌드·배포·재시작 미실행. 운영 미반영. 롤백은 Runner가 최종 선별 커밋을 생성한 뒤 해당 커밋 revert; 현재는 위 의도 파일 diff만 원복 가능하다. 외부 유료 호출 없음, 실제 총비용 미측정.
+
+
+---
+
+## 목업 채팅 아티팩트 수정 검증 결과 — runner-951e5ee2
+
+- 작업: AADS-RDOC-M7-CHAT-MOCKUP-ARTIFACT-FIX-20261029
+- source_task_id: runner-951e5ee2
+- change_summary: 세션을 넘나드는 목업 수정 요청 완료 UI 오염과 모바일 입력창 복귀 누락을 수정하고 실제 검증 범위를 기록한다.
+- 상태: 코드 수정 및 로컬 회귀 검증 수행. 실제 API 화면 증거와 정본 등록은 미완료.
+- 실제 대시보드 기준 커밋 SHA: 4f2abb492cdbb69fea98ce8b430dde425f43aa50
+- 재사용한 검수 SHA: c18bcc3cc2fa1011f7b3157338f30716ef867199
+- 실제 검토한 서버 SHA: ce503cd4aa716f73a160a10e836831246932984e
+- 이번 수정의 커밋 SHA: 없음. 사용자 지시에 따라 commit/push/운영 반영을 실행하지 않았다.
+
+### STEP 0 기존 구현 조사와 분류
+
+코드 변경 전 /root/aads/AGENTS.md와 서버 AGENTS.md를 읽고 기존 접점을 조사했다.
+복구 패치의 전체 적용 검사에서 문맥 불일치를 확인하여, 관련 파일만 기존/부모/검수 SHA의 3방향 병합으로 복구했다.
+최근 사용자 메시지 idempotency 및 client environment 수집, HTML 원본 파일명/격리 뷰어와 기존 모델 API·selftest를 보존했다.
+
+| 대상 | 기존 함수·컴포넌트·접점 | 분류 및 반영 |
+|---|---|---|
+| mockupTargetStore.ts | 현재 기준에는 파일 없음. 검수 SHA의 resetForSession, arm/disarm, submitPendingIntent, registerMockupChangeAfterSend, sessionStorage pending intents | 신규(복구 후 수정). session/arm/request epoch와 전송 시점 fence 추가, 다른 세션의 setPanel/setReply/setCandidates 무시 |
+| page.tsx | ChatPage, sendMessage/finally, chatApi 메시지 조회, mockupSourceMessageId, 고정 MockupReviewPanel | 수정. 실제 저장 메시지를 조회해 change-intake 연결, 스트림 대기 전 fence 보존, 고정 패널 composer 복귀 연결 |
+| ChatArtifactPanel.tsx | ChatArtifactPanel, activeArtifact metadata, ArtifactContentArea | 수정. metadata의 review/project/revision으로 embedded 패널 표시 및 composer 복귀 콜백 전달 |
+| MockupReviewPanel.tsx | load, doApprove, AssetImage, ImageZoomDialog, useNarrow, doChange, changeAttempt, 로컬 comment/sourceMessageId | 수정. 기존 승인·이미지·HTML 링크 보존, startChange로 대상 고정 후 채팅 입력창 복귀, 비교/변경 보고 복구. doChange 등 아래 삭제 내역 참조 |
+| mockupReviewApi.ts | getReview/getRevision/assetBlob/approve/requestChanges/listReviews/알림 API | 유지 및 수정. 기존 API 유지, listReviews signal 및 change-intake/change-report 접점 추가 |
+| mockupReviewModel.ts | 파싱·승인/변경 본문·권한·HTML 링크·확대·보관함 함수 및 공개 타입 | 유지 및 수정. 기존 공개 helper/관련 테스트 유지, metadata binding·대상 판정·저장 메시지 검색·비교 모델 추가 |
+| useMockupChatTargets.ts | 현재 기준에는 파일 없음 | 신규(검수 구현 복구). 세션별 목록/답장 대상 조회, AbortController로 이전 조회 차단 |
+| MockupTargetBar.tsx | 현재 기준에는 파일 없음 | 신규(복구). 대상 고정/선택/실패 안내/같은 멱등키 재시도 |
+| mockupComposerReturn.ts | 없음 | 신규. 두 패널에서 패널·모바일 overlay를 닫고 다음 frame에 composer focus |
+| mockupTargetStore.test.ts / mockupComposerReturn.test.ts | 현재 기준에는 파일 없음 | 신규(복구 및 추가). 세션/요청 경합 및 모바일 복귀 회귀 검증 |
+| mockupReviewModel.selftest.ts / vitest.config.mts | 기존 selftest와 Vitest include | 수정. 기존 검사 보존, 모델 계약 검사 및 새 테스트 검색 경로 추가 |
+| 서버 mockup_review_service.py | submit_review/create_revision → _bind_session_card, _session_scope, _workspace_in_scope, _lock/_replay | 유지. 이미 구현되어 있어 중복 구현하지 않음. 잠긴 head의 tenant/session/project 기준, 권한 검증, UPDATE 후 INSERT로 동일 카드 연결 |
+| 서버 DB 접점 | chat_sessions JOIN chat_workspaces, chat_artifacts metadata UPDATE/INSERT, submitted 이벤트 | 유지. 단위 계약·권한 테스트로 확인. 실제 DB 통합은 테스트 DB 미설정으로 미검증 |
+| 스케줄러·마이그레이션·인증 클라이언트·배포 게이트 | 변경 대상 없음 | 유지. 수정하지 않음 |
+
+명시 대상 외 변경 사유는 수정 전 진행 보고에도 명시했다. ChatArtifactPanel/API/모델/hook/표시줄은 기존 M7 카드 및 전송 연결을 복구하는 필수 접점이다. 공통 composer helper와 테스트는 양쪽 모바일 진입점의 복귀 동작을 검증한다. Vitest 설정은 새 테스트를 실제 검색하도록 한다. 이 RESULT는 기존 파일/기록을 보존하고 이번 결과만 덧붙인다.
+
+삭제 내역: 파일 삭제 없음. 패널 로컬 doChange·changeAttempt·comment/sourceMessageId 연결과 page의 mockupSourceMessageId memo를 제거했다. 이 경로는 이전의 마지막 사용자 메시지를 재사용했으므로, 현재 보낸 메시지에 근거하는 change-intake로 연결하기 위해 변경했다. 호출처는 패널 내부 버튼 한 곳과 page의 패널 prop 한 곳이며, 이제 startChange → 대상 고정 → composer 전송 → 저장 메시지 조회 → registerMockupChangeAfterSend로 이어진다. 서버 requestChanges 및 모델의 기존 공개 helper는 호환성을 위해 보존한다. 롤백은 위 연결 파일의 이번 diff만 역적용하여 기존 prop/memo/doChange 흐름을 함께 복구하며 무관한 변경을 되돌리지 않는다.
+
+### 반려 결함별 대응과 증거
+
+1. 세션/요청 경합: UI fence를 전송 시점에 캡처한다. 세션 reset, 새 arm/disarm, 새 요청이 epoch를 바꾸므로 오래된 성공·실패·message_not_found가 현재 armed/notice를 덮지 않는다. 오래된 요청의 성공 시 pending intent 정리는 유지한다. A→B 및 A→B→A의 성공/실패, 늦은 메시지 조회·조회 오류, 같은 세션 새 arm, 더 늦게 시작한 요청, 스트림 완료 후 등록 시작을 회귀 테스트로 검증했다.
+2. 서버 metadata: 기존 최소 구현을 확인하고 유지했다. metadata 키 mockup_review_id/mockup_project/mockup_revision_id, 반복 연결 및 판 변경 시 카드 재사용, tenant/workspace tenant/project 격리, 다른 사용자 세션 권한, 쓰기 실패 전파를 포함한 서버 단위 테스트 통과. PostgreSQL 실제 트랜잭션 검증은 미완료.
+3. production next build: 실행하지 않음. 승인 후 Runner 빌드 검증 대상. 실제 /chat 연동 증거는 미확보. localhost:3000/chat 및 localhost:8000/api/v1/health 읽기 시도는 샌드박스에서 Operation not permitted로 차단됐다. 모의 화면을 실제 API 증거로 제시하지 않는다.
+4. 모바일 fallback: 고정 패널 onRequestChange와 embedded onFocusComposer가 같은 returnToMockupComposer 함수를 호출한다. 패널 및 overlay 닫기 후 다음 frame의 focus 순서와 두 진입점 배선을 단위 테스트로 검증했다. 실제 모바일 브라우저/API 화면 증거는 미확보.
+5. 정본: canonical_document_lookup/register 연결 도구를 검색했으나 제공되지 않았다. 기존 document_key를 확인하지 못했으므로 임의 새 key로 등록하지 않았다. source_task_id/change_summary는 위에 명시했다. 정본 미등록(미완료), 열람 링크 미제공. 이 RESULT는 정본 열람 참조를 대신하지 않는다.
+
+### 실제 실행한 검증
+
+- Vitest: node node_modules/vitest/vitest.mjs run src/lib/mockupTargetStore.test.ts src/components/mockupComposerReturn.test.ts → 2 files, 24 tests passed, exit 0.
+- selftest: node scripts/run-selftests.mjs → 16/16 files passed, exit 0. 기존 모델/HTML 이름 검사도 보존하여 재실행했다.
+- 타입 검사: node node_modules/typescript/bin/tsc --noEmit --incremental false --pretty false → 두 차례 exit 0. 최종 수정 후 세 번째 검사도 exit 0.
+- 서버 핵심 pytest: 테스트 전용 JWT_SECRET_KEY와 기존 .venv Python으로 tests/unit/test_mockup_session_card.py 및 tests/unit/test_mockup_review_tools_session.py → 22 passed, exit 0. 운영 비밀값/설정 변경 없음.
+- 서버 PostgreSQL 통합: tests/integration/test_mockup_session_card_postgres.py → 6 skipped, exit 0. AADS_MOCKUP_TEST_DATABASE_URL 없음. 통과 증거로 세지 않는다.
+- 원본 게이트: bash scripts/run_unit_tests.sh [관련 4개 단위 테스트 파일] → 기준 컨테이너/이미지 조회 실패, exit 2. 스크립트 수정 없음. 게이트 통과 아님.
+- 초기 시스템 Python pytest → fastapi 없음, collection error exit 2. 기존 .venv 첫 시도 → JWT_SECRET_KEY 없음, collection error exit 2. 이후 테스트 전용 키를 사용한 위 핵심 22건 통과.
+- 확장 pytest 4파일 실행은 57개 진행 표시 이후 종료 결과 미수신 상태로 별도 구분한다. 핵심 22건 결과와 합산하지 않는다.
+- Vitest 첫 시도는 공유 node_modules의 .vite-temp 쓰기 EROFS로 exit 1. 작업 폴더 내 dependency symlink 디렉터리/로컬 캐시로 분리 후 위 24건 통과. 공유 dependency 원본 수정 없음.
+- 통합 pytest를 대시보드 cwd에서 최초 실행한 시도는 잘못된 상대 경로로 exit 4. 서버 cwd에서 다시 실행해 위 6 skipped 결과를 확인했다.
+- git diff --check → exit 0.
+
+최종 보충: 최종 타입 검사 exit 0 및 RESULT 후행 공백 수정 후 git diff --check exit 0을 확인했다. 새 커밋은 생성하지 않았다.

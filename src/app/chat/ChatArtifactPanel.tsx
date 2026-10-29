@@ -14,6 +14,8 @@ import {
 } from "./runnerJobsLoader";
 import { getMe } from "@/lib/auth";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
+import { MockupReviewPanel } from "@/components/MockupReviewPanel";
+import { bindingRevisionFor, mockupBindingFromArtifact } from "@/lib/mockupReviewModel";
 import { buildCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import { isArtifactPreviewHref } from "@/lib/documentLinks";
 import {
@@ -226,6 +228,10 @@ export interface ChatArtifactPanelProps {
   systemMessages?: ChatMessage[];
   unreadLogCount?: number;
   sessionId?: string;
+  // 수정 요청 모드로 들어가면 입력창으로 돌아가게 한다(모바일은 아티팩트 시트를 닫는다).
+  onFocusComposer?: () => void;
+  // 알림 딥링크의 mockup_revision — 같은 검토 건의 카드를 열 때 그 판을 먼저 보여준다.
+  mockupRevisionHint?: { reviewId: string; project: string; revisionId: string | null } | null;
 }
 
 /** 우측 아티팩트 패널 — 보고서/코드/차트/대시보드/작업 탭 */
@@ -1073,7 +1079,7 @@ function ArtifactContentArea({ artifactTab, filteredArtifacts, selectedArtifactI
 const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPanelProps) {
   const {
     screenSize, showArtifactPanel, artifactMode, setArtifactMode,
-    mobileOverlay, setMobileOverlay,
+    mobileOverlay, setMobileOverlay, onFocusComposer, mockupRevisionHint,
     artifacts, artifactTab, setArtifactTab, artifactCounts,
     sessionDocs = [], sessionOtherFiles = 0,
     sessionCanonicalDocs = [], onOpenDocument,
@@ -1081,6 +1087,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective, sendDirectiveNow, regenerateDirective, deleteDirective, sessionId,
   } = props;
+  const mockupBinding = activeArtifact ? mockupBindingFromArtifact(activeArtifact.metadata) : null;
 
   // 아티팩트 검색/필터 상태
   const [searchQuery, setSearchQuery] = useState("");
@@ -1932,7 +1939,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
               selectedArtifactIdx={selectedArtifactIdx}
               setSelectedArtifactIdx={setSelectedArtifactIdx}
             >
-              {artifactTab === "tasks" ? (
+              {activeArtifact && mockupBinding && (artifactTab === "html_preview" || artifactTab === "report") ? (
+                <MockupReviewPanel
+                  key={`${mockupBinding.project}:${mockupBinding.reviewId}:${activeArtifact.id}:${bindingRevisionFor(mockupBinding, mockupRevisionHint) ?? ""}`}
+                  embedded
+                  project={mockupBinding.project}
+                  reviewId={mockupBinding.reviewId}
+                  revisionId={bindingRevisionFor(mockupBinding, mockupRevisionHint)}
+                  chatSessionId={activeSession?.id ?? null}
+                  artifactId={activeArtifact.id}
+                  onRequestChange={onFocusComposer}
+                />
+              ) : artifactTab === "tasks" ? (
                 <div style={{ padding: "8px 12px 0" }}>
                   <RunnerHostStatus emphasis="running" />
                   <ArtifactTaskMonitor sessionId={activeSession?.id} />
