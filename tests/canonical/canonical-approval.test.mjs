@@ -204,11 +204,11 @@ test('viewer requires opening verified content and hides approval outside review
     if(status==='draft')assert.match(v.text(),/검토 요청 전 — 작성 세션에서 검토 요청 필요/);
   }
 });
-test('list badges distinguish drafts, review queue and approval with queue taking precedence',()=>{
+test('list badges distinguish drafts, review queue and approval with approval taking precedence',()=>{
   assert.equal(exports.canonicalListStatus(false,false),'초안');
   assert.equal(exports.canonicalListStatus(false,true),'승인 대기');
   assert.equal(exports.canonicalListStatus(true,false),'승인됨');
-  assert.equal(exports.canonicalListStatus(true,true),'승인 대기');
+  assert.equal(exports.canonicalListStatus(true,true),'승인됨');
 });
 test('queue is fetched once per project including failure; failed queue falls back silently',async()=>{
   const calls=[], warnings=[], out={};
@@ -234,4 +234,53 @@ test('chat card exports use the same extracted component and preserve public hel
   }});
   assert.equal(cards.CanonicalApprovalCard,exports.CanonicalApprovalPanel);
   for(const name of ['approvable','reviewable','allowedCanonicalReference','canonicalReferencesFromTools','selectCanonicalCardRefs','shownCanonicalCardIds'])assert.equal(cards[name],exports[name]);
+});
+
+
+test('canonical list groups three revisions and limits review to the latest row', () => {
+  const docs = [1, 2, 3].map(revision => ({ project: 'AADS', document_key: 'spec', revision, approved: revision === 1, is_latest: revision === 3, approved_revision: 1, in_review: revision === 3 }));
+  const groups = workflow.groupCanonicalDocuments(docs);
+  assert.equal(groups.length, 1);
+  const { latest, previous, approvedRevision } = groups[0];
+  assert.equal(latest.revision, 3);
+  assert.equal(previous.length, 2);
+  assert.equal(workflow.canonicalLatestWaiting(latest, true), true);
+  assert.equal(exports.canonicalListStatus(false, true), '승인 대기');
+  assert.equal(exports.canonicalListStatus(false, true, approvedRevision), '승인 대기 (현재 정본: 개정 1)');
+  assert.equal(previous.filter(doc => workflow.canonicalLatestWaiting(doc, true)).length, 0);
+  assert.equal(workflow.canonicalRevisionApproved(previous[1]), true);
+  const panel = fs.readFileSync('src/app/chat/ChatArtifactPanel.tsx', 'utf8');
+  const history = panel.slice(panel.indexOf('{previous.map('), panel.indexOf('</details>}', panel.indexOf('{previous.map(')));
+  assert.match(history, /<a /);
+  assert.doesNotMatch(history, /<button/);
+});
+
+test('legacy responses use maximum revision and queue while keeping approved revisions approved', () => {
+  const docs = [2, 1, 3].map(revision => ({ project: 'AADS', document_key: 'spec', revision, approved: revision === 1 }));
+  const [group] = workflow.groupCanonicalDocuments(docs);
+  assert.equal(group.latest.revision, 3);
+  assert.equal(group.previous.length, 2);
+  assert.equal(group.approvedRevision, 1);
+  assert.equal(workflow.canonicalLatestWaiting(group.latest, true), true);
+  assert.equal(workflow.canonicalLatestWaiting(group.latest, false), false);
+  assert.equal(workflow.canonicalLatestWaiting(docs[1], true), false);
+});
+
+test('explicit latest and review fields override revision order and queue', () => {
+  const docs = [{project:'AADS', document_key:'spec', revision:2, is_latest:true, in_review:false}, {project:'AADS', document_key:'spec', revision:3, is_latest:false}];
+  const [group] = workflow.groupCanonicalDocuments(docs);
+  assert.equal(group.latest.revision, 2);
+  assert.equal(workflow.canonicalLatestWaiting(group.latest, true), false);
+  assert.equal(workflow.canonicalLatestWaiting({...group.latest, in_review:true}, false), true);
+  assert.equal(workflow.canonicalLatestWaiting({...group.latest, in_review:true}, true, true), false);
+  assert.equal(workflow.canonicalLatestWaiting({...group.latest, approved_revision:2, in_review:true}, true), false);
+});
+
+test('one revision stays one row and projects and document keys remain separate', () => {
+  const doc = {project:'AADS', document_key:'spec', revision:1};
+  const [group] = workflow.groupCanonicalDocuments([doc]);
+  assert.equal(group.latest, doc);
+  assert.equal(group.previous.length, 0);
+  assert.equal(workflow.groupCanonicalDocuments([doc, {...doc, project:'DESIGN'}, {...doc, document_key:'other'}]).length, 3);
+  assert.equal(workflow.groupCanonicalDocuments([]).length, 0);
 });

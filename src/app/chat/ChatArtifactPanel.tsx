@@ -1,4 +1,6 @@
 "use client";
+
+import { groupCanonicalDocuments, canonicalRevisionApproved, canonicalLatestWaiting, type SessionCanonicalDocument } from "@/lib/canonicalDocumentWorkflow";
 import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
@@ -210,10 +212,7 @@ export interface ChatArtifactPanelProps {
   }>;
   sessionOtherFiles?: number;
   // 이 대화가 정본(project_document_*)에 등록한 문서. 열람은 인증 API 로만 한다.
-  sessionCanonicalDocs?: Array<{
-    project: string; document_key: string; revision?: number | null;
-    title?: string | null; approved?: boolean; at?: string | null;
-  }>;
+  sessionCanonicalDocs?: Array<SessionCanonicalDocument>;
   // 문서 링크를 아티팩트 본문으로 연다(채팅 링크와 같은 처리기).
   onOpenDocument?: (href: string, label: string) => void | Promise<void>;
   filteredArtifacts: Artifact[];
@@ -1091,6 +1090,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [canonicalQueue, setCanonicalQueue] = useState<Record<string, string[]>>({});
   const [canonicalApproved, setCanonicalApproved] = useState<Record<string, boolean>>({});
   const queueRequests = useRef(new Map<string, Promise<string[] | null>>());
+  const canonicalDocumentGroups = groupCanonicalDocuments(sessionCanonicalDocs);
   const canonicalProjects = [...new Set(sessionCanonicalDocs.map(doc => doc.project))].sort().join(",");
   useEffect(() => {
     if (!(showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden") || mobileOverlay === "artifact")) return;
@@ -2439,22 +2439,22 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                       {sessionCanonicalDocs.length > 0 && (
                         <div data-testid="session-canonical-docs" style={{ marginBottom: 12 }}>
                           <div style={{ marginBottom: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
-                            정본 문서 {sessionCanonicalDocs.length}건
+                            정본 문서 {canonicalDocumentGroups.length}건
                           </div>
-                          {sessionCanonicalDocs.map((c) => {
+                          {canonicalDocumentGroups.map(({ id, latest: c, previous, approvedRevision }) => {
                             const href = buildCanonicalDocHref({
                               project: c.project,
                               documentKey: c.document_key,
                               revision: c.revision ?? undefined,
                             });
                             const label = (c.title || "").trim() || c.document_key;
-                            const id = `${c.project}/${c.document_key}`;
-                            const approved = canonicalApproved[id] ?? c.approved;
-                            const waiting = !canonicalApproved[id] && !!canonicalQueue[c.project]?.includes(c.document_key);
+                            const approved = canonicalApproved[id] ?? canonicalRevisionApproved(c);
+                            const waiting = canonicalLatestWaiting(c, !!canonicalQueue[c.project]?.includes(c.document_key), canonicalApproved[id]);
                             return (
                               <div key={`${id}/${c.revision ?? "latest"}`}>
                               <a
                                 href={href}
+                                className="min-h-11"
                                 data-testid="session-canonical-doc"
                                 title={`${c.project} · ${c.document_key}`}
                                 onClick={(e) => {
@@ -2476,7 +2476,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)",
                                                  border: "1px solid var(--border)", borderRadius: 5,
                                                  padding: "1px 5px", whiteSpace: "nowrap" }}>
-                                    {canonicalListStatus(approved, waiting)}
+                                    {canonicalListStatus(approved, waiting, approvedRevision)}
                                   </span>
                                 </div>
                                 <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
@@ -2484,6 +2484,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   {c.revision != null && ` · 개정 ${c.revision}`}
                                 </div>
                               </a>
+                              {previous.length > 0 && <details className="mb-2">
+                                <summary className="min-h-11 cursor-pointer px-3 py-3">이전 판본 {previous.length}개</summary>
+                                {previous.map((revision) => {
+                                  const previousHref = buildCanonicalDocHref({ project: revision.project, documentKey: revision.document_key, revision: revision.revision ?? undefined });
+                                  const isApproved = canonicalRevisionApproved(revision) || (revision.revision != null && revision.revision === approvedRevision);
+                                  return <a key={revision.revision ?? "unknown"} className="min-h-11 block px-3 py-3" href={previousHref} onClick={(event) => {
+                                    if (!onOpenDocument) return;
+                                    event.preventDefault();
+                                    void onOpenDocument(previousHref, label);
+                                  }}>개정 {revision.revision ?? "미상"} · {isApproved ? "승인됨(현재 정본)" : "이전 판본(대체됨)"}</a>;
+                                })}
+                              </details>}
                               {waiting && onOpenDocument && <button type="button" className="min-h-11 rounded-lg border px-3 mb-2" onClick={() => void onOpenDocument(buildCanonicalDocHref({ project: c.project, documentKey: c.document_key }), label)}>열어서 승인</button>}
                               </div>
                             );

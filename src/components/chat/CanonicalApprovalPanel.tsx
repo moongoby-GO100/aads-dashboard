@@ -16,8 +16,10 @@ export function loadCanonicalReviewQueueOnce(cache: Map<string, Promise<string[]
   cache.set(project, pending);
   return pending;
 }
-export function canonicalListStatus(approved: boolean | undefined, waiting: boolean): string {
-  return waiting ? "승인 대기" : approved ? "승인됨" : "초안";
+export function canonicalListStatus(approved: boolean | undefined, waiting: boolean, approvedRevision?: number | null): string {
+  if (approved) return "승인됨";
+  if (waiting) return approvedRevision != null ? `승인 대기 (현재 정본: 개정 ${approvedRevision})` : "승인 대기";
+  return "초안";
 }
 
 const DOCUMENT_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;

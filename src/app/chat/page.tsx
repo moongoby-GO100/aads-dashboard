@@ -1,5 +1,7 @@
 // AADS-dashboard-rebuild: refactored
 "use client";
+import { type SessionCanonicalDocument } from "@/lib/canonicalDocumentWorkflow";
+
 import CanonicalApprovalCards, { canonicalReferencesFromTools } from "@/components/chat/CanonicalApprovalCards";
 
 import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo, memo } from "react";
@@ -11373,10 +11375,7 @@ export default function ChatPage() {
     sessionId: string; documents: Array<{ project: string; document_key: string }>;
   } | null>(null);
   const [canonicalDocsSession, setCanonicalDocsSession] = useState<string | null>(null);
-  const [sessionCanonicalDocs, setSessionCanonicalDocs] = useState<Array<{
-    project: string; document_key: string; revision?: number | null;
-    title?: string | null; approved?: boolean; at?: string | null;
-  }>>([]);
+  const [sessionCanonicalDocs, setSessionCanonicalDocs] = useState<Array<SessionCanonicalDocument>>([]);
 
   useEffect(() => {
     const sid = activeSession?.id;

@@ -17,3 +17,36 @@ export function canTransitionDocumentForHead(
     ? canTransitionDocument(approvedStatus, action, hasApproved)
     : canTransitionDocument(latestStatus, action, hasLatest);
 }
+
+export interface SessionCanonicalDocument {
+  project: string; document_key: string; revision?: number | null;
+  title?: string | null; approved?: boolean; at?: string | null;
+  is_latest?: boolean; latest_revision?: number | null; approved_revision?: number | null;
+  in_review?: boolean; superseded?: boolean;
+}
+
+export function groupCanonicalDocuments(documents: SessionCanonicalDocument[]) {
+  const groups = new Map<string, SessionCanonicalDocument[]>();
+  for (const document of documents) {
+    const id = `${document.project}/${document.document_key}`;
+    const revisions = groups.get(id) ?? [];
+    revisions.push(document);
+    groups.set(id, revisions);
+  }
+  return [...groups.entries()].map(([id, revisions]) => {
+    const sorted = [...revisions].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0));
+    const latest = sorted.find(document => document.is_latest === true) ?? sorted[0];
+    const previous = sorted.filter(document => document !== latest);
+    const approvedRevision = latest.approved_revision ?? sorted.find(document => document.approved)?.revision;
+    return { id, latest, previous, approvedRevision };
+  });
+}
+
+export function canonicalRevisionApproved(document: SessionCanonicalDocument): boolean {
+  return document.approved === true || (document.revision != null && document.revision === document.approved_revision);
+}
+
+export function canonicalLatestWaiting(document: SessionCanonicalDocument, queued: boolean, locallyApproved = false): boolean {
+  return !locallyApproved && !canonicalRevisionApproved(document) && document.is_latest !== false
+    && document.superseded !== true && (document.in_review ?? queued);
+}
