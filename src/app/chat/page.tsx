@@ -2,6 +2,7 @@
 "use client";
 import { type SessionCanonicalDocument } from "@/lib/canonicalDocumentWorkflow";
 
+import DesignIntakeCard from "@/components/chat/DesignIntakeCard";
 import CanonicalApprovalCards, { canonicalReferencesFromTools } from "@/components/chat/CanonicalApprovalCards";
 
 import React, { useState, useEffect, useLayoutEffect, useRef, startTransition, useCallback, useMemo, memo } from "react";
@@ -13781,6 +13782,7 @@ export default function ChatPage() {
             </div>
           )}
 
+          {activeSession && <DesignIntakeCard key={`design-intake:${activeSession.id}`} chatSessionId={activeSession.id} />}
           {activeSession && <CanonicalApprovalCards key={activeSession.id} documents={[
             ...(canonicalDocsSession === activeSession.id ? sessionCanonicalDocs : []),
             ...(streamCanonicalRefs?.sessionId === activeSession.id ? streamCanonicalRefs.documents : []),
