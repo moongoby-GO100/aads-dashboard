@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 const transpile = file => ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-const code = transpile('src/components/chat/CanonicalApprovalCards.tsx');
+const code = transpile('src/components/chat/CanonicalApprovalPanel.tsx') + '\nexports.CanonicalApprovalCard = exports.CanonicalApprovalPanel;';
 const workflow = {};
 vm.runInNewContext(transpile('src/lib/canonicalDocumentWorkflow.ts'), {exports: workflow});
 const exports = {};
@@ -49,13 +49,13 @@ test('candidate selection de-duplicates and caps; shown cards capped at three',(
 });
 
 // Execute production handlers with a minimal hook host; no HTTP or production data.
-function harness({status='review',documentKey='ohvis-ui-ux-design-profile-contract',getError=0}={}) {
+function harness({status='review',documentKey='ohvis-ui-ux-design-profile-contract',getError=0,viewer=false}={}) {
   const states=[], pending=[], timers=[];
   let cursor=0, tree, scheduled=false;
   const current=detail();current.revision.version='12.0.0';current.revision.content='격리 본문';
   current.status=status;current.document.document_key=documentKey;current.approval_card.document_key=documentKey;
   if(status==='approved'){current.document.approved_revision_id='latest';current.approval_card.can_approve=false}
-  const calls=[], events=[], visibility=[];
+  const calls=[], events=[], visibility=[], approvals=[];
   let postError=0, getErr=getError;
   const api={
     async getCanonicalDocument(){calls.push('GET');if(getErr)throw Error(typeof getErr==='string'?getErr:`API error ${getErr}`);return structuredClone(current)},
@@ -84,12 +84,12 @@ function harness({status='review',documentKey='ohvis-ui-ux-design-profile-contra
     return {default:()=>null,statusTone:x=>x};
   }});
   const onVisibleChange=(id,visible)=>visibility.push([id,visible]);
-  const props={project:'AADS',document_key:documentKey,onVisibleChange};
+  const props={project:'AADS',document_key:documentKey,onVisibleChange,viewer,onApproved:()=>approvals.push(current.document.approved_revision_id)};
   function render(){cursor=0;tree=out.CanonicalApprovalCard(props);
     while(pending.length){const {i,effect,deps}=pending.shift();states[i]?.cleanup?.();const cleanup=effect();states[i]={deps:deps??[],cleanup}}}
   function nodes(node,predicate){if(!node||typeof node!=='object')return [];const found=predicate(node)?[node]:[];return found.concat([node.props?.children].flat(Infinity).flatMap(child=>nodes(child,predicate)))}
   render();
-  return {current,calls,events,visibility,setPostError:v=>postError=v,setGetError:v=>getErr=v,
+  return {current,calls,events,visibility,approvals,setPostError:v=>postError=v,setGetError:v=>getErr=v,
     async settle(){for(let i=0;i<12;i++)await Promise.resolve()},
     rendered:()=>tree!==null&&tree!==undefined,
     text:()=>nodes(tree,()=>true).flatMap(n=>[n.props?.children].flat(Infinity)).filter(c=>typeof c==='string').join(' '),
@@ -190,4 +190,48 @@ test('cross-tenant or removed document read denial clears previously loaded cont
 test('a successful approval schedules exactly one close timer',async()=>{
   const h=harness();await h.settle();h.open();await h.settle();
   h.button('정본 승인').props.onClick();await h.settle();assert.equal(h.pendingTimers(),1);
+});
+
+test('viewer requires opening verified content and hides approval outside review', async()=>{
+  const h=harness({viewer:true});await h.settle();
+  assert.equal(h.button('정본 승인').props.disabled,true);
+  h.button('정본 승인').props.onClick();await h.settle();assert.equal(h.events.length,0);
+  h.open();await h.settle();assert.equal(h.button('정본 승인').props.disabled,false);
+  h.button('정본 승인').props.onClick();await h.settle();assert.equal(h.events.length,1);
+  assert.equal(h.rendered(),true);assert.equal(h.pendingTimers(),0);assert.deepEqual(h.approvals,['latest']);
+  for(const status of ['draft','approved','archived','removed','missing']) {
+    const v=harness({viewer:true,status});await v.settle();assert.equal(v.button('정본 승인'),undefined,status);
+    if(status==='draft')assert.match(v.text(),/검토 요청 전 — 작성 세션에서 검토 요청 필요/);
+  }
+});
+test('list badges distinguish drafts, review queue and approval with queue taking precedence',()=>{
+  assert.equal(exports.canonicalListStatus(false,false),'초안');
+  assert.equal(exports.canonicalListStatus(false,true),'승인 대기');
+  assert.equal(exports.canonicalListStatus(true,false),'승인됨');
+  assert.equal(exports.canonicalListStatus(true,true),'승인 대기');
+});
+test('queue is fetched once per project including failure; failed queue falls back silently',async()=>{
+  const calls=[], warnings=[], out={};
+  vm.runInNewContext(code,{exports:out,console:{warn:(...args)=>warnings.push(args)},require(name){
+    if(name==='@/lib/api')return {api:{getCanonicalReviewQueue:async project=>{calls.push(project);if(project==='DESIGN')throw Error('offline');return {documents:[{document_key:'a'}]}}}};
+    if(name==='@/lib/canonicalProjects')return {CANONICAL_NAV_PROJECTS:['AADS','DESIGN']};
+    return {};
+  }});
+  const cache=new Map();
+  const one=out.loadCanonicalReviewQueueOnce(cache,'AADS');
+  assert.equal(one,out.loadCanonicalReviewQueueOnce(cache,'AADS'));
+  assert.equal(JSON.stringify(await one),'["a"]');
+  const failed=out.loadCanonicalReviewQueueOnce(cache,'DESIGN');assert.equal(await failed,null);
+  assert.equal(await out.loadCanonicalReviewQueueOnce(cache,'DESIGN'),null);
+  assert.deepEqual(calls,['AADS','DESIGN']);assert.equal(warnings.length,1);
+  assert.equal(out.canonicalListStatus(false,false),'초안');
+});
+
+test('chat card exports use the same extracted component and preserve public helpers',()=>{
+  const cards={};vm.runInNewContext(transpile('src/components/chat/CanonicalApprovalCards.tsx'),{exports:cards,require(name){
+    if(name==='./CanonicalApprovalPanel')return exports;
+    return {};
+  }});
+  assert.equal(cards.CanonicalApprovalCard,exports.CanonicalApprovalPanel);
+  for(const name of ['approvable','reviewable','allowedCanonicalReference','canonicalReferencesFromTools','selectCanonicalCardRefs','shownCanonicalCardIds'])assert.equal(cards[name],exports[name]);
 });

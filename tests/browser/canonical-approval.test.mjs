@@ -13,7 +13,7 @@ function script() {
     return item.id;
   }
   const react = bundle(require.resolve('react')), dom = bundle(require.resolve('react-dom/client'));
-  const source = fs.readFileSync('src/components/chat/CanonicalApprovalCards.tsx', 'utf8').replace(/^import .*;\n/gm, '').replace(/export default /g, '').replace(/export /g, '');
+  const source = (fs.readFileSync('src/components/chat/CanonicalApprovalPanel.tsx', 'utf8') + '\n' + fs.readFileSync('src/components/chat/CanonicalApprovalCards.tsx', 'utf8').replace(/^export \{.*$/gm, '').replace(/^const referenceId.*$/gm, '')).replace(/^import .*;\n/gm, '').replace(/export default /g, '').replace(/export /g, '');
   const app = `const {useCallback,useEffect,useRef,useState}=React;
 const canTransitionDocument=(status,action,hasRevision)=>hasRevision&&status==='review';
 const CANONICAL_NAV_PROJECTS=['AADS'];

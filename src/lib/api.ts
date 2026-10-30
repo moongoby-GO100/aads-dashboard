@@ -990,6 +990,8 @@ export const api = {
     if (query) params.set("q", query);
     return request<{ documents: CanonicalDocument[] }>(`/projects/${encodeURIComponent(project)}/documents?${params}`);
   },
+  getCanonicalReviewQueue: (project: string) =>
+    request<{ documents: Array<{ project_key: string; document_key: string }> }>(`/projects/${encodeURIComponent(project)}/documents/review-queue`),
   getCanonicalDocument: (project: string, key: string, approvedOnly = false) =>
     request<CanonicalDocumentDetail>(`/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(key)}${approvedOnly ? "?approved_only=true" : ""}`),
   getCanonicalDocumentHistory: (project: string, key: string) =>

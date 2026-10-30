@@ -16,6 +16,7 @@ import { getMe } from "@/lib/auth";
 import { isDirectiveDraftArtifact } from "./directiveArtifacts";
 import { MockupReviewPanel } from "@/components/MockupReviewPanel";
 import { bindingRevisionFor, mockupBindingFromArtifact } from "@/lib/mockupReviewModel";
+import { CanonicalApprovalPanel, allowedCanonicalReference, canonicalListStatus, loadCanonicalReviewQueueOnce } from "@/components/chat/CanonicalApprovalPanel";
 import { buildCanonicalDocHref } from "@/lib/canonicalDocLinks";
 import { isArtifactPreviewHref } from "@/lib/documentLinks";
 import {
@@ -1087,6 +1088,18 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
     filteredArtifacts, activeArtifact, selectedArtifactIdx, setSelectedArtifactIdx,
     activeSession, copyArtifact, toDirective, sendDirectiveNow, regenerateDirective, deleteDirective, sessionId,
   } = props;
+  const [canonicalQueue, setCanonicalQueue] = useState<Record<string, string[]>>({});
+  const [canonicalApproved, setCanonicalApproved] = useState<Record<string, boolean>>({});
+  const queueRequests = useRef(new Map<string, Promise<string[] | null>>());
+  const canonicalProjects = [...new Set(sessionCanonicalDocs.map(doc => doc.project))].sort().join(",");
+  useEffect(() => {
+    if (!(showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden") || mobileOverlay === "artifact")) return;
+    for (const project of canonicalProjects.split(",").filter(Boolean)) {
+      void loadCanonicalReviewQueueOnce(queueRequests.current, project).then(keys => {
+        if (keys) setCanonicalQueue(previous => ({ ...previous, [project]: keys }));
+      });
+    }
+  }, [showArtifactPanel, mobileOverlay, canonicalProjects, screenSize, artifactMode]);
   const mockupBinding = activeArtifact ? mockupBindingFromArtifact(activeArtifact.metadata) : null;
 
   // 아티팩트 검색/필터 상태
@@ -2435,9 +2448,12 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                               revision: c.revision ?? undefined,
                             });
                             const label = (c.title || "").trim() || c.document_key;
+                            const id = `${c.project}/${c.document_key}`;
+                            const approved = canonicalApproved[id] ?? c.approved;
+                            const waiting = !canonicalApproved[id] && !!canonicalQueue[c.project]?.includes(c.document_key);
                             return (
+                              <div key={`${id}/${c.revision ?? "latest"}`}>
                               <a
-                                key={`${c.project}/${c.document_key}/${c.revision ?? "latest"}`}
                                 href={href}
                                 data-testid="session-canonical-doc"
                                 title={`${c.project} · ${c.document_key}`}
@@ -2452,7 +2468,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   textDecoration: "none", cursor: "pointer",
                                 }}
                               >
-                                <div style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, alignItems: "baseline" }}>
                                   <span>📘</span>
                                   <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-primary)", wordBreak: "break-all" }}>
                                     {label}
@@ -2460,7 +2476,7 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-secondary)",
                                                  border: "1px solid var(--border)", borderRadius: 5,
                                                  padding: "1px 5px", whiteSpace: "nowrap" }}>
-                                    {c.approved ? "승인됨" : "초안"}
+                                    {canonicalListStatus(approved, waiting)}
                                   </span>
                                 </div>
                                 <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--text-secondary)", wordBreak: "break-all" }}>
@@ -2468,6 +2484,8 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                                   {c.revision != null && ` · 개정 ${c.revision}`}
                                 </div>
                               </a>
+                              {waiting && onOpenDocument && <button type="button" className="min-h-11 rounded-lg border px-3 mb-2" onClick={() => void onOpenDocument(buildCanonicalDocHref({ project: c.project, documentKey: c.document_key }), label)}>열어서 승인</button>}
+                              </div>
                             );
                           })}
                         </div>
@@ -2888,12 +2906,22 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         | undefined;
                       if (!canonical) return null;
                       return (
+                        <React.Fragment>
                         <div data-testid="canonical-doc-meta" style={{ fontSize: "11px", color: "var(--ct-text-muted)", marginBottom: "8px" }}>
                           정본 문서
                           {canonical.status_label ? ` · ${canonical.status_label}` : ""}
                           {canonical.version ? ` · v${canonical.version}` : ""}
                           {canonical.revision != null ? ` · 개정 ${canonical.revision}` : ""}
                         </div>
+                        {(() => {
+                          const project = String(displayArtifact.metadata?.project || "");
+                          const document_key = String(displayArtifact.metadata?.document_key || "");
+                          if (!allowedCanonicalReference({ project, document_key })) return null;
+                          return <CanonicalApprovalPanel key={`${project}/${document_key}`} project={project} document_key={document_key} viewer onApproved={() => {
+                            setCanonicalApproved(previous => ({ ...previous, [`${project}/${document_key}`]: true }));
+                          }} />;
+                        })()}
+                        </React.Fragment>
                       );
                     })()}
                     {(() => {
