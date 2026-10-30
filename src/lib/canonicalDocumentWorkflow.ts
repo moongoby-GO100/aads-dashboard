@@ -42,6 +42,22 @@ export function groupCanonicalDocuments(documents: SessionCanonicalDocument[]) {
   });
 }
 
+export type CanonicalDocumentGroup = ReturnType<typeof groupCanonicalDocuments>[number];
+
+export function sortCanonicalGroupsForReview(
+  groups: CanonicalDocumentGroup[],
+  isWaiting: (group: CanonicalDocumentGroup) => boolean,
+  isApproved: (group: CanonicalDocumentGroup) => boolean,
+): CanonicalDocumentGroup[] {
+  return groups
+    .map((group, index) => ({ group, index }))
+    .sort((a, b) => {
+      const rank = (group: CanonicalDocumentGroup) => isWaiting(group) ? 0 : isApproved(group) ? 2 : 1;
+      return rank(a.group) - rank(b.group) || a.index - b.index;
+    })
+    .map(({ group }) => group);
+}
+
 export function canonicalRevisionApproved(document: SessionCanonicalDocument): boolean {
   return document.approved === true || (document.revision != null && document.revision === document.approved_revision);
 }

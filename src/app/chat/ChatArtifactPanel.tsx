@@ -1,6 +1,6 @@
 "use client";
 
-import { groupCanonicalDocuments, canonicalRevisionApproved, canonicalLatestWaiting, type SessionCanonicalDocument } from "@/lib/canonicalDocumentWorkflow";
+import { groupCanonicalDocuments, sortCanonicalGroupsForReview, canonicalRevisionApproved, canonicalLatestWaiting, type SessionCanonicalDocument } from "@/lib/canonicalDocumentWorkflow";
 import React, { memo, useRef, useCallback, useState, useEffect } from "react";
 import type { Artifact, ArtifactMode, ArtifactTab, ScreenSize, ChatSession, ChatMessage } from "./types";
 import ArtifactTaskMonitor from "@/components/chat/ArtifactTaskMonitor";
@@ -1090,7 +1090,14 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
   const [canonicalQueue, setCanonicalQueue] = useState<Record<string, string[]>>({});
   const [canonicalApproved, setCanonicalApproved] = useState<Record<string, boolean>>({});
   const queueRequests = useRef(new Map<string, Promise<string[] | null>>());
-  const canonicalDocumentGroups = groupCanonicalDocuments(sessionCanonicalDocs);
+  const canonicalDocumentGroups = sortCanonicalGroupsForReview(
+    groupCanonicalDocuments(sessionCanonicalDocs),
+    ({ id, latest }) => canonicalLatestWaiting(latest, !!canonicalQueue[latest.project]?.includes(latest.document_key), canonicalApproved[id]),
+    ({ id, latest }) => canonicalApproved[id] ?? canonicalRevisionApproved(latest),
+  );
+  const canonicalWaitingCount = canonicalDocumentGroups.filter(({ id, latest }) =>
+    canonicalLatestWaiting(latest, !!canonicalQueue[latest.project]?.includes(latest.document_key), canonicalApproved[id]),
+  ).length;
   const canonicalProjects = [...new Set(sessionCanonicalDocs.map(doc => doc.project))].sort().join(",");
   useEffect(() => {
     if (!(showArtifactPanel || (screenSize === "desktop" && artifactMode !== "hidden") || mobileOverlay === "artifact")) return;
@@ -2440,6 +2447,11 @@ const ChatArtifactPanel = memo(function ChatArtifactPanel(props: ChatArtifactPan
                         <div data-testid="session-canonical-docs" style={{ marginBottom: 12 }}>
                           <div style={{ marginBottom: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
                             정본 문서 {canonicalDocumentGroups.length}건
+                            {canonicalWaitingCount > 0 && (
+                              <span style={{ marginLeft: 8, color: "var(--warning, #f59e0b)" }}>
+                                승인 대기 {canonicalWaitingCount}건
+                              </span>
+                            )}
                           </div>
                           {canonicalDocumentGroups.map(({ id, latest: c, previous, approvedRevision }) => {
                             const href = buildCanonicalDocHref({

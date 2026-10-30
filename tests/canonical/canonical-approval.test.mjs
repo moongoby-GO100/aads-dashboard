@@ -284,3 +284,33 @@ test('one revision stays one row and projects and document keys remain separate'
   assert.equal(workflow.groupCanonicalDocuments([doc, {...doc, project:'DESIGN'}, {...doc, document_key:'other'}]).length, 3);
   assert.equal(workflow.groupCanonicalDocuments([]).length, 0);
 });
+
+test('canonical groups sort waiting, drafts, and approved while preserving stable order', () => {
+  const groups = [
+    {id:'approved-1', latest:{revision:1}},
+    {id:'draft-1', latest:{revision:1}},
+    {id:'waiting-1', latest:{revision:1}},
+    {id:'waiting-2', latest:{revision:1}},
+    {id:'draft-2', latest:{revision:1}},
+    {id:'approved-2', latest:{revision:1}},
+  ];
+  const sorted = workflow.sortCanonicalGroupsForReview(groups, group => group.id.startsWith('waiting'), group => group.id.startsWith('approved'));
+  assert.equal(JSON.stringify(sorted.map(group => group.id)), JSON.stringify(['waiting-1','waiting-2','draft-1','draft-2','approved-1','approved-2']));
+  assert.equal(JSON.stringify(groups.map(group => group.id)), JSON.stringify(['approved-1','draft-1','waiting-1','waiting-2','draft-2','approved-2']));
+});
+
+test('a group moves to the top when its review queue is populated', () => {
+  const groups = [
+    {id:'draft', latest:{project:'AADS', document_key:'draft'}},
+    {id:'queued', latest:{project:'AADS', document_key:'queued'}},
+  ];
+  let queue = [];
+  const sort = () => workflow.sortCanonicalGroupsForReview(
+    groups,
+    group => queue.includes(group.latest.document_key),
+    () => false,
+  );
+  assert.equal(JSON.stringify(sort().map(group => group.id)), JSON.stringify(['draft','queued']));
+  queue = ['queued'];
+  assert.equal(JSON.stringify(sort().map(group => group.id)), JSON.stringify(['queued','draft']));
+});
