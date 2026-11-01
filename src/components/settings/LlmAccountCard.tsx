@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import AccountLoginModal from "./AccountLoginModal";
 import EnableSwitch from "./EnableSwitch";
+import { HostAccountUsage, type HostUsage } from "./LlmMetadata";
 
 /** LLM 계정 통합 카드.
  *
@@ -25,7 +26,7 @@ type UsageWindow = {
   stale?: boolean; snapshot_age_hours?: number | null;
 };
 
-type Account = {
+type Account = Omit<HostUsage, "state" | "windows"> & {
   windows: UsageWindow[];
   key_name: string; provider: string; label: string; priority: number | null;
   id?: number | null; email?: string | null; toggleable?: boolean;
@@ -33,9 +34,10 @@ type Account = {
   kind: "subscription"; masked_value: string; slot: string | null;
   state: State; bound: boolean; needs_login: boolean; login_in_progress: boolean;
   binding_mismatch?: boolean; actual_account?: string | null;
+  account_source?: string | null; account_verified?: boolean;
   login_target: string | null; subscription: string | null;
   rate_limited_until: string | null; used_percent: number | null; resets_at: string | null;
-  snapshot_age_hours: number | null; ok_72h: number; limit_72h: number; notes: string | null;
+  snapshot_age_hours: number | null; ok_72h: number | null; limit_72h: number | null; notes: string | null;
 };
 
 type ProviderGroup = {
@@ -235,6 +237,8 @@ export default function LlmAccountCard() {
   if (!data) return null;
 
   const s = data.summary;
+  const hostRows = rows.filter(isHostManaged);
+  const tableRows = rows.filter((a) => !isHostManaged(a));
   const actionAccounts = data.accounts.filter((a) => a.state === "needs_login" || a.state === "rate_limited");
   const needsLoginCount = data.accounts.filter((a) => a.state === "needs_login").length;
   const onlyClaudeAction = actionAccounts.every((a) => a.provider === "anthropic");
@@ -366,10 +370,29 @@ export default function LlmAccountCard() {
           사용량 창 개수(코덱스 1개·클로드 2개)에 따라 열이 제각각 밀려서
           우선순위·상태 숫자가 행마다 다른 x 좌표에 찍혔다. 좁은 화면에서는
           줄을 흘리지 말고 카드를 가로로 굴린다 — 표는 열이 맞아야 읽힌다. */}
-      {effectiveChip !== "apikey" && (
+      {hostRows.map((a) => (
+        <section key={a.key_name} aria-label="Google 구독 계정" className="rounded-lg p-3 space-y-2 min-w-0"
+          style={{ border: "1px solid var(--border)" }}>
+          <div className="flex flex-wrap justify-between gap-2 text-xs">
+            <div className="min-w-0">
+              <p className="font-semibold break-all">{a.actual_account || a.email || "계정 이메일 미확인"}</p>
+              <p style={{ color: "var(--text-secondary)" }}>Google 구독 (Antigravity)</p>
+            </div>
+            <span style={{ color: STATE_COLOR[a.state] }}>{a.state === "ok" && !a.account_verified ? "계정 정보 확인 · 실시간 검증 전" : STATE_TEXT[a.state]}</span>
+          </div>
+          <div className="text-xs" style={{ color: "var(--text-secondary)" }}><HostAccountUsage account={a} /></div>
+          <details className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            <summary className="cursor-pointer py-2">계정 확인·관리 안내</summary>
+            <p>{a.account_verified ? "실시간 계정 검증 완료" : "로컬 계정 정보 — 실시간 검증 전"}</p>
+            <p>서버에서 agy 로그인으로 계정을 관리합니다. 사용량은 제공자 구독 한도이며 AADS 호출 통계와 별개입니다.</p>
+          </details>
+        </section>
+      ))}
+
+      {effectiveChip !== "apikey" && (tableRows.length > 0 || hostRows.length === 0) && (
         <div className="rounded-lg" style={{ border: "1px solid var(--border)", overflowX: "auto" }}>
           <div style={{ minWidth: COLS_MIN_WIDTH }}>
-          {rows.length > 0 && (
+          {tableRows.length > 0 && (
             <div className="px-3 py-1.5 text-xs" style={{
               display: "grid", gridTemplateColumns: COLS, gap: 12, alignItems: "center",
               background: "var(--bg-subtle, rgba(0,0,0,0.02))",
@@ -384,15 +407,13 @@ export default function LlmAccountCard() {
               <span style={{ textAlign: "right" }}>액션</span>
             </div>
           )}
-          {rows.length === 0 ? (
+          {tableRows.length === 0 ? (
             <p className="text-xs px-3 py-4" style={{ color: "var(--text-secondary)" }}>
               {effectiveChip === "action" ? "조치가 필요한 계정이 없습니다." : "표시할 계정이 없습니다."}
             </p>
-          ) : rows.map((a) => {
+          ) : tableRows.map((a) => {
             const open = openRow === a.key_name;
             const color = STATE_COLOR[a.state];
-            const host = isHostManaged(a);
-            const hostAccount = a.email || a.actual_account || a.label || "-";
             const isPrimary = isPrimaryAccount(a);
             const autoHold = !a.manual_disabled && a.rate_limited_until && new Date(a.rate_limited_until).getTime() > Date.now()
               ? a.rate_limited_until : null;
@@ -404,9 +425,9 @@ export default function LlmAccountCard() {
                   <button onClick={() => setOpenRow(open ? null : a.key_name)}
                     className="text-xs text-left" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{open ? "▾" : "▸"}</button>
                   <span className="text-xs font-mono truncate" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{a.provider}</span>
-                  <span className="text-xs font-semibold min-w-0 truncate" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
-                    {host ? "Google" : (a.slot ?? a.key_name.replace("CODEX_OAUTH_", ""))}
-                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{host ? hostAccount : (a.label || "-")}</span>
+                  <span className="text-xs font-semibold min-w-0 break-words" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
+                    {a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
+                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{a.label || "-"}</span>
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
                   <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>{a.priority == null ? "-" : `p${a.priority}`}</span>
@@ -421,11 +442,7 @@ export default function LlmAccountCard() {
                         한쪽은 사용량, 한쪽은 잔량이면 같은 계정의 같은 창이
                         97% 와 3% 로 보인다(2026-09-16 실측). 막대는 사용량만큼
                         차오르고 숫자는 남은 양을 적는다. */}
-                    {host && a.state === "needs_login" ? (
-                      <span className="text-xs" style={{ color: "#d97706" }}>
-                        Google 로그인이 풀렸습니다. 서버에서 agy 로그인을 다시 해 주세요.
-                      </span>
-                    ) : a.windows.length > 0 ? a.windows.map((w) => (
+                    {a.windows.length > 0 ? a.windows.map((w) => (
                       <span key={w.window_minutes ?? "n"} className="block">
                         <Bar pct={w.used_percent}
                           color={w.stale ? "var(--text-secondary)"
@@ -445,7 +462,7 @@ export default function LlmAccountCard() {
                       </span>
                     )) : (
                       <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        기록 없음 — 첫 호출 후 표시
+                        사용량 수집 기록 없음
                       </span>
                     )}
                     {a.manual_disabled && (
@@ -458,11 +475,6 @@ export default function LlmAccountCard() {
                     )}
                   </span>
                   <span className="flex gap-1 justify-end items-center flex-wrap">
-                    {host ? (
-                      <span className="text-xs text-right" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>
-                        호스트 로그인 계정 — 서버에서 agy 로그인
-                      </span>
-                    ) : (<>
                     <EnableSwitch checked={isOn(a)} busy={toggling === a.key_name} disabled={toggling !== null}
                       label={a.label || a.key_name} onToggle={() => void toggleEnabled(a)} />
                     {!a.needs_login && !isPrimary && (
@@ -480,15 +492,11 @@ export default function LlmAccountCard() {
                                color: a.needs_login ? "#d97706" : "var(--text-primary)" }}>
                       {a.login_in_progress ? "진행창" : "재로그인"}
                     </button>
-                    </>)}
                   </span>
                 </div>
 
                 {open && (
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
-                    {host ? (
-                      <div>Google 계정 <span style={{ color: "var(--text-primary)" }}>{hostAccount}</span> · {STATE_TEXT[a.state]} · 서버에 로그인된 계정이라 여기서 켜고 끄거나 로그인할 수 없습니다.</div>
-                    ) : (<>
                     <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"} · {a.manual_disabled ? `직접 끔${a.manual_disabled_at ? ` (${kst(a.manual_disabled_at)} KST)` : ""}` : "직접 끔 아님"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
                     {a.binding_mismatch && (
@@ -497,7 +505,7 @@ export default function LlmAccountCard() {
                       </div>
                     )}
                     <div>
-                      최근 72h 성공 {a.ok_72h} · 한도실패 {a.limit_72h}
+                      최근 72h 성공 {a.ok_72h ?? "미측정"} · 한도실패 {a.limit_72h ?? "미측정"}
                       {a.snapshot_age_hours !== null && (
                         <span style={{ color: a.snapshot_age_hours > 24 ? "#d97706" : undefined }}>
                           {" "}· 스냅샷 {a.snapshot_age_hours < 1 ? "실시간" : `${a.snapshot_age_hours.toFixed(0)}시간 전`}
@@ -505,7 +513,6 @@ export default function LlmAccountCard() {
                       )}
                     </div>
                     {a.notes && <div className="whitespace-pre-wrap">메모 {a.notes}</div>}
-                    </>)}
                   </div>
                 )}
               </div>
