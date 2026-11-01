@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
+import { ModelReleaseDate, DiscoveryRunStatus, latestDiscoveryRuns, type DiscoveryRun, type ReleaseMetadata } from "./LlmMetadata";
 
 interface LlmKey {
   id: number;
@@ -55,7 +56,7 @@ interface LlmModelSummaryResponse {
   normalized_providers: Record<string, number>;
 }
 
-interface LlmRegistryModel {
+interface LlmRegistryModel extends ReleaseMetadata {
   provider: string;
   model_id: string;
   display_name?: string;
@@ -158,6 +159,8 @@ function buildTimelineSubtext(item: ProviderTimelineItem): string {
 
 export default function LlmRegistryWorkspacePanel() {
   const [keys, setKeys] = useState<LlmKey[]>([]);
+  const [discoveryRuns, setDiscoveryRuns] = useState<DiscoveryRun[]>([]);
+  const [discoveryError, setDiscoveryError] = useState(false);
   const [summary, setSummary] = useState<LlmModelSummaryResponse | null>(null);
   const [providerModels, setProviderModels] = useState<Record<string, LlmRegistryModel[]>>({});
   const [providerTimeline, setProviderTimeline] = useState<Record<string, ProviderTimelineItem[]>>({});
@@ -200,15 +203,19 @@ export default function LlmRegistryWorkspacePanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [keysRes, summaryRes] = await Promise.allSettled([
+      const [keysRes, summaryRes, discoveryRes] = await Promise.allSettled([
         api.getLlmKeys(),
         api.getLlmModelSummary(),
+        api.getLlmModelDiscoveryRuns(100),
       ]);
       const normalizedKeys =
         keysRes.status === "fulfilled" && Array.isArray(keysRes.value) ? keysRes.value : [];
       const summaryValue = summaryRes.status === "fulfilled" ? summaryRes.value : null;
       setKeys(normalizedKeys);
       setSummary(summaryValue);
+      const validDiscovery = discoveryRes.status === "fulfilled" && Array.isArray(discoveryRes.value?.runs);
+      setDiscoveryError(!validDiscovery);
+      setDiscoveryRuns(validDiscovery ? latestDiscoveryRuns(discoveryRes.value.runs) : []);
       const hasFailure = [keysRes, summaryRes].some((result) => result.status === "rejected");
       setMsg(hasFailure ? "일부 LLM 운영 데이터 로드 실패" : "");
     } catch {
@@ -376,6 +383,17 @@ export default function LlmRegistryWorkspacePanel() {
           reason={summary?.last_sync_reason || "—"} / actor={summary?.last_sync_actor || "—"}
         </span>
       </div>
+
+      <section aria-label="모델 자동 갱신 상태" className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">모델 자동 갱신 상태</h3>
+          <button onClick={() => void load()} disabled={loading} className="text-xs px-3 py-2 rounded" style={{ border: "1px solid var(--border)" }}>상태 새로고침</button>
+        </div>
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>회사별 마지막 수집 결과입니다. 건너뜀·수집 제한이 있는 회사는 최신 모델 자동 반영을 보장하지 않습니다. Antigravity 모델 목록 자동 수집은 미지원입니다.</p>
+        {discoveryError ? <p role="alert" className="text-xs" style={{ color: "var(--warning)" }}>자동 갱신 이력을 불러오지 못했습니다. 상태 새로고침으로 다시 확인해 주세요.</p>
+          : discoveryRuns.length ? <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{discoveryRuns.map(run => <DiscoveryRunStatus key={run.provider} run={run} />)}</div>
+          : <p className="text-xs">자동 갱신 기록 없음 — 수집 상태 미확인</p>}
+      </section>
 
       {normalizedEntries.length > 0 && (
         <div className="rounded-lg p-3" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid var(--border)" }}>
@@ -558,9 +576,10 @@ export default function LlmRegistryWorkspacePanel() {
                         <span className="text-xs" style={{ color: "var(--text-secondary)" }}>활성 모델이 없습니다.</span>
                       ) : (
                         (providerModels[provider.provider] || []).map((model) => (
-                          <div key={model.model_id} className="px-3 py-2 rounded-lg text-xs" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                          <div key={model.model_id} className="min-w-0 max-w-full break-words px-3 py-2 rounded-lg text-xs" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                             <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{model.display_name || model.model_id}</div>
                             <div style={{ color: "var(--text-secondary)" }}>{formatCostLabel(model)}</div>
+                            <ModelReleaseDate model={model} />
                             <div className="flex flex-wrap gap-1 mt-1">
                               {model.supports_coding && <span className="px-1.5 py-0.5 rounded" style={{ background: "rgba(14,165,233,0.12)", color: "#0ea5e9" }}>coding</span>}
                               {model.supports_thinking && <span className="px-1.5 py-0.5 rounded" style={{ background: "rgba(249,115,22,0.12)", color: "#f97316" }}>thinking</span>}
