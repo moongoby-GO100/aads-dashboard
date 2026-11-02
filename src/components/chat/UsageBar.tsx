@@ -90,12 +90,6 @@ type RelayCapacity = {
   stale_age_sec?: number;
 };
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
-}
-
 function barColor(pct: number): string {
   if (pct >= 80) return "#ef4444";
   if (pct >= 50) return "#f59e0b";
@@ -117,18 +111,6 @@ function formatResetTime(isoStr?: string): string {
   } catch {
     return "";
   }
-}
-
-function formatResetSeconds(seconds?: number): string {
-  if (seconds == null || seconds <= 0) return "";
-  const totalMin = Math.max(0, Math.round(seconds / 60));
-  if (totalMin < 60) return `${totalMin}m`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h < 24) return m > 0 ? `${h}h${m}m` : `${h}h`;
-  const days = Math.floor(h / 24);
-  const hours = h % 24;
-  return hours > 0 ? `${days}d${hours}h` : `${days}d`;
 }
 
 // pct 가 null 이면 **아직 측정값이 없다**는 뜻이다. 막대 자리는 그대로 두고
@@ -165,7 +147,9 @@ function MiniBar({ pct, label, detail, resetIn, width = 48 }: { pct: number | nu
 
 type OverviewAccount = {
   key_name: string; provider: string; label: string; slot: string | null;
-  state: string; priority: number;
+  state: string; priority: number; is_active: boolean; manual_disabled?: boolean;
+  actual_account?: string | null; usage_status?: string | null;
+  usage_note?: string | null;
   windows: Array<{ window_minutes: number | null; used_percent: number; resets_at: string | null }>;
   rate_limited_until: string | null;
 };
@@ -311,11 +295,22 @@ export default function UsageBar() {
       try {
         const d = await (api as unknown as { getLlmOverview: () => Promise<{ accounts: OverviewAccount[] }> }).getLlmOverview();
         if (alive) setOverview(d);
-      } catch { /* 접힘 줄만 비고, 펼침은 기존 경로로 돈다 */ }
+      } catch {
+        // 활성 여부를 확인하지 못하면 이전 계정을 계속 노출하지 않는다.
+        if (alive) setOverview(null);
+      }
     };
     void run();
     const iv = window.setInterval(run, 30_000);
-    return () => { alive = false; window.clearInterval(iv); };
+    const onVisible = () => { if (!document.hidden) void run(); };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(iv);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // 등록된 프로젝트 목록. 드롭다운으로 고르게 하려면 목록이 있어야 한다 —
@@ -419,28 +414,24 @@ export default function UsageBar() {
   }, [fetchRelayCapacity]);
 
   if (error && !relay) return null;
-  if (!claude && !codex && !relay) return null;
+  if (!overview && !claude && !codex && !relay) return null;
 
-  const cm = claude?.claude_max;
-  const cxAll = codex?.ok ? (codex.limits ?? []) : [];
   const tokenLabels = claude?.token_labels ?? [];
   const slotMeta = (slot: string) => tokenLabels.find((t) => String(t.slot ?? "") === slot);
-  // 꺼진 계정은 상단에 그리지 않는다. 쓰지 않는 계정의 막대가 섞여 있으면
-  // 지금 어느 계정으로 도는지 읽기 어렵다(2026-10-13 대표님 지시 "켜진것만
-  // 나오게"). 켜고 끄는 곳은 설정 > 구독계정이다.
-  const inactiveKeys = new Set(
-    Object.values(primaryInfo?.providers ?? {})
-      .flatMap((p) => p.accounts ?? [])
-      .filter((a) => a.is_active === false)
-      .map((a) => a.key_name),
-  );
+  // 설정과 같은 정본으로 허용 목록을 만든다. token_labels에는 꺼진 계정이
+  // 없으므로, 거기서 key를 못 찾았다고 슬롯을 허용하면 안 된다.
+  const ovAccounts = (overview?.accounts ?? []).filter((a) =>
+    a.is_active === true && a.manual_disabled !== true && a.state !== "inactive");
+  const activeKeys = new Set(ovAccounts.map((a) => a.key_name));
   const slots = (claude?.claude_slots ?? []).filter((sl) => {
-    if (sl.last_resort === true && sl.enabled !== true) return false;
+    if (sl.enabled === false || (sl.last_resort === true && sl.enabled !== true)) return false;
     const keyName = slotMeta(sl.slot)?.key_name;
-    return !(keyName && inactiveKeys.has(keyName));
+    return ovAccounts.some((a) => a.provider === "anthropic" &&
+      (a.slot === `slot${sl.slot}` || (keyName && a.key_name === keyName)));
   });
   const codexAccounts = (primaryInfo?.providers?.codex?.accounts ?? [])
-    .filter((a) => a.is_active !== false);
+    .filter((a) => a.is_active === true && activeKeys.has(a.key_name));
+  const antigravityAccounts = ovAccounts.filter((a) => a.provider === "antigravity");
   // CLI 가 실제로 어느 슬롯으로 도는가. 서버가 말해 주는 주계정을 먼저 믿고,
   // 그 API 를 모르는 배포 창에서만 예전처럼 priority 1 을 훑어 짐작한다.
   // (짐작은 슬롯 4 처럼 priority 가 0 이거나 순번이 밀린 계정에서 틀린다)
@@ -450,8 +441,6 @@ export default function UsageBar() {
     : null)
     ?? tokenLabels.reduce<string | null>(
       (best, t) => (t.priority === 1 && t.slot ? String(t.slot) : best), null);
-  const isLive = cm?.source === "claude_ai_api" || cm?.source === "db_snapshot";
-  const sourceLabel = cm?.source === "claude_ai_api" ? "" : cm?.source === "db_snapshot" ? " (db)" : cm?.source === "anthropic_header" ? " (hdr)" : " (est)";
   const relayMetrics = relay ? Object.values(relay.acquire_metrics ?? {}) : [];
   const waitAttempts = relayMetrics.reduce((sum, metric) => sum + (metric.wait_attempts ?? 0), 0);
   const waitedSuccesses = relayMetrics.reduce((sum, metric) => sum + (metric.waited_successes ?? 0), 0);
@@ -486,7 +475,6 @@ export default function UsageBar() {
 
   // ── 접힘 줄에 쓸 값 ──────────────────────────────────────────────
   // 지금 쓰는 클로드 슬롯과, 새 세션이 배정받을 코덱스 계정 하나씩만 고른다.
-  const ovAccounts = (overview?.accounts ?? []).filter((a) => !inactiveKeys.has(a.key_name));
   const curClaude = ovAccounts.find((a) => a.provider === "anthropic" && a.slot === `slot${activeSlot}`)
     ?? ovAccounts.find((a) => a.provider === "anthropic" && a.state === "ok")
     ?? null;
@@ -496,7 +484,7 @@ export default function UsageBar() {
     ?? ovAccounts.find((a) => a.provider === "codex")
     ?? null;
   // 잔량이 가장 적은 창 = 가장 먼저 막히는 창. 경고는 그것만 띄운다.
-  const tightest = [curClaude, curCodex]
+  const tightest = [curClaude, curCodex, ...antigravityAccounts]
     .flatMap((a) => (a ? a.windows.map((w) => ({ acc: a, w })) : []))
     .sort((x, y) => (100 - x.w.used_percent) - (100 - y.w.used_percent))[0];
   const tightRemain = tightest ? 100 - tightest.w.used_percent : 100;
@@ -547,13 +535,22 @@ export default function UsageBar() {
     if (!acc) return null;
     // 한 줄에 다 들어가야 한다. 도메인과 괄호 주석은 떼고 계정 이름만 남긴다 —
     // moong76@gmail → moong76, jinah-biseo(244) → jinah-biseo.
-    const name = (acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
+    const name = (acc.actual_account || acc.label || acc.key_name).split(" ")[0].split("@")[0].split("(")[0];
+    const emptyUsage = acc.usage_status === "unsupported" ? "사용량 조회 미지원"
+      : acc.usage_status === "collection_failed" ? "사용량 수집 실패" : "사용량 미측정";
     return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}>
+      <span data-usage-account={acc.key_name} data-usage-provider={acc.provider}
+            title={acc.actual_account || acc.label}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap", maxWidth: "100%", minWidth: 0 }}>
         <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>{kind}</span>
-        <span style={{ fontSize: "10px", color: "var(--ct-text)" }}>{name}</span>
+        <span style={{ fontSize: "10px", color: "var(--ct-text)", overflowWrap: "anywhere" }}>{name}</span>
+        {acc.provider === "antigravity" && acc.state !== "ok" && (
+          <span style={{ fontSize: "10px", color: "#d97706" }}>
+            {acc.state === "needs_login" ? "로그인 필요" : "계정 상태 확인 중"}
+          </span>
+        )}
         {acc.windows.length === 0
-          ? <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>기록 없음</span>
+          ? <span title={acc.usage_note || undefined} style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>{emptyUsage}</span>
           : acc.windows.map((w) => (
               <MiniBar key={w.window_minutes ?? "n"} pct={w.used_percent} width={34}
                 label={windowName(w.window_minutes)}
@@ -579,6 +576,7 @@ export default function UsageBar() {
                 모드(자동/수동)까지 붙여야 계정이 저절로 바뀐 것처럼 안 보인다. */}
             {summaryChip(curClaude, activeSlot ? `CLI 슬롯${activeSlot}` : "CLI 슬롯")}
             {summaryChip(curCodex, "코덱스")}
+            {antigravityAccounts.map((acc) => <React.Fragment key={acc.key_name}>{summaryChip(acc, "Antigravity")}</React.Fragment>)}
             {primaryInfo && (
               <span style={{ fontSize: "10px", color: "var(--ct-text3, #999)", whiteSpace: "nowrap" }}
                     title={"자동: 한도 남은 계정 중 곧 리셋될 것부터 씁니다\n수동: 고른 계정을 고정합니다"}>
@@ -816,24 +814,6 @@ export default function UsageBar() {
             </React.Fragment>
           );
         })
-      ) : cm ? (
-        <>
-          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)" }}>
-            Claude{isLive ? sourceLabel : " (est)"}
-          </span>
-          <MiniBar
-            pct={cm.primary.used_percent}
-            label="5h"
-            detail={`5\uc2dc\uac04 \uc794\ub7c9: ${(100 - cm.primary.used_percent).toFixed(0)}% | ${formatTokens(cm.primary.total_tokens)} tok \uc0ac\uc6a9`}
-            resetIn={formatResetTime(cm.primary.resets_at)}
-          />
-          <MiniBar
-            pct={cm.secondary.used_percent}
-            label="1w"
-            detail={`1\uc8fc \uc794\ub7c9: ${(100 - cm.secondary.used_percent).toFixed(0)}% | ${formatTokens(cm.secondary.total_tokens)} tok \uc0ac\uc6a9`}
-            resetIn={formatResetTime(cm.secondary.resets_at)}
-          />
-        </>
       ) : null}
       {switchError && (
         <span style={{ fontSize: "10px", color: "#ef4444", whiteSpace: "nowrap" }}
@@ -894,30 +874,8 @@ export default function UsageBar() {
           />
         );
       })}
-      {cxAll.map((cx, i) => {
-        const cname = cx.limit_id && cx.limit_id !== "codex" ? `Codex:${cx.limit_id.replace(/^codex_/, "")}` : "Codex";
-        return (
-          <React.Fragment key={`codex-${cx.limit_id || i}`}>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--ct-text2)", marginLeft: "4px" }}>{cname}</span>
-            {/* \ucc3d \uc774\ub984\uc744 window_minutes \ub85c \uc815\ud55c\ub2e4. 'primary=5h' \ub85c \ubc15\uc544\ub450\uba74
-                \ucf54\ub371\uc2a4\uc758 \uc8fc\uac04 \uc18c\uc9c4\uc774 5\uc2dc\uac04 \uc790\ub9ac\uc5d0 \uadf8\ub824\uc9c4\ub2e4 \u2014 2026-09-16 \uc2e4\uce21:
-                primary \uac00 window_minutes=10080(\uc8fc\uac04) \uc778\ub370 "5h 0%" \ub85c \ubcf4\uc600\uace0,
-                \uc606\uc758 "1w 100%" \ub294 \uac12\uc774 \uc5c6\ub294 secondary \uc600\ub2e4.
-                \uac12\uc774 \uc5c6\ub294 \ucc3d\uc740 \uc544\uc608 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4. */}
-            {[cx.primary, cx.secondary].map((w, wi) =>
-              w && w.used_percent != null ? (
-                <MiniBar
-                  key={`cx-w-${wi}`}
-                  pct={w.used_percent}
-                  label={windowName(w.window_minutes ?? null)}
-                  detail={`${cname} ${windowName(w.window_minutes ?? null)} \uc794\ub7c9: ${(100 - w.used_percent).toFixed(0)}%`}
-                  resetIn={formatResetSeconds(w.resets_in_sec)}
-                />
-              ) : null,
-            )}
-          </React.Fragment>
-        );
-      })}
+      {antigravityAccounts.map((acc) => <React.Fragment key={acc.key_name}>{summaryChip(acc, "Antigravity")}</React.Fragment>)}
+
     </div>
   );
 }
