@@ -149,6 +149,14 @@ export async function registerMockupChangeAfterSend(opts: {
     if (isCurrent(fence)) mockupTargetStore.setNotice({ kind: "failed", at: Date.now(), intentId: null, error: null, reason: "message_not_found" });
     return { ok: false };
   }
+  // A repeated registration of the same saved message is the same intent, even
+  // after response loss. Keep its original target and keys for server replay.
+  const existing = readIntents().find((i) => i.intentId === saved.id
+    && i.project === opts.target.project && i.body.session_id === opts.target.sessionId);
+  if (existing) {
+    const r = await submitPendingIntent(existing, fence);
+    return { ok: r.ok };
+  }
   const body = intakeBody(opts.target, { changeRequestId: newUuid(), idempotencyKey: newUuid(), sourceMessageId: saved.id }, opts.content, opts.replyToId);
   const intent: PendingIntent = { intentId: saved.id, project: opts.target.project, body, createdAt: Date.now() };
   writeIntents([...readIntents().filter((i) => i.intentId !== intent.intentId), intent]);

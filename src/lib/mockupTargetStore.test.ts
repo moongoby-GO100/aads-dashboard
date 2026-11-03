@@ -272,3 +272,138 @@ it("lets the newer request own the notice in the same session", async () => {
   await older;
   expect(store.get().notice).toEqual(notice);
 });
+
+
+it("reuses the pending body when the same saved message is registered again after response loss", async () => {
+  const fetchMock = vi.fn().mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce(jsonRes(200, {}));
+  vi.stubGlobal("fetch", fetchMock);
+  const { registerMockupChangeAfterSend, mockupTargetStore: store } = await load();
+  const opts = { target: target(R1), content: "수정", sentAt: Date.now(), replyToId: null,
+    loadMessages: async () => [{ id: MSG, role: "user", content: "수정" }] };
+  await registerMockupChangeAfterSend(opts);
+  expect(store.pendingIntents()).toHaveLength(1);
+  await registerMockupChangeAfterSend({ ...opts, target: target(R2, 99) });
+  expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+  expect(store.pendingIntents()).toHaveLength(0);
+});
+
+
+describe("chat review candidate pagination", () => {
+  it("includes approved reviews and candidates after the first twenty rows", async () => {
+    const rows = Array.from({ length: 20 }, (_, i) => ({ review_id: `closed-${i}`, title: "종료", status: "revoked" }));
+    const approved = { review_id: R1, title: "승인 후 재수정", status: "approved" };
+    const ready = { review_id: R2, title: "검토", status: "review_ready" };
+    const network = vi.fn()
+      .mockResolvedValueOnce(jsonRes(200, { items: rows, total: 22 }))
+      .mockResolvedValueOnce(jsonRes(200, { items: [approved, ready], total: 22 }));
+    vi.stubGlobal("fetch", network);
+    vi.resetModules();
+    const { listMockupChatReviews } = await import("@/app/chat/useMockupChatTargets");
+    expect(await listMockupChatReviews("AADS", SID, new AbortController().signal)).toEqual([approved, ready]);
+    expect(network).toHaveBeenCalledTimes(2);
+    const urls = network.mock.calls.map(([url]) => new URL(url));
+    expect(urls.map((url) => url.searchParams.get("offset"))).toEqual(["0", "20"]);
+    expect(urls.every((url) => url.searchParams.get("session_id") === SID)).toBe(true);
+  });
+
+  it("does not publish a partial candidate list when a later page fails", async () => {
+    const rows = Array.from({ length: 20 }, () => ({ review_id: R1, title: "검토", status: "review_ready" }));
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonRes(200, { items: rows, total: 21 }))
+      .mockResolvedValueOnce(jsonRes(503, {})));
+    vi.resetModules();
+    const { listMockupChatReviews } = await import("@/app/chat/useMockupChatTargets");
+    await expect(listMockupChatReviews("AADS", SID, new AbortController().signal)).rejects.toThrow();
+  });
+
+  it("stops loading additional pages after the session lookup is aborted", async () => {
+    const ctl = new AbortController();
+    const rows = Array.from({ length: 20 }, () => ({ review_id: R1, title: "검토", status: "review_ready" }));
+    const network = vi.fn().mockImplementation(async () => {
+      ctl.abort();
+      return jsonRes(200, { items: rows, total: 40 });
+    });
+    vi.stubGlobal("fetch", network);
+    vi.resetModules();
+    const { listMockupChatReviews } = await import("@/app/chat/useMockupChatTargets");
+    await listMockupChatReviews("AADS", SID, ctl.signal);
+    expect(network).toHaveBeenCalledOnce();
+  });
+});
+
+describe("pinned document reading", () => {
+  const doc = { role: "spec", document_key: "mockup-spec", revision_id: REV };
+  const response = (over = {}) => ({ project: "AADS", document_key: doc.document_key, content: "<script>untrusted</script>",
+    canonical: { revision_id: REV, revision: 3 }, ...over });
+  it("resolves the saved UUID through history and checks the exact content identity using user authentication", async () => {
+    const network = vi.fn().mockResolvedValueOnce(jsonRes(200, { revisions: [{ id: R2, revision: 4 }, { id: REV, revision: 3 }] }))
+      .mockResolvedValueOnce(jsonRes(200, response()));
+    vi.stubGlobal("fetch", network);
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    expect((await loadPinnedMockupDocument("AADS", doc)).content).toContain("<script>");
+    expect(network.mock.calls[1][0]).toMatch(/mockup-spec\/content\?revision=3$/);
+    expect(network.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer user-token" && init.credentials === "include")).toBe(true);
+  });
+  it("fails closed when the UUID is outside history instead of reading latest", async () => {
+    const network = vi.fn().mockResolvedValue(jsonRes(200, { revisions: [{ id: R2, revision: 9 }] }));
+    vi.stubGlobal("fetch", network);
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    await expect(loadPinnedMockupDocument("AADS", doc)).rejects.toThrow("이력");
+    expect(network).toHaveBeenCalledOnce();
+  });
+  it.each([
+    response({ canonical: { revision_id: R2, revision: 3 } }),
+    response({ document_key: "different" }),
+    response({ project: "OTHER" }),
+    response({ canonical: { revision_id: REV, revision: 4 } }),
+  ])("rejects a mismatched document response", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonRes(200, { revisions: [{ id: REV, revision: 3 }] }))
+      .mockResolvedValueOnce(jsonRes(200, body)));
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    await expect(loadPinnedMockupDocument("AADS", doc)).rejects.toThrow("응답");
+  });
+  it.each([403, 404, 503])("recovers from HTTP %s by retrying the same pinned revision", async (status) => {
+    const network = vi.fn().mockResolvedValueOnce(jsonRes(status, {}))
+      .mockResolvedValueOnce(jsonRes(200, { revisions: [{ id: REV, revision: 3 }] }))
+      .mockResolvedValueOnce(jsonRes(200, response()));
+    vi.stubGlobal("fetch", network);
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    await expect(loadPinnedMockupDocument("AADS", doc)).rejects.toThrow();
+    await expect(loadPinnedMockupDocument("AADS", doc)).resolves.toMatchObject(response());
+    expect(network.mock.calls[2][0]).toMatch(/revision=3$/);
+  });
+  it("passes the cancellation signal through both reads", async () => {
+    const network = vi.fn().mockResolvedValueOnce(jsonRes(200, { revisions: [{ id: REV, revision: 3 }] }))
+      .mockResolvedValueOnce(jsonRes(200, response()));
+    vi.stubGlobal("fetch", network);
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    const ctl = new AbortController();
+    await loadPinnedMockupDocument("AADS", doc, ctl.signal);
+    expect(network.mock.calls.every(([, init]) => init.signal === ctl.signal)).toBe(true);
+  });
+  it("rejects absent or unsafe reference fields without making requests", async () => {
+    const network = vi.fn(); vi.stubGlobal("fetch", network);
+    const { loadPinnedMockupDocument } = await import("./mockupReviewApi");
+    for (const bad of [{ ...doc, revision_id: null }, { ...doc, document_key: "../secret" }]) {
+      await expect(loadPinnedMockupDocument("AADS", bad)).rejects.toThrow();
+    }
+    expect(network).not.toHaveBeenCalled();
+  });
+});
+
+
+it("renders a touch sized fixed revision action without a fabricated latest link", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { MockupDocumentRef } = await import("@/components/MockupDocumentRef");
+  const doc = { role: "spec", document_key: "mockup-spec", revision_id: REV };
+  const html = renderToStaticMarkup(createElement(MockupDocumentRef, { project: "AADS", doc }));
+  expect(html).toContain("고정 판본 열람");
+  expect(html).toContain("min-height:44px");
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).not.toContain("href=");
+  expect(html).not.toContain("iframe");
+  const unpinned = renderToStaticMarkup(createElement(MockupDocumentRef, { project: "AADS", doc: { ...doc, revision_id: null } }));
+  expect(unpinned).toContain("고정 판본 열람 정보 없음");
+  expect(unpinned).not.toContain("<button");
+});

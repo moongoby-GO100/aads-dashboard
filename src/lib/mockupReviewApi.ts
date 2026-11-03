@@ -1,8 +1,9 @@
 // 목업 검토 API. 로그인한 사용자 본인 토큰(getAuthHeaders)만 보낸다 — 시스템 토큰 없음.
 import { getAuthHeaders } from "@/lib/api";
+import { KEY_RE, PROJECT_RE, type CanonicalContentResponse } from "@/lib/canonicalDocLinks";
 import {
   describeMockupError, type ApproveBody, type ChangeBody, type IntakeBody, type MockupChangeReport, type MockupErrorView,
-  type MockupNotification, type MockupReview, type MockupReviewListResponse, type MockupRevision,
+  asUuid, type MockupDocRef, type MockupNotification, type MockupReview, type MockupReviewListResponse, type MockupRevision,
 } from "@/lib/mockupReviewModel";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://aads.newtalk.kr/api/v1";
@@ -56,6 +57,28 @@ async function send(url: string, init?: RequestInit): Promise<Response> {
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return (await send(url, init)).json() as Promise<T>;
+}
+
+// The existing content API accepts a numeric revision, not a UUID. Resolve the
+// pinned UUID through authorized history and verify it again on the content.
+// History is capped at 100: absence must never fall back to the latest revision.
+export async function loadPinnedMockupDocument(project: string, ref: MockupDocRef, signal?: AbortSignal): Promise<CanonicalContentResponse> {
+  if (!PROJECT_RE.test(project) || !ref.document_key || !KEY_RE.test(ref.document_key) || !asUuid(ref.revision_id)) {
+    throw new Error("고정 문서판본 정보가 없어 열 수 없습니다.");
+  }
+  const path = `${BASE_URL}/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(ref.document_key)}`;
+  const history = await json<{ revisions: { id: string; revision: number }[] }>(`${path}/history`, { signal });
+  const row = history.revisions.find((r) => r.id.toLowerCase() === ref.revision_id!.toLowerCase());
+  if (!row || !Number.isSafeInteger(row.revision) || row.revision < 1) {
+    throw new Error("고정 판본을 조회 가능한 이력에서 찾지 못했습니다. 삭제 또는 이력 조회 범위를 확인해 주세요.");
+  }
+  const content = await json<CanonicalContentResponse>(`${path}/content?revision=${row.revision}`, { signal });
+  if (content.project !== project || content.document_key !== ref.document_key
+    || content.canonical?.revision_id?.toLowerCase() !== ref.revision_id!.toLowerCase()
+    || content.canonical?.revision !== row.revision || typeof content.content !== "string") {
+    throw new Error("요청한 고정 판본과 응답이 달라 본문을 표시하지 않습니다.");
+  }
+  return content;
 }
 
 export const mockupApi = {

@@ -7,9 +7,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MockupHtmlLinks } from "@/components/MockupHtmlLinks";
+import { MockupDocumentRef } from "@/components/MockupDocumentRef";
 import { mockupApi, MockupApiError } from "@/lib/mockupReviewApi";
 import {
-  approveBody, canApprove, canRequestChanges, describeMockupError, docRefLabel,
+  approveBody, canApprove, canRequestChanges, describeMockupError,
   groupAssetsByScreen, isImageAsset, newUuid, outcomeLabel, pairWithPreviousRevision, PANEL_WIDE_STORAGE_KEY, panelWidthCss, parsePanelWide,
   phaseLabel, statusColor, statusLabel, stepZoomIndex, VIEWPORT_LABEL, zoomScale,
   type MockupAsset, type MockupChangeReport, type MockupErrorView, type MockupReview, type MockupRevision, type MockupTarget, type ViewportClass, type ZoomMode,
@@ -600,7 +601,7 @@ export function MockupReviewPanel({ project, reviewId, revisionId, chatSessionId
                 <div style={{ fontWeight: 800, marginTop: 4 }}>연결 문서 (판본 v{rev.revision})</div>
                 {rev.doc_refs && rev.doc_refs.length > 0 ? (
                   <ul style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
-                    {rev.doc_refs.map((d, i) => <li key={`${d.role}:${i}`}>{docRefLabel(d)}</li>)}
+                    {rev.doc_refs.map((d, i) => <li key={`${project}:${rev.revision_id}:${d.document_key}:${d.revision_id}:${i}`}><MockupDocumentRef project={project} doc={d} /></li>)}
                   </ul>
                 ) : <div style={{ margin: "4px 0 8px", color: "var(--text-secondary)" }}>연결된 문서가 없습니다.</div>}
                 <div style={{ fontWeight: 800 }}>수정 요청과 반영 결과</div>

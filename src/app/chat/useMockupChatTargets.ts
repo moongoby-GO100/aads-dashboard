@@ -1,12 +1,25 @@
 // 채팅 화면에서 수정 요청 대상을 모으는 훅 — 답장한 카드, 이 세션의 진행 중 검토 건 후보를 저장소에 올린다.
 import { useEffect } from "react";
 import { mockupApi } from "@/lib/mockupReviewApi";
-import { mockupBindingFromArtifact, type MockupTarget } from "@/lib/mockupReviewModel";
+import { mockupBindingFromArtifact, type MockupTarget, type MockupReviewListItem } from "@/lib/mockupReviewModel";
 import { mockupTargetStore } from "@/lib/mockupTargetStore";
 
 type ArtifactLike = { id: string; metadata?: Record<string, unknown> };
 
-const ACTIVE = new Set(["review_ready", "changes_requested", "revising"]);
+const ACTIVE = new Set(["review_ready", "changes_requested", "revising", "approved"]);
+
+// Read every page before resolving a target: a later page can contain another
+// valid candidate, including an approved review that needs further changes.
+export async function listMockupChatReviews(project: string, sessionId: string, signal: AbortSignal): Promise<MockupReviewListItem[]> {
+  const items: MockupReviewListItem[] = [];
+  const limit = 20;
+  for (let offset = 0; !signal.aborted; offset += limit) {
+    const page = await mockupApi.listReviews(project, { sessionId, limit, offset }, signal);
+    items.push(...page.items.filter((item) => ACTIVE.has(item.status)));
+    if (page.items.length < limit || offset + page.items.length >= page.total) break;
+  }
+  return items;
+}
 
 async function targetOf(sessionId: string, project: string, reviewId: string, artifactId: string | null, signal: AbortSignal): Promise<MockupTarget | null> {
   const review = await mockupApi.getReview(project, reviewId, signal);
@@ -45,8 +58,8 @@ export function useMockupChatTargets(opts: {
       // 프로젝트별 목록과 건별 상세(generation 필요)를 병렬로 읽는다. 실패한 조회는 후보에서 빠지고 화면에 알린다.
       const perProject = await Promise.all([...projects].map(async (project) => {
         try {
-          const list = await mockupApi.listReviews(project, { sessionId, limit: 20 }, ctl.signal);
-          const settled = await Promise.allSettled(list.items.filter((i) => ACTIVE.has(i.status)).map((it) =>
+          const items = await listMockupChatReviews(project, sessionId, ctl.signal);
+          const settled = await Promise.allSettled(items.map((it) =>
             targetOf(sessionId, project, it.review_id, artifactByReview.get(`${project}:${it.review_id}`) ?? null, ctl.signal)));
           return {
             targets: settled.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : [])),
