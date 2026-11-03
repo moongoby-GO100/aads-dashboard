@@ -81,6 +81,7 @@ function RoutingTab() {
   const [prefs, setPrefs] = useState<RoutingPref[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState("");
   const [expandedRoute, setExpandedRoute] = useState<string | null>(null);
 
@@ -99,6 +100,22 @@ function RoutingTab() {
   useEffect(() => { load(); }, [load]);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
+
+  const syncLatestModels = async () => {
+    setSyncing(true);
+    try {
+      const result = await (api as any).syncLlmModelRegistry();
+      await load();
+      const inserted = result?.cli_autoreg?.chat_llm_candidates_inserted?.length || 0;
+      flash(inserted
+        ? `레지스트리 동기화 완료 · 새 채팅 후보 ${inserted}개는 검토 대기(OFF)`
+        : "레지스트리 동기화 완료 · 새 채팅 후보 없음");
+    } catch {
+      flash("모델 레지스트리 동기화 실패");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, RoutingPref[]>();
@@ -166,6 +183,22 @@ function RoutingTab() {
           color: msg.includes("실패") ? "var(--danger)" : "var(--success)",
         }}>{msg}</div>
       )}
+
+      <div className="rounded-lg px-3 py-3 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+        <div className="flex-1 min-w-[240px]">
+          <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>최신 모델 반영 및 자동 라우팅</p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+            레지스트리를 동기화하면 실행 검증을 통과한 새 모델이 채팅 후보로 추가됩니다. 새 후보는 기본 라우트에 자동 적용하지 않고 OFF 상태로 두며, 최근 사용량과 인텐트별 경로를 검토한 뒤 켭니다.
+            채팅창에서 <b>Auto</b>를 고르면 아래 기본 라우트와 인텐트 정책에 따라 자동 선택됩니다.
+          </p>
+        </div>
+        <a href="/admin/model-parity" className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
+          사용량·경로 비교
+        </a>
+        <button onClick={() => void syncLatestModels()} disabled={syncing || saving} className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: "var(--accent)", color: "#fff", opacity: syncing || saving ? 0.6 : 1 }}>
+          {syncing ? "동기화 중..." : "최신 모델 동기화"}
+        </button>
+      </div>
 
       {ROUTE_GROUP_ORDER.map(([groupName, routeKeys]) => {
         const activeRoutes = routeKeys.filter(rk => grouped.has(rk));
@@ -235,6 +268,11 @@ function RoutingTab() {
                           <td colSpan={2} style={{ padding: "6px 12px", fontFamily: "monospace", fontSize: 11, color: "var(--text-primary)" }}>
                             {item.display_name || item.model_id}
                             <span style={{ marginLeft: 8, fontSize: 10, color: "var(--text-secondary)" }}>#{item.display_order}</span>
+                            {!item.is_enabled && item.notes?.includes("후보") && (
+                              <span className="ml-2 rounded px-1.5 py-0.5" style={{ fontFamily: "inherit", fontSize: 10, background: "rgba(245,158,11,0.14)", color: "var(--warning)" }}>
+                                신규 후보 · 검토 대기
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: "6px 12px", textAlign: "center" }}>
                             <button

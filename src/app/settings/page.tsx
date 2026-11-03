@@ -921,7 +921,7 @@ export default function SettingsPage() {
                 <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
                   <h2 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>모델 라우팅 · 인텐트 정책</h2>
                   <p className="text-xs mb-4" style={{ color: "var(--text-secondary)" }}>
-                    라우트별 기본 모델 및 인텐트별 모델 정책 — 변경 즉시 적용
+                    라우트별 기본 모델 및 인텐트별 모델 정책 — 변경 즉시 적용. 채팅창에서 Auto를 선택하면 여기 설정이 사용됩니다. 채팅창 노출 순서는 별도 탭에서 관리합니다.
                   </p>
                   <ModelSettingsPanel />
                 </section>
