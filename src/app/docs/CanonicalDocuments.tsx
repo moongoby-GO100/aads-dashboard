@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import { api, type CanonicalDocument, type CanonicalDocumentDetail, type CanonicalDocumentHistory } from "@/lib/api";
 import { canTransitionDocumentForHead } from "@/lib/canonicalDocumentWorkflow";
-import { canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
+import { canonicalConflictText, canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
 import {
   duplicateKeyTails, filterDocuments, hasActiveFilter, kstShort, listBodyState, NO_FILTERS, optionCounts,
   recentDocuments, selectionPresence, SLOW_LIST_MS, type DocFilters,
@@ -38,7 +38,7 @@ function problemOf(error: unknown, project: string): Problem {
   const kind = canonicalErrorKind(error);
   if (kind === "auth") return { kind, text: "로그인이 만료되었습니다. 다시 로그인한 뒤 재시도하세요." };
   if (kind === "forbidden") return { kind, text: `${project} 프로젝트의 문서 접근 권한이 없습니다. 다른 프로젝트를 선택하거나 권한을 확인한 뒤 재시도하세요.` };
-  if (kind === "conflict") return { kind, text: "문서 상태가 변경되었습니다. 새로고침 후 다시 시도하세요." };
+  if (kind === "conflict") return { kind, text: canonicalConflictText(error) };
   const raw = error instanceof Error ? error.message : "네트워크 오류";
   const message = raw.replace(/https?:\/\/\S+/g, "[URL]").slice(0, 120);
   return { kind, text: `문서를 불러오거나 변경하지 못했습니다. 연결을 확인하고 재시도하세요. (${message})` };

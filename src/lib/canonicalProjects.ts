@@ -21,3 +21,46 @@ export function canonicalErrorKind(error: unknown): CanonicalErrorKind {
   if (status === "409") return "conflict";
   return "network";
 }
+
+export const CANONICAL_CONFLICT_FALLBACK = "문서 상태가 변경되었습니다. 새로고침 후 다시 시도하세요.";
+
+const CONFLICT_TEXT: Record<string, (reviewState: string | null) => string> = {
+  document_split_required: () => "문서가 너무 길어(5만 자 초과) 검토·승인할 수 없습니다. 문서를 나누어 등록해 주세요.",
+  cross_review_required: (state) =>
+    `다른 회사 AI의 교차 검토가 필요합니다${state ? `(현재: ${state})` : ""}. 이 요청으로 교차 검토가 자동 시작됩니다. 검토가 끝나면 다시 시도하세요.`,
+  approval_not_required: () => "짧은 문서(D1)는 승인 단계 없이 검토만으로 사용합니다.",
+  revision_not_in_review: () => "먼저 '검토로 이동'을 눌러야 승인할 수 있습니다.",
+  revision_already_decided: () => "이미 승인 또는 보관된 판본입니다. 새로고침해 최신 상태를 확인하세요.",
+};
+
+// request() 는 오류 메시지에 `API error 409: <응답 본문>` 을 싣는다. 본문 detail 에서 code·message 를 꺼내 사용자 문구로 바꾼다.
+export function canonicalConflictText(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  const bodyStart = message.indexOf("{");
+  let detail: unknown;
+  if (bodyStart >= 0) {
+    try {
+      const body = JSON.parse(message.slice(bodyStart)) as { detail?: unknown };
+      detail = body?.detail;
+    } catch {
+      detail = undefined;
+    }
+  }
+  let code = "";
+  let serverMessage = "";
+  let reviewState: string | null = null;
+  if (typeof detail === "string") {
+    code = detail;
+  } else if (detail && typeof detail === "object") {
+    const d = detail as { code?: unknown; message?: unknown; review_state?: unknown };
+    if (typeof d.code === "string") code = d.code;
+    if (typeof d.message === "string") serverMessage = d.message;
+    if (typeof d.review_state === "string") reviewState = d.review_state;
+  }
+  const known = CONFLICT_TEXT[code];
+  if (known) return known(reviewState);
+  if (code && code !== "generation_conflict" && serverMessage) {
+    return serverMessage.replace(/https?:\/\/\S+/g, "[URL]").slice(0, 200);
+  }
+  return CANONICAL_CONFLICT_FALLBACK;
+}
