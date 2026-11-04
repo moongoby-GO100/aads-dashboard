@@ -131,6 +131,11 @@ export async function login(email: string, password: string): Promise<string> {
 // (2026-09-14 실측: 1623~2025ms, 1652~2438ms 로 겹침).
 let meInflight: Promise<CurrentUser | null> | null = null;
 
+// TTL 이 지났어도 같은 토큰으로 확인된 사용자라면 일시 장애 동안 그대로 쓴다.
+function lastKnownUser(token: string): CurrentUser | null {
+  return cachedMe && cachedMe.token === token ? cachedMe.user : null;
+}
+
 export async function getMe(): Promise<CurrentUser | null> {
   if (typeof window === "undefined") return null;
   const token = syncTokenCookieFromStorage();
@@ -146,12 +151,19 @@ export async function getMe(): Promise<CurrentUser | null> {
       const res = await fetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) { logout(); return null; }
+      // 토큰을 지우는 것은 서버가 인증을 거절했을 때(401/403)뿐이다.
+      // 2026-11-04 실측: API 이벤트 루프가 5~14초 멈출 때 nginx 가 /auth/me 를
+      // 15초에서 끊어 504 를 냈고, 예전 코드는 !res.ok 전부를 로그아웃으로 처리해
+      // 토큰을 지웠다. 이후 모든 요청이 "토큰 없음" 401 이 되어 재로그인 화면으로
+      // 튕겼다(하루 6회). 5xx·네트워크 오류는 일시 장애이므로 토큰을 유지하고,
+      // 같은 토큰으로 직전에 확인된 사용자를 돌려준다(관리자 화면 튕김 방지).
+      if (res.status === 401 || res.status === 403) { logout(); return null; }
+      if (!res.ok) return lastKnownUser(token);
       const user = await res.json();
       cachedMe = { token, user, expiresAt: Date.now() + ME_CACHE_TTL_MS };
       return user;
     } catch {
-      return null;
+      return lastKnownUser(token);
     } finally {
       // 성공이든 실패든 즉시 버린다. 남겨두면 다음 호출이 옛 결과를 받는다.
       meInflight = null;
