@@ -51,9 +51,10 @@ interface ServerHealth {
   checked_at?: string;
   source?: string;
   error?: string;
+  httpStatus?: number;
 }
 
-type StandardConnectName = "contabo116" | "contabo14" | "cafe24_114";
+type StandardConnectName = "contabo116" | "contabo14" | "cafe24_114" | "contabo92";
 
 interface ServerConfig {
   id: StandardConnectName;
@@ -62,6 +63,8 @@ interface ServerConfig {
   sshPort: number;
   role: string;
   sshIdentity?: string;
+  unmonitored?: boolean;
+  pendingNote?: string;
 }
 
 interface PCAgent {
@@ -166,7 +169,7 @@ async function fetchServerHealth(
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     const r = await fetch(url, { headers, signal: AbortSignal.timeout(SERVER_HEALTH_TIMEOUT_MS) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { httpStatus: r.status });
     const data = await r.json();
 
     const rawStatus = String(data.status || "").toLowerCase();
@@ -213,6 +216,7 @@ async function fetchServerHealth(
       role,
       status: "unknown",
       error: String(e),
+      httpStatus: (e as { httpStatus?: number }).httpStatus,
       checked_at: new Date().toISOString(),
     };
   }
@@ -240,6 +244,15 @@ const SERVERS: ServerConfig[] = [
   { id: "contabo116", connectName: "contabo116", ip: "5.104.86.116", sshPort: 22, role: "AADS Backend (FastAPI / PostgreSQL / Dashboard)" },
   { id: "contabo14", connectName: "contabo14", ip: "5.104.86.14", sshPort: 22, role: "GO100 / KIS 트레이딩 (스케줄러 / 스캘핑 / WS / API)" },
   { id: "cafe24_114", connectName: "cafe24_114", ip: "114.207.244.86", sshPort: 7916, role: "SF / NTV2 / NAS (ShortFlow / NewTalk V2)", sshIdentity: "id_rsa_final" },
+  {
+    id: "contabo92",
+    connectName: "contabo92",
+    ip: "13.140.248.92",
+    sshPort: 22,
+    role: "GO100 보조 (과거 DB 보관 / 러너 이전 대상)",
+    unmonitored: true,
+    pendingNote: "상태 수집 대기 (서버 API 배포 전)",
+  },
 ];
 
 const CROSS_EDGES: CrossCheckEdge[] = [
@@ -469,11 +482,32 @@ export default function ServersPage() {
                     >
                       {statusVal.toUpperCase()}
                     </span>
+                    {srv.unmonitored && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "2px 8px",
+                          borderRadius: 10,
+                          border: "1px dashed var(--border)",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        감시 미편입
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>{srv.role}</div>
 
                   {loading && !health ? (
                     <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>로딩 중...</div>
+                  ) : health?.httpStatus === 404 && srv.pendingNote ? (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      ⏳ {srv.pendingNote}
+                      <div style={{ fontSize: 10, marginTop: 4 }}>
+                        SSH: <span style={{ fontFamily: "monospace" }}>ssh {srv.connectName}</span> · {srv.ip}
+                      </div>
+                    </div>
                   ) : health?.error ? (
                     <div style={{ fontSize: 12, color: "var(--danger)" }}>⚠️ {health.error}</div>
                   ) : (
