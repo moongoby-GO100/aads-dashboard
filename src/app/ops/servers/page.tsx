@@ -23,6 +23,16 @@ interface CodexUsage {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ExtraDisk {
+  label: string;
+  mount?: string;
+  device?: string;
+  size?: string;
+  used?: string;
+  available?: string;
+  pct?: number;
+}
+
 interface ServerHealth {
   server_id: string | number;
   ip: string;
@@ -33,6 +43,7 @@ interface ServerHealth {
   disk_used?: string;
   disk_total?: string;
   disk_available?: string;
+  extra_disks?: ExtraDisk[];
   load?: number;
   load_5m?: number;
   load_15m?: number;
@@ -65,6 +76,7 @@ interface ServerConfig {
   sshIdentity?: string;
   unmonitored?: boolean;
   pendingNote?: string;
+  hidePowerShell?: boolean;
 }
 
 interface PCAgent {
@@ -191,6 +203,19 @@ async function fetchServerHealth(
       disk_used: data.disk_used,
       disk_total: data.disk_total,
       disk_available: data.disk_available,
+      extra_disks: Array.isArray(data.extra_disks)
+        ? data.extra_disks
+            .filter((d: unknown) => d && typeof d === "object" && (d as { label?: unknown }).label)
+            .map((d: Record<string, unknown>) => ({
+              label: String(d.label),
+              mount: typeof d.mount === "string" ? d.mount : undefined,
+              device: typeof d.device === "string" ? d.device : undefined,
+              size: typeof d.size === "string" ? d.size : undefined,
+              used: typeof d.used === "string" ? d.used : undefined,
+              available: typeof d.available === "string" ? d.available : undefined,
+              pct: numberOrUndefined(d.pct),
+            }))
+        : [],
       load: load1m,
       load_5m: numberOrUndefined(data.load_5m),
       load_15m: numberOrUndefined(data.load_15m),
@@ -249,9 +274,10 @@ const SERVERS: ServerConfig[] = [
     connectName: "contabo92",
     ip: "13.140.248.92",
     sshPort: 22,
-    role: "GO100 보조 (과거 DB 보관 / 러너 이전 대상)",
+    role: "GO100 보관 DB·백업 (증설, 서비스 미구성)",
     unmonitored: true,
-    pendingNote: "상태 수집 대기 (서버 API 배포 전)",
+    hidePowerShell: true,
+    pendingNote: "상태 수집 대기 (헬스 감시 대상 아님)",
   },
 ];
 
@@ -509,7 +535,9 @@ export default function ServersPage() {
                       </div>
                     </div>
                   ) : health?.error ? (
-                    <div style={{ fontSize: 12, color: "var(--danger)" }}>⚠️ {health.error}</div>
+                    <div style={{ fontSize: 12, color: srv.unmonitored ? "var(--text-secondary)" : "var(--danger)" }}>
+                      {srv.unmonitored ? "⏳ 상태 수집 대기 (헬스 감시 대상 아님)" : `⚠️ ${health.error}`}
+                    </div>
                   ) : (
                     <>
                       <div style={{ marginBottom: 12 }}>
@@ -535,6 +563,16 @@ export default function ServersPage() {
                           {health?.disk_used && health?.disk_total ? `${health.disk_used} / ${health.disk_total}` : "용량 미수집"}
                           {health?.disk_available ? ` · 여유 ${health.disk_available}` : ""}
                         </div>
+                        {health?.extra_disks?.map((disk) => (
+                          <div key={`${disk.label}:${disk.mount ?? ""}`} style={{ marginTop: 8 }}>
+                            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>{disk.label}</div>
+                            <GaugeBar pct={disk.pct} />
+                            <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
+                              {disk.used && disk.size ? `${disk.used} / ${disk.size}` : "용량 미수집"}
+                              {disk.available ? ` · 여유 ${disk.available}` : ""}
+                            </div>
+                          </div>
+                        ))}
 
                         <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8, marginBottom: 3 }}>메모리</div>
                         <GaugeBar pct={health?.memory_pct} />
@@ -566,6 +604,13 @@ export default function ServersPage() {
                         )}
                       </div>
 
+                      {srv.hidePowerShell ? (
+                        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
+                          <div style={{ fontSize: 10, color: "var(--text-secondary)", fontFamily: "monospace" }}>
+                            표준 접속명: ssh {srv.connectName}
+                          </div>
+                        </div>
+                      ) : (
                       <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                           <div style={{ minWidth: 0 }}>
@@ -607,6 +652,7 @@ export default function ServersPage() {
                           {health?.source ? ` · ${health.source}` : ""}
                         </div>
                       </div>
+                      )}
 
                       {/* 서비스 상태 */}
                       {health?.services && Object.keys(health.services).length > 0 && (
