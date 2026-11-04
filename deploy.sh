@@ -410,6 +410,22 @@ build_release_image() {
         log "FAIL: nginx 전환 락을 잡은 채 빌드할 수 없다"
         return 1
     fi
+    # 빌드 전 디스크 여유 게이트. 2026-11-04 루트 디스크 98%(여유 5.5GB)에서
+    # 이 스크립트는 아무 확인 없이 빌드를 시작할 수 있었다. 이미지 1.3GB 에
+    # npm ci·next build 중간 산출물까지 수 GB 를 쓰므로, 공간이 모자라면
+    # 같은 디스크의 postgres 까지 멈출 수 있다. API deploy.sh 의 게이트와 같은
+    # 방식으로 fail-closed 한다.
+    local disk_path min_free_gb avail_kb
+    disk_path="${AADS_DASHBOARD_DEPLOY_DISK_CHECK_PATH:-/var/lib/docker}"
+    [ -d "$disk_path" ] || disk_path="/"
+    min_free_gb="${AADS_DASHBOARD_DEPLOY_MIN_FREE_GB:-10}"
+    case "$min_free_gb" in ''|*[!0-9]*) min_free_gb=10 ;; esac
+    avail_kb="$(df -Pk "$disk_path" | awk 'NR==2 {print $4}')"
+    if [ -z "$avail_kb" ] || [ "$avail_kb" -lt $(( min_free_gb * 1024 * 1024 )) ]; then
+        log "FAIL: 디스크 여유 부족 — ${disk_path} 여유 $(( ${avail_kb:-0} / 1024 / 1024 ))GB < 필요 ${min_free_gb}GB. 빌드하지 않는다"
+        return 1
+    fi
+    log "OK: 디스크 여유 $(( avail_kb / 1024 / 1024 ))GB (필요 ${min_free_gb}GB)"
     cleanup_release_context
     if ! RELEASE_CONTEXT_DIR="$(mktemp -d /tmp/aads-dashboard-release.XXXXXX)"; then
         log "FAIL: release context 생성 실패"
