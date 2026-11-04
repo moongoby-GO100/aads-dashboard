@@ -65,7 +65,7 @@ interface ServerHealth {
   httpStatus?: number;
 }
 
-type StandardConnectName = "contabo116" | "contabo14" | "cafe24_114" | "contabo92";
+type StandardConnectName = "contabo116" | "contabo14" | "cafe24_114" | "contabo92" | "contabo42";
 
 interface ServerConfig {
   id: StandardConnectName;
@@ -275,6 +275,16 @@ const SERVERS: ServerConfig[] = [
     ip: "13.140.248.92",
     sshPort: 22,
     role: "GO100 보관 DB·백업 (증설, 서비스 미구성)",
+    unmonitored: true,
+    hidePowerShell: true,
+    pendingNote: "상태 수집 대기 (헬스 감시 대상 아님)",
+  },
+  {
+    id: "contabo42",
+    connectName: "contabo42",
+    ip: "46.250.255.42",
+    sshPort: 22,
+    role: "AADS 러너 풀 주력 (증설, 12코어·47GB, 116과 같은 데이터센터)",
     unmonitored: true,
     hidePowerShell: true,
     pendingNote: "상태 수집 대기 (헬스 감시 대상 아님)",
