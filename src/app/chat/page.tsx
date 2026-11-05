@@ -11681,6 +11681,7 @@ export default function ChatPage() {
 
   // 세션이 바뀌면 단계 렌더를 처음부터. 메시지 로딩이 끝난 뒤 다음 단계로 넓힌다.
   const progressiveSidRef = useRef<string | null>(null);
+  const progressiveFollowBottomRef = useRef(false);
   useEffect(() => {
     const sid = activeSession?.id ?? null;
     if (progressiveSidRef.current === sid) return;
@@ -11698,8 +11699,15 @@ export default function ChatPage() {
     // 먼저 그린 것이 화면에 칠해진 뒤(rAF) 다음 단계를 잡는다.
     const raf = requestAnimationFrame(() => {
       timer = setTimeout(() => {
-        // 넓히기 직전에 보던 메시지와 위치를 잡아 둔다. 위에 메시지가 추가돼도 그 자리를 지킨다.
-        chatViewportController.enqueueMutationAnchor(chatViewportController.captureAnchor(), "prepend");
+        // 넓히기 직전에 보던 위치를 본다. 중간을 읽고 있었으면 그 메시지·오프셋을 지키고(prepend 앵커),
+        // 맨 아래였으면 앵커 대신 맨 아래 따라가기를 유지한다. 앵커로만 복원하면 그 뒤 늦게 커지는
+        // 내용(코드 블록·이미지)을 따라가지 못해 맨 아래보다 131~553px 위에 멈췄다(1f4e262f 실측).
+        const anchor = chatViewportController.captureAnchor();
+        if (anchor && !anchor.wasNearBottom) {
+          chatViewportController.enqueueMutationAnchor(anchor, "prepend");
+        } else {
+          progressiveFollowBottomRef.current = true;
+        }
         setProgressiveRenderCap(next);
       }, 30);
     });
@@ -11711,6 +11719,10 @@ export default function ChatPage() {
   // 단계가 넓어져 DOM 이 바뀐 직후(페인트 전) 잡아 둔 위치로 되돌린다. messages 변경 때와 같은 커밋 경로다.
   useLayoutEffect(() => {
     chatViewportController.commitPendingIntent();
+    if (progressiveFollowBottomRef.current) {
+      progressiveFollowBottomRef.current = false;
+      chatViewportController.settleAfterMessageChange(false, false);
+    }
   }, [chatViewportController, progressiveRenderCap]);
 
   // PERF: O(1) lookup maps
