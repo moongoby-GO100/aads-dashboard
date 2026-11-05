@@ -106,6 +106,7 @@ import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/ch
 import { findMockupArtifact, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
+const PROGRESSIVE_RENDER_STEPS: readonly number[] = [30, 80];
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
@@ -5125,6 +5126,10 @@ export default function ChatPage() {
   const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  // PERF 2026-11-05: 세션을 열 때 메시지 120개를 한 번에 그리면 브라우저가 1.2초 멈췄다(실측,
+  // 메시지 표시 4.0초). 최근 것부터 단계적으로 그린다: 30 → 80 → 전체(MAX_RENDER).
+  // startTransition 은 쓰지 않는다 — 스트리밍 갱신에 밀려 확장이 굶을 수 있다(8934행 교훈).
+  const [progressiveRenderCap, setProgressiveRenderCap] = useState<number | null>(PROGRESSIVE_RENDER_STEPS[0]);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
@@ -11629,7 +11634,9 @@ export default function ChatPage() {
       i++;
     }
     // PERF P1: 렌더링 cap — DOM 노드 과부하 방지 (이전 메시지는 "이전 대화 불러오기" 버튼으로 접근)
-    const MAX_RENDER = display.length > 400 ? 200 : 150;  // AADS-MSG-VANISH-P0: 숨김(러너/시스템) 메시지 제외한 표시 대상 기준으로 산정
+    const MAX_RENDER_FULL = display.length > 400 ? 200 : 150;  // AADS-MSG-VANISH-P0: 숨김(러너/시스템) 메시지 제외한 표시 대상 기준으로 산정
+    const progressive = progressiveRenderCap != null && progressiveRenderCap < MAX_RENDER_FULL;
+    const MAX_RENDER = progressive ? progressiveRenderCap : MAX_RENDER_FULL;
     const cappedBase = display.length > MAX_RENDER ? display.slice(display.length - MAX_RENDER) : display;
     const cappedIds = new Set(cappedBase.map((item) => item.msg.id));
     const protectedLocalQuestions = display
@@ -11640,7 +11647,7 @@ export default function ChatPage() {
           (item.msg.role === "user" && item.msg.intent !== "system_trigger")
         )
       ))
-      .slice(-20);  // AADS-MSG-VANISH-P0: CEO 입력 질문 버블은 렌더 cap에서 절대 탈락시키지 않는다
+      .slice(progressive ? 0 : -20);  // AADS-MSG-VANISH-P0: CEO 입력 질문 버블은 렌더 cap에서 절대 탈락시키지 않는다(단계 렌더 중에는 수십 ms 뒤 전체 단계에서 붙는다)
     const capped = [...protectedLocalQuestions, ...cappedBase].sort((a, b) => a.idx - b.idx);
     const lastAssistantId = capped.slice().reverse().find(d => {
       const m = d.msg;
@@ -11658,9 +11665,32 @@ export default function ChatPage() {
       lastAssistantId,
       totalCount: sortedAll.length,
       renderedCount,
-      truncated: renderedCount < sortedAll.length,
+      // 단계 렌더 중에는 "최근 N건 표시 중" 안내를 띄우지 않는다(수십 ms 뒤 전체가 그려진다).
+      truncated: !progressive && renderedCount < sortedAll.length,
     };
-  }, [messages]);
+  }, [messages, progressiveRenderCap]);
+
+  // 세션이 바뀌면 단계 렌더를 처음부터. 메시지 로딩이 끝난 뒤 다음 단계로 넓힌다.
+  const progressiveSidRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sid = activeSession?.id ?? null;
+    if (progressiveSidRef.current === sid) return;
+    progressiveSidRef.current = sid;
+    setProgressiveRenderCap(PROGRESSIVE_RENDER_STEPS[0]);
+  }, [activeSession?.id]);
+  useEffect(() => {
+    if (progressiveRenderCap == null || messagesLoading || messages.length === 0) return;
+    const next = PROGRESSIVE_RENDER_STEPS.find((step) => step > progressiveRenderCap) ?? null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // 먼저 그린 것이 화면에 칠해진 뒤(rAF) 다음 단계를 잡는다.
+    const raf = requestAnimationFrame(() => {
+      timer = setTimeout(() => setProgressiveRenderCap(next), 30);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
+    };
+  }, [progressiveRenderCap, messagesLoading, messages.length]);
 
   // PERF: O(1) lookup maps
   // 미반영 판정은 시간이 지나야 참이 된다. 20초마다 다시 계산해

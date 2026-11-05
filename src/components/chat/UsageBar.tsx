@@ -164,6 +164,10 @@ function windowName(minutes: number | null): string {
   return `${minutes}m`;
 }
 
+// PERF 2026-11-05: 채팅방을 열 때 요청이 약 100개 한꺼번에 나가 메시지 표시가 늦었다(실측 4.0초).
+// 사용량 줄은 첫 화면에 꼭 필요하지 않으므로 첫 조회를 늦춘다. 이후 주기는 그대로다.
+const USAGEBAR_INITIAL_DELAY_MS = 2_500;
+
 export default function UsageBar() {
   // 기본은 접힘. 채팅 중 알아야 할 것은 "지금 쓰는 계정이 얼마나 남았나" 하나다.
   // 나머지(릴레이 진단·프로젝트 배정·게이트)는 펼쳤을 때와 설정 화면에 있다.
@@ -277,7 +281,10 @@ export default function UsageBar() {
     } catch { /* 배정 조회 실패가 사용량 표시를 막으면 안 된다 */ }
   }, []);
 
-  useEffect(() => { void fetchSlotProjects(); }, [fetchSlotProjects]);
+  useEffect(() => {
+    const t = window.setTimeout(() => { void fetchSlotProjects(); }, USAGEBAR_INITIAL_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [fetchSlotProjects]);
 
   // 접힘 여부는 대표님 선택이므로 브라우저에 남긴다.
   useEffect(() => {
@@ -300,13 +307,14 @@ export default function UsageBar() {
         if (alive) setOverview(null);
       }
     };
-    void run();
+    const first = window.setTimeout(() => { void run(); }, USAGEBAR_INITIAL_DELAY_MS);
     const iv = window.setInterval(run, 30_000);
     const onVisible = () => { if (!document.hidden) void run(); };
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       alive = false;
+      window.clearTimeout(first);
       window.clearInterval(iv);
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
@@ -319,16 +327,21 @@ export default function UsageBar() {
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getChatWorkspaces()
-      .then((r: any) => {
-        const keys = Array.from(new Set(
-          (r?.workspaces || r || [])
-            .map((w: any) => String(w.project_key || "").toUpperCase())
-            .filter(Boolean),
-        )) as string[];
-        setKnownProjects(keys.sort());
-      })
-      .catch(() => setKnownProjects([]));
+    let alive = true;
+    const t = window.setTimeout(() => {
+      api.getChatWorkspaces()
+        .then((r: any) => {
+          if (!alive) return;
+          const keys = Array.from(new Set(
+            (r?.workspaces || r || [])
+              .map((w: any) => String(w.project_key || "").toUpperCase())
+              .filter(Boolean),
+          )) as string[];
+          setKnownProjects(keys.sort());
+        })
+        .catch(() => { if (alive) setKnownProjects([]); });
+    }, USAGEBAR_INITIAL_DELAY_MS);
+    return () => { alive = false; window.clearTimeout(t); };
   }, []);
 
   const toggleProject = useCallback(async (slot: string, key: string) => {
@@ -378,7 +391,7 @@ export default function UsageBar() {
     const run = () => {
       void fetchUsage();
     };
-    const initial = window.setTimeout(run, 0);
+    const initial = window.setTimeout(run, USAGEBAR_INITIAL_DELAY_MS);
     const iv = window.setInterval(run, 30_000);
     return () => {
       window.clearTimeout(initial);
@@ -403,7 +416,7 @@ export default function UsageBar() {
         void fetchRelayCapacity();
       }
     };
-    const initial = window.setTimeout(run, 0);
+    const initial = window.setTimeout(run, USAGEBAR_INITIAL_DELAY_MS);
     const iv = window.setInterval(run, RELAY_POLL_MS);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
