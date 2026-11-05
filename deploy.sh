@@ -1377,9 +1377,23 @@ else
         -d '{"project_id":"AADS","deploy_url":"https://aads.newtalk.kr/","pages":["/","/chat","/ops"]}' \
         --max-time 240 2>/dev/null || echo '{"error":"QA API 호출 실패"}')
 fi
+# 2026-11-05 대표님 결정: 합격 판정은 실제 브라우저 스모크 점검으로 한다.
+# full-qa 의 verdict 는 자동 통과 조건(테스트 PASS + 기준 화면 비교 PASS + 디자인 35+)을 구조적으로
+# 만족할 수 없어(테스트 SKIP·기준 화면 없음) 배포마다 "CEO 확인 요청"이었다. 디자인 점수는 참고로만 남긴다.
+SMOKE_OUT="$(AADS_SMOKE_TOKEN="${QA_TOKEN:-}" timeout 240 python3 "${SOURCE_DIR}/scripts/post_deploy_smoke.py" 2>&1 | tail -1 || true)"
 unset QA_TOKEN
+log "Step 7: 스모크 점검 — ${SMOKE_OUT:-SMOKE ERROR 출력 없음}"
 
-QA_RESULT=$(echo "$QA_RESPONSE" | python3 -c "
+QA_DESIGN=$(echo "$QA_RESPONSE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(f\"디자인 {d.get('design_score','?')}점·{d.get('verdict','?')}(참고)\")
+except Exception:
+    print('디자인 감리 없음')
+" 2>/dev/null || echo "디자인 감리 없음")
+
+QA_RESULT_LEGACY=$(echo "$QA_RESPONSE" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -1387,8 +1401,13 @@ try:
 except:
     print('ERROR')
 " 2>/dev/null || echo "ERROR")
+case "$SMOKE_OUT" in
+    "SMOKE PASS"*) QA_RESULT="PASS — ${SMOKE_OUT#SMOKE PASS } / ${QA_DESIGN}" ;;
+    "SMOKE FAIL"*) QA_RESULT="FAIL — ${SMOKE_OUT#SMOKE FAIL } / ${QA_DESIGN}" ;;
+    *) QA_RESULT="스모크 점검 불가(${SMOKE_OUT:-출력 없음}) / 예전 판정 ${QA_RESULT_LEGACY} / ${QA_DESIGN}" ;;
+esac
 
-if [[ "$QA_RESULT" == *"FAIL"* ]]; then
+if [[ "$QA_RESULT" == FAIL* ]]; then
     log "⚠️ Step 7: 프론트엔드 QA 실패 — $QA_RESULT (배포는 유지, 알림만)"
     # 텔레그램 알림 (환경변수 있으면 발송)
     if [[ -f "${COMPOSE_DIR}/.env" ]]; then
@@ -1401,7 +1420,7 @@ if [[ "$QA_RESULT" == *"FAIL"* ]]; then
                 -d parse_mode=HTML >/dev/null 2>&1 || true
         fi
     fi
-elif [[ "$QA_RESULT" == *"PASS"* ]]; then
+elif [[ "$QA_RESULT" == PASS* ]]; then
     log "Step 7: ✅ 프론트엔드 QA 통과 — $QA_RESULT"
 else
     # PASS 도 FAIL 도 아닌 값은 전부 미확정으로 둔다.
