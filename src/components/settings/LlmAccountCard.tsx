@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import AccountLoginModal from "./AccountLoginModal";
 import EnableSwitch from "./EnableSwitch";
+import LlmKeyInfoEditor from "./LlmKeyInfoEditor";
 import { HostAccountUsage, type HostUsage } from "./LlmMetadata";
 
 /** LLM 계정 통합 카드.
@@ -132,6 +133,7 @@ export default function LlmAccountCard() {
   const [current, setCurrent] = useState<number | null>(null);
   const [primaryInfo, setPrimaryInfo] = useState<PrimaryState | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [editingInfo, setEditingInfo] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -218,6 +220,15 @@ export default function LlmAccountCard() {
       setToggling(null);
     }
   };
+
+  /** 등록정보 수정 저장용. overview 행에 id 가 없으면 toggleEnabled 와 같이 /llm-keys 목록에서 key_name 으로 찾는다. */
+  const findKeyId = async (keyName: string): Promise<number> => {
+    const keys: Array<{ id: number; key_name: string }> = await (api as any).getLlmKeys();
+    const id = keys.find((k) => k.key_name === keyName)?.id;
+    if (id == null) throw new Error("계정 id 를 찾을 수 없습니다");
+    return id;
+  };
+  const infoSaved = () => { setEditingInfo(null); flash("등록정보를 저장했습니다"); load(); };
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -482,6 +493,9 @@ export default function LlmAccountCard() {
                         className="text-xs px-2 py-1 rounded whitespace-nowrap"
                         style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>주계정</button>
                     )}
+                    <button onClick={() => { setOpenRow(a.key_name); setEditingInfo(a.key_name); }}
+                      className="text-xs px-2 rounded whitespace-nowrap" aria-label={`${a.label || a.key_name} 정보 수정`}
+                      style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
                     <button onClick={() => {
                       const target = a.login_target || (a.key_name === "ANTHROPIC_AUTH_TOKEN_4" ? "claude:4" : null);
                       if (target) setLoginTarget(target);
@@ -513,6 +527,16 @@ export default function LlmAccountCard() {
                       )}
                     </div>
                     {a.notes && <div className="whitespace-pre-wrap">메모 {a.notes}</div>}
+                    {editingInfo === a.key_name ? (
+                      <LlmKeyInfoEditor
+                        info={{ id: a.id, key_name: a.key_name, provider: a.provider, label: a.label,
+                                priority: a.priority, notes: a.notes, kind: a.kind }}
+                        resolveId={() => findKeyId(a.key_name)}
+                        onSaved={infoSaved} onCancel={() => setEditingInfo(null)} />
+                    ) : (
+                      <button onClick={() => setEditingInfo(a.key_name)}
+                        className="px-3 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
+                    )}
                   </div>
                 )}
               </div>
@@ -542,19 +566,33 @@ export default function LlmAccountCard() {
                 {/* 키 행도 열을 고정한다. flex + ml-auto 였을 때는 key_name
                     길이에 따라 라벨·값·상태가 행마다 다른 자리에 섰다. */}
                 {open && (
-                  <div className="px-3 pb-2 space-y-1">
+                  <div className="px-3 pb-2 space-y-1" style={{ overflowX: "auto" }}>
                     {p.keys.map((k) => (
-                      <div key={k.id} className="text-xs py-1" style={{
+                      <div key={k.id}>
+                      <div className="text-xs py-1" style={{
                         color: "var(--text-secondary)",
                         display: "grid",
-                        gridTemplateColumns: "34px 220px minmax(120px,1fr) 180px 76px",
-                        gap: 12, alignItems: "center",
+                        gridTemplateColumns: "34px 220px minmax(120px,1fr) 180px 76px 72px",
+                        gap: 12, alignItems: "center", minWidth: 700,
                       }}>
                         <span className="tabular-nums" style={{ textAlign: "right" }}>p{k.priority}</span>
                         <span className="font-mono truncate" style={{ color: "var(--text-primary)" }}>{k.key_name}</span>
                         <span className="truncate">{k.label || "-"}</span>
                         <span className="font-mono truncate">{k.masked_value}</span>
                         <span className="truncate" style={{ color: STATE_COLOR[k.state] }}>{STATE_TEXT[k.state]}</span>
+                        <button onClick={() => setEditingInfo(`key:${k.id}`)} aria-label={`${k.label || k.key_name} 정보 수정`}
+                          className="px-2 rounded whitespace-nowrap"
+                          style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
+                      </div>
+                      {editingInfo === `key:${k.id}` && (
+                        <div className="py-1">
+                          <LlmKeyInfoEditor
+                            info={{ id: k.id, key_name: k.key_name, provider: p.provider, label: k.label,
+                                    priority: k.priority, notes: k.notes, kind: "apikey" }}
+                            resolveId={async () => k.id}
+                            onSaved={infoSaved} onCancel={() => setEditingInfo(null)} />
+                        </div>
+                      )}
                       </div>
                     ))}
                   </div>
