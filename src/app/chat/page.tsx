@@ -106,9 +106,10 @@ import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/ch
 import { findMockupArtifact, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
-// 2026-11-05 끔: 단계 렌더(30→80→전체)는 위쪽에 이전 메시지를 끼워 넣을 때 스크롤이 따라가지 않아
-// 화면이 맨 아래에서 위로 밀렸다(대표님 지적, 헤드리스 실측: 맨 아래보다 4,497px 위에 멈춤). 단계를 비워 끈다.
-const PROGRESSIVE_RENDER_STEPS: readonly number[] = [];
+// 단계 렌더(30→80→전체). 2026-11-05 위쪽에 이전 메시지를 끼울 때 스크롤이 따라가지 않아 화면이 위로
+// 밀렸다(맨 아래보다 4,497px 위). 이제 단계를 넓히기 직전에 보던 위치(앵커)를 잡고, 그린 직후 그 위치로
+// 되돌린다(chatViewportController 'prepend' — 이전 대화 불러오기와 같은 방식).
+const PROGRESSIVE_RENDER_STEPS: readonly number[] = [30, 80];
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
@@ -11696,13 +11697,21 @@ export default function ChatPage() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     // 먼저 그린 것이 화면에 칠해진 뒤(rAF) 다음 단계를 잡는다.
     const raf = requestAnimationFrame(() => {
-      timer = setTimeout(() => setProgressiveRenderCap(next), 30);
+      timer = setTimeout(() => {
+        // 넓히기 직전에 보던 메시지와 위치를 잡아 둔다. 위에 메시지가 추가돼도 그 자리를 지킨다.
+        chatViewportController.enqueueMutationAnchor(chatViewportController.captureAnchor(), "prepend");
+        setProgressiveRenderCap(next);
+      }, 30);
     });
     return () => {
       cancelAnimationFrame(raf);
       if (timer) clearTimeout(timer);
     };
-  }, [progressiveRenderCap, messagesLoading, messages.length]);
+  }, [progressiveRenderCap, messagesLoading, messages.length, chatViewportController]);
+  // 단계가 넓어져 DOM 이 바뀐 직후(페인트 전) 잡아 둔 위치로 되돌린다. messages 변경 때와 같은 커밋 경로다.
+  useLayoutEffect(() => {
+    chatViewportController.commitPendingIntent();
+  }, [chatViewportController, progressiveRenderCap]);
 
   // PERF: O(1) lookup maps
   // 미반영 판정은 시간이 지나야 참이 된다. 20초마다 다시 계산해
