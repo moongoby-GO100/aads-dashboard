@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CANONICAL_CONFLICT_FALLBACK, CANONICAL_NAV_PROJECTS, canonicalConflictText, canonicalErrorKind, mergeCanonicalProjects } from "./canonicalProjects";
+import {
+  CANONICAL_CONFLICT_FALLBACK, CANONICAL_NAV_PROJECTS, CANONICAL_NO_APPROVAL_TEXT, canonicalApprovalBadge, canonicalConflictText,
+  canonicalErrorKind, isLegacyApprovalList, mergeCanonicalProjects,
+} from "./canonicalProjects";
 
 describe("mergeCanonicalProjects", () => {
   it("offers AADS, ACCT and GO100 when the file scan is empty, failed or pending", () => {
@@ -56,5 +59,41 @@ describe("canonicalConflictText", () => {
   it("shows the server message for unknown codes", () => {
     expect(canonicalConflictText(conflict({ code: "new_rule", message: "새 규칙 위반" }))).toBe("새 규칙 위반");
     expect(canonicalConflictText(conflict({ code: "new_rule" }))).toBe(CANONICAL_CONFLICT_FALLBACK);
+  });
+});
+
+describe("canonicalApprovalBadge", () => {
+  it("marks approval_required documents as '승인 필요'", () => {
+    expect(canonicalApprovalBadge({ approval_required: true, status: "draft" })).toBe("required");
+    expect(canonicalApprovalBadge({ approval_required: true, status: "approved", approved_revision_id: "r1" })).toBe("required");
+  });
+
+  it("marks non-required, non-approved documents as '기록용'", () => {
+    expect(canonicalApprovalBadge({ approval_required: false, status: "draft" })).toBe("record");
+    expect(canonicalApprovalBadge({ approval_required: false, status: "review", approved_revision_id: null })).toBe("record");
+  });
+
+  it("keeps the existing display for approved documents", () => {
+    expect(canonicalApprovalBadge({ approval_required: false, status: "approved" })).toBeNull();
+    expect(canonicalApprovalBadge({ approval_required: false, status: "draft", approved_revision_id: "r1" })).toBeNull();
+  });
+
+  it("shows no badge when an old server omits the field", () => {
+    expect(canonicalApprovalBadge({ status: "draft" })).toBeNull();
+    expect(canonicalApprovalBadge({ approval_required: "true", status: "draft" })).toBeNull();
+  });
+});
+
+describe("isLegacyApprovalList", () => {
+  it("detects an old server response and treats empty lists as undecided", () => {
+    expect(isLegacyApprovalList([])).toBe(false);
+    expect(isLegacyApprovalList([{ approval_required: true }, { approval_required: false }])).toBe(false);
+    expect(isLegacyApprovalList([{}, {}])).toBe(true);
+    expect(isLegacyApprovalList([{ approval_required: true }, {}])).toBe(true);
+  });
+
+  it("has the zero-result guidance text", () => {
+    expect(CANONICAL_NO_APPROVAL_TEXT).toContain("승인할 문서가 없습니다");
+    expect(CANONICAL_NO_APPROVAL_TEXT).toContain("승인 없이 기록으로 보관");
   });
 });

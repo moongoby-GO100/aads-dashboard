@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import Link from "next/link";
 import { api, type CanonicalDocument, type CanonicalDocumentDetail, type CanonicalDocumentHistory } from "@/lib/api";
 import { canTransitionDocumentForHead } from "@/lib/canonicalDocumentWorkflow";
-import { canonicalConflictText, canonicalErrorKind, mergeCanonicalProjects, type CanonicalErrorKind } from "@/lib/canonicalProjects";
+import {
+  canonicalApprovalBadge, canonicalConflictText, canonicalErrorKind, CANONICAL_NO_APPROVAL_TEXT, isLegacyApprovalList, mergeCanonicalProjects,
+  type CanonicalApprovalView, type CanonicalErrorKind,
+} from "@/lib/canonicalProjects";
 import {
   duplicateKeyTails, filterDocuments, hasActiveFilter, kstShort, listBodyState, NO_FILTERS, optionCounts,
   recentDocuments, selectionPresence, SLOW_LIST_MS, type DocFilters,
@@ -58,7 +61,7 @@ const revisionOf = (item: CanonicalDocument): number | null => {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 };
 
-export function CanonicalListBody({ loading, slow, error, documents, totalCount, keyTails, filtered = false, query, selected, selectedRef, onSelect, onRetry, onClearSearch, onClearFilters }: {
+export function CanonicalListBody({ loading, slow, error, documents, totalCount, keyTails, filtered = false, query, selected, selectedRef, onSelect, onRetry, onClearSearch, onClearFilters, showApprovalBadges = false, emptyText }: {
   loading: boolean;
   slow: boolean;
   error: Problem | null;
@@ -73,6 +76,8 @@ export function CanonicalListBody({ loading, slow, error, documents, totalCount,
   onRetry: () => void;
   onClearSearch: () => void;
   onClearFilters?: () => void;
+  showApprovalBadges?: boolean;
+  emptyText?: string;
 }) {
   const total = totalCount ?? documents.length;
   const tails = keyTails ?? duplicateKeyTails(documents);
@@ -88,7 +93,7 @@ export function CanonicalListBody({ loading, slow, error, documents, totalCount,
         </> : <p className="sr-only">목록을 불러오는 중…</p>}
         <DocListSkeleton rows={slow ? 5 : 6} />
       </div>}
-      {state === "empty" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>승인된 정본 없음 · 등록된 문서가 없습니다.</p>}
+      {state === "empty" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>{emptyText ?? "승인된 정본 없음 · 등록된 문서가 없습니다."}</p>}
       {state === "no-results" && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>검색 결과가 없습니다. 다른 검색어를 입력하거나 검색을 해제하세요.</p>}
       {filteredOut && <p className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)" }}>
         선택한 상태·종류에 맞는 문서가 없습니다. {onClearFilters && <button type="button" onClick={onClearFilters} className="underline">필터 초기화</button>}
@@ -98,11 +103,19 @@ export function CanonicalListBody({ loading, slow, error, documents, totalCount,
         {total === 100 && <p className="text-xs" role="status">최대 100건이 표시됩니다. 다른 문서를 찾으려면 이름이나 내용을 검색하세요.</p>}
         {documents.map((item) => {
           const isSelected = selected === item.document_key;
-          return (
+          const row = (
             <DocListRow key={item.document_key} buttonRef={isSelected ? selectedRef : undefined} selected={isSelected}
               title={item.title} kindLabel={KIND[item.kind] || item.kind} status={item.status} statusLabel={STATUS[item.status] || item.status}
               revision={revisionOf(item)} updatedLabel={kstShort(item.updated_at)} keyTail={tails.get(item.document_key)}
               onClick={() => onSelect(item.document_key)} />
+          );
+          const badge = showApprovalBadges ? canonicalApprovalBadge(item) : null;
+          if (!badge) return row;
+          return (
+            <div key={item.document_key} className="flex items-center gap-1.5" data-approval-badge={badge}>
+              <div className="min-w-0 flex-1">{row}</div>
+              <DocBadge tone={badge === "required" ? "review" : "kind"}>{badge === "required" ? "승인 필요" : "기록용"}</DocBadge>
+            </div>
           );
         })}
       </div>}
@@ -125,19 +138,20 @@ function CountBadges({ counts, labels, tone }: { counts: Map<string, number>; la
   );
 }
 
-export function CanonicalSummary({ project, documents, loading, error, keyTails, onSelect }: {
+export function CanonicalSummary({ project, documents, loading, error, keyTails, onSelect, scopeLabel }: {
   project: string;
   documents: CanonicalDocument[];
   loading: boolean;
   error: boolean;
   keyTails: Map<string, string>;
   onSelect: (key: string) => void;
+  scopeLabel?: string;
 }) {
   const counts = optionCounts(documents, NO_FILTERS);
   return (
     <div className="space-y-4" data-testid="canonical-summary">
       <div>
-        <h2 className="font-semibold">{project} 정본 요약</h2>
+        <h2 className="font-semibold">{project} 정본 요약{scopeLabel ? ` (${scopeLabel})` : ""}</h2>
         <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>목록에서 문서를 선택하면 상태와 개정 이력이 표시됩니다.</p>
       </div>
       {loading && <DocListSkeleton rows={3} />}
@@ -207,6 +221,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
   const [slow, setSlow] = useState(false);
   const [loadStat, setLoadStat] = useState<{ ms: number; ok: boolean } | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const [approvalView, setApprovalView] = useState<CanonicalApprovalView>("required");
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
   const listRequest = useRef(0);
@@ -220,7 +235,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
     setError(null);
     const startedAt = Date.now();
     try {
-      const response = await api.listCanonicalDocuments(project, query);
+      const response = await api.listCanonicalDocuments(project, query, approvalView === "required");
       if (requestId === listRequest.current) {
         setDocuments(response.documents);
         setLoadStat({ ms: Date.now() - startedAt, ok: true });
@@ -234,7 +249,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
     } finally {
       if (requestId === listRequest.current) setLoading(false);
     }
-  }, [project, query]);
+  }, [project, query, approvalView]);
 
   const reloadDetail = useCallback(async (key: string) => {
     if (projectRef.current !== project) return;
@@ -285,6 +300,8 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
     return () => clearTimeout(timer);
   }, [loading]);
 
+  const legacyList = isLegacyApprovalList(documents);
+  const effectiveView: CanonicalApprovalView = legacyList ? "all" : approvalView;
   const showDetailOnMobile = mobileView === "detail" && !!selected;
   const visibleDocuments = filterDocuments(documents, filters);
   const keyTails = duplicateKeyTails(documents);
@@ -343,6 +360,15 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
               </p>}
               <button type="button" onClick={() => void reloadList()} className={`${loadStat && !loading ? "" : "ml-auto"} min-h-10 shrink-0 rounded-lg px-3 text-sm`} style={{ border: "1px solid var(--border)" }}>재시도 · 새로고침</button>
             </div>
+            {!legacyList && <div role="group" aria-label="보기 전환" className="mb-2 flex gap-2">
+              {([["required", "승인 필요"], ["all", "전체 문서"]] as const).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={approvalView === value} onClick={() => setApprovalView(value)}
+                  className="min-h-11 flex-1 rounded-lg px-3 text-sm font-medium sm:flex-none"
+                  style={approvalView === value ? { background: "var(--accent)", color: "#fff" } : { border: "1px solid var(--border)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>}
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <form className="flex min-w-[12rem] flex-1 gap-2" onSubmit={(event) => { event.preventDefault(); setQuery(searchInput.trim()); }}>
                 <input aria-label="문서 검색" value={searchInput} maxLength={100} onChange={(event) => setSearchInput(event.target.value)}
@@ -367,12 +393,13 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
             <CanonicalListBody loading={loading} slow={slow} error={error} documents={visibleDocuments} totalCount={documents.length}
               keyTails={keyTails} filtered={hasActiveFilter(filters)} query={query} selected={selected} selectedRef={selectedItemRef}
               onSelect={openDetail} onRetry={() => void reloadList()} onClearSearch={() => { setSearchInput(""); setQuery(""); }}
-              onClearFilters={() => setFilters(NO_FILTERS)} />
+              onClearFilters={() => setFilters(NO_FILTERS)}
+              showApprovalBadges={effectiveView === "all"} emptyText={effectiveView === "required" ? CANONICAL_NO_APPROVAL_TEXT : undefined} />
           </section>
           <section className={`${showDetailOnMobile ? "" : "hidden lg:block"} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 상세">
             {selected && <button type="button" onClick={() => setMobileView("list")} className="mb-3 min-h-11 rounded-lg px-4 text-sm lg:hidden" style={{ border: "1px solid var(--border)" }}>‹ 목록으로</button>}
             {!selected && <CanonicalSummary project={project} documents={documents} loading={loading} error={!!error}
-              keyTails={keyTails} onSelect={openDetail} />}
+              keyTails={keyTails} onSelect={openDetail} scopeLabel={effectiveView === "required" ? "승인 필요 문서" : undefined} />}
             {selected && <>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="font-semibold">현재 문서와 개정 이력</h2>

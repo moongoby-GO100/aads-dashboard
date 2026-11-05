@@ -519,6 +519,8 @@ export interface CanonicalDocument {
   approved_revision_id: string | null;
   updated_at: string;
   status: string;
+  // 구버전 서버는 이 필드를 주지 않는다(undefined).
+  approval_required?: boolean;
 }
 export interface CanonicalDocumentDetail {
   approval_card?: {
@@ -985,9 +987,10 @@ export const api = {
   getAnalytics: () => request<any>("/dashboard/analytics"),
   getDocuments: (tag?: string) => request<any>("/documents" + (tag ? "?tag=" + encodeURIComponent(tag) : "")),
   getDocumentContent: (docId: string) => request<any>("/documents/" + encodeURIComponent(docId)),
-  listCanonicalDocuments: (project: string, query = "") => {
+  listCanonicalDocuments: (project: string, query = "", approvalRequired = false) => {
     const params = new URLSearchParams({ limit: "100" });
     if (query) params.set("q", query);
+    if (approvalRequired) params.set("approval_required", "true");
     return request<{ documents: CanonicalDocument[] }>(`/projects/${encodeURIComponent(project)}/documents?${params}`);
   },
   getCanonicalReviewQueue: (project: string) =>

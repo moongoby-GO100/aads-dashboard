@@ -11,6 +11,30 @@ export function mergeCanonicalProjects(scanned: readonly string[] = []): string[
   return [...new Set([...CANONICAL_NAV_PROJECTS, ...extra])];
 }
 
+export type CanonicalApprovalView = "required" | "all";
+export type CanonicalApprovalBadge = "required" | "record" | null;
+
+export const CANONICAL_NO_APPROVAL_TEXT = "승인할 문서가 없습니다. 보고서·참고 문서는 승인 없이 기록으로 보관됩니다.";
+
+interface ApprovalFields {
+  approval_required?: unknown;
+  status: string;
+  approved_revision_id?: string | null;
+}
+
+// 구버전 서버는 approval_required 를 주지 않고 쿼리 파라미터도 무시한다 → 목록 전체가 기존 화면 그대로 동작해야 한다.
+export function isLegacyApprovalList(documents: readonly Pick<ApprovalFields, "approval_required">[]): boolean {
+  return documents.length > 0 && documents.some((item) => typeof item.approval_required !== "boolean");
+}
+
+// '승인 필요' 배지 / '기록용' 배지 / 배지 없음(승인된 문서는 기존 표시 유지, 서버가 필드를 안 주면 표시 없음).
+export function canonicalApprovalBadge(item: ApprovalFields): CanonicalApprovalBadge {
+  if (typeof item.approval_required !== "boolean") return null;
+  if (item.approval_required) return "required";
+  if (item.status === "approved" || item.approved_revision_id) return null;
+  return "record";
+}
+
 export type CanonicalErrorKind = "auth" | "forbidden" | "conflict" | "network";
 
 export function canonicalErrorKind(error: unknown): CanonicalErrorKind {
