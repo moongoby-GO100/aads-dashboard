@@ -106,7 +106,9 @@ export const mockupTargetStore = {
     if (!armed) return { kind: "none" };
     if (state.chosenKey === targetKey(armed)) return { kind: "target", target: armed };
     const res = resolveMockupTarget({ sessionId: armed.sessionId, reply: state.reply, panel: state.panel, candidates: state.candidates, chosenKey: state.chosenKey });
-    if (res.kind === "ambiguous") return { kind: "ambiguous", candidates: res.candidates };
+    // 후보가 여럿이라는 이유만으로는 막지 않는다: 이미 직접 장전했고, 답장·패널과 어긋나지 않으면 그 대상이 맞다
+    // (모바일은 장전하면 패널이 닫혀 후보 목록만 남는다).
+    if (res.kind === "ambiguous" && res.reason === "reply_vs_panel") return { kind: "ambiguous", candidates: res.candidates };
     if (res.kind === "target" && targetKey(res.target) !== targetKey(armed)) return { kind: "ambiguous", candidates: [armed, res.target] };
     return { kind: "target", target: armed };
   },

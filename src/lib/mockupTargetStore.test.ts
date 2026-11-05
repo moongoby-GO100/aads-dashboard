@@ -128,6 +128,19 @@ describe("mockup target pinning", () => {
     expect(r.kind === "target" && r.target.reviewId).toBe(R1);
   });
 
+  it("sends to the armed target after the panel closes, even when several candidates exist (mobile)", async () => {
+    const { mockupTargetStore } = await load();
+    mockupTargetStore.resetForSession(SID);
+    mockupTargetStore.setCandidates(SID, [target(R1), target(R2)]);
+    mockupTargetStore.setPanel(SID, target(R1));
+    mockupTargetStore.arm(target(R1));
+    mockupTargetStore.setPanel(SID, null);
+    const r = mockupTargetStore.sendResolution();
+    expect(r.kind === "target" && r.target.reviewId).toBe(R1);
+    mockupTargetStore.setPanel(SID, target(R2));
+    expect(mockupTargetStore.sendResolution().kind).toBe("ambiguous");
+  });
+
   it("is not a change request unless armed, and resets on session change", async () => {
     const { mockupTargetStore } = await load();
     mockupTargetStore.resetForSession(SID);

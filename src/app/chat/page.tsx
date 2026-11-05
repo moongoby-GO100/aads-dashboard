@@ -7317,10 +7317,12 @@ export default function ChatPage() {
     });
     fetchSessionArtifactSnapshot(fetchSid)
       .then((snapshot) => {
+        if (cancelled) return;
         setArtifactListTruncated(snapshot.truncated);
         setArtifacts(snapshot.items);
       })
       .catch(() => {
+        if (cancelled) return;
         setArtifactListTruncated(false);
         setArtifacts([]);
       });
@@ -11083,7 +11085,8 @@ export default function ChatPage() {
     if (idx >= 0) setSelectedArtifactIdx(idx);
     setArtifactMode("full");
     setArtifactTab(tab);
-  }, [artifacts]);
+    if (screenSize !== "desktop") setMobileOverlay("artifact");
+  }, [artifacts, screenSize]);
   const handleOpenLightboxStable = useCallback((srcs: string[], i: number) => {
     setLightboxSrcs(srcs);
     setLightboxIdx(i);
