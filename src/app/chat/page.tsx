@@ -106,7 +106,9 @@ import { chatHashSessionId, parseGoalDeepLink, stripGoalFromUrl } from "@/lib/ch
 import { findMockupArtifact, parseMockupDeepLink, stripMockupFromUrl, type MockupDeepLink } from "@/lib/mockupReviewModel";
 
 const CHAT_ARTIFACT_RENDER_LIMIT = 60;
-const PROGRESSIVE_RENDER_STEPS: readonly number[] = [30, 80];
+// 2026-11-05 끔: 단계 렌더(30→80→전체)는 위쪽에 이전 메시지를 끼워 넣을 때 스크롤이 따라가지 않아
+// 화면이 맨 아래에서 위로 밀렸다(대표님 지적, 헤드리스 실측: 맨 아래보다 4,497px 위에 멈춤). 단계를 비워 끈다.
+const PROGRESSIVE_RENDER_STEPS: readonly number[] = [];
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
@@ -5135,7 +5137,7 @@ export default function ChatPage() {
   // PERF 2026-11-05: 세션을 열 때 메시지 120개를 한 번에 그리면 브라우저가 1.2초 멈췄다(실측,
   // 메시지 표시 4.0초). 최근 것부터 단계적으로 그린다: 30 → 80 → 전체(MAX_RENDER).
   // startTransition 은 쓰지 않는다 — 스트리밍 갱신에 밀려 확장이 굶을 수 있다(8934행 교훈).
-  const [progressiveRenderCap, setProgressiveRenderCap] = useState<number | null>(PROGRESSIVE_RENDER_STEPS[0]);
+  const [progressiveRenderCap, setProgressiveRenderCap] = useState<number | null>(PROGRESSIVE_RENDER_STEPS[0] ?? null);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
@@ -11682,7 +11684,7 @@ export default function ChatPage() {
     const sid = activeSession?.id ?? null;
     if (progressiveSidRef.current === sid) return;
     progressiveSidRef.current = sid;
-    setProgressiveRenderCap(PROGRESSIVE_RENDER_STEPS[0]);
+    setProgressiveRenderCap(PROGRESSIVE_RENDER_STEPS[0] ?? null);
   }, [activeSession?.id]);
   // 첫 메시지가 그려지면 미뤄 둔 비핵심 요청을 내보낸다(api.ts 의 부팅 게이트).
   useEffect(() => {
