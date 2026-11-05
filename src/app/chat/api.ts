@@ -101,8 +101,11 @@ const CHAT_BOOT_CRITICAL: RegExp[] = [
   /^\/ops\/version/,
 ];
 let _releaseBootGate: (() => void) | null = null;
+// 2026-11-05 끔: 늦게 나간 목표·할 일·문서 패널 응답이 메시지가 그려진 뒤 나타나 채팅 영역 높이가
+// 줄면서(630→345px) 화면이 맨 아래보다 500~850px 위에 멈췄다(헤드리스 실측). 위치 안정이 우선이다.
+const CHAT_BOOT_GATE_ENABLED = false;
 const _chatBootGate: Promise<void> =
-  typeof window === "undefined" || !window.location.pathname.startsWith("/chat")
+  !CHAT_BOOT_GATE_ENABLED || typeof window === "undefined" || !window.location.pathname.startsWith("/chat")
     ? Promise.resolve()
     : new Promise<void>((resolve) => {
         _releaseBootGate = resolve;
