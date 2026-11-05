@@ -63,7 +63,7 @@ import {
 import { Workspace, ChatSession, ChatMessage, Artifact, Theme, ArtifactMode, ArtifactTab, ScreenSize, DARK, LIGHT } from "./types";
 import TodoPanel from "./TodoPanel";
 import { useSessionTodos } from "./useSessionTodos";
-import { BASE_URL, authHdrs, chatApi, chatApiThrottled, uploadChatFile } from "./api";
+import { BASE_URL, authHdrs, chatApi, chatApiThrottled, releaseChatBootGate, uploadChatFile } from "./api";
 import type { ChatResponseMode } from "@/services/chatApi";
 import { processInline, MarkdownBlock, StreamingMarkdownBlock, type DocumentLinkHandler } from "./MarkdownRenderer";
 import SectionCardContent, { detectCrfSections } from "@/components/chat/SectionCardContent";
@@ -11684,6 +11684,10 @@ export default function ChatPage() {
     progressiveSidRef.current = sid;
     setProgressiveRenderCap(PROGRESSIVE_RENDER_STEPS[0]);
   }, [activeSession?.id]);
+  // 첫 메시지가 그려지면 미뤄 둔 비핵심 요청을 내보낸다(api.ts 의 부팅 게이트).
+  useEffect(() => {
+    if (!messagesLoading && messages.length > 0) releaseChatBootGate();
+  }, [messagesLoading, messages.length]);
   useEffect(() => {
     if (progressiveRenderCap == null || messagesLoading || messages.length === 0) return;
     const next = PROGRESSIVE_RENDER_STEPS.find((step) => step > progressiveRenderCap) ?? null;

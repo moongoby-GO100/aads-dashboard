@@ -87,7 +87,42 @@ export interface ChatApiOptions {
   softAuth?: boolean;
 }
 
+// PERF 2026-11-05: 채팅방을 열면 세션 관련 요청 약 15개가 동시에 나가, API(단일 워커)가
+// 붐비는 동안 메시지 표시를 좌우하는 streaming-status·messages 도 1.4~2.4초씩 밀렸다(헤드리스 실측).
+// 첫 메시지가 그려질 때까지(최대 2.5초) 화면에 꼭 필요하지 않은 GET 은 잠시 기다리게 한다.
+const CHAT_BOOT_GATE_MAX_MS = 2_500;
+const CHAT_BOOT_CRITICAL: RegExp[] = [
+  /^\/chat\/messages(\?|$)/,
+  /^\/chat\/sessions\/[^/?]+(\?|$)/,
+  /\/streaming-status(\?|$)/,
+  /^\/chat\/sessions(\?|$)/,
+  /^\/chat\/workspaces(\?|$)/,
+  /^\/auth\//,
+  /^\/ops\/version/,
+];
+let _releaseBootGate: (() => void) | null = null;
+const _chatBootGate: Promise<void> =
+  typeof window === "undefined" || !window.location.pathname.startsWith("/chat")
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => {
+        _releaseBootGate = resolve;
+        window.setTimeout(resolve, CHAT_BOOT_GATE_MAX_MS);
+      });
+
+/** 첫 메시지가 화면에 그려지면 부른다. 대기 중인 비핵심 요청을 바로 내보낸다. */
+export function releaseChatBootGate(): void {
+  _releaseBootGate?.();
+  _releaseBootGate = null;
+}
+
+function _isBootCritical(path: string, opts?: RequestInit): boolean {
+  const method = String(opts?.method || "GET").toUpperCase();
+  if (method !== "GET") return true; // 사용자 동작(전송·수정)은 절대 늦추지 않는다
+  return CHAT_BOOT_CRITICAL.some((re) => re.test(path));
+}
+
 export async function chatApi<T>(path: string, opts?: RequestInit, apiOpts?: ChatApiOptions): Promise<T> {
+  if (_releaseBootGate && !_isBootCritical(path, opts)) await _chatBootGate;
   const softAuth = apiOpts?.softAuth === true;
   const baseKey = _coalesceKey(path, opts);
   // 전역 401 처리 여부가 다른 호출끼리 한 약속을 나눠 쓰면 안 된다.
