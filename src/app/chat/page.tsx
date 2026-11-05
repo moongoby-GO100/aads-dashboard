@@ -109,7 +109,9 @@ const CHAT_ARTIFACT_RENDER_LIMIT = 60;
 // 단계 렌더(30→80→전체). 2026-11-05 위쪽에 이전 메시지를 끼울 때 스크롤이 따라가지 않아 화면이 위로
 // 밀렸다(맨 아래보다 4,497px 위). 이제 단계를 넓히기 직전에 보던 위치(앵커)를 잡고, 그린 직후 그 위치로
 // 되돌린다(chatViewportController 'prepend' — 이전 대화 불러오기와 같은 방식).
-const PROGRESSIVE_RENDER_STEPS: readonly number[] = [30, 80];
+// 2026-11-05 다시 끔: 위치 유지(앵커·맨 아래 따라가기)를 붙여도 헤드리스 3회 중 1회가 맨 아래보다
+// 20,375px 위로 밀렸다(61fd87a6). 화면 위치 안정이 로딩 단축보다 중요하다 — 원인을 밝히기 전까지 끈다.
+const PROGRESSIVE_RENDER_STEPS: readonly number[] = [];
 const CHAT_ARTIFACT_FETCH_LIMIT = CHAT_ARTIFACT_RENDER_LIMIT + 1;
 const AUTO_RECOVERY_DRAFT_GRACE_MS = 120000;
 const COMPLETION_ALERT_DEDUPE_MAX = 200;
