@@ -405,6 +405,79 @@ ensure_release_image() {
     log "OK: release 이미지 빌드·검증 완료 (${id})"
 }
 
+# --- 원격 빌드(42) 스위치·경로 (AADS-IMAGE-BUILD-42-B) ---
+# AADS_REMOTE_BUILD=42|off. 비어 있으면 호스트 파일 첫 줄을 읽고, 그 외 값은 모두 off.
+REMOTE_BUILD_FLAG_FILE="${AADS_REMOTE_BUILD_FLAG_FILE:-/root/aads/state/aads-dashboard.remote-build}"
+REMOTE_REGISTRY="localhost:5000"
+REMOTE_DOCKER_HOST="ssh://mesh-42"
+BUILD_PATH="local"
+REMOTE_DIGEST=""
+FALLBACK_REASON=""
+
+remote_build_mode() {
+    local v="${AADS_REMOTE_BUILD:-}"
+    if [ -z "$v" ] && [ -r "$REMOTE_BUILD_FLAG_FILE" ]; then
+        v="$(head -n 1 "$REMOTE_BUILD_FLAG_FILE" 2>/dev/null | tr -d '[:space:]')"
+    fi
+    if [ "$v" = "42" ]; then printf '42'; else printf 'off'; fi
+}
+
+# 42 원격 빌드 → 레지스트리 → 116 digest pull → aads-dashboard:<sha> 태그.
+# 실패하면 REMOTE_FAIL_REASON 에 "단계: 사유" 를 남기고 1 을 반환한다.
+# 어떤 실패 경로에서도 aads-dashboard:<sha> 태그는 만들지 않는다.
+REMOTE_FAIL_REASON=""
+build_release_image_remote42() {
+    local ref="${REMOTE_REGISTRY}/aads-dashboard:${AADS_RELEASE_SHA}" push_out digest repo_digests
+    REMOTE_DIGEST=""
+    if ! curl -fsS -m 5 -o /dev/null "http://127.0.0.1:5000/v2/" 2>/dev/null; then
+        REMOTE_FAIL_REASON="registry_check: 127.0.0.1:5000/v2/ 응답 없음"; return 1
+    fi
+    if ! timeout 15 docker -H "$REMOTE_DOCKER_HOST" version >/dev/null 2>&1; then
+        REMOTE_FAIL_REASON="remote_docker_check: mesh-42 docker 접속 실패"; return 1
+    fi
+    if ! timeout 2700 docker -H "$REMOTE_DOCKER_HOST" build --tag "$ref" \
+        --label "${RELEASE_LABEL_KEY}=${RELEASE_FULL_SHA}" "$RELEASE_CONTEXT_DIR"; then
+        REMOTE_FAIL_REASON="remote_build: 42 원격 빌드 실패"; return 1
+    fi
+    if ! push_out="$(timeout 600 docker -H "$REMOTE_DOCKER_HOST" push "$ref" 2>&1)"; then
+        REMOTE_FAIL_REASON="push: 레지스트리 push 실패"; return 1
+    fi
+    digest="$(printf '%s\n' "$push_out" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -n 1)"
+    if [ -z "$digest" ]; then
+        REMOTE_FAIL_REASON="push: push 출력에서 digest 를 찾지 못함"; return 1
+    fi
+    REMOTE_DIGEST="$digest"
+    if ! timeout 900 docker pull "${REMOTE_REGISTRY}/aads-dashboard@${digest}" >/dev/null; then
+        REMOTE_FAIL_REASON="pull: 116 pull 실패 (${digest})"; return 1
+    fi
+    repo_digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REMOTE_REGISTRY}/aads-dashboard@${digest}" 2>/dev/null || true)"
+    if ! printf '%s\n' "$repo_digests" | grep -qxF "${REMOTE_REGISTRY}/aads-dashboard@${digest}"; then
+        docker rmi "${REMOTE_REGISTRY}/aads-dashboard@${digest}" >/dev/null 2>&1 || true
+        REMOTE_FAIL_REASON="digest_verify: pull 한 이미지 RepoDigests 불일치 (${digest})"; return 1
+    fi
+    if ! docker tag "${REMOTE_REGISTRY}/aads-dashboard@${digest}" "aads-dashboard:${AADS_RELEASE_SHA}"; then
+        REMOTE_FAIL_REASON="tag: docker tag 실패"; return 1
+    fi
+    docker rmi "${REMOTE_REGISTRY}/aads-dashboard@${digest}" >/dev/null 2>&1 || true
+    return 0
+}
+
+# deploy_runs 에 빌드 경로를 병합 기록한다. 실패해도 배포는 계속한다.
+record_build_info() {
+    [ -z "${DEPLOY_RUN_ID}" ] && return 0
+    local bp rd fr coltype
+    bp="${BUILD_PATH//[^A-Za-z0-9_]/}"
+    rd="${REMOTE_DIGEST//[^A-Za-z0-9:]/}"
+    fr="${FALLBACK_REASON//[\'\"\\]/}"
+    coltype="$(_db_exec "SELECT data_type FROM information_schema.columns WHERE table_name='deploy_runs' AND column_name='request_payload'" 2>/dev/null || true)"
+    if [ "$(printf '%s' "$coltype" | head -n 1 | tr -d '[:space:]')" = "jsonb" ]; then
+        _db_exec "UPDATE deploy_runs SET request_payload = COALESCE(request_payload,'{}'::jsonb) || jsonb_build_object('build_path','${bp}','remote_digest','${rd}','fallback_reason','${fr}'), updated_at=NOW() WHERE id=${DEPLOY_RUN_ID}" >/dev/null || true
+    else
+        _db_exec "UPDATE deploy_runs SET release_summary = COALESCE(release_summary,'') || ' [build_path=${bp} remote_digest=${rd} fallback_reason=${fr}]', updated_at=NOW() WHERE id=${DEPLOY_RUN_ID}" >/dev/null || true
+    fi
+    return 0
+}
+
 build_release_image() {
     if [ "$NGINX_LOCK_HELD" = "true" ]; then
         log "FAIL: nginx 전환 락을 잡은 채 빌드할 수 없다"
@@ -462,7 +535,7 @@ build_release_image() {
     # (2026-09-14 이 함정에 여러 번 빠졌다).
     local _busy
     _busy=$(ps -eo pid=,comm=,args= 2>/dev/null \
-            | awk '$2 == "docker" && /build --tag aads-dashboard:/ {print}' | head -3)
+            | awk '$2 == "docker" && (/build --tag aads-dashboard:/ || /build --tag localhost:5000\/aads-dashboard:/) {print}' | head -3)
     if [ -n "$_busy" ]; then
         log "FAIL: 같은 이미지를 빌드 중인 프로세스가 있다. 끝난 뒤 다시 시도하라."
         while IFS= read -r _l; do
@@ -471,10 +544,25 @@ build_release_image() {
         return 1
     fi
 
-    local build_rc=0
+    local build_rc=0 _remote_ok=false
+    BUILD_PATH="local"; REMOTE_DIGEST=""; FALLBACK_REASON=""
+    if [ "$(remote_build_mode)" = "42" ]; then
+        if build_release_image_remote42; then
+            _remote_ok=true
+            BUILD_PATH="remote42"
+            log "OK: 42 원격 빌드 → 116 digest pull 완료 (${REMOTE_DIGEST})"
+        else
+            BUILD_PATH="local_fallback"
+            FALLBACK_REASON="$REMOTE_FAIL_REASON"
+            log "WARN: 42 원격 빌드 경로 실패 — ${FALLBACK_REASON}. 116 로컬 빌드로 폴백한다"
+        fi
+    fi
+    if [ "$_remote_ok" != "true" ]; then
     timeout 2700 docker build --tag "aads-dashboard:${AADS_RELEASE_SHA}" \
         --label "${RELEASE_LABEL_KEY}=${RELEASE_FULL_SHA}" "$RELEASE_CONTEXT_DIR" || build_rc=$?
+    fi
     cleanup_release_context
+    [ "$build_rc" -ne 0 ] || record_build_info
     if [ "$build_rc" -ne 0 ]; then
         log "FAIL: release image build 실패 (exit=${build_rc})"
         return "$build_rc"

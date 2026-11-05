@@ -178,6 +178,8 @@ function runDeploy({ env = {}, setup = () => {}, args = [] } = {}) {
     s = sub(s, "/root/aads/aads-server/scripts/verify-bluegreen-release-contract.sh /root/aads/aads-server", `${verifier} ${compose}`);
     s = sub(s, '[ -x "/root/aads/aads-server/scripts/verify-bluegreen-release-contract.sh" ]', `[ -x "${verifier}" ]`);
     s = sub(s, "/proc/uptime", "${FAKE_DIR}/uptime");
+    // 원격 빌드 스위치 파일도 임시 경로로 돌려 호스트 파일(/root/aads/state/...)이 테스트에 영향을 주지 않게 한다.
+    s = sub(s, 'REMOTE_BUILD_FLAG_FILE="${AADS_REMOTE_BUILD_FLAG_FILE:-/root/aads/state/aads-dashboard.remote-build}"', `REMOTE_BUILD_FLAG_FILE="${dir}/remote-build.flag"`);
     assert.doesNotMatch(s.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n"), /\/root\/aads/, "an unredirected host path remains");
 
     fs.writeFileSync(path.join(source, "deploy.sh"), s, { mode: 0o755 });
