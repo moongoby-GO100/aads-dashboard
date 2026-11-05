@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { INITIAL_VERSION_STATE, nextVersionState, type VersionState } from '@/lib/versionCheck';
 
 export function useVersionCheck(intervalMs: number = 30000) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const initialHash = useRef<string | null>(null);
+  const versionState = useRef<VersionState>(INITIAL_VERSION_STATE);
   const isStreaming = useRef(false);
 
   const checkVersion = useCallback(async () => {
@@ -11,13 +12,8 @@ export function useVersionCheck(intervalMs: number = 30000) {
       if (!res.ok) return;
       const data = await res.json();
 
-      if (initialHash.current === null) {
-        // 최초 로드 시 현재 해시 저장
-        initialHash.current = data.build_hash;
-      } else if (initialHash.current !== data.build_hash) {
-        // 해시 불일치 = 새 배포 감지
-        setUpdateAvailable(true);
-      }
+      versionState.current = nextVersionState(versionState.current, data?.build_hash);
+      if (versionState.current.updateAvailable) setUpdateAvailable(true);
     } catch {
       // 네트워크 오류 무시
     }
