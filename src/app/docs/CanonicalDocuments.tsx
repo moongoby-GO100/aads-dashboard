@@ -15,6 +15,7 @@ import {
 import DocBadge, { statusTone } from "@/components/docs/DocBadge";
 import DocListRow from "@/components/docs/DocListRow";
 import DocListSkeleton from "@/components/docs/DocListSkeleton";
+import AutoApprovalReview from "./AutoApprovalReview";
 
 const STATUS: Record<string, string> = { draft: "초안", review: "검토", approved: "승인", archived: "보관" };
 const KIND: Record<string, string> = {
@@ -351,6 +352,7 @@ export default function CanonicalDocuments({ project, projects, onProjectChange,
             </button>
           ))}
         </div>
+        <div className={showDetailOnMobile ? "hidden lg:block" : ""}><AutoApprovalReview project={project} onChanged={() => { void reloadList(); if (selected) void reloadDetail(selected); }} /></div>
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <section className={`${showDetailOnMobile ? "hidden lg:block" : ""} min-w-0 rounded-xl border p-3`} style={{ borderColor: "var(--border)" }} aria-label="문서 정본 목록">
             <div className="mb-2 flex items-center gap-2">

@@ -1004,6 +1004,13 @@ export const api = {
       method: "POST", body: JSON.stringify({ revision_id: revisionId, expected_generation: generation }),
     }),
 
+  getAutoApprovalDigest: (project: string, sinceHours: number, signal?: AbortSignal) =>
+    request<unknown>(`/projects/${encodeURIComponent(project)}/documents/auto-approval-digest?since_hours=${sinceHours}`, { signal }),
+  requestCanonicalChange: (project: string, key: string, revisionId: string, generation: number, feedback: string) =>
+    request<unknown>(`/projects/${encodeURIComponent(project)}/documents/${encodeURIComponent(key)}/change-request`, {
+      method: "POST", body: JSON.stringify({ revision_id: revisionId, expected_generation: generation, feedback }),
+    }),
+
   // T-073: CEO Chat v2 — Legacy, /chat으로 통합됨 (2026-03-11 비활성화)
   completeRunning: (project?: string) => request<any>("/dashboard/complete-running", {
     method: "POST",
