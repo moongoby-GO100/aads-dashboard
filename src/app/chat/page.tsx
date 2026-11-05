@@ -454,6 +454,7 @@ const IDLE_STATUS_POLL_TICKS = 13;
 // 조용히 버린다. 잘못된 세션의 메시지를 화면에 올리는 것보다 낫다.
 type PrefetchedMessages = {
   sid: string;
+  at: number;
   promise: Promise<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>;
 };
 let _messagePrefetch: PrefetchedMessages | null = null;
@@ -465,6 +466,7 @@ function startMessagePrefetch(): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sid)) return;
   _messagePrefetch = {
     sid,
+    at: Date.now(),
     promise: chatApi<{ messages: ChatMessage[]; next_cursor: string | null; has_more: boolean }>(
       `/chat/messages?session_id=${sid}&limit=120&include_streaming=true&fields=render`
     ),
@@ -473,12 +475,16 @@ function startMessagePrefetch(): void {
   void _messagePrefetch.promise.catch(() => { _messagePrefetch = null; });
 }
 
+// PERF 2026-11-05: 한 번 쓰고 버리던 선행 조회를 짧게 재사용한다. 세션 진입 effect 가
+// activeSession 갱신으로 다시 돌면(취소 후 재실행) 두 번째 실행이 같은 메시지를 또 받아,
+// 메시지 표시가 약 0.8초 늦었다(헤드리스 실측: 1.23s 선행 조회 후 3.21s 재조회).
+const MESSAGE_PREFETCH_REUSE_MS = 8_000;
+
 function takeMessagePrefetch(sid: string) {
-  if (_messagePrefetch && _messagePrefetch.sid === sid) {
-    const p = _messagePrefetch.promise;
-    _messagePrefetch = null;
-    return p;
+  if (_messagePrefetch && _messagePrefetch.sid === sid && Date.now() - _messagePrefetch.at < MESSAGE_PREFETCH_REUSE_MS) {
+    return _messagePrefetch.promise;
   }
+  _messagePrefetch = null;
   return null;
 }
 
