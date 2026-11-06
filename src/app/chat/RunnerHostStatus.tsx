@@ -21,12 +21,15 @@ type ServerRow = {
   alive: boolean | null;
   seen_ago_sec: number | null;
   engine_mode?: string;
+  queued?: number;
+  queued_shared?: boolean;
+  max_concurrent?: number | null;
 };
 
-type Payload = {
+export type Payload = {
   window_hours: number;
   servers: ServerRow[];
-  totals: { hosts: number; running: number; error: number; done: number; cancelled: number };
+  totals: { queued?: number; hosts: number; running: number; error: number; done: number; cancelled: number };
 };
 
 const ERROR_WARN = 5;
@@ -71,6 +74,16 @@ export default function RunnerHostStatus({ emphasis = "running" }: { emphasis?: 
   if (err && !data) return null;
   if (!data || data.servers.length === 0) return null;
 
+  return <RunnerHostStatusView data={data} open={open} onToggle={() => setOpen((v) => !v)} emphasis={emphasis} />;
+}
+
+export function RunnerHostStatusView({ data, open = true, onToggle, emphasis = "running" }: {
+  data: Payload;
+  open?: boolean;
+  onToggle?: () => void;
+  emphasis?: "running" | "error";
+}) {
+  const successTitle = `최근 ${data.window_hours}시간 기준 성공 작업 수`;
   const t = data.totals;
   const worst = Math.max(0, ...data.servers.map((s) => s.error));
 
@@ -84,9 +97,9 @@ export default function RunnerHostStatus({ emphasis = "running" }: { emphasis?: 
     }}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         style={{
-          width: "100%", display: "flex", alignItems: "center", gap: 8,
+          width: "100%", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
           padding: "8px 10px", background: "transparent", border: "none",
           cursor: "pointer", color: "var(--ct-text)", fontSize: 12, textAlign: "left",
         }}
@@ -94,6 +107,8 @@ export default function RunnerHostStatus({ emphasis = "running" }: { emphasis?: 
         <span style={{ fontSize: 10, opacity: 0.6 }}>{open ? "▾" : "▸"}</span>
         <span style={{ fontWeight: 700 }}>러너 {t.hosts}대</span>
         <span style={{ color: "var(--ct-text2)" }}>실행 {t.running}</span>
+        <span style={{ color: "var(--ct-text)", fontWeight: (t.queued ?? 0) > 0 ? 700 : 400 }}>대기 {t.queued ?? "—"}</span>
+        <span title={successTitle} style={{ color: t.done > 0 ? "var(--ct-success, #4ade80)" : "var(--ct-text)" }}>성공 {t.done}</span>
         <span style={{ color: errorTone(worst), fontWeight: worst >= ERROR_WARN ? 700 : 400 }}>
           실패 {t.error}
         </span>
@@ -108,7 +123,7 @@ export default function RunnerHostStatus({ emphasis = "running" }: { emphasis?: 
             const dead = s.alive === false;
             return (
               <div key={s.host} style={{
-                display: "flex", alignItems: "center", gap: 8,
+                display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
                 padding: "7px 10px", fontSize: 11,
                 borderTop: "1px solid var(--ct-border)",
               }}>
@@ -117,7 +132,10 @@ export default function RunnerHostStatus({ emphasis = "running" }: { emphasis?: 
                   ●
                 </span>
                 <span style={{ fontWeight: 600, minWidth: 92 }}>{s.host}</span>
-                <span style={{ color: "var(--ct-text2)", minWidth: 54 }}>실행 {s.running}</span>
+                <span title="러너가 보고한 동시 실행 상한" style={{ color: s.max_concurrent != null && s.running >= s.max_concurrent ? "#f59e0b" : "var(--ct-text2)", minWidth: 54 }}>실행 {s.running}/{s.max_concurrent ?? "—"}</span>
+                <span title={s.queued_shared ? "이 대기는 같은 프로젝트를 받는 다른 서버와 공유됩니다(합계에는 한 번만 셈)" : undefined}
+                      style={{ color: "var(--ct-text)", fontWeight: (s.queued ?? 0) > 0 ? 700 : 400 }}>대기 {s.queued ?? "—"}</span>
+                <span title={successTitle} style={{ color: s.done > 0 ? "var(--ct-success, #4ade80)" : "var(--ct-text)" }}>성공 {s.done}</span>
                 <span style={{ color: errorTone(s.error), fontWeight: s.error >= ERROR_WARN ? 700 : 400, minWidth: 54 }}>
                   실패 {s.error}
                 </span>
