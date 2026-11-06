@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
-import { api } from "@/lib/api";
+import { api, type AutoRouting, type FallbackCandidate } from "@/lib/api";
+import ModelFallbackChainPanel from "@/components/settings/ModelFallbackChainPanel";
 
 type RouteKey = string;
 
@@ -29,6 +30,7 @@ interface RoutingPreference {
 }
 
 interface RoutingPreferencesResponse {
+  auto_routing?: AutoRouting;
   preferences?: RoutingPreference[];
   blocked_counts?: Record<string, number>;
   route_keys?: string[];
@@ -120,7 +122,8 @@ function hasModelIssue(item: ErrorModel): boolean {
 export default function ModelRoutingPage() {
   const [items, setItems] = useState<RoutingPreference[]>([]);
   const [blockedCounts, setBlockedCounts] = useState<Record<string, number>>({});
-  const [fallbackChain, setFallbackChain] = useState<RoutingPreference[]>([]);
+  const [fallbackChain, setFallbackChain] = useState<FallbackCandidate[]>([]);
+  const [autoRouting, setAutoRouting] = useState<AutoRouting>();
   const [errorModels, setErrorModels] = useState<ErrorModel[]>([]);
   const [routeKeys, setRouteKeys] = useState<RouteKey[]>(ROUTE_ORDER);
   const [activeRoute, setActiveRoute] = useState<RouteKey>("llm");
@@ -131,16 +134,17 @@ export default function ModelRoutingPage() {
   const load = useCallback(() => {
     setLoading(true);
     setMessage("");
-    api.getModelRoutingPreferences()
-      .then((res: RoutingPreferencesResponse) => {
-        setItems(Array.isArray(res.preferences) ? res.preferences : []);
+    Promise.all([api.getModelRoutingPreferences(), api.getModelFallbackChains()])
+      .then(([res, fallback]: [RoutingPreferencesResponse, { global_chain: FallbackCandidate[] }]) => {
+        setAutoRouting(res.auto_routing);
+        setItems((res.preferences || []).filter((item) => !item.route_key.startsWith("llm_fallback:")));
         setBlockedCounts(res.blocked_counts || {});
-        setFallbackChain(Array.isArray(res.fallback_chain) ? res.fallback_chain : []);
+        setFallbackChain(fallback.global_chain);
         setErrorModels(Array.isArray(res.error_models) ? res.error_models.filter(hasModelIssue) : []);
         const preferences = Array.isArray(res.preferences) ? res.preferences : [];
         const apiRoutes = Array.isArray(res.route_keys) ? res.route_keys : [];
         const itemRoutes = Array.from(new Set(preferences.map((item) => item.route_key)));
-        const nextRoutes = Array.from(new Set([...ROUTE_ORDER, ...apiRoutes, ...itemRoutes])).filter((k) => !k.startsWith("intent_"));
+        const nextRoutes = Array.from(new Set([...ROUTE_ORDER, ...apiRoutes, ...itemRoutes])).filter((k) => !k.startsWith("intent_") && !k.startsWith("llm_fallback:"));
         setRouteKeys(nextRoutes);
         setActiveRoute((prev) => nextRoutes.includes(prev) ? prev : (nextRoutes[0] || "llm"));
       })
@@ -149,6 +153,12 @@ export default function ModelRoutingPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const orderedGlobalChain = useMemo(() => [...fallbackChain].sort((a, b) => {
+    const base = autoRouting?.default_model;
+    const isDefault = (item: FallbackCandidate) => item.provider === base?.provider && item.model_id === base?.model_id;
+    return Number(isDefault(b)) - Number(isDefault(a)) || a.display_order - b.display_order;
+  }), [fallbackChain, autoRouting]);
 
   const grouped = useMemo(() => {
     return routeKeys.reduce((acc, key) => {
@@ -215,7 +225,10 @@ export default function ModelRoutingPage() {
         notes: item.notes || "",
       }));
       const res = await api.updateModelRoutingPreferences(preferences) as RoutingPreferencesResponse;
-      setItems(Array.isArray(res.preferences) ? res.preferences : items);
+      setItems((res.preferences || items).filter((item) => !item.route_key.startsWith("llm_fallback:")));
+      setAutoRouting(res.auto_routing);
+      const fallback = await api.getModelFallbackChains();
+      setFallbackChain(fallback.global_chain);
       setMessage("저장 완료");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "저장 실패");
@@ -226,7 +239,7 @@ export default function ModelRoutingPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-primary)" }}>
-      <Header title="Model Routing" />
+      <Header title="모델 라우팅 설정" />
       <div className="flex-1 p-3 md:p-6 overflow-auto space-y-4">
         <section className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -239,7 +252,7 @@ export default function ModelRoutingPage() {
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={load}
-                className="px-3 py-2 rounded-lg text-xs"
+                className="min-h-11 px-3 py-2 rounded-lg text-xs"
                 style={{ background: "var(--bg-hover)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
               >
                 새로고침
@@ -247,13 +260,14 @@ export default function ModelRoutingPage() {
               <button
                 onClick={save}
                 disabled={saving || loading}
-                className="px-4 py-2 rounded-lg text-xs font-bold"
+                className="min-h-11 px-4 py-2 rounded-lg text-xs font-bold"
                 style={{ background: "var(--accent)", color: "#fff", opacity: saving || loading ? 0.6 : 1 }}
               >
                 {saving ? "저장 중..." : "설정 저장"}
               </button>
             </div>
           </div>
+          <p className="text-xs mt-3 break-words">채팅 자동라우팅: 기본 {autoRouting?.default_model?.display_name || autoRouting?.default_model?.model_id || "미확인"}, 인텐트 정책 {autoRouting?.intent_policies.length ?? 0}개</p>
           {message && (
             <p className="text-xs mt-3 px-3 py-2 rounded" style={{
               background: message.includes("실패") || message.includes("API error") ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
@@ -297,42 +311,20 @@ export default function ModelRoutingPage() {
           })}
         </section>
 
-        {activeRoute === "llm" && (
-          <section className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-              <div>
-                <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>채팅 LLM 폴백 순서</h3>
-                <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                  기본 모델 실패 또는 런타임 미가용 시 enabled 모델을 순서값 기준으로 시도합니다.
-                </p>
-              </div>
-              <span className="text-xs px-2 py-1 rounded" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                후보 {fallbackChain.length}개
-              </span>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {fallbackChain.length === 0 ? (
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>설정된 LLM 후보가 없습니다.</span>
-              ) : fallbackChain.map((item, idx) => {
-                const issue = hasRoutingIssue(item);
-                return (
-                  <span
-                    key={`${item.provider}:${item.model_id}`}
-                    className="text-xs px-2 py-1 rounded font-mono"
-                    style={{
-                      background: issue ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
-                      color: issue ? "var(--danger)" : "var(--success)",
-                      border: issue ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(34,197,94,0.22)",
-                    }}
-                  >
-                    {idx + 1}. {item.provider}:{item.model_id}
-                    {issue ? ` · ${item.availability}` : ""}
-                  </span>
-                );
-              })}
-            </div>
+        {activeRoute === "llm" && <>
+          <section className="rounded-xl p-4 space-y-3" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <h3 className="text-sm font-semibold">채팅 LLM 폴백 순서</h3>
+            <p className="text-xs">저장된 기본 모델부터 순서값 순으로 시도합니다. 제외 표시는 서버 적용 기준입니다.</p>
+            <ol className="space-y-2 text-xs">{orderedGlobalChain.filter((item) => item.is_enabled).map((item, index) => <li key={`${item.provider}:${item.model_id}`} className="break-all">
+              {index + 1}. {item.provider} · {item.model_id}
+              {item.excluded_reason && <span className="block text-amber-600">⚠️ 서버가 전역 폴백에서 제외</span>}
+            </li>)}</ol>
+            <details><summary className="min-h-11 cursor-pointer text-xs">꺼진 모델 {fallbackChain.filter((item) => !item.is_enabled).length}개</summary>
+              {fallbackChain.filter((item) => !item.is_enabled).map((item) => <p key={`${item.provider}:${item.model_id}`} className="text-xs break-all py-1">{item.provider} · {item.model_id}{item.excluded_reason ? " ⚠️ 서버가 전역 폴백에서 제외" : ""}</p>)}
+            </details>
           </section>
-        )}
+          <ModelFallbackChainPanel models={items.filter((item) => item.route_key === "llm")} globalChain={orderedGlobalChain} />
+        </>}
 
         <section className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
           <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: "1px solid var(--border)" }}>

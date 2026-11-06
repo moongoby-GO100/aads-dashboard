@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { api, type AutoRouting } from "@/lib/api";
 
 export interface ModelOption {
   id: string;
@@ -361,6 +362,31 @@ async function fetchRegisteredChatModels(): Promise<ChatModelOption[]> {
   }
 }
 
+function useAutoRouting() {
+  const [routing, setRouting] = useState<AutoRouting>();
+  useEffect(() => {
+    let live = true;
+    const refresh = () => {
+      api.getModelRoutingPreferences().then((res: { auto_routing?: AutoRouting }) => {
+        if (live) setRouting(res.auto_routing);
+      }).catch(() => { if (live) setRouting(undefined); });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { live = false; window.removeEventListener("focus", refresh); };
+  }, []);
+  return routing;
+}
+
+function autoLabel(routing?: AutoRouting) {
+  const model = routing?.default_model;
+  return model ? `자동 · ${model.display_name || model.model_id}` : "자동";
+}
+
+function intentDescription(routing?: AutoRouting) {
+  return routing?.intent_policies.slice(0, 3).map((policy) => `${policy.intent}: ${policy.model_id}`).join(" · ") || "";
+}
+
 // ─── ChatModelSelector ───────────────────────────────────────────────────────
 
 interface ChatModelSelectorProps {
@@ -370,6 +396,7 @@ interface ChatModelSelectorProps {
 }
 
 export function ChatModelSelector({ value, onChange, compact }: ChatModelSelectorProps) {
+  const routing = useAutoRouting();
   const [displayOptions, setDisplayOptions] = useState<ChatModelOption[]>(CHAT_MODEL_OPTIONS);
   const valueRef = useRef(value);
 
@@ -407,11 +434,11 @@ export function ChatModelSelector({ value, onChange, compact }: ChatModelSelecto
   const selected = displayOptions.find((m) => m.id === value) ?? displayOptions[0];
 
   return (
-    <div className={`relative flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+    <div className={`relative flex flex-wrap min-w-0 items-center ${compact ? "gap-1" : "gap-2"}`}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="text-xs rounded-lg cursor-pointer"
+        className="text-xs rounded-lg cursor-pointer min-h-11 max-w-full"
         style={{
           background: "var(--bg-main)",
           color: "var(--text-primary)",
@@ -420,12 +447,16 @@ export function ChatModelSelector({ value, onChange, compact }: ChatModelSelecto
           padding: compact ? "4px 6px" : "6px 10px",
           minWidth: compact ? "120px" : "160px",
         }}
-        title={selected?.description}
+        aria-label="채팅 모델 선택"
+        title={["auto", "mixture"].includes(value) ? intentDescription(routing) : selected?.description}
       >
         {displayOptions.map((m) => (
-          <option key={m.id} value={m.id} disabled={m.isSelectable === false}>
-            {m.label}{m.isSelectable === false ? " (비활성)" : ""} ({m.cost})
-          </option>
+          <Fragment key={m.id}>
+            <option value={m.id} disabled={m.isSelectable === false}>
+              {["auto", "mixture"].includes(m.id) ? autoLabel(routing) : m.label}{m.isSelectable === false ? " (비활성)" : ""} ({m.cost})
+            </option>
+            {["auto", "mixture"].includes(m.id) && routing?.intent_policies.slice(0, 3).map((policy, index) => <option key={index} disabled>인텐트 정책 · {policy.intent}: {policy.model_id}</option>)}
+          </Fragment>
         ))}
       </select>
       {!compact && (
@@ -467,6 +498,7 @@ interface Props {
 }
 
 export default function ModelSelector({ value, onChange }: Props) {
+  const routing = useAutoRouting();
   const selected = MODEL_OPTIONS.find((m) => m.id === value) ?? MODEL_OPTIONS[1];
 
   const providers = [
@@ -475,14 +507,14 @@ export default function ModelSelector({ value, onChange }: Props) {
   ];
 
   return (
-    <div className="flex items-center gap-2 mb-2">
+    <div className="flex flex-wrap items-center gap-2 mb-2 min-w-0">
       <span className="text-xs whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
         모델:
       </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="text-xs rounded-md px-2 py-1.5 min-w-[220px] max-w-[320px] cursor-pointer"
+        className="text-xs rounded-md px-2 py-1.5 min-h-11 min-w-0 max-w-full cursor-pointer"
         style={{
           background: "var(--bg-card)",
           color: "var(--text-primary)",
@@ -496,9 +528,12 @@ export default function ModelSelector({ value, onChange }: Props) {
           return (
             <optgroup key={prov} label={PROVIDER_LABELS[prov] || prov}>
               {group.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.cost}/M)
-                </option>
+                <Fragment key={m.id}>
+                  <option value={m.id}>
+                    {m.provider === "auto" ? autoLabel(routing) : m.name} ({m.cost}/M)
+                  </option>
+                  {m.provider === "auto" && routing?.intent_policies.slice(0, 3).map((policy, index) => <option key={index} disabled>인텐트 정책 · {policy.intent}: {policy.model_id}</option>)}
+                </Fragment>
               ))}
             </optgroup>
           );

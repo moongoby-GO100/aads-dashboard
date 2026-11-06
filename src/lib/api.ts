@@ -641,6 +641,26 @@ export function handle401Redirect(): void {
   }
 }
 
+export interface AutoRouting {
+  default_model: { provider: string; model_id: string; display_name: string } | null;
+  intent_policies: Array<{ intent: string; provider: string; model_id: string }>;
+}
+
+export interface FallbackCandidate {
+  provider: string;
+  model_id: string;
+  display_order: number;
+  is_enabled: boolean;
+  availability?: string;
+  excluded_reason?: string | null;
+}
+
+export interface ModelFallbackChain {
+  source_provider: string;
+  source_model_id: string;
+  chain: FallbackCandidate[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -1688,6 +1708,28 @@ export const api = {
       is_pinned: boolean;
     }>,
   ) => request<any>("/llm-models/chat-preferences", { method: "PUT", body: JSON.stringify(items) }),
+  getModelFallbackChains: () => request<{ chains: ModelFallbackChain[]; global_chain: FallbackCandidate[] }>("/llm-models/fallback-chains"),
+  updateModelFallbackChain: async (provider: string, modelId: string, chain: FallbackCandidate[]) => {
+    try {
+      return await request<ModelFallbackChain>(`/llm-models/fallback-chains/${encodeURIComponent(provider)}/${modelId}`, {
+        method: "PUT",
+        body: JSON.stringify({ chain: chain.map(({ provider, model_id, display_order, is_enabled }) => ({ provider, model_id, display_order, is_enabled })) }),
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        const body = error.message.match(/^API error \d+: ([\s\S]*)$/)?.[1];
+        if (body) {
+          try {
+            const detail = JSON.parse(body).detail;
+            if (typeof detail === "string") throw new Error(detail);
+          } catch (parsed) {
+            if (parsed instanceof Error && !(parsed instanceof SyntaxError)) throw parsed;
+          }
+        }
+      }
+      throw error;
+    }
+  },
   getModelRoutingPreferences: () => request<any>("/llm-models/routing-preferences"),
   updateModelRoutingPreferences: (preferences: Array<{
     route_key: string;
