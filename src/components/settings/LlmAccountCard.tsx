@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import AccountLoginModal from "./AccountLoginModal";
 import EnableSwitch from "./EnableSwitch";
 import LlmKeyInfoEditor from "./LlmKeyInfoEditor";
-import { HostAccountUsage, type HostUsage } from "./LlmMetadata";
+import { HostAccountUsage, UsageProgressBar as Bar, type HostUsage } from "./LlmMetadata";
 
 /** LLM 계정 통합 카드.
  *
@@ -110,14 +110,6 @@ function windowLabel(minutes: number | null): string {
 function staleDays(hours: number | null | undefined): string {
   if (hours == null) return "";
   return hours >= 24 ? ` ${Math.floor(hours / 24)}일` : ` ${Math.max(1, Math.round(hours))}시간`;
-}
-
-function Bar({ pct, color }: { pct: number; color: string }) {
-  return (
-    <div className="h-1.5 rounded-full overflow-hidden w-full" style={{ background: "var(--border)" }}>
-      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: color }} />
-    </div>
-  );
 }
 
 export default function LlmAccountCard() {
@@ -281,8 +273,7 @@ export default function LlmAccountCard() {
   </p>;
 
   const s = data.summary;
-  const hostRows = rows.filter(isHostManaged);
-  const tableRows = rows.filter((a) => !isHostManaged(a));
+  const tableRows = rows;
   const actionAccounts = data.accounts.filter((a) => a.state === "needs_login" || a.state === "rate_limited");
   const needsLoginCount = data.accounts.filter((a) => a.state === "needs_login").length;
   const onlyClaudeAction = actionAccounts.every((a) => a.provider === "anthropic");
@@ -415,26 +406,7 @@ export default function LlmAccountCard() {
           사용량 창 개수(코덱스 1개·클로드 2개)에 따라 열이 제각각 밀려서
           우선순위·상태 숫자가 행마다 다른 x 좌표에 찍혔다. 좁은 화면에서는
           줄을 흘리지 말고 카드를 가로로 굴린다 — 표는 열이 맞아야 읽힌다. */}
-      {hostRows.map((a) => (
-        <section key={a.key_name} aria-label="Google 구독 계정" className="rounded-lg p-3 space-y-2 min-w-0"
-          style={{ border: "1px solid var(--border)" }}>
-          <div className="flex flex-wrap justify-between gap-2 text-xs">
-            <div className="min-w-0">
-              <p className="font-semibold break-all">{a.actual_account || a.email || "계정 이메일 미확인"}</p>
-              <p style={{ color: "var(--text-secondary)" }}>AGY 구독 (Antigravity · Google)</p>
-            </div>
-            <span style={{ color: STATE_COLOR[a.state] }}>{a.state === "ok" && !a.account_verified ? "계정 정보 확인 · 실시간 검증 전" : STATE_TEXT[a.state]}</span>
-          </div>
-          <div className="text-xs" style={{ color: "var(--text-secondary)" }}><HostAccountUsage account={a} /></div>
-          <details className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            <summary className="cursor-pointer py-2">계정 확인·관리 안내</summary>
-            <p>{a.account_verified ? "실시간 계정 검증 완료" : "로컬 계정 정보 — 실시간 검증 전"}</p>
-            <p>서버에서 agy 로그인으로 계정을 관리합니다. 사용량은 제공자 구독 한도이며 AADS 호출 통계와 별개입니다.</p>
-          </details>
-        </section>
-      ))}
-
-      {effectiveChip !== "apikey" && (tableRows.length > 0 || hostRows.length === 0) && (
+      {effectiveChip !== "apikey" && (
         <div className="rounded-lg" style={{ border: "1px solid var(--border)", overflowX: "auto" }}>
           <div style={{ minWidth: COLS_MIN_WIDTH }}>
           {tableRows.length > 0 && (
@@ -458,12 +430,13 @@ export default function LlmAccountCard() {
             </p>
           ) : tableRows.map((a) => {
             const open = openRow === a.key_name;
+            const hostManaged = isHostManaged(a);
             const color = STATE_COLOR[a.state];
             const isPrimary = isPrimaryAccount(a);
             const autoHold = !a.manual_disabled && a.rate_limited_until && new Date(a.rate_limited_until).getTime() > Date.now()
               ? a.rate_limited_until : null;
             return (
-              <div key={a.key_name} style={{ borderBottom: "1px solid var(--border)" }}>
+              <div key={a.key_name} data-account-provider={a.provider} role={hostManaged ? "region" : undefined} aria-label={hostManaged ? "AGY 구독 계정" : undefined} style={{ borderBottom: "1px solid var(--border)" }}>
                 <div className="px-3 py-2" style={{
                   display: "grid", gridTemplateColumns: COLS, gap: 12, alignItems: "start",
                 }}>
@@ -471,23 +444,23 @@ export default function LlmAccountCard() {
                     className="text-xs text-left" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{open ? "▾" : "▸"}</button>
                   <span className="text-xs font-mono truncate" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{a.provider}</span>
                   <span className="text-xs font-semibold min-w-0 break-words" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
-                    {a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
-                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{a.label || "-"}</span>
+                    {hostManaged ? "AGY" : a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
+                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{hostManaged ? a.actual_account || a.email || a.label || "계정 이메일 미확인" : a.label || "-"}</span>
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
                   <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>{a.priority == null ? "-" : `p${a.priority}`}</span>
                   <span className="text-xs font-semibold truncate" style={{ color, lineHeight: "20px" }}>
-                    {a.binding_mismatch ? "계정 불일치" : STATE_TEXT[a.state]}
+                    {a.binding_mismatch ? "계정 불일치" : hostManaged && a.state === "ok" && !a.account_verified ? "검증 대기" : STATE_TEXT[a.state]}
                   </span>
                   {/* 창 구성이 provider 마다 다르다. 코덱스는 주간 하나,
                       클로드는 5시간 + 주간이다. window_minutes 로 이름을 정하고
                       'primary/secondary' 라는 순서에 기대지 않는다. */}
-                  <span className="space-y-0.5" style={{ minWidth: 0 }}>
+                  <span className="space-y-0.5 text-xs" style={{ minWidth: 0 }}>
                     {/* 숫자는 **잔량**이다. 채팅창 상단과 같은 방향으로 맞춘다 —
                         한쪽은 사용량, 한쪽은 잔량이면 같은 계정의 같은 창이
                         97% 와 3% 로 보인다(2026-09-16 실측). 막대는 사용량만큼
                         차오르고 숫자는 남은 양을 적는다. */}
-                    {a.windows.length > 0 ? a.windows.map((w) => (
+                    {hostManaged ? <HostAccountUsage account={a} /> : a.windows.length > 0 ? a.windows.map((w) => (
                       <span key={w.window_minutes ?? "n"} className="block">
                         <Bar pct={w.used_percent}
                           color={w.stale ? "var(--text-secondary)"
@@ -520,6 +493,11 @@ export default function LlmAccountCard() {
                     )}
                   </span>
                   <span className="flex gap-1 justify-end items-center flex-wrap">
+                    {hostManaged ? (
+                      <button onClick={() => setOpenRow(open ? null : a.key_name)}
+                        className="text-xs px-2 py-1 rounded whitespace-nowrap"
+                        style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>계정 안내</button>
+                    ) : <>
                     <EnableSwitch checked={isOn(a)} busy={toggling === a.key_name} disabled={toggling !== null}
                       label={a.label || a.key_name} onToggle={() => void toggleEnabled(a)} />
                     {!a.needs_login && !isPrimary && (
@@ -540,11 +518,16 @@ export default function LlmAccountCard() {
                                color: a.needs_login ? "#d97706" : "var(--text-primary)" }}>
                       {a.login_in_progress ? "진행창" : "재로그인"}
                     </button>
+                    </>}
                   </span>
                 </div>
 
                 {open && (
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
+                    {hostManaged ? <>
+                      <div>{a.account_verified ? "실시간 계정 검증 완료" : "계정 정보 확인 · 실시간 검증 전"}</div>
+                      <div>서버에서 agy 로그인으로 계정을 관리합니다. 사용량은 제공자 구독 한도이며 AADS 호출 통계와 별개입니다.</div>
+                    </> : <>
                     <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"} · {a.manual_disabled ? `직접 끔${a.manual_disabled_at ? ` (${kst(a.manual_disabled_at)} KST)` : ""}` : "직접 끔 아님"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
                     {a.binding_mismatch && (
@@ -571,6 +554,7 @@ export default function LlmAccountCard() {
                       <button onClick={() => setEditingInfo(a.key_name)}
                         className="px-3 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
                     )}
+                    </>}
                   </div>
                 )}
               </div>

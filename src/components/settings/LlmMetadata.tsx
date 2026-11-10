@@ -45,6 +45,17 @@ export type HostUsage = {
   windows?: Array<{ window_minutes: number | null; used_percent: number | null; resets_at: string | null; stale?: boolean }>;
 };
 
+export function UsageProgressBar({ pct, color, label }: { pct: number | null; color: string; label?: string }) {
+  const measured = typeof pct === "number" && Number.isFinite(pct);
+  const value = measured ? Math.min(100, Math.max(0, pct)) : 0;
+  return <span className="block h-1.5 rounded-full overflow-hidden w-full" style={{ background: "var(--border)" }}
+    role={measured ? "progressbar" : undefined} aria-label={label}
+    aria-valuemin={measured ? 0 : undefined} aria-valuemax={measured ? 100 : undefined}
+    aria-valuenow={measured ? value : undefined}>
+    <span className="block h-full rounded-full" style={{ width: `${value}%`, background: color }} />
+  </span>;
+}
+
 export function HostAccountUsage({ account }: { account: HostUsage }) {
   const groups = account.groups || [];
   const available = account.state === "ok" && account.usage_status === "available";
@@ -53,13 +64,24 @@ export function HostAccountUsage({ account }: { account: HostUsage }) {
     {!available && <span className="block">이전 수집 기록 · 사용량 갱신 대기</span>}
     {groups.map(g => <span key={g.name} className="block">
       <strong>{g.name === "Gemini" ? "Gemini" : "Claude·GPT"}</strong>
-      {g.windows.map(w => <span key={w.period} className="block">
-        {w.period === "weekly" ? "주간" : "5시간"}{" · "}
-        {!available || w.stale ? "갱신 대기" : w.disabled ? "주간 한도 소진으로 비적용"
-          : typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent)
-            ? `잔량 ${w.remaining_percent.toFixed(1)}%` : "미측정"}
-        {available && !w.stale && w.reset_description && !w.disabled && <span> · 갱신까지 {w.reset_description}</span>}
-      </span>)}
+      {g.windows.map(w => {
+        const fresh = available && !w.stale;
+        const measured = fresh && !w.disabled && typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent);
+        const used = measured ? 100 - w.remaining_percent! : null;
+        const color = used === null ? "var(--text-secondary)" : used >= 90 ? "#dc2626" : used >= 80 ? "#d97706" : "#16a34a";
+        const period = w.period === "weekly" ? "주간" : "5시간";
+        return <span key={w.period} className="block mt-0.5" data-agy-window={w.period}>
+          <UsageProgressBar pct={used} color={color} label={`${g.name} ${period} 사용량`} />
+          <span className="block text-xs" style={{ color: "var(--text-secondary)" }}>
+            {period}{" "}
+            {!fresh ? "갱신 대기" : w.disabled ? "주간 한도 소진으로 비적용"
+              : measured ? `${w.remaining_percent!.toFixed(1)}% 남음` : "미측정"}
+            {fresh && !w.disabled && (w.reset_at
+              ? <span> · {new Date(w.reset_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 리셋</span>
+              : w.reset_description && <span> · 리셋까지 {w.reset_description}</span>)}
+          </span>
+        </span>;
+      })}
     </span>)}
     <span className="block">수집 {metadataTime(account.usage_collected_at)}</span>
   </span>;
