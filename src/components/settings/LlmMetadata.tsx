@@ -32,29 +32,42 @@ export function ModelReleaseDate({ model }: { model: ReleaseMetadata }) {
   </div>;
 }
 
+export type QuotaGroup = {
+  name: string; models: string[];
+  windows: Array<{ period: string; remaining_percent: number | null; used_percent: number | null;
+    reset_at: string | null; reset_description?: string | null; disabled?: boolean; stale: boolean }>;
+};
 export type HostUsage = {
   state: string;
-  usage_status?: "available" | "unsupported" | "collection_failed" | "not_measured";
+  usage_status?: string | null;
   usage_collected_at?: string | null;
+  groups?: QuotaGroup[];
   windows?: Array<{ window_minutes: number | null; used_percent: number | null; resets_at: string | null; stale?: boolean }>;
 };
 
 export function HostAccountUsage({ account }: { account: HostUsage }) {
-  const text = { unsupported: "구독 사용량 조회 미지원", collection_failed: "구독 사용량 수집 실패 — 새로고침 후 다시 확인해 주세요", not_measured: "구독 사용량 미측정" };
-  if (account.state === "needs_login") return <span>Google 로그인 필요 — 서버에서 agy 로그인 후 새로고침해 주세요.</span>;
-  if (account.state === "unknown") return <span>계정 연결 확인 불가 — 사용량을 확인할 수 없습니다.</span>;
-  if (account.usage_status !== "available") return <span>{text[account.usage_status || "not_measured"]}</span>;
-  const windows = (account.windows || []).filter(w => typeof w.used_percent === "number"
-    && Number.isFinite(w.used_percent) && w.used_percent >= 0 && w.used_percent <= 100);
-  if (!windows.length || metadataTime(account.usage_collected_at) === "미확인") return <span>구독 사용량 미측정 — 유효한 수집 기록 없음</span>;
-  return <span className="space-y-1 block">
-    {windows.map((w, i) => <span key={i} className="block">
-      {w.window_minutes ? (w.window_minutes >= 60 ? `${w.window_minutes / 60}시간 ` : `${w.window_minutes}분 `) : ""}
-      {w.stale ? "이전 기록 · " : ""}사용 {w.used_percent!.toFixed(1)}% · 잔량 {(100 - w.used_percent!).toFixed(1)}%
-      {w.resets_at && <span className="block">리셋 {metadataTime(w.resets_at)}</span>}
+  const groups = account.groups || [];
+  const available = account.state === "ok" && account.usage_status === "available";
+  if (account.state === "needs_login" || account.usage_status === "login_required") return <span>Google 로그인 필요 — 서버에서 agy 로그인 후 새로고침해 주세요.</span>;
+  if (groups.length) return <span className="space-y-2 block" data-agy-usage="groups">
+    {!available && <span className="block">이전 수집 기록 · 사용량 갱신 대기</span>}
+    {groups.map(g => <span key={g.name} className="block">
+      <strong>{g.name === "Gemini" ? "Gemini" : "Claude·GPT"}</strong>
+      {g.windows.map(w => <span key={w.period} className="block">
+        {w.period === "weekly" ? "주간" : "5시간"}{" · "}
+        {!available || w.stale ? "갱신 대기" : w.disabled ? "주간 한도 소진으로 비적용"
+          : typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent)
+            ? `잔량 ${w.remaining_percent.toFixed(1)}%` : "미측정"}
+        {available && !w.stale && w.reset_description && !w.disabled && <span> · 갱신까지 {w.reset_description}</span>}
+      </span>)}
     </span>)}
     <span className="block">수집 {metadataTime(account.usage_collected_at)}</span>
   </span>;
+  const text: Record<string,string> = { unsupported: "구독 사용량 조회 미지원", collection_failed: "구독 사용량 수집 실패 — 새로고침 후 다시 확인해 주세요", not_measured: "구독 사용량 수집 중", unknown: "계정 연결 확인 중", stale: "사용량 갱신 대기" };
+  if (account.usage_status !== "available") return <span>{text[account.usage_status || "not_measured"] || "사용량 확인 중"}</span>;
+  const windows = (account.windows || []).filter(w => typeof w.used_percent === "number" && Number.isFinite(w.used_percent));
+  if (!windows.length) return <span>구독 사용량 미측정</span>;
+  return <span>{windows.map((w,i) => <span key={i}>잔량 {(100-w.used_percent!).toFixed(1)}% </span>)}</span>;
 }
 
 export type DiscoveryRun = {

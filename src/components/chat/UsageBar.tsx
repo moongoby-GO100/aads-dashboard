@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import type { QuotaGroup } from "@/components/settings/LlmMetadata";
 
 type ClaudeSlotUsage = {
   slot: string;
@@ -149,6 +150,7 @@ type OverviewAccount = {
   key_name: string; provider: string; label: string; slot: string | null;
   state: string; priority: number; is_active: boolean; manual_disabled?: boolean;
   actual_account?: string | null; usage_status?: string | null;
+  groups?: QuotaGroup[]; usage_collected_at?: string | null;
   usage_note?: string | null;
   windows: Array<{ window_minutes: number | null; used_percent: number; resets_at: string | null }>;
   rate_limited_until: string | null;
@@ -562,7 +564,20 @@ export default function UsageBar() {
             {acc.state === "needs_login" ? "로그인 필요" : "계정 상태 확인 중"}
           </span>
         )}
-        {acc.windows.length === 0
+        {acc.provider === "antigravity" && (acc.groups || []).length > 0 ? (
+          <span data-agy-usage="groups" style={{ display: "inline-flex", flexWrap: "wrap", gap: "8px" }}>
+            {(acc.groups || []).map(g => <span key={g.name} style={{ display: "inline-flex", gap: "5px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "10px" }}>{g.name === "Gemini" ? "Gemini" : "Claude·GPT"}</span>
+              {g.windows.map(w => <React.Fragment key={w.period}>
+                {acc.state !== "ok" || acc.usage_status !== "available" || w.stale
+                  ? <span style={{ fontSize: "10px" }}>갱신 대기</span>
+                  : w.disabled ? <span style={{ fontSize: "10px" }}>5h 비적용</span>
+                  : <MiniBar pct={w.used_percent} width={34} label={w.period === "weekly" ? "주간" : "5h"}
+                      detail={`${g.name} ${w.period} · 잔량 ${w.remaining_percent?.toFixed(1)}%${w.reset_description ? ` · 갱신까지 ${w.reset_description}` : ""}`} />}
+              </React.Fragment>)}
+            </span>)}
+          </span>
+        ) : acc.windows.length === 0
           ? <span title={acc.usage_note || undefined} style={{ fontSize: "10px", color: "var(--ct-text3, #999)" }}>{emptyUsage}</span>
           : acc.windows.map((w) => (
               <MiniBar key={w.window_minutes ?? "n"} pct={w.used_percent} width={34}
