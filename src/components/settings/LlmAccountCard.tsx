@@ -328,7 +328,7 @@ export default function LlmAccountCard() {
       {primaryInfo && (
         <div className="rounded-lg" style={{ border: "1px solid var(--border)", overflowX: "auto" }}>
           {Object.entries(primaryInfo.providers).map(([provider, p]) => {
-            const acc = p.accounts.find((a) => a.key_name === p.primary);
+            const acc = p.accounts.find((a) => a.key_name === p.primary && data?.accounts.some(row => row.key_name === a.key_name && row.is_active === true && !row.manual_disabled && row.state !== "inactive"));
             return (
               <div key={provider} className="px-3 py-2 text-xs" style={{
                 display: "grid", gridTemplateColumns: "72px 128px minmax(160px,1fr) 180px",
@@ -352,7 +352,7 @@ export default function LlmAccountCard() {
                 </span>
                 <span className="truncate" style={{ color: "var(--text-secondary)" }}>
                   <span style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>{" "}
-                  <span style={{ color: "var(--text-primary)" }}>{acc?.label || p.primary || "-"}</span>
+                  <span style={{ color: "var(--text-primary)" }}>{acc?.label || "활성 주계정 없음"}</span>
                   {acc && !acc.has_quota && <span style={{ color: "#dc2626" }}> · 한도 없음</span>}
                 </span>
                 <span className="truncate" style={{ color: "var(--text-secondary)" }}>

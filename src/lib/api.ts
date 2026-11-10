@@ -880,6 +880,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ tab, before }),
     }),
+  getServerCpuDetail: (serverId: string, minutes = 15) => request<unknown>(`/ops/servers/${encodeURIComponent(serverId)}/cpu-detail?minutes=${minutes}&top_n=10`),
   getOpsStatus: () => request<OpsServerStatusResponse>("/ops/status"),
   getCollectorOverview: () => request<CollectorOverview>("/authenticated-site-collector/overview"),
   getCollectorSites: (projectKey?: string) =>

@@ -300,13 +300,15 @@ export default function UsageBar() {
   // 같은 숫자를 계산하면 값이 어긋난다 — 2026-09-16 오전에 그렇게 어긋났다.
   useEffect(() => {
     let alive = true;
+    let generation = 0;
     const run = async () => {
+      const request = ++generation;
       try {
         const d = await (api as unknown as { getLlmOverview: () => Promise<{ accounts: OverviewAccount[] }> }).getLlmOverview();
-        if (alive) setOverview(d);
+        if (alive && request === generation) setOverview(d);
       } catch {
         // 활성 여부를 확인하지 못하면 이전 계정을 계속 노출하지 않는다.
-        if (alive) setOverview(null);
+        if (alive && request === generation) setOverview(null);
       }
     };
     const first = window.setTimeout(() => { void run(); }, USAGEBAR_INITIAL_DELAY_MS);

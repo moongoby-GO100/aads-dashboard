@@ -64,7 +64,7 @@ export function HostAccountUsage({ account }: { account: HostUsage }) {
     <span className="block">수집 {metadataTime(account.usage_collected_at)}</span>
   </span>;
   const text: Record<string,string> = { unsupported: "구독 사용량 조회 미지원", collection_failed: "구독 사용량 수집 실패 — 새로고침 후 다시 확인해 주세요", not_measured: "구독 사용량 수집 중", unknown: "계정 연결 확인 중", stale: "사용량 갱신 대기" };
-  if (account.usage_status !== "available") return <span>{text[account.usage_status || "not_measured"] || "사용량 확인 중"}</span>;
+  if (!available) return <span>{text[account.usage_status || "not_measured"] || "사용량 확인 중"}</span>;
   const windows = (account.windows || []).filter(w => typeof w.used_percent === "number" && Number.isFinite(w.used_percent));
   if (!windows.length) return <span>구독 사용량 미측정</span>;
   return <span>{windows.map((w,i) => <span key={i}>잔량 {(100-w.used_percent!).toFixed(1)}% </span>)}</span>;

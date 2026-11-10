@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import CpuDetail from "./CpuDetail";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import type { OpsServerStatusResponse } from "@/lib/api";
@@ -143,6 +144,7 @@ function statusColor(s: string): string {
 }
 
 function numberOrUndefined(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
 }
@@ -275,9 +277,7 @@ const SERVERS: ServerConfig[] = [
     ip: "13.140.248.92",
     sshPort: 22,
     role: "GO100 보관 DB·백업 (증설, 서비스 미구성)",
-    unmonitored: true,
     hidePowerShell: true,
-    pendingNote: "상태 수집 대기 (헬스 감시 대상 아님)",
   },
   {
     id: "contabo42",
@@ -314,29 +314,41 @@ export default function ServersPage() {
   const [pcAgents, setPcAgents] = useState<PCAgent[]>([]);
   const [psStatus, setPsStatus] = useState<Record<string, string>>({});
 
+  const fetchGeneration = useRef(0);
+  const mounted = useRef(false);
   const fetchAll = useCallback(async () => {
+    if (!mounted.current) return;
+    const request = ++fetchGeneration.current;
+    const current = () => mounted.current && request === fetchGeneration.current;
     setLoading(true);
     try {
       const status = await api.getOpsStatus();
+      if (!current()) return;
       setOpsServerList(status.servers || []);
     } catch {
+      if (!current()) return;
       setOpsServerList([]);
     }
     const results = await Promise.all(
       SERVERS.map((s) => fetchServerHealth(s.id, s.ip, s.role))
     );
+    if (!current()) return;
     setServers(results);
     // AADS-193: Codex live rate-limit
     try {
       const cu = await api.getOpsCodexUsage();
+      if (!current()) return;
       setCodexUsage(cu as CodexUsage);
     } catch (e) {
+      if (!current()) return;
       setCodexUsage({ ok: false, error: String(e).slice(0, 200) });
     }
     try {
       const pc = await api.getPCAgents();
+      if (!current()) return;
       setPcAgents(Array.isArray(pc) ? pc : pc.agents || []);
     } catch {
+      if (!current()) return;
       setPcAgents([]);
     }
     setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }));
@@ -344,9 +356,11 @@ export default function ServersPage() {
   }, []);
 
   useEffect(() => {
-    queueMicrotask(fetchAll);
+    mounted.current = true;
+    let disposed = false;
+    queueMicrotask(() => { if (!disposed) void fetchAll(); });
     const t = setInterval(fetchAll, 30000);
-    return () => clearInterval(t);
+    return () => { disposed = true; mounted.current = false; ++fetchGeneration.current; clearInterval(t); };
   }, [fetchAll]);
 
   const cardStyle: React.CSSProperties = {
@@ -485,7 +499,9 @@ export default function ServersPage() {
         {/* ─── 섹션 1: 3서버 상태 카드 ─── */}
         <section style={{ marginBottom: 24 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-            {SERVERS.map((srv) => {
+            {SERVERS.map((config) => {
+              const meta = opsServerList?.find(s => String(s.server_id ?? s.id) === config.id);
+              const srv = { ...config, unmonitored: meta ? meta.health_monitored !== true : config.unmonitored };
               const health = servers.find((s) => String(s.server_id) === srv.id);
               const statusVal = health?.status || "unknown";
               return (
@@ -535,6 +551,7 @@ export default function ServersPage() {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>{srv.role}</div>
 
+                  <CpuDetail serverId={srv.id} />
                   {loading && !health ? (
                     <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>로딩 중...</div>
                   ) : health?.httpStatus === 404 && srv.pendingNote ? (
@@ -552,7 +569,7 @@ export default function ServersPage() {
                     <>
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 3 }}>
-                          CPU{health?.cpu_cores ? ` · ${health.cpu_cores}코어` : ""}
+                          CPU 부하(Load / 코어){health?.cpu_cores ? ` · ${health.cpu_cores}코어` : ""}
                         </div>
                         <GaugeBar pct={health?.cpu_load_pct} />
                         <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 3 }}>
