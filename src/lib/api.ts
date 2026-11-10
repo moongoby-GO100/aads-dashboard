@@ -1668,7 +1668,7 @@ export const api = {
   // 코덱스 계정별 사용량 (PRD-LLM-ACCOUNT-RUNTIME-BINDING)
   getCodexUsage: () => request<any>("/llm-keys/codex-usage"),
   // 통합 계정 카드 — 키·바인딩·사용량을 서버가 합쳐 내려준다 (PRD-SETTINGS-UNIFIED-ACCOUNT-CARD)
-  getLlmOverview: () => request<any>("/llm-keys/overview"),
+  getLlmOverview: (options?: RequestInit) => request<any>("/llm-keys/overview", options),
   getProviderOptions: () => request<any>("/llm-keys/providers"),
   getNewKeyDefaults: (provider: string) =>
     request<any>(`/llm-keys/new-key-defaults?provider=${encodeURIComponent(provider)}`),

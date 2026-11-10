@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import AccountLoginModal from "./AccountLoginModal";
 import EnableSwitch from "./EnableSwitch";
@@ -134,13 +134,29 @@ export default function LlmAccountCard() {
   const [primaryInfo, setPrimaryInfo] = useState<PrimaryState | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [editingInfo, setEditingInfo] = useState<string | null>(null);
+  const overviewPending = useRef(false);
+
+  const refreshOverview = useCallback(async () => {
+    if (overviewPending.current) return;
+    overviewPending.current = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    setLoading(true);
+    try {
+      const r: Overview = await api.getLlmOverview({ signal: controller.signal, cache: "no-store" });
+      setData(r);
+      setErr("");
+    } catch {
+      setErr("계정 정보를 갱신하지 못했습니다. 새로고침으로 다시 시도해 주세요.");
+    } finally {
+      window.clearTimeout(timeout);
+      overviewPending.current = false;
+      setLoading(false);
+    }
+  }, []);
 
   const load = useCallback(() => {
-    setLoading(true);
-    (api as any).getLlmOverview()
-      .then((r: Overview) => { setData(r); setErr(""); })
-      .catch(() => setErr("계정 정보를 불러오지 못했습니다"))
-      .finally(() => setLoading(false));
+    void refreshOverview();
     fetch("/api/v1/ops/claude-accounts")
       .then((r) => r.json())
       .then((r) => setCurrent(r?.current_account ?? null))
@@ -148,9 +164,25 @@ export default function LlmAccountCard() {
     (api as any).getAccountPrimary()
       .then((r: PrimaryState) => setPrimaryInfo(r))
       .catch(() => {/* 토글만 비운다 */});
-  }, []);
+  }, [refreshOverview]);
 
   useEffect(() => { load(); }, [load]);
+
+  // /usage 수집은 첫 응답 뒤에 완료될 수 있다. 화면을 열어 둔 상태에서도
+  // 수집 결과를 다시 읽고, 다른 탭에서 돌아오면 즉시 갱신한다.
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void refreshOverview();
+    };
+    const timer = window.setInterval(refreshVisible, 15000);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [refreshOverview]);
 
   // 기본 화면은 항상 구독 전체. 조치가 필요한 계정이 있어도 목록을 좁히지 않고
   // 상단 배너로만 알린다 — 정상 계정이 첫 화면에서 사라지면 "반영 안 됨" 으로 읽힌다.
@@ -244,8 +276,9 @@ export default function LlmAccountCard() {
   }, [data, effectiveChip]);
 
   if (loading && !data) return <p className="text-xs" style={{ color: "var(--text-secondary)" }}>불러오는 중...</p>;
-  if (err) return <p className="text-xs" style={{ color: "#dc2626" }}>{err}</p>;
-  if (!data) return null;
+  if (!data) return <p className="text-xs" style={{ color: "#dc2626" }}>{err}
+    <button onClick={load} className="ml-2 underline">다시 시도</button>
+  </p>;
 
   const s = data.summary;
   const hostRows = rows.filter(isHostManaged);
@@ -262,7 +295,7 @@ export default function LlmAccountCard() {
     { id: "codex", label: `코덱스 ${s.codex.usable}/${s.codex.total}`, danger: s.codex.usable === 0 && s.codex.total > 0 },
     { id: "anthropic", label: `클로드 ${s.anthropic.usable}/${s.anthropic.total}`, danger: s.anthropic.usable === 0 && s.anthropic.total > 0 },
     ...(ag && ag.total > 0
-      ? [{ id: "antigravity" as Chip, label: `구글 ${ag.usable}/${ag.total}`, danger: ag.usable === 0 }]
+      ? [{ id: "antigravity" as Chip, label: `AGY ${ag.usable}/${ag.total}`, danger: ag.usable === 0 }]
       : []),
     { id: "subscription", label: `구독 ${s.subscription_total}` },
     { id: "apikey", label: `API 키 ${s.apikey_total}` },
@@ -271,6 +304,7 @@ export default function LlmAccountCard() {
 
   return (
     <div className="space-y-3">
+      {err && <p role="status" className="text-xs" style={{ color: "#d97706" }}>{err} 이전 조회 결과를 표시합니다.</p>}
       {/* 요약 칩 = 상태 표시이자 필터. 두 줄로 나누지 않는다. */}
       <div className="flex flex-wrap items-center gap-1.5">
         {chips.map((c) => {
@@ -387,7 +421,7 @@ export default function LlmAccountCard() {
           <div className="flex flex-wrap justify-between gap-2 text-xs">
             <div className="min-w-0">
               <p className="font-semibold break-all">{a.actual_account || a.email || "계정 이메일 미확인"}</p>
-              <p style={{ color: "var(--text-secondary)" }}>Google 구독 (Antigravity)</p>
+              <p style={{ color: "var(--text-secondary)" }}>AGY 구독 (Antigravity · Google)</p>
             </div>
             <span style={{ color: STATE_COLOR[a.state] }}>{a.state === "ok" && !a.account_verified ? "계정 정보 확인 · 실시간 검증 전" : STATE_TEXT[a.state]}</span>
           </div>
