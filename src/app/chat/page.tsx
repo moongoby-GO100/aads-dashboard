@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
+import { ChatModelSaveQueue, saveChatModelFenced } from "@/lib/chatModelSave";
 import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
 import { CodePanel } from "@/components/CodePanel";
 import { GoalPanel } from "@/components/GoalPanel";
@@ -2544,14 +2545,9 @@ function getLegacyModelOption(modelId?: string | null): (typeof MODEL_OPTIONS)[n
 function normalizeModelIdForSelector(modelId?: string | null, aliasMap?: Map<string, string>): string {
   const trimmed = (modelId || "").trim();
   if (!trimmed) return trimmed;
+  // Provider-scoped IDs are transport identities, never catalog aliases.
+  if (trimmed.includes(":")) return trimmed;
   if (aliasMap?.has(trimmed)) return aliasMap.get(trimmed) || trimmed;
-  if (trimmed.includes(":")) {
-    const unqualified = trimmed.split(":").slice(1).join(":").trim();
-    if (unqualified) {
-      if (aliasMap?.has(unqualified)) return aliasMap.get(unqualified) || unqualified;
-      if (LEGACY_MODEL_ID_ALIASES[unqualified]) return LEGACY_MODEL_ID_ALIASES[unqualified];
-    }
-  }
   return LEGACY_MODEL_ID_ALIASES[trimmed] ?? trimmed;
 }
 
@@ -5353,18 +5349,6 @@ export default function ChatPage() {
     return options;
   }, [model, modelAliasMap, modelPreferences, runtimeModels]);
 
-  const activeSelectableModelIds = useMemo(
-    () => {
-      const ids = new Set<string>();
-      selectableModels.filter((option) => option.isActive).forEach((option) => {
-        ids.add(option.id);
-        ids.add(option.modelId);
-      });
-      return ids;
-    },
-    [selectableModels]
-  );
-
   const selectedModelValue = useMemo(() => {
     const normalized = normalizeModelIdForSelector(model, modelAliasMap);
     if (selectableModels.some((option) => option.id === normalized)) return normalized;
@@ -5712,37 +5696,6 @@ export default function ChatPage() {
     };
   }, [refreshChatModelCatalog]);
 
-  useEffect(() => {
-    if (!activeSession || runtimeModels === null) return;
-    const currentModelId = normalizeModelIdForSelector(model, modelAliasMap);
-    if (!currentModelId || currentModelId === "mixture" || activeSelectableModelIds.has(currentModelId)) return;
-    const fallbackModel = activeSelectableModelIds.has(DEFAULT_RUNTIME_MODEL) ? DEFAULT_RUNTIME_MODEL : "mixture";
-    if (!fallbackModel || fallbackModel === currentModelId) return;
-
-    setModel(fallbackModel);
-    setSessions((prev) =>
-      prev.map((session) =>
-        session.id === activeSession.id ? { ...session, current_model: fallbackModel } : session
-      )
-    );
-    setSidebarSessionsByWorkspace((prev) => {
-      const workspaceId = activeSession.workspace_id;
-      const current = prev[workspaceId] || [];
-      return {
-        ...prev,
-        [workspaceId]: current.map((session) =>
-          session.id === activeSession.id ? { ...session, current_model: fallbackModel } : session
-        ),
-      };
-    });
-    setActiveSession((prev) =>
-      prev && prev.id === activeSession.id ? { ...prev, current_model: fallbackModel } : prev
-    );
-    chatApi(`/chat/sessions/${activeSession.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ current_model: fallbackModel }),
-    }).catch(() => {});
-  }, [activeSelectableModelIds, activeSession, model, modelAliasMap, runtimeModels]);
   // 세션 이동 시 생성 중이던 세션 ID 추적 (돌아오면 빠른 폴링)
   const pendingResponseSessions = useRef<Set<string>>(new Set());
   const [waitingBgResponse, setWaitingBgResponse] = useState(false);
@@ -6422,6 +6375,33 @@ export default function ChatPage() {
   // ── H-3: sendMessage useCallback 안정화용 ref ──
   const activeSessionObjRef = useRef(activeSession);
   const modelRef = useRef(model);
+  const modelSaveQueue = useRef(new ChatModelSaveQueue());
+  const [, refreshModelSave] = useState(0);
+  const modelSaveState = activeSession ? modelSaveQueue.current.get(activeSession.id) : undefined;
+  const saveSelectedModel = (newModel: string) => {
+    const session = activeSessionObjRef.current;
+    modelRef.current = newModel;
+    setModel(newModel);
+    if (!session) return;
+    const update = (item: ChatSession) => item.id === session.id ? { ...item, current_model: newModel } : item;
+    activeSessionObjRef.current = update(session);
+    setActiveSession((prev) => prev ? update(prev) : prev);
+    setSessions((prev) => prev.map(update));
+    setSidebarSessionsByWorkspace((prev) => ({
+      ...prev, [session.workspace_id]: (prev[session.workspace_id] || []).map(update),
+    }));
+    void modelSaveQueue.current.save(session.id, newModel, async (signal) => {
+      const saved = await saveChatModelFenced<ChatSession>(session.id, newModel, signal, chatApi);
+      if (modelSaveQueue.current.get(session.id)?.model !== newModel) return;
+      const confirm = (item: ChatSession) => item.id === session.id
+        ? { ...item, current_model: newModel, updated_at: saved.updated_at } : item;
+      setActiveSession((prev) => prev ? confirm(prev) : prev);
+      setSessions((prev) => prev.map(confirm));
+      setSidebarSessionsByWorkspace((prev) => ({
+        ...prev, [session.workspace_id]: (prev[session.workspace_id] || []).map(confirm),
+      }));
+    }, () => refreshModelSave((version) => version + 1));
+  };
   const responseModeRef = useRef(responseMode);
   const roleKeyRef = useRef(roleKey);
   const activeWsRef = useRef(activeWs);
@@ -6432,7 +6412,27 @@ export default function ChatPage() {
   const screenSizeRef = useRef(screenSize);
   const uploadingRef = useRef(uploading);
   const queueCountRef = useRef(queueCount);
-  useEffect(() => { activeSessionObjRef.current = activeSession; }, [activeSession]);
+  useLayoutEffect(() => {
+    activeSessionObjRef.current = activeSession;
+    if (!activeSession) return;
+    const pendingSelection = modelSaveQueue.current.get(activeSession.id);
+    const desired = pendingSelection?.status !== "saved" ? pendingSelection?.model : undefined;
+    const selected = desired || activeSession.current_model || DEFAULT_RUNTIME_MODEL;
+    modelRef.current = normalizeModelIdForSelector(selected, modelAliasMap);
+    setModel(modelRef.current);
+    if (desired && activeSession.current_model !== desired) {
+      setActiveSession((prev) => prev?.id === activeSession.id ? { ...prev, current_model: desired } : prev);
+    }
+    if (desired) {
+      setSessions((prev) => prev.some((item) => item.id === activeSession.id && item.current_model !== desired)
+        ? prev.map((item) => item.id === activeSession.id ? { ...item, current_model: desired } : item) : prev);
+      setSidebarSessionsByWorkspace((prev) => {
+        const items = prev[activeSession.workspace_id] || [];
+        return items.some((item) => item.id === activeSession.id && item.current_model !== desired)
+          ? { ...prev, [activeSession.workspace_id]: items.map((item) => item.id === activeSession.id ? { ...item, current_model: desired } : item) } : prev;
+      });
+    }
+  }, [activeSession, modelAliasMap]);
   useEffect(() => { modelRef.current = model; }, [model]);
   useEffect(() => { responseModeRef.current = responseMode; }, [responseMode]);
   useEffect(() => { roleKeyRef.current = roleKey; }, [roleKey]);
@@ -6574,7 +6574,8 @@ export default function ChatPage() {
     setActiveSession(session);
     if (session.role_key) setRoleKey(session.role_key);
     if (session.current_model) {
-      setModel(normalizeModelIdForSelector(session.current_model, modelAliasMap));
+      modelRef.current = normalizeModelIdForSelector(modelSaveQueue.current.pendingModel(session.id) || session.current_model, modelAliasMap);
+      setModel(modelRef.current);
     }
   }, [modelAliasMap, patchCachedSession, sidebarSessionsByWorkspace]);
 
@@ -7326,7 +7327,8 @@ export default function ChatPage() {
       });
     // Sync model from session (세션별 분리: current_model 있으면 사용, 없으면 기본 모델)
     {
-      const sessionModel = normalizeModelIdForSelector(activeSession.current_model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
+      const sessionModel = normalizeModelIdForSelector(modelSaveQueue.current.pendingModel(activeSession.id) || activeSession.current_model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
+      modelRef.current = sessionModel;
       setModel(sessionModel);
     }
     {
@@ -8486,6 +8488,13 @@ export default function ChatPage() {
 
   // ── Send message (SSE streaming) ──
   const sendMessage = useCallback(async function sendMessage(queuedContent?: string, _unused?: undefined, retryCount?: number, _existingMsgId?: string, _existingIdempotencyKey?: string) {
+    const savingSessionId = activeSessionObjRef.current?.id;
+    const selection = savingSessionId ? modelSaveQueue.current.get(savingSessionId) : undefined;
+    if (selection && selection.status !== "saved") {
+      setYellowWarning("모델 저장을 완료한 뒤 다시 전송해 주세요.");
+      return;
+    }
+    const sendModel = modelRef.current;
     const content = queuedContent || (chatInputRef.current?.getValue() || inputRef.current).trim();
     const hasFiles = pendingAttachments.current.length > 0;
     if (!content && !hasFiles) return;
@@ -8870,14 +8879,14 @@ export default function ChatPage() {
       // P2-2: 분기 모드일 때 branch endpoint 사용
       if (_capturedBranch) {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}) });
+        fetchBody = JSON.stringify({ content, model_override: sendModel, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}) });
         fetchUrl = `${BASE_URL}/chat/messages/${_capturedBranch.id}/branch`;
       } else if (rawFiles.length > 0) {
         // FormData: raw File 객체로 전송 (서버에서 base64 변환)
         const formData = new FormData();
         formData.append("session_id", sessionId!);
         formData.append("content", content);
-        if (modelRef.current) formData.append("model_override", modelRef.current);
+        if (sendModel) formData.append("model_override", sendModel);
         formData.append("response_mode", responseModeRef.current);
         rawFiles.forEach((f) => formData.append("files", f));
         if (replyToMessageRef.current) formData.append("reply_to_id", replyToMessageRef.current.id);
@@ -8887,7 +8896,7 @@ export default function ChatPage() {
         // Content-Type 헤더는 브라우저가 multipart/form-data + boundary 자동 설정
       } else {
         fetchHeaders["Content-Type"] = "application/json";
-        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: modelRef.current, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}), ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
+        fetchBody = JSON.stringify({ session_id: sessionId, content, model_override: sendModel, response_mode: responseModeRef.current, attachments, idempotency_key: _idempotencyKey, ...(_clientEnv ? { client_env: _clientEnv } : {}), ...(replyToMessageRef.current ? { reply_to_id: replyToMessageRef.current.id } : {}) });
       }
 
       const res = await fetch(fetchUrl, {
@@ -12745,34 +12754,8 @@ export default function ChatPage() {
           {/* Model selector */}
           <select
             value={selectedModelValue}
-            onChange={(e) => {
-              const newModel = e.target.value;
-              modelRef.current = newModel;
-              setModel(newModel);
-              if (activeSession) {
-                const updatedSession = { ...activeSession, current_model: newModel };
-                setActiveSession(updatedSession);
-                setSessions((prev) =>
-                  prev.map((session) =>
-                    session.id === activeSession.id ? { ...session, current_model: newModel } : session
-                  )
-                );
-                setSidebarSessionsByWorkspace((prev) => {
-                  const workspaceId = activeSession.workspace_id;
-                  const current = prev[workspaceId] || [];
-                  return {
-                    ...prev,
-                    [workspaceId]: current.map((session) =>
-                      session.id === activeSession.id ? { ...session, current_model: newModel } : session
-                    ),
-                  };
-                });
-                chatApi(`/chat/sessions/${activeSession.id}`, {
-                  method: "PUT",
-                  body: JSON.stringify({ current_model: newModel }),
-                }).catch(() => {});
-              }
-            }}
+            aria-label="채팅 모델"
+            onChange={(e) => saveSelectedModel(e.target.value)}
             style={{
               fontSize: "12px",
               padding: "5px 8px",
@@ -12786,12 +12769,23 @@ export default function ChatPage() {
               ...(screenSize === "mobile" ? { width: "100%", maxWidth: "none", minHeight: "44px", fontSize: "16px" } : {}),
             }}
           >
+            {!selectableModels.some((m) => m.id === selectedModelValue) && <option value={selectedModelValue} disabled>{selectedModelValue} (목록에 없음)</option>}
             {selectableModels.map((m) => (
               <option key={m.id} value={m.id} disabled={!m.isActive}>
                 {m.name} ({["자동", "무료", "변동"].includes(m.cost) ? m.cost : `${m.cost}/M`})
               </option>
             ))}
           </select>
+
+          {modelSaveState?.status === "saving" && <span role="status">모델 저장 중 · 완료 후 전송할 수 있습니다.</span>}
+          {modelSaveState?.status === "error" && <span role="alert">
+            모델 저장에 실패했습니다. 전송 전에 다시 저장해 주세요.
+            <button type="button" onClick={() => saveSelectedModel(modelSaveState.model)}>다시 저장</button>
+          </span>}
+          {selectableModels.find((option) => option.id === selectedModelValue)?.isActive !== true && <span role="status">
+            선택한 모델이 비활성이거나 카탈로그에 없습니다. 다른 모델을 선택하거나
+            <button type="button" onClick={() => void refreshChatModelCatalog()}>목록 재시도</button>
+          </span>}
 
           <select
             value={responseMode}
