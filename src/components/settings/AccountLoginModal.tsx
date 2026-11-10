@@ -145,7 +145,7 @@ export default function AccountLoginModal(
                 </p>
                 <div className="flex gap-2">
                   <input value={code} onChange={(e) => setCode(e.target.value)}
-                    placeholder="인증 코드"
+                    placeholder={sess.kind === "antigravity" ? "Google authorization code" : "인증 코드"}
                     disabled={sess.state !== "awaiting_code" || busy}
                     className="flex-1 text-xs px-2 py-1 rounded"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />

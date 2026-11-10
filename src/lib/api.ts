@@ -1676,6 +1676,7 @@ export const api = {
     request<any>("/llm-keys/check-duplicate", { method: "POST", body: JSON.stringify({ value }) }),
   // 구독 계정(코덱스/클로드) 런타임 바인딩 + 재로그인
   getAccountBindings: () => request<any>("/llm-keys/account-bindings"),
+  registerAntigravityAccount: () => request<{ id: number }>("/llm-keys/antigravity/registration", { method: "POST" }),
   startAccountLogin: (target: string) =>
     request<any>("/llm-keys/account-login", { method: "POST", body: JSON.stringify({ target }) }),
   getAccountLogin: (loginId: string) => request<any>(`/llm-keys/account-login/${loginId}`),

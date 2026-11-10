@@ -94,8 +94,7 @@ const STATE_COLOR: Record<State, string> = {
   inactive: "var(--text-secondary)", unknown: "var(--text-secondary)",
 };
 
-/** 호스트에 로그인된 계정(Google/Antigravity). 키가 DB 에 없어 켜기/끄기·로그인 창이 해당 없다.
- *  기존 계정은 overview 에 id 가 없으므로 id 유무로 판정하면 안 된다. */
+/** 호스트 OAuth 계정도 공통 관리 액션을 사용한다. 사용량 그룹만 별도로 표시한다. */
 const isHostManaged = (a: Account) => a.toggleable === false || a.provider === "antigravity";
 
 /** 창 길이를 사람이 읽는 이름으로. 300분=5시간, 10080분=주간. */
@@ -230,9 +229,7 @@ export default function LlmAccountCard() {
     if (!window.confirm(lines.join("\n"))) return;
     setToggling(a.key_name);
     try {
-      const keys: Array<{ id: number; key_name: string }> = await (api as any).getLlmKeys();
-      const id = keys.find((k) => k.key_name === a.key_name)?.id;
-      if (id == null) throw new Error("계정 id 를 찾을 수 없습니다");
+      const id = await findKeyId(a.key_name);
       await (api as any).setLlmKeyEnabled(id, next);
       flash(next ? `${name} 계정을 켰습니다` : `${name} 계정을 껐습니다`);
       load();
@@ -247,6 +244,9 @@ export default function LlmAccountCard() {
 
   /** 등록정보 수정 저장용. overview 행에 id 가 없으면 toggleEnabled 와 같이 /llm-keys 목록에서 key_name 으로 찾는다. */
   const findKeyId = async (keyName: string): Promise<number> => {
+    if (keyName === "ANTIGRAVITY_HOST") {
+      return (await api.registerAntigravityAccount()).id;
+    }
     const keys: Array<{ id: number; key_name: string }> = await (api as any).getLlmKeys();
     const id = keys.find((k) => k.key_name === keyName)?.id;
     if (id == null) throw new Error("계정 id 를 찾을 수 없습니다");
@@ -445,7 +445,7 @@ export default function LlmAccountCard() {
                   <span className="text-xs font-mono truncate" style={{ color: "var(--text-secondary)", lineHeight: "20px" }}>{a.provider}</span>
                   <span className="text-xs font-semibold min-w-0 break-words" style={{ color: "var(--text-primary)", lineHeight: "20px" }}>
                     {hostManaged ? "AGY" : a.slot ?? a.key_name.replace("CODEX_OAUTH_", "")}
-                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{hostManaged ? a.actual_account || a.email || a.label || "계정 이메일 미확인" : a.label || "-"}</span>
+                    <span className="font-normal ml-1.5" style={{ color: "var(--text-secondary)" }}>{hostManaged ? [a.label, a.actual_account || a.email].filter(Boolean).join(" · ") || "계정 이메일 미확인" : a.label || "-"}</span>
                     {isPrimary && <span className="ml-1.5" style={{ color: "var(--accent, #2563eb)" }}>▪ 주계정</span>}
                   </span>
                   <span className="text-xs tabular-nums" style={{ color: "var(--text-secondary)", textAlign: "right", lineHeight: "20px" }}>{a.priority == null ? "-" : `p${a.priority}`}</span>
@@ -493,14 +493,9 @@ export default function LlmAccountCard() {
                     )}
                   </span>
                   <span className="flex gap-1 justify-end items-center flex-wrap">
-                    {hostManaged ? (
-                      <button onClick={() => setOpenRow(open ? null : a.key_name)}
-                        className="text-xs px-2 py-1 rounded whitespace-nowrap"
-                        style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>계정 안내</button>
-                    ) : <>
                     <EnableSwitch checked={isOn(a)} busy={toggling === a.key_name} disabled={toggling !== null}
                       label={a.label || a.key_name} onToggle={() => void toggleEnabled(a)} />
-                    {!a.needs_login && !isPrimary && (
+                    {!hostManaged && !a.needs_login && !isPrimary && (
                       <button onClick={() => void makePrimary(a.provider, a.key_name, a.label || a.key_name)}
                         className="text-xs px-2 py-1 rounded whitespace-nowrap"
                         style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>주계정</button>
@@ -509,7 +504,7 @@ export default function LlmAccountCard() {
                       className="text-xs px-2 rounded whitespace-nowrap" aria-label={`${a.label || a.key_name} 정보 수정`}
                       style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
                     <button onClick={() => {
-                      const target = a.login_target || (a.key_name === "ANTHROPIC_AUTH_TOKEN_4" ? "claude:4" : null);
+                      const target = a.login_target || (hostManaged ? "antigravity:host" : null) || (a.key_name === "ANTHROPIC_AUTH_TOKEN_4" ? "claude:4" : null);
                       if (target) setLoginTarget(target);
                       else flash(`${a.label || a.key_name}: 로그인 대상 슬롯을 확인할 수 없습니다.`);
                     }}
@@ -518,16 +513,12 @@ export default function LlmAccountCard() {
                                color: a.needs_login ? "#d97706" : "var(--text-primary)" }}>
                       {a.login_in_progress ? "진행창" : "재로그인"}
                     </button>
-                    </>}
                   </span>
                 </div>
 
                 {open && (
                   <div className="px-3 pb-3 pt-1 text-xs space-y-1" style={{ background: "var(--bg-subtle, rgba(0,0,0,0.02))", color: "var(--text-secondary)" }}>
-                    {hostManaged ? <>
-                      <div>{a.account_verified ? "실시간 계정 검증 완료" : "계정 정보 확인 · 실시간 검증 전"}</div>
-                      <div>서버에서 agy 로그인으로 계정을 관리합니다. 사용량은 제공자 구독 한도이며 AADS 호출 통계와 별개입니다.</div>
-                    </> : <>
+                    {hostManaged && <div>{a.account_verified ? "실시간 계정 검증 완료" : "계정 정보 확인 · 실시간 검증 전"} · 사용량은 제공자 구독 한도입니다.</div>}
                     <div>키 이름 <span style={{ color: "var(--text-primary)" }}>{a.key_name}</span> · 값 {a.masked_value} · 우선순위 {a.priority} · {a.is_active ? "활성" : "비활성"} · {a.manual_disabled ? `직접 끔${a.manual_disabled_at ? ` (${kst(a.manual_disabled_at)} KST)` : ""}` : "직접 끔 아님"}</div>
                     <div>자격증명 {a.bound ? "정상" : "없음"}{a.subscription ? ` · 구독 ${a.subscription}` : ""}</div>
                     {a.binding_mismatch && (
@@ -547,14 +538,13 @@ export default function LlmAccountCard() {
                     {editingInfo === a.key_name ? (
                       <LlmKeyInfoEditor
                         info={{ id: a.id, key_name: a.key_name, provider: a.provider, label: a.label,
-                                priority: a.priority, notes: a.notes, kind: a.kind }}
+                                priority: a.priority ?? 1, notes: a.notes, kind: a.kind }}
                         resolveId={() => findKeyId(a.key_name)}
                         onSaved={infoSaved} onCancel={() => setEditingInfo(null)} />
                     ) : (
                       <button onClick={() => setEditingInfo(a.key_name)}
                         className="px-3 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-primary)", minHeight: 32 }}>정보 수정</button>
                     )}
-                    </>}
                   </div>
                 )}
               </div>
