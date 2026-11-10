@@ -327,7 +327,7 @@ export default function ServersPage() {
       setOpsServerList(status.servers || []);
     } catch {
       if (!current()) return;
-      setOpsServerList([]);
+      // Keep the last successful ledger if a refresh temporarily fails.
     }
     const results = await Promise.all(
       SERVERS.map((s) => fetchServerHealth(s.id, s.ip, s.role))
