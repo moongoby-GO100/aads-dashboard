@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
 import { ModelReleaseDate, DiscoveryRunStatus, latestDiscoveryRuns, type DiscoveryRun, type ReleaseMetadata } from "./LlmMetadata";
+import { ModelActivationStatus, type ActivationModel } from "./ModelActivationStatus";
 
 interface LlmKey {
   id: number;
@@ -56,7 +57,7 @@ interface LlmModelSummaryResponse {
   normalized_providers: Record<string, number>;
 }
 
-interface LlmRegistryModel extends ReleaseMetadata {
+interface LlmRegistryModel extends ReleaseMetadata, ActivationModel {
   provider: string;
   model_id: string;
   display_name?: string;
@@ -182,7 +183,7 @@ export default function LlmRegistryWorkspacePanel() {
     setProviderLoading((prev) => ({ ...prev, [provider]: true }));
     try {
       const [modelRes, timelineRes] = await Promise.allSettled([
-        api.getLlmModels({ provider, active_only: true }),
+        api.getLlmModels({ provider, active_only: false }),
         api.getLlmProviderTimeline(provider, 12),
       ]);
       setProviderModels((prev) => ({
@@ -256,11 +257,11 @@ export default function LlmRegistryWorkspacePanel() {
           available_key_count: summaryRow?.available_key_count ?? providerKeys.filter((key) => key.is_active && !isRateLimited(key)).length,
           rate_limited_key_count: summaryRow?.rate_limited_key_count ?? providerKeys.filter(isRateLimited).length,
           verified_key_count: summaryRow?.verified_key_count ?? providerKeys.filter((key) => !!key.last_verified_at).length,
-          active_model_count: summaryRow?.active_model_count ?? (providerModels[provider]?.length || 0),
+          active_model_count: summaryRow?.active_model_count ?? (providerModels[provider]?.filter((model) => model.is_active).length || 0),
           template_model_count: summaryRow?.template_model_count ?? (providerModels[provider]?.length || 0),
           discovered_model_count: summaryRow?.discovered_model_count ?? 0,
-          selectable_model_count: summaryRow?.selectable_model_count ?? (providerModels[provider]?.length || 0),
-          executable_model_count: summaryRow?.executable_model_count ?? (providerModels[provider]?.length || 0),
+          selectable_model_count: summaryRow?.selectable_model_count ?? 0,
+          executable_model_count: summaryRow?.executable_model_count ?? (providerModels[provider]?.filter((model) => model.is_executable).length || 0),
           template_active_model_count: summaryRow?.template_active_model_count ?? 0,
           discovery_active_model_count: summaryRow?.discovery_active_model_count ?? 0,
           active_model_source: summaryRow?.active_model_source ?? "none",
@@ -387,7 +388,7 @@ export default function LlmRegistryWorkspacePanel() {
       <section aria-label="모델 자동 갱신 상태" className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">모델 자동 갱신 상태</h3>
-          <button onClick={() => void load()} disabled={loading} className="text-xs px-3 py-2 rounded" style={{ border: "1px solid var(--border)" }}>상태 새로고침</button>
+          <button onClick={() => void (async () => { await load(); await reloadExpandedProviders(); })()} disabled={loading} className="text-xs px-3 py-2 rounded" style={{ border: "1px solid var(--border)" }}>상태 새로고침</button>
         </div>
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>회사별 마지막 수집 결과입니다. 건너뜀·수집 제한이 있는 회사는 최신 모델 자동 반영을 보장하지 않습니다. Antigravity 모델 목록 자동 수집은 미지원입니다.</p>
         {discoveryError ? <p role="alert" className="text-xs" style={{ color: "var(--warning)" }}>자동 갱신 이력을 불러오지 못했습니다. 상태 새로고침으로 다시 확인해 주세요.</p>
@@ -568,16 +569,17 @@ export default function LlmRegistryWorkspacePanel() {
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 pt-1">
                   <div className="rounded-lg p-4" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>실행 가능 모델</h4>
+                      <h4 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>발견된 모델 · 검증 상태</h4>
                       {providerLoading[provider.provider] && <span className="text-xs" style={{ color: "var(--text-secondary)" }}>로딩 중...</span>}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {(providerModels[provider.provider] || []).length === 0 ? (
-                        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>활성 모델이 없습니다.</span>
+                        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>등록된 모델이 없습니다.</span>
                       ) : (
                         (providerModels[provider.provider] || []).map((model) => (
                           <div key={model.model_id} className="min-w-0 max-w-full break-words px-3 py-2 rounded-lg text-xs" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                             <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{model.display_name || model.model_id}</div>
+                            <ModelActivationStatus model={model} />
                             <div style={{ color: "var(--text-secondary)" }}>{formatCostLabel(model)}</div>
                             <ModelReleaseDate model={model} />
                             <div className="flex flex-wrap gap-1 mt-1">
