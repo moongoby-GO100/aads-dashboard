@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { buildRegistryOptions, groupByProvider, useModelRegistry } from "@/lib/modelRegistry";
 
 /* ── Types ── */
 interface Participant {
@@ -36,12 +37,6 @@ type Phase = "setup" | "streaming" | "wait_ceo" | "done";
 interface DiscussionPanelProps {
   sessionId: string;
   onClose: () => void;
-}
-
-interface ModelOption {
-  value: string;
-  label: string;
-  enabled?: boolean;
 }
 
 const BASE_URL =
@@ -89,16 +84,6 @@ const DEFAULT_PRESETS: Record<string, Preset> = {
   },
 };
 
-const FALLBACK_MODEL_OPTIONS: ModelOption[] = [
-  { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { value: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
-  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-];
-
 /* ── Component ── */
 export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelProps) {
   const [phase, setPhase] = useState<Phase>("setup");
@@ -120,42 +105,13 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
     DEFAULT_PRESETS.standard.participants
   );
   const [useCustom, setUseCustom] = useState(false);
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODEL_OPTIONS);
+  // 모델 목록은 레지스트리(llm_models) API 에서 조회 — 하드코딩 폴백 없음.
+  const { rows: registryRows, status: registryStatus, retry: retryRegistry } = useModelRegistry();
+  const modelOptions = useMemo(() => buildRegistryOptions(registryRows), [registryRows]);
+  const modelGroups = useMemo(() => groupByProvider(modelOptions), [modelOptions]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  /* ── Fetch AADS model list on mount ── */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        // view=selector — 이 패널은 display_name/model_id/is_* 만 쓴다. 전체 응답은
-        // 1MB 이고 그중 60%가 여기서 쓰지 않는 metadata 다(2026-09-13 진단기 실측).
-        const res = await fetch(`${BASE_URL}/llm-models?view=selector`, {
-          headers: authHdrs(),
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        const models: ModelOption[] = (data.models || [])
-          .map((m: Record<string, unknown>) => ({
-            value: m.model_id as string,
-            label: `${(m.display_name as string) || (m.model_id as string)}${
-              m.is_active || m.is_selectable || m.is_executable ? "" : " (비활성)"
-            }`,
-            enabled: Boolean(m.is_active || m.is_selectable || m.is_executable),
-          }))
-          .sort((a: ModelOption, b: ModelOption) => a.label.localeCompare(b.label));
-        if (models.length > 0) {
-          setModelOptions(models);
-        }
-      } catch {
-        /* fallback to hardcoded list */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const handlePresetChange = (nextPreset: string) => {
     setPreset(nextPreset);
@@ -569,7 +525,17 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
               }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#888", marginBottom: 8 }}>
                   참가자 ({participants.length}명) · 모델 {modelOptions.length}종 사용 가능
+                  {registryStatus === "cached" && " (저장된 목록)"}
                 </div>
+                {registryStatus === "error" && modelOptions.length === 0 && (
+                  <div role="alert" style={{ fontSize: 13, color: "#e17055", marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span>모델 목록을 불러오지 못했습니다 ·</span>
+                    <button onClick={() => void retryRegistry()} style={{
+                      minHeight: 44, minWidth: 44, padding: "0 12px", borderRadius: 8,
+                      border: "1px solid #e17055", background: "transparent", color: "#e17055", cursor: "pointer",
+                    }}>다시 시도</button>
+                  </div>
+                )}
                 {participants.map((p, i) => (
                   <div key={i} style={{
                     display: "flex", gap: 8, alignItems: "center", marginBottom: 8,
@@ -590,9 +556,16 @@ export default function DiscussionPanel({ sessionId, onClose }: DiscussionPanelP
                       <span style={{ flex: 1, fontSize: 13, color: "#e0e0e0" }}>{p.name}</span>
                     )}
                     <select value={p.model} onChange={(e) => updateParticipant(i, "model", e.target.value)}
-                      style={{ flex: 2, minWidth: 140, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
-                      {modelOptions.map((m) => (
-                        <option key={m.value} value={m.value} disabled={m.enabled === false}>{m.label}</option>
+                      style={{ flex: 2, minWidth: 140, minHeight: 44, padding: 6, borderRadius: 6, background: "var(--ct-bg, #1a1a2e)", border: "1px solid #333", color: "#e0e0e0", fontSize: 12 }}>
+                      {!modelOptions.some((m) => m.value === p.model) && (
+                        <option value={p.model}>{p.model} (목록에 없음)</option>
+                      )}
+                      {modelGroups.map(([provider, list]) => (
+                        <optgroup key={provider} label={provider}>
+                          {list.map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                     {useCustom && (

@@ -11,7 +11,7 @@ import ChatInput, { ChatInputHandle } from "./ChatInput";
 import ChatSidebar from "./ChatSidebar";
 import ChatArtifactPanel from "./ChatArtifactPanel";
 import { ChatModelSaveQueue, saveChatModelFenced } from "@/lib/chatModelSave";
-import { MODEL_OPTIONS } from "@/components/chat/ModelSelector";
+import { readCache as readModelRegistryCache, writeCache as writeModelRegistryCache } from "@/lib/modelRegistry";
 import { CodePanel } from "@/components/CodePanel";
 import { GoalPanel } from "@/components/GoalPanel";
 import { MockupReviewPanel } from "@/components/MockupReviewPanel";
@@ -641,7 +641,6 @@ type DesignRequestCreateResponse = {
   };
 };
 
-const LEGACY_MODEL_OPTION_MAP = new Map(MODEL_OPTIONS.map((option) => [option.id, option]));
 // 스트리밍 표시 주기. 초당 약 10회 — 사람 눈에 "이어서 써진다" 고 보이는
 // 하한이 대략 초당 8회다 (2026-09-16 대표님 지적으로 450/900ms 에서 내렸다).
 const STREAM_DRAIN_TICK_MS = 100;
@@ -2528,18 +2527,7 @@ function buildRuntimeModelAliasMap(rows: LlmRegistryModel[]): Map<string, string
 function isSelectableRegistryModel(row: LlmRegistryModel): boolean {
   const metadata = coerceModelMetadata(row.metadata);
   if (metadata.alias_of || metadata.model_source === "accepted_alias") return false;
-  return row.is_selectable === true && row.is_active !== false;
-}
-
-function getLegacyModelOption(modelId?: string | null): (typeof MODEL_OPTIONS)[number] | null {
-  const trimmed = String(modelId || "").trim();
-  if (!trimmed) return null;
-  return (
-    LEGACY_MODEL_OPTION_MAP.get(trimmed) ||
-    LEGACY_MODEL_OPTION_MAP.get(LEGACY_CANONICAL_DISPLAY_MODEL_ID[trimmed] || "") ||
-    LEGACY_MODEL_OPTION_MAP.get(LEGACY_CANONICAL_DISPLAY_MODEL_ID[LEGACY_MODEL_ID_ALIASES[trimmed] || ""] || "") ||
-    null
-  );
+  return row.is_executable === true && row.is_active !== false;
 }
 
 function normalizeModelIdForSelector(modelId?: string | null, aliasMap?: Map<string, string>): string {
@@ -2575,16 +2563,15 @@ function preferenceKeyForSelectorId(optionId: string, provider?: string, aliasMa
 function buildSelectableModelOption(row: LlmRegistryModel, duplicateModelIds: Set<string>): SelectableModelOption {
   const modelId = String(row.model_id || "").trim();
   const optionId = duplicateModelIds.has(modelId) ? `${row.provider}:${modelId}` : modelId;
-  const fallbackStaticOption = getLegacyModelOption(modelId);
   const costLabel = formatCostLabel(row.input_cost, row.output_cost);
   const isActive = Boolean(row.is_active || row.is_selectable || row.is_executable);
   return {
     id: optionId,
     modelId,
     preferenceKey: buildChatPreferenceKey(row.provider, row.model_id),
-    name: row.display_name || fallbackStaticOption?.name || optionId,
-    provider: row.provider || fallbackStaticOption?.provider || "legacy",
-    cost: costLabel !== "변동" ? costLabel : fallbackStaticOption?.cost || costLabel,
+    name: row.display_name || optionId,
+    provider: row.provider || "legacy",
+    cost: costLabel,
     isActive,
   };
 }
@@ -5247,7 +5234,10 @@ export default function ChatPage() {
         .map(([modelId]) => modelId),
     );
     const autoOption = {
-      ...(getLegacyModelOption("mixture") || { id: "mixture", name: "자동 라우팅 (혼합)", provider: "auto", cost: "자동" }),
+      id: "mixture",
+      name: "자동 라우팅 (혼합)",
+      provider: "auto",
+      cost: "자동",
       modelId: "mixture",
       preferenceKey: "mixture",
       isActive: true,
@@ -5258,36 +5248,23 @@ export default function ChatPage() {
 
     if (runtimeModels === null) {
       const currentModelId = normalizeModelIdForSelector(model || DEFAULT_RUNTIME_MODEL, modelAliasMap);
-      const currentOption = getLegacyModelOption(currentModelId);
-      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider, modelAliasMap);
-      const currentOptionName = currentOption ? currentOption.name : currentModelId;
-      const currentOptionProvider = currentOption ? currentOption.provider : "legacy";
-      const currentOptionCost = currentOption ? currentOption.cost : "변동";
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, undefined, modelAliasMap);
+      const currentPref = preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId);
       return currentModelId && currentModelId !== "mixture"
         ? [
             autoOption,
-            currentOption
-              ? {
-                  ...currentOption,
-                  modelId: currentModelId,
-                  preferenceKey: currentPreferenceKey,
-                  isActive: true,
-                  isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
-                  isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
-                  isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
-                }
-              : {
-                  id: currentModelId,
-                  modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
-                  preferenceKey: currentPreferenceKey,
-                  name: currentOptionName,
-                  provider: currentOptionProvider,
-                  cost: currentOptionCost,
-                  isActive: true,
-                  isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
-                  isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
-                  isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
-                },
+            {
+              id: currentModelId,
+              modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
+              preferenceKey: currentPreferenceKey,
+              name: currentModelId,
+              provider: "legacy",
+              cost: "변동",
+              isActive: true,
+              isPinned: currentPref?.is_pinned ?? false,
+              isFavorite: currentPref?.is_favorite ?? false,
+              isHidden: currentPref?.is_hidden ?? false,
+            },
           ]
         : [autoOption];
     }
@@ -5318,33 +5295,20 @@ export default function ChatPage() {
       currentModelId !== "mixture" &&
       !options.some((option) => option.id === currentModelId || option.modelId === currentModelId)
     ) {
-      const currentOption = getLegacyModelOption(currentModelId);
-      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, currentOption?.provider, modelAliasMap);
-      options.push(
-        currentOption
-          ? {
-              ...currentOption,
-              modelId: currentModelId,
-              preferenceKey: currentPreferenceKey,
-              name: `${currentOption.name} (비활성)`,
-              isActive: false,
-              isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
-              isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
-              isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
-            }
-          : {
-              id: currentModelId,
-              modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
-              preferenceKey: currentPreferenceKey,
-              name: `${currentModelId} (비활성)`,
-              provider: "legacy",
-              cost: "변동",
-              isActive: false,
-              isPinned: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_pinned ?? false,
-              isFavorite: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_favorite ?? false,
-              isHidden: (preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId))?.is_hidden ?? false,
-            }
-      );
+      const currentPreferenceKey = preferenceKeyForSelectorId(currentModelId, undefined, modelAliasMap);
+      const currentPref = preferenceMap.get(currentPreferenceKey) || preferenceMap.get(currentModelId);
+      options.push({
+        id: currentModelId,
+        modelId: currentModelId.includes(":") ? currentModelId.split(":").slice(1).join(":") : currentModelId,
+        preferenceKey: currentPreferenceKey,
+        name: `${currentModelId} (비활성)`,
+        provider: "legacy",
+        cost: "변동",
+        isActive: false,
+        isPinned: currentPref?.is_pinned ?? false,
+        isFavorite: currentPref?.is_favorite ?? false,
+        isHidden: currentPref?.is_hidden ?? false,
+      });
     }
     return options;
   }, [model, modelAliasMap, modelPreferences, runtimeModels]);
@@ -5648,7 +5612,13 @@ export default function ChatPage() {
       chatApi<{ preferences: ChatModelPreference[] }>("/llm-models/chat-preferences"),
     ]);
     if (modelsRes.status === "fulfilled") {
-      setRuntimeModels(Array.isArray(modelsRes.value.models) ? modelsRes.value.models : []);
+      const fetched = Array.isArray(modelsRes.value.models) ? modelsRes.value.models : [];
+      setRuntimeModels(fetched);
+      if (fetched.length > 0) writeModelRegistryCache(fetched);
+    } else {
+      // 마지막 성공 목록(localStorage) 사용 — 이미 목록이 있으면 유지.
+      const cached = readModelRegistryCache() as LlmRegistryModel[] | null;
+      if (cached) setRuntimeModels((prev) => prev ?? cached);
     }
     if (preferencesRes.status === "fulfilled") {
       setModelPreferences(Array.isArray(preferencesRes.value.preferences) ? preferencesRes.value.preferences : []);
@@ -5666,7 +5636,12 @@ export default function ChatPage() {
       ]);
       if (cancelled) return;
       if (modelsRes.status === "fulfilled") {
-        setRuntimeModels(Array.isArray(modelsRes.value.models) ? modelsRes.value.models : []);
+        const fetched = Array.isArray(modelsRes.value.models) ? modelsRes.value.models : [];
+        setRuntimeModels(fetched);
+        if (fetched.length > 0) writeModelRegistryCache(fetched);
+      } else {
+        const cached = readModelRegistryCache() as LlmRegistryModel[] | null;
+        if (cached) setRuntimeModels((prev) => prev ?? cached);
       }
       if (preferencesRes.status === "fulfilled") {
         setModelPreferences(Array.isArray(preferencesRes.value.preferences) ? preferencesRes.value.preferences : []);
@@ -12782,7 +12757,11 @@ export default function ChatPage() {
             모델 저장에 실패했습니다. 전송 전에 다시 저장해 주세요.
             <button type="button" onClick={() => saveSelectedModel(modelSaveState.model)}>다시 저장</button>
           </span>}
-          {selectableModels.find((option) => option.id === selectedModelValue)?.isActive !== true && <span role="status">
+          {runtimeModels === null && <span role="alert">
+            모델 목록을 불러오지 못했습니다 ·
+            <button type="button" style={{ minHeight: 44, minWidth: 44 }} onClick={() => void refreshChatModelCatalog()}>다시 시도</button>
+          </span>}
+          {runtimeModels !== null && selectableModels.find((option) => option.id === selectedModelValue)?.isActive !== true && <span role="status">
             선택한 모델이 비활성이거나 카탈로그에 없습니다. 다른 모델을 선택하거나
             <button type="button" onClick={() => void refreshChatModelCatalog()}>목록 재시도</button>
           </span>}
