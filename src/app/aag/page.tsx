@@ -53,6 +53,29 @@ function AagScreen() {
   const opsAbort = useRef<AbortController | null>(null);
   const findingsAbort = useRef<AbortController | null>(null);
 
+  // A different tab can replace the login while this screen is still mounted.
+  // Reload the whole screen so operations, findings, diagram and impact all lose
+  // their in-memory state together before the new session reads anything.
+  useEffect(() => {
+    const initialToken = safeStorage()?.getItem("aads_token") ?? null;
+    const checkSession = () => {
+      if ((safeStorage()?.getItem("aads_token") ?? null) !== initialToken) {
+        opsAbort.current?.abort();
+        findingsAbort.current?.abort();
+        window.location.reload();
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "aads_token" || event.key === null) checkSession();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", checkSession);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", checkSession);
+    };
+  }, []);
+
   const targetKey = opsKeyOf(filters);
   const target = useMemo<AagFilters>(
     () => ({ project: filters.project, repositoryId: filters.repositoryId, targetRef: filters.targetRef, severity: "", finding: "" }),

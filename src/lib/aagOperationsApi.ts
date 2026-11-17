@@ -31,18 +31,20 @@ function redirectToLogin(): void {
 
 async function getJson<T>(url: string, endpoint: "operations" | "findings" | "mermaid" | "impact", signal?: AbortSignal): Promise<T> {
   let res: Response;
+  const authHeaders = getAuthHeaders();
   try {
     res = await fetch(url, {
       credentials: "include",
       cache: "no-store",
       signal,
-      headers: { "X-AAG-Consumer": CONSUMER, ...getAuthHeaders() },
+      headers: { "X-AAG-Consumer": CONSUMER, ...authHeaders },
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new AagApiError(classifyApiError(0, null, endpoint));
   }
-  if (res.status === 401) redirectToLogin();
+  // An old request must not erase a newer login when its 401 arrives late.
+  if (res.status === 401 && getAuthHeaders().Authorization === authHeaders.Authorization) redirectToLogin();
   if (!res.ok) {
     let body: unknown = null;
     try { body = await res.json(); } catch { body = null; }

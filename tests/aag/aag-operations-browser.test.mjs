@@ -48,7 +48,7 @@ after(async () => {
   server?.kill("SIGTERM");
 });
 
-const DESKTOP = { viewport: { width: 1280, height: 900 } };
+const DESKTOP = { viewport: { width: 1920, height: 911 } };
 const MOBILE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 
 // ops/findings: 시나리오가 응답을 정한다. 반환 {status, body} 또는 "abort".
@@ -56,7 +56,7 @@ async function session(device, handlers = {}) {
   const context = await browser.newContext({ ...device, locale: "ko-KR", timezoneId: "Asia/Seoul" });
   const url = new URL(BASE);
   await context.addCookies([{ name: "aads_token", value: "fixture-token", domain: url.hostname, path: "/" }]);
-  await context.addInitScript(() => { try { localStorage.setItem("aads_token", "fixture-token"); } catch { /* ignore */ } });
+  await context.addInitScript(() => { try { if (!localStorage.getItem("aads_token")) localStorage.setItem("aads_token", "fixture-token"); } catch { /* ignore */ } });
   const calls = [];
   await context.route("**/api/v1/**", async (route) => {
     const u = new URL(route.request().url());
@@ -86,6 +86,21 @@ const open = async (page, search = "") => {
   await page.locator("[data-testid=aag-root]").waitFor();
 };
 const shot = (page, name) => page.screenshot({ path: path.join(CAPTURES, `${name}.png`), fullPage: true });
+
+test("다른 탭의 로그인 교체 후 이전 세션 상태를 지운다", { timeout: 90000 }, async () => {
+  let offline = false;
+  const { context, page } = await session(DESKTOP, { ops: () => offline ? "abort" : ({ status: 200, body: operations() }) });
+  await open(page);
+  await page.locator("#aag-axes").waitFor();
+  offline = true;
+  const other = await context.newPage();
+  await other.goto(`${BASE}/login`);
+  await other.evaluate(() => localStorage.setItem("aads_token", "second-fixture-token"));
+  await page.locator("[data-error-kind=network]").waitFor();
+  assert.equal(await page.locator("#aag-axes").count(), 0);
+  assert.equal(await page.getByTestId("aag-saved-banner").count(), 0);
+  await context.close();
+});
 
 test("첫 진입: 사이드바 nav → GO100 기본 대상·4축·P0/P1 (desktop)", { timeout: 120000 }, async () => {
   const { context, page, calls, errors } = await session(DESKTOP);
